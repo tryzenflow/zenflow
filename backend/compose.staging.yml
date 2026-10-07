@@ -30,9 +30,9 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
       redis-ratelimit:
-        condition: service_started
+        condition: service_healthy
       mail:
         condition: service_started
       migrations:
@@ -128,21 +128,62 @@ services:
       timeout: 5s
       retries: 5
 
+  # Sessions + OTP. Must NOT evict: losing keys logs users out. AOF keeps them across restarts.
   redis:
     container_name: zenflow-cache-staging
     image: redis:8.8.0-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --maxmemory
+      - 192mb
+      - --maxmemory-policy
+      - noeviction
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+    volumes:
+      - redis_data:/data
     expose:
       - "6379"
     networks:
       - cache
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
+  # Rate-limit counters only (ADR-0005): disposable, so LRU eviction + RDB snapshot
+  # (every 15 s when >= 1 key changed) and no AOF. Keep separate from `redis`.
   redis-ratelimit:
     container_name: zenflow-cache-ratelimit-staging
     image: redis:8.8.0-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --maxmemory
+      - 64mb
+      - --maxmemory-policy
+      - allkeys-lru
+      - --save
+      - "15 1"
+      - --appendonly
+      - "no"
+    volumes:
+      - redis_ratelimit_data:/data
     expose:
       - "6379"
     networks:
       - ratelimit
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   mail:
     container_name: zenflow-mail-staging
@@ -412,3 +453,5 @@ volumes:
   alloy_data:
   prometheus_data:
   grafana_data:
+  redis_data:
+  redis_ratelimit_data:

@@ -494,7 +494,7 @@ docker compose --env-file .env.staging -f compose.staging.yml up -d --build   # 
 container.
 
 `compose.staging.yml` is the fully containerized stack: `api`, `postgres`, `redis`
-(sessions/OTP), `redis-ratelimit`, `mail` (Mailpit), and a `caddy` reverse proxy on `:80`.
+(sessions/OTP), `redis-ratelimit` (`allkeys-lru` + RDB every 15 s, [ADR-0005](../docs/adr/0005-rate-limit-store-lru-rdb.md)), `mail` (Mailpit), and a `caddy` reverse proxy on `:80`.
 `compose.prod.yml` follows the same shape minus `mail`.
 
 ```bash
