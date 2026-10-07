@@ -13,6 +13,7 @@ import {
   type SlotTakenError,
 } from "@zenflow/shared";
 import { isAxiosError } from "axios";
+import { differenceInCalendarDays } from "date-fns";
 import { describeSaveError } from "./save-error";
 
 export interface PlacementToastUser {
@@ -128,17 +129,26 @@ export function placementToastMessage(
   }
 
   const qualifier = placementQualifier(task, { timezone: user.timezone });
-  const suffix =
-    qualifier === "pastDeadline" ? `\n${t("It's past its deadline.")}` : "";
+  const start = zonedDate(task.scheduledStartTime, user.timezone);
+  const today = zonedDate(new Date(), user.timezone);
+  const dayOffset = differenceInCalendarDays(start, today);
+  const time = format(start, "HH:mm");
 
-  const when = format(
-    zonedDate(task.scheduledStartTime, user.timezone),
-    "EEE MMM d, HH:mm",
-  );
-  return {
-    message: t("Scheduled for {when}", { when }) + suffix,
-    variant: "success",
-  };
+  // Say where it landed in the student's own words: today / tomorrow, else the date.
+  const title =
+    dayOffset === 0
+      ? t("Scheduled for today, {time}", { time })
+      : dayOffset === 1
+        ? t("Scheduled for tomorrow, {time}", { time })
+        : t("Scheduled for {when}", {
+            when: format(start, "EEE MMM d, HH:mm"),
+          });
+  // The second line names the task, so the toast reads as "this one, there".
+  const detail =
+    qualifier === "pastDeadline"
+      ? `${task.title} · ${t("It's past its deadline.")}`
+      : task.title;
+  return { message: `${title}\n${detail}`, variant: "success" };
 }
 
 const POLICY_LABEL: Record<InfeasiblePolicy, string> = {

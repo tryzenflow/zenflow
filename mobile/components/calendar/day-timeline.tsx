@@ -3,7 +3,7 @@ import { useLanguage } from "@/hooks/use-language";
 import { locale } from "@/lib/i18n";
 import { format, formatTitle } from "@/lib/i18n";
 import { listSessions, updateSession } from "@/api/tasks";
-import { AlertTriangle, Plus, RefreshCcw, RotateCw } from "@/components/Icons";
+import { AlertTriangle, RotateCw } from "@/components/Icons";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
@@ -11,8 +11,11 @@ import { useToast } from "@/components/ui/toast";
 import { completeStep } from "@/hooks/use-checklist";
 import { useLastCreated } from "@/hooks/use-last-created";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading";
+import { useDluSync } from "@/hooks/use-dlu-sync";
 import { useNow } from "@/hooks/use-now";
 import { useUserStore } from "@/hooks/use-user-store";
+import { FONT_SCALE_CAP } from "@/lib/constants";
+import { type DayStatus, deriveDayStatus } from "@/lib/day-status";
 import { isPastDeadlineDrop } from "@/lib/overdue";
 import { showErrorToast } from "@/lib/task-toasts";
 import { type PeekBlock, peekBlocksFromSegments } from "@/lib/peek";
@@ -68,6 +71,7 @@ import Animated, {
   clamp,
   runOnJS,
 } from "react-native-reanimated";
+import { EmptyDayGhost } from "./empty-day-ghost";
 import { NowIndicator } from "./now-indicator";
 import { SessionBlock } from "./task-block";
 import { TimeGutter } from "./time-gutter";
@@ -76,9 +80,9 @@ import type {
   UpdateRecurringScope,
 } from "./update-recurring-sheet";
 
-/** The empty-day "add a task" zone spans 8:00–10:00. */
+/** The empty-day ghost block sits at 8:00 and is one and a half hours tall. */
 const EMPTY_ZONE_START_MIN = 8 * 60;
-const EMPTY_ZONE_MINUTES = 120;
+const EMPTY_ZONE_MINUTES = 90;
 
 /** Inset (px) of every block from the day column's edges. */
 const BLOCK_GUTTER = 2;
@@ -235,6 +239,9 @@ interface DayTimelineProps {
    * on — set when the calendar teleports to a freshly created / rescheduled
    * session. Cleared by the parent shortly after. */
   flashSessionId?: string | null;
+  /** Reports "next up" / "done for today" for today's date (else `none`), so
+   * the Week screen can show it beside its header. Only the active page reports. */
+  onStatusChange?: (status: DayStatus) => void;
 }
 
 export function DayTimeline({
@@ -255,6 +262,7 @@ export function DayTimeline({
   isActive = true,
   syncScroll = false,
   flashSessionId = null,
+  onStatusChange,
 }: DayTimelineProps) {
   useLanguage();
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
@@ -682,6 +690,23 @@ export function DayTimeline({
     );
   }, [date, now, tz]);
 
+  const dluSync = useDluSync();
+  const dayStatus = useMemo<DayStatus>(
+    () =>
+      isToday && !loading && !error
+        ? deriveDayStatus(segments, now.getTime())
+        : { kind: "none" },
+    [isToday, loading, error, segments, now],
+  );
+  const statusKey =
+    dayStatus.kind === "next"
+      ? `next:${dayStatus.taskId}:${dayStatus.startISO}`
+      : dayStatus.kind;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `statusKey` is the identity of `dayStatus`.
+  useEffect(() => {
+    if (isActive) onStatusChange?.(dayStatus);
+  }, [isActive, statusKey, onStatusChange]);
+
   // Tapping the empty-day zone opens the new-task form seeded at 8:00 (or the
   // next quarter hour when today is already past it) — it never creates a
   // session by itself.
@@ -929,7 +954,9 @@ export function DayTimeline({
       ? t("Couldn't sync")
       : dragSnap
         ? t("Moving · release to reschedule")
-        : tasks.length === 0
+        : dayStatus.kind === "done"
+          ? t("All done for today. Rest up.")
+          : tasks.length === 0
           ? t("{now} · nothing scheduled", { now: nowLabel })
           : t("{now} · {count} tasks today", {
               now: nowLabel,
@@ -1005,7 +1032,7 @@ export function DayTimeline({
             <Text className="text-center text-lg font-bold">
               {t("Couldn't load your day")}
             </Text>
-            <Text className="mt-1.5 max-w-[280px] text-center text-[13.5px] leading-normal text-muted-foreground">
+            <Text className="mt-1.5 max-w-[280px] text-center text-sm leading-normal text-muted-foreground">
               {t(
                 "Couldn't reach the scheduler. Check your connection and try again.",
               )}
@@ -1013,6 +1040,7 @@ export function DayTimeline({
             <Button
               variant="outline"
               className="mt-5 rounded-xl px-8 gap-2"
+              accessibilityLabel={t("Try again")}
               onPress={() => void refetch()}
             >
               <RotateCw size={16} className="text-foreground" />
@@ -1074,30 +1102,24 @@ export function DayTimeline({
                 ))}
 
                 {segments.length === 0 && !loading && (
-                  <Pressable
+                  <EmptyDayGhost
+                    top={(EMPTY_ZONE_START_MIN / DAILY_HORIZON) * totalHeight}
+                    height={(EMPTY_ZONE_MINUTES / DAILY_HORIZON) * totalHeight}
+                    left={BLOCK_GUTTER}
+                    right={BLOCK_GUTTER}
+                    dluClear={dluSync.kind === "ok"}
+                    active={isActive}
                     onPress={openNewTaskForm}
-                    accessibilityRole="button"
-                    accessibilityLabel={t("Add a session to this day")}
-                    className="absolute items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-brand-orange/70 bg-brand-orange/5 active:bg-brand-orange/10"
-                    style={{
-                      left: BLOCK_GUTTER,
-                      right: BLOCK_GUTTER,
-                      top: (EMPTY_ZONE_START_MIN / DAILY_HORIZON) * totalHeight,
-                      height: (EMPTY_ZONE_MINUTES / DAILY_HORIZON) * totalHeight,
-                    }}
-                  >
-                    <Plus size={20} className="text-primary-text" />
-                    <Text className="text-center text-[14px] font-semibold text-primary-text">
-                      {t("Tap to add a session")}
-                    </Text>
-                    <Text className="text-center text-[12px] text-muted-foreground">
-                      {t("Nothing scheduled for this day")}
-                    </Text>
-                  </Pressable>
+                  />
                 )}
 
                 {isToday && (
-                  <NowIndicator now={now} tz={tz} totalHeight={totalHeight} />
+                  <NowIndicator
+                    now={now}
+                    tz={tz}
+                    totalHeight={totalHeight}
+                    active={isActive}
+                  />
                 )}
 
                 {segments.map((segment) => {
@@ -1161,7 +1183,10 @@ export function DayTimeline({
                     style={{ top: totalHeight }}
                   >
                     <View className="absolute right-2 -translate-y-1/2 rounded-md bg-background px-1.5 py-px">
-                      <Text className="text-[10px] font-bold text-muted-foreground">
+                      <Text
+                        maxFontSizeMultiplier={FONT_SCALE_CAP.grid}
+                        className="text-label font-bold text-muted-foreground"
+                      >
                         {t("Midnight")}
                       </Text>
                     </View>
@@ -1174,7 +1199,10 @@ export function DayTimeline({
                   style={dragLineStyle}
                 >
                   <View className="absolute right-2 -translate-y-1/2 rounded-md bg-brand-orange px-1.5 py-px">
-                    <Text className="text-[10px] font-bold text-primary-foreground">
+                    <Text
+                      maxFontSizeMultiplier={FONT_SCALE_CAP.grid}
+                      className="text-label font-bold text-primary-foreground"
+                    >
                       {dragChipLabel}
                     </Text>
                   </View>

@@ -26,6 +26,7 @@ import {
   BlockActionsSheet,
   type BlockActionsSheetHandle,
 } from "@/components/calendar/block-actions-sheet";
+import { DayStatusRow } from "@/components/calendar/day-status-row";
 import { TodayButton } from "@/components/calendar/today-button";
 import {
   WeekHeader,
@@ -51,6 +52,7 @@ import {
   type SlotPickResult,
   singleSitting,
 } from "@/lib/series-alternatives";
+import type { DayStatus } from "@/lib/day-status";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { dateKey } from "@/lib/week-date-math";
 import { zonedDate, zonedNow } from "@zenflow/core";
@@ -122,6 +124,8 @@ export default function WeekScreen() {
   const [focusTick, setFocusTick] = useState(0);
   // Load state of the focused page, reported up by the pager — gates the FAB.
   const [timelineState, setTimelineState] = useState<TimelineState>("loading");
+  // Today's next session / "done" line, reported by the focused day.
+  const [dayStatus, setDayStatus] = useState<DayStatus>({ kind: "none" });
   // Session id to pulse on the focused day — set by a create/edit teleport
   // (`?flash=` param) or a cross-day drag drop, cleared after the entrance.
   const [flashId, setFlashId] = useState<string | null>(null);
@@ -508,11 +512,17 @@ export default function WeekScreen() {
           onWeekSlideStart={handleWeekSlideStart}
           onWeekSlideEnd={handleWeekSlideEnd}
           onActiveStateChange={setTimelineState}
+          onStatusChange={setDayStatus}
           onRequestReschedule={handleRequestReschedule}
           onRequestBlockMenu={handleRequestBlockMenu}
           onRequestScopedUpdate={handleRequestScopedUpdate}
           onRequestSlotPick={handleRequestSlotPick}
           flashSessionId={flashId}
+        />
+        <DayStatusRow
+          status={dayStatus}
+          tz={tz}
+          onOpenSession={handleSessionPress}
         />
       </View>
 
