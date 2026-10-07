@@ -159,42 +159,48 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           disable-animations: true
+          # NOTE: the action splits `script` on newlines and runs each line as
+          # its own `sh -c` in `working-directory` (default: the repo root), so
+          # `cd` has no effect and every line must be self-contained — no `cd`,
+          # no multi-line `for` blocks, no line continuations.
+          working-directory: mobile
           script: |
-            cd mobile
-
             # 1. Generate the native android project if not present.
             npx expo prebuild --platform android --no-install
 
-            # 2. Build the debug APK via Gradle.
-            cd android
-            ./gradlew assembleDebug -x lint --no-daemon
-            cd ..
+            # 2. Fail fast if prebuild ran anywhere but mobile/ — the repo root
+            #    is also an expo project, so a wrong cwd silently succeeds with
+            #    the wrong package name and leaves a stray /android behind.
+            test -f android/gradlew || { echo "::error::prebuild did not generate mobile/android/gradlew"; exit 1; }
 
-            # 3. Install the APK on the emulator.
+            # 3. Build the debug APK via Gradle (sh, so a lost exec bit on the
+            #    freshly generated wrapper can't break the build).
+            sh android/gradlew -p android assembleDebug -x lint --no-daemon
+
+            # 4. Install the APK on the emulator.
+            test -f android/app/build/outputs/apk/debug/app-debug.apk || { echo "::error::assembleDebug produced no APK"; exit 1; }
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 
-            # 4. Start Metro in production-like mode (no dev menu, minified).
-            npx expo start --dev-client --no-dev --minify &
-            METRO_PID=$!
+            # 5. Start Metro in production-like mode (no dev menu, minified).
+            #    Backgrounded with output redirected so nothing holds the step's
+            #    stdout; there is no $! to kill because each line is its own shell.
+            npx expo start --dev-client --no-dev --minify > /tmp/metro.log 2>&1 &
 
-            # 5. Wait for Metro to be ready.
-            for i in $(seq 1 60); do
-              curl -fs http://localhost:8081/status 2>/dev/null && break
-              sleep 2
-            done
+            # 6. Wait for Metro to be ready.
+            for i in $(seq 1 60); do curl -fs http://localhost:8081/status >/dev/null 2>&1 && break; sleep 2; done
 
-            # 6. Launch the app on the emulator.
+            # 7. Launch the app on the emulator.
             adb shell monkey -p "$MAESTRO_APP_ID" -c android.intent.category.LAUNCHER 1
             sleep 10
 
-            # 7. Run P0 smoke suite via the orchestrator:
+            # 8. Run P0 smoke suite via the orchestrator:
             #    reset → OTP request → MailHog fetch → seed → suite.
             #    The runner calls the backend from the host, so it needs the
             #    localhost URL while the app itself uses 10.0.2.2.
-            E2E_API_URL=http://localhost:5000/api/v1 \
-              node maestro/scripts/run-suite.js smoke
+            E2E_API_URL=http://localhost:5000/api/v1 node maestro/scripts/run-suite.js smoke
 
-            kill $METRO_PID 2>/dev/null || true
+            # 9. Stop Metro (the emulator teardown below stops the emulator).
+            pkill -f "expo start" || true
         env:
           MAESTRO_APP_ID: ${{ env.MAESTRO_APP_ID }}
           E2E_EMAIL: mobile-e2e+${{ env.E2E_RUN_ID }}@example.test

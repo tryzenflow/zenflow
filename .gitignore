@@ -19,5 +19,9 @@ startdev-*.bat
 !frontend/.env.staging
 backend/.vault-dev/
 
+# Stray native trees from an `expo prebuild` run at the repo root
+/android
+/ios
+
 # Local agent settings
 .claude/settings.local.json
