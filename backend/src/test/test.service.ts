@@ -42,6 +42,10 @@ export class TestService {
   /**
    * Seeds a test task (Session) for the given user.
    * Requires authenticated user context.
+   *
+   * `scheduledStartTime` is written verbatim when provided so Maestro flows
+   * can place seeded tasks on deterministic calendar days without going
+   * through the placement engine (which would choose its own slot).
    */
   async seedTask(
     userId: string,
@@ -51,9 +55,20 @@ export class TestService {
       deadline: string; // ISO string
       durationMinutes: number;
       sessionCount?: number;
+      scheduledStartTime?: string; // ISO string, optional
     },
   ) {
-    const { title, type, deadline, durationMinutes, sessionCount = 1 } = input;
+    const {
+      title,
+      type,
+      deadline,
+      durationMinutes,
+      sessionCount = 1,
+      scheduledStartTime,
+    } = input;
+    const scheduled = scheduledStartTime
+      ? new Date(scheduledStartTime)
+      : undefined;
 
     if (sessionCount > 1) {
       // Create a series with multiple sessions
@@ -76,6 +91,7 @@ export class TestService {
               type,
               source: "USER",
               deadline: new Date(deadline),
+              ...(scheduled ? { scheduledStartTime: scheduled } : {}),
             },
           }),
         ),
@@ -93,6 +109,7 @@ export class TestService {
         type,
         source: "USER",
         deadline: new Date(deadline),
+        ...(scheduled ? { scheduledStartTime: scheduled } : {}),
       },
     });
 

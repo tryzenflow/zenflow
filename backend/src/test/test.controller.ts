@@ -62,6 +62,7 @@ export class TestController {
       deadline: string;
       durationMinutes: number;
       sessionCount?: number;
+      scheduledStartTime?: string;
     },
   ) {
     const result = await this.testService.seedTask(user.id, body);
