@@ -146,10 +146,12 @@ Work (completed):
 - Rewritten workflow from scratch to match existing CI patterns (backend-e2e, frontend-e2e).
 - Triggers: nightly schedule (2:17 AM UTC), `release/**` branches, manual dispatch.
 - Uses existing `.github/actions/setup` composite action.
-- Backend test stack matches `ci.yml`:
-  - Redis + Redis rate-limit + MailHog via GitHub Actions service containers.
-  - Postgres + MinIO via `compose.test.yml`.
-  - `write-test-env.sh` generates throwaway `.env.test` (includes `NODE_ENV=test`).
+- Backend test stack from `compose.dev.yml` (bandit skipped):
+  - Postgres + Redis + Redis rate-limit + MailHog + MinIO via compose
+    (no `services:` block — dev.yml owns every dependency).
+  - `write-test-env.sh` generates throwaway `.env.test` (includes `NODE_ENV=test`),
+    mirrored to `backend/.env.dev` (the env file dev.yml reads), with ports
+    overridden to dev.yml's mapping (`PG_HOST_PORT=5432`, `S3_HOST_PORT=9000`).
   - Migrations via `prisma migrate deploy`.
   - Backend API on port 5000.
 - Android emulator setup:
@@ -177,9 +179,9 @@ Representative files:
 Work (completed):
 
 - Added `ios-e2e` job to existing workflow running on `macos-latest`.
-- macOS runners don't have Docker, so backend services use Homebrew:
-  - PostgreSQL 17, Redis (two instances), MailHog, MinIO installed via `brew`.
-  - Inline `.env.test` with macOS-specific settings (Postgres on port 5432, peer auth).
+- macOS runners have no Docker host, so the job starts one with Colima
+  (`--vz-rosetta` keeps the amd64-only MailHog image runnable on arm64),
+  then follows the exact same compose + env setup as Android.
 - iOS simulator setup:
   - Auto-selects latest available iPhone simulator via `xcrun simctl`.
   - `expo prebuild --platform ios` + `pod install` + `xcodebuild`.
@@ -302,11 +304,9 @@ Document the planned data model:
 - Do not use dev, staging, production, or a real personal account.
 - Preferred account format: `mobile-e2e+<run-id>@example.test`.
 - The backend test stack should be the same pattern used by current CI:
-  - generated `backend/.env.test`
-  - Postgres/object storage from `backend/compose.test.yml`
-  - Redis
-  - rate-limit Redis
-  - MailHog for OTP
+  - generated `backend/.env.test` (mirrored to `backend/.env.dev`)
+  - Postgres, Redis, rate-limit Redis, MailHog, object storage from
+    `backend/compose.dev.yml` (bandit skipped)
 - OTP should be read from MailHog by helper script.
 - For flows that are not testing task creation, seed tasks directly through API/backend helper so flows are independent.
 - Reset strategy:
@@ -434,7 +434,8 @@ Link to:
 - `../mobile/package.json`
 - `../mobile/vitest.config.ts`
 - `../.github/workflows/ci.yml`
-- `../backend/compose.test.yml`
+- `../.github/workflows/mobile-e2e.yml`
+- `../backend/compose.dev.yml`
 - `../.github/scripts/write-test-env.sh`
 
 ## Rollout checklist

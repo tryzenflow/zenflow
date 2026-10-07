@@ -37,14 +37,17 @@ mobile/maestro/
 
 1. Install dependencies: `pnpm install`
 2. Install Maestro: `curl -Ls "https://get.maestro.mobile.dev" | bash`
-3. Start backend test stack:
+3. Start backend test stack (dev.yml owns Postgres, Redis ×2, MailHog,
+   MinIO — bandit skipped; ports must match dev.yml's mapping, and dev.yml
+   reads per-service env from `backend/.env.dev`):
 
 ```bash
-# Generate throwaway env
-.github/scripts/write-test-env.sh backend/.env.test
+# Generate throwaway env (dev.yml maps Postgres 5432, MinIO 9000)
+PG_HOST_PORT=5432 S3_HOST_PORT=9000 .github/scripts/write-test-env.sh backend/.env.test
+cp backend/.env.test backend/.env.dev
 
-# Start Postgres + MinIO
-cd backend && docker compose -f compose.test.yml up -d && cd ..
+# Start services (Windows/macOS: Docker Desktop or Colima running)
+cd backend && docker compose -f compose.dev.yml up -d postgres redis redis-ratelimit mail storage && cd ..
 
 # Apply migrations
 pnpm --filter backend exec dotenv -e .env.test -- prisma migrate deploy
@@ -54,14 +57,7 @@ pnpm --filter backend build
 pnpm --filter backend exec dotenv -e .env.test -- env PORT=5000 node dist/main
 ```
 
-4. Start Redis and MailHog (if not using service containers):
-```bash
-redis-server --port 6379 --daemonize yes
-redis-server --port 6380 --daemonize yes
-# MailHog on ports 1025 (SMTP) and 8025 (API)
-```
-
-5. Build and install the Expo dev client:
+4. Build and install the Expo dev client:
 ```bash
 # Android
 cd mobile && npx expo run:android
@@ -70,7 +66,7 @@ cd mobile && npx expo run:android
 cd mobile && npx expo run:ios
 ```
 
-6. Start Metro: `pnpm --filter mobile dev`
+5. Start Metro: `pnpm --filter mobile dev`
 
 ### Commands
 
@@ -105,19 +101,28 @@ run shell mid-suite, so `run-suite.js` owns the sequencing.
 
 ## Running in CI
 
-CI is configured in `.github/workflows/mobile-e2e.yml` with two jobs:
+CI is configured in `.github/workflows/mobile-e2e.yml` with two jobs.
+Both jobs provision the backend from the same file —
+`backend/compose.dev.yml` (Postgres, Redis ×2, MailHog, MinIO; the
+bandit service is skipped) — plus the shared
+`.github/scripts/write-test-env.sh` generator (ports overridden to match
+dev.yml's mapping). The generated `.env.test` is mirrored to
+`backend/.env.dev` because that is the env file dev.yml reads.
 
 ### Android (ubuntu-latest)
 
-- Backend test stack: `compose.test.yml` + `write-test-env.sh` + GitHub Actions service containers (Redis ×2, MailHog).
+- Native Docker: `compose.dev.yml up -d postgres redis redis-ratelimit mail storage`.
 - Android emulator: KVM-accelerated, API 34, x86_64, AVD cached across runs.
 - Build: `expo prebuild` → `gradlew assembleDebug` → `adb install`.
 - Metro in production mode (`--no-dev --minify`).
-- Android emulator reaches backend via `http://10.0.2.2:5000/api/v1`.
+- Android emulator reaches backend via `http://10.0.2.2:5000/api/v1`
+  (host-side scripts use `E2E_API_URL=http://localhost:5000/api/v1`).
 
 ### iOS (macos-latest)
 
-- Backend services: PostgreSQL, Redis, MailHog, MinIO installed via Homebrew (macOS runners lack Docker).
+- macOS runners have no Docker host, so the job starts one with Colima
+  (`--vz-rosetta` keeps the amd64-only MailHog image runnable on arm64),
+  then follows the exact same compose + env steps as Android.
 - iOS simulator: auto-selects latest available iPhone, built via `xcodebuild`.
 - iOS simulator reaches backend via `http://localhost:5000/api/v1` directly.
 
@@ -240,6 +245,6 @@ Rules:
 - [`mobile/maestro/config.yaml`](../mobile/maestro/config.yaml) — Maestro config
 - [`.github/workflows/mobile-e2e.yml`](../.github/workflows/mobile-e2e.yml) — CI workflow
 - [`backend/src/test/`](../backend/src/test/) — test-only endpoints
-- [`backend/compose.test.yml`](../backend/compose.test.yml) — test services
+- [`backend/compose.dev.yml`](../backend/compose.dev.yml) — test services
 - [`.github/scripts/write-test-env.sh`](../.github/scripts/write-test-env.sh) — env generator
 - [`docs/mobile-e2e-test-plan.md`](./mobile-e2e-test-plan.md) — commit plan and rollout checklist
