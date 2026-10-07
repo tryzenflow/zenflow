@@ -15,7 +15,7 @@ import {
   parseRegistHistory,
   type ConfirmedSection,
 } from "./core/parse-regist-history";
-import { resolveSemester } from "./core/semester";
+import { discoveryReopensAt, resolveSemester } from "./core/semester";
 import { IngestionJobsService } from "./ingestion-jobs.service";
 import { IngestionScheduleService } from "./ingestion-schedule.service";
 import {
@@ -148,7 +148,12 @@ export class EnrollmentDiscoveryService {
 
       // One request is the whole picture, so reconciling drops is safe.
       await this.recordSections(target, parsed.sections, term, now);
-      await this.schedule.markDiscovered(target.integrationId, term, now);
+      await this.schedule.markDiscovered(
+        target.integrationId,
+        term,
+        now,
+        discoveryReopensAt(term),
+      );
 
       await this.jobs.finishJob("PORTAL", jobId, "COMPLETED");
       this.logger.debug(

@@ -48,6 +48,23 @@ export interface ResolvedSemester {
   endDate: Date;
 }
 
+/**
+ * When DKHP discovery next has anything to learn after a clean pass for `term`:
+ * the moment the *following* term enters the lookahead window, i.e. two weeks
+ * before it opens (a registration history is addressed by term, so nothing
+ * between now and then changes what a pass would ask for).
+ *
+ * Always later than the instant `term` was resolved at, because `term` is only
+ * resolved while that instant plus the lookahead is still inside it.
+ */
+export function discoveryReopensAt(
+  term: Pick<ResolvedSemester, "endDate">,
+  lookaheadWeeks: number = SEMESTER_LOOKAHEAD_WEEKS,
+): Date {
+  // `endDate` is the last millisecond before the next term opens.
+  return new Date(term.endDate.getTime() + 1 - lookaheadWeeks * 7 * DAY_MS);
+}
+
 /** Calendar year/month (1–12) of an instant in the given IANA timezone. */
 function yearMonthIn(now: Date, tz: string): { year: number; month: number } {
   const [year, month] = localDateStr(now, tz).split("-").map(Number);

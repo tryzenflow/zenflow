@@ -46,9 +46,10 @@ Off by default (`INGESTION_OCCURRENCE_CACHE_ENABLED`). Timetable meetings and Mo
 
 `POST /integrations/:provider/sync` ([api.md](api.md#integrations-integrations)).
 
-- Limit: `SYNC_MANUAL_LIMIT` (3) per `SYNC_MANUAL_WINDOW_SEC` (21600 = 6 h) per user + provider. Over: `429` + `Retry-After`.
+- Cooldown: `SYNC_MANUAL_COOLDOWN_SEC` (900 = 15 min) from the provider's newest `IngestionSchedule.lastRunAt`, so a background run counts as much as a manual one. Inside it: `429` + `Retry-After`.
+- After a run, only the kinds that succeeded are pushed out a period; a failed kind stays due for the ticker, and any failed pass (e.g. no DKHP token) makes the request `502`.
 - A `SET NX EX 120` lock `sync:inflight:{userId}:{provider}` (`integrations/sync-inflight.service.ts`) rejects a concurrent duplicate with `409`.
-- Breaker open: `503 UPSTREAM_UNAVAILABLE` + `Retry-After`. The rate-limit slot is already spent (the limiter is a separate guard, deliberately not coupled).
+- Breaker open: `503 UPSTREAM_UNAVAILABLE` + `Retry-After`.
 - Redis errors fail open. Details: [api.md](api.md#rate-limits).
 
 Deeper detail (client endpoints, parser rules, semester resolution, job tracking) lives in the `ingestion/` source.

@@ -1,3 +1,5 @@
+import { BadGatewayException } from "@nestjs/common";
+import { SyncCooldownException } from "./sync-cooldown.exception";
 import { UpstreamUnavailableHttpException } from "../common/upstream-unavailable.exception";
 import { Test, TestingModule } from "@nestjs/testing";
 import {
@@ -61,6 +63,12 @@ function makePrismaDouble() {
   const integrations: IntegrationRow[] = [];
   const keys: KeyRow[] = [];
   const jobs: JobRow[] = [];
+  const schedules: {
+    integrationId: string;
+    kind: string;
+    lastSuccessAt: Date | null;
+    consecutiveFailures: number;
+  }[] = [];
 
   /** What `include`/`select`ing LATEST_JOB_SELECT yields for one integration. */
   const withJobs = (row: IntegrationRow) => {
@@ -74,6 +82,7 @@ function makePrismaDouble() {
       ...row,
       lmsSyncJobs: newest("lmsSyncJobs"),
       portalApiJobs: newest("portalApiJobs"),
+      schedules: schedules.filter((x) => x.integrationId === row.id),
     };
   };
 
@@ -174,7 +183,7 @@ function makePrismaDouble() {
     },
   };
 
-  return { prisma, integrations, keys, jobs };
+  return { prisma, integrations, keys, jobs, schedules };
 }
 
 // ── fixtures ──────────────────────────────────────────────────────────────
@@ -203,16 +212,22 @@ describe("IntegrationsService", () => {
   // and a manual sync pushes them out so the ticker does not re-walk at once.
   let ensureRows: jest.Mock;
   let deferAfterManualSync: jest.Mock;
+  let lastRunAt: jest.Mock;
+  let markManualFailure: jest.Mock;
   let inflightRun: jest.Mock;
   let db: ReturnType<typeof makePrismaDouble>;
 
   beforeEach(async () => {
     db = makePrismaDouble();
     verifyCredentials = jest.fn().mockResolvedValue(true);
-    syncNow = jest.fn().mockResolvedValue(undefined);
+    syncNow = jest
+      .fn()
+      .mockResolvedValue({ synced: ["LMS_CALENDAR"], complete: true });
     upstreamUnavailableFor = jest.fn().mockReturnValue(null);
     ensureRows = jest.fn().mockResolvedValue(3);
     deferAfterManualSync = jest.fn().mockResolvedValue(undefined);
+    lastRunAt = jest.fn().mockResolvedValue(null);
+    markManualFailure = jest.fn().mockResolvedValue(undefined);
     inflightRun = jest.fn(
       (_u: string, _p: string, fn: () => Promise<unknown>) => fn(),
     );
@@ -231,7 +246,12 @@ describe("IntegrationsService", () => {
         },
         {
           provide: IngestionScheduleService,
-          useValue: { ensureRows, deferAfterManualSync },
+          useValue: {
+            ensureRows,
+            deferAfterManualSync,
+            lastRunAt,
+            markManualFailure,
+          },
         },
         {
           provide: SyncInflightGuard,
@@ -277,9 +297,22 @@ describe("IntegrationsService", () => {
 
       await service.sync(USER, "LMS");
 
+      expect(deferAfterManualSync).toHaveBeenCalledWith(db.integrations[0].id, [
+        "LMS_CALENDAR",
+      ]);
+    });
+
+    it("defers only the kinds that succeeded, and none after a failed run", async () => {
+      await service.connect(USER, creds);
+      syncNow.mockResolvedValue({ synced: [], complete: false });
+
+      await expect(service.sync(USER, "LMS")).rejects.toBeInstanceOf(
+        BadGatewayException,
+      );
+
       expect(deferAfterManualSync).toHaveBeenCalledWith(
         db.integrations[0].id,
-        "LMS",
+        [],
       );
     });
 
@@ -307,6 +340,8 @@ describe("IntegrationsService", () => {
         lastVerifiedAt: expect.any(String) as string,
         lastSyncedAt: null,
         lastSyncStatus: null,
+        lastSuccessAt: null,
+        failing: false,
       });
 
       expect(db.keys).toHaveLength(1);
@@ -370,6 +405,8 @@ describe("IntegrationsService", () => {
         lastVerifiedAt: expect.any(String) as string,
         lastSyncedAt: null,
         lastSyncStatus: null,
+        lastSuccessAt: null,
+        failing: false,
       });
       await expect(service.revealCredentials("u1", "LMS")).resolves.toEqual({
         username: "sv123",
@@ -397,6 +434,8 @@ describe("IntegrationsService", () => {
         lastVerifiedAt: expect.any(String) as string,
         lastSyncedAt: null,
         lastSyncStatus: null,
+        lastSuccessAt: null,
+        failing: false,
       });
       await expect(service.revealCredentials("u1", "LMS")).resolves.toEqual({
         username: "new-user",
@@ -424,6 +463,8 @@ describe("IntegrationsService", () => {
             lastVerifiedAt: expect.any(String) as string,
             lastSyncedAt: null,
             lastSyncStatus: null,
+            lastSuccessAt: null,
+            failing: false,
           },
           {
             provider: "PORTAL",
@@ -431,6 +472,8 @@ describe("IntegrationsService", () => {
             lastVerifiedAt: null,
             lastSyncedAt: null,
             lastSyncStatus: null,
+            lastSuccessAt: null,
+            failing: false,
           },
         ]),
       );
@@ -465,6 +508,101 @@ describe("IntegrationsService", () => {
     });
   });
 
+  describe("lastSuccessAt", () => {
+    const good = new Date("2026-09-06T03:00:00.000Z");
+
+    it("is the time every data pass last came back clean, not the last run", async () => {
+      await service.connect(USER, creds);
+      const integrationId = db.integrations[0].id;
+      db.schedules.push({
+        integrationId,
+        kind: "LMS_CALENDAR",
+        lastSuccessAt: good,
+        consecutiveFailures: 0,
+      });
+      // A newer run that failed moves lastSyncedAt but not the good sync.
+      db.jobs.push({
+        integrationId,
+        table: "lmsSyncJobs",
+        status: "FAILED",
+        createdAt: new Date("2026-09-06T04:00:00.000Z"),
+      });
+
+      const lms = (await service.status(USER)).integrations.find(
+        (i) => i.provider === "LMS",
+      );
+
+      expect(lms).toMatchObject({
+        lastSyncedAt: "2026-09-06T04:00:00.000Z",
+        lastSyncStatus: "FAILED",
+        lastSuccessAt: good.toISOString(),
+      });
+    });
+
+    it("is the oldest portal pass, and null while any has never succeeded", async () => {
+      await service.connect(USER, { ...creds, provider: "PORTAL" });
+      const integrationId = db.integrations[0].id;
+      const older = new Date("2026-09-05T03:00:00.000Z");
+      db.schedules.push({
+        integrationId,
+        kind: "PORTAL_EXAM",
+        lastSuccessAt: good,
+        consecutiveFailures: 0,
+      });
+      const portal = async () =>
+        (await service.status(USER)).integrations.find(
+          (i) => i.provider === "PORTAL",
+        );
+
+      // Exams worked but the timetable never has: not a good sync.
+      expect((await portal())?.lastSuccessAt).toBeNull();
+
+      db.schedules.push({
+        integrationId,
+        kind: "PORTAL_TIMETABLE",
+        lastSuccessAt: older,
+        consecutiveFailures: 0,
+      });
+      expect((await portal())?.lastSuccessAt).toBe(older.toISOString());
+    });
+  });
+
+  describe("failing", () => {
+    it("is true while a data pass has consecutive failures, even if the last job says COMPLETED", async () => {
+      await service.connect(USER, { ...creds, provider: "PORTAL" });
+      const integrationId = db.integrations[0].id;
+      db.jobs.push({
+        integrationId,
+        table: "portalApiJobs",
+        status: "COMPLETED",
+        createdAt: new Date("2026-09-06T04:00:00.000Z"),
+      });
+      db.schedules.push(
+        {
+          integrationId,
+          kind: "PORTAL_EXAM",
+          lastSuccessAt: new Date(),
+          consecutiveFailures: 0,
+        },
+        {
+          integrationId,
+          kind: "PORTAL_TIMETABLE",
+          lastSuccessAt: null,
+          consecutiveFailures: 2,
+        },
+      );
+
+      const portal = (await service.status(USER)).integrations.find(
+        (i) => i.provider === "PORTAL",
+      );
+
+      expect(portal).toMatchObject({
+        lastSyncStatus: "COMPLETED",
+        failing: true,
+      });
+    });
+  });
+
   describe("sync", () => {
     it("runs the watchers, then reports the run just performed", async () => {
       await service.connect(USER, creds);
@@ -477,7 +615,7 @@ describe("IntegrationsService", () => {
           status: "COMPLETED",
           createdAt: new Date("2026-09-06T04:00:00.000Z"),
         });
-        return Promise.resolve();
+        return Promise.resolve({ synced: ["LMS_CALENDAR"], complete: true });
       });
 
       const status = await service.sync(USER, "LMS");
@@ -492,6 +630,8 @@ describe("IntegrationsService", () => {
       // Never a counts payload — run counts stay in the job rows and the logs.
       expect(Object.keys(status).sort()).toEqual([
         "connected",
+        "failing",
+        "lastSuccessAt",
         "lastSyncStatus",
         "lastSyncedAt",
         "lastVerifiedAt",
@@ -499,22 +639,46 @@ describe("IntegrationsService", () => {
       ]);
     });
 
-    it("reports a failed run rather than throwing", async () => {
-      await service.connect(USER, creds);
-      const integrationId = db.integrations[0].id;
-      syncNow.mockImplementation(() => {
-        db.jobs.push({
-          integrationId,
-          table: "lmsSyncJobs",
-          status: "FAILED",
-          createdAt: new Date("2026-09-06T04:00:00.000Z"),
-        });
-        return Promise.resolve();
-      });
+    it("fails with 502 when any pass failed, even if another succeeded", async () => {
+      // e.g. exams worked but the portal timetable had no token.
+      await service.connect(USER, { ...creds, provider: "PORTAL" });
+      syncNow.mockResolvedValue({ synced: ["PORTAL_EXAM"], complete: false });
 
-      await expect(service.sync(USER, "LMS")).resolves.toMatchObject({
-        lastSyncStatus: "FAILED",
-      });
+      await expect(service.sync(USER, "PORTAL")).rejects.toBeInstanceOf(
+        BadGatewayException,
+      );
+      // The failed kinds are counted, so the status reports the account failing.
+      expect(markManualFailure).toHaveBeenCalledWith(
+        expect.any(String),
+        "PORTAL",
+        ["PORTAL_EXAM"],
+      );
+      // What did succeed is still deferred; the failed kinds stay due.
+      expect(deferAfterManualSync).toHaveBeenCalledWith(expect.any(String), [
+        "PORTAL_EXAM",
+      ]);
+    });
+
+    it("refuses with 429 inside the cooldown, whoever ran last", async () => {
+      await service.connect(USER, creds);
+      // The ticker synced 4 minutes ago; the default cooldown is 15.
+      lastRunAt.mockResolvedValue(new Date(Date.now() - 4 * 60_000));
+
+      const err = await service.sync(USER, "LMS").catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(SyncCooldownException);
+      const { retryAfterSeconds } = err as SyncCooldownException;
+      expect(retryAfterSeconds).toBeGreaterThan(10 * 60);
+      expect(retryAfterSeconds).toBeLessThanOrEqual(11 * 60);
+      expect(syncNow).not.toHaveBeenCalled();
+    });
+
+    it("allows a sync once the cooldown has passed", async () => {
+      await service.connect(USER, creds);
+      lastRunAt.mockResolvedValue(new Date(Date.now() - 16 * 60_000));
+
+      await expect(service.sync(USER, "LMS")).resolves.toBeDefined();
+      expect(syncNow).toHaveBeenCalled();
     });
 
     it("runs under the in-flight lock", async () => {
@@ -568,6 +732,8 @@ describe("IntegrationsService", () => {
         lastVerifiedAt: null,
         lastSyncedAt: null,
         lastSyncStatus: null,
+        lastSuccessAt: null,
+        failing: false,
       });
       await expect(service.disconnect(USER, "LMS")).resolves.toBeDefined();
 

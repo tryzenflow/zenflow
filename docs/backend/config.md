@@ -38,8 +38,8 @@ Sliding windows; `*_WINDOW_SEC` in seconds, `*_LIMIT` max requests per window. R
 | `OTP_REQUEST_EMAIL_WINDOW_SEC` / `_LIMIT` | 900 / 3 |
 | `OTP_VERIFY_IP_WINDOW_SEC` / `_LIMIT` | 60 / 20 |
 | `OTP_VERIFY_EMAIL_WINDOW_SEC` / `_LIMIT` | 600 / 10 |
-| `SYNC_MANUAL_WINDOW_SEC` / `SYNC_MANUAL_LIMIT` | 21600 / 3 |
 | `RATE_LIMIT_STORE_TIMEOUT_MS` | 250 |
+| `SYNC_MANUAL_COOLDOWN_SEC` | 900 | Minimum gap between two syncs of one provider (manual or background). |
 
 ## DLU ingestion
 
@@ -55,7 +55,7 @@ Behaviour: [ingestion.md](ingestion.md).
 | `DLU_TZ` | `Asia/Ho_Chi_Minh` | Zone of upstream wall-clock strings, not the user's. |
 | `INGESTION_ENABLED` | `true` | Kill switch; `false` in `.env.test`. |
 | `INGESTION_REQUEST_DELAY_MS` | 750 | Pause between one watcher's requests (0 in tests). |
-| `INGESTION_PORTAL_DISCOVERY_PERIOD_MS` | 24 h in schema; 120 d in `ingestion-schedule.service.ts` | Per-student DKHP discovery period. |
+| `INGESTION_PORTAL_DISCOVERY_PERIOD_MS` | 120 d | Safety-net DKHP discovery period. A clean pass parks the row until the next term's window opens (2 weeks before it starts), so DKHP is asked about once per term. |
 | `INGESTION_LMS_DISCOVERY_PERIOD_MS` | 86400000 | |
 | `INGESTION_TIMETABLE_PERIOD_MS` | 86400000 | |
 | `INGESTION_EXAM_PERIOD_MS` | 86400000 | |

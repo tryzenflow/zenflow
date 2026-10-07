@@ -1,4 +1,6 @@
+import { ConfigService } from "@nestjs/config";
 import {
+  BadGatewayException,
   BadRequestException,
   forwardRef,
   Inject,
@@ -23,10 +25,14 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CryptoService } from "../crypto/crypto.service";
 import { MasterKeyService } from "../crypto/master-key.service";
 import { UpstreamUnavailableHttpException } from "../common/upstream-unavailable.exception";
+import { SyncCooldownException } from "./sync-cooldown.exception";
 import { SyncInflightGuard } from "./sync-inflight.service";
 import { IntegrationAuthService } from "./integration-auth.service";
 import { IngestionSyncService } from "../ingestion/ingestion-sync.service";
-import { IngestionScheduleService } from "../ingestion/ingestion-schedule.service";
+import {
+  DATA_KINDS_BY_PROVIDER,
+  IngestionScheduleService,
+} from "../ingestion/ingestion-schedule.service";
 import { ConnectIntegrationDto } from "./dto/connect-integration.dto";
 import { UpdateIntegrationDto } from "./dto/update-integration.dto";
 
@@ -52,7 +58,44 @@ const LATEST_JOB_SELECT = {
     take: 1,
     select: { status: true, createdAt: true },
   },
+  schedules: {
+    select: { kind: true, lastSuccessAt: true, consecutiveFailures: true },
+  },
 } as const;
+
+type ScheduleRows = {
+  kind: string;
+  lastSuccessAt: Date | null;
+  consecutiveFailures: number;
+}[];
+
+/** Is a pass that feeds the calendar currently failing? */
+function isFailing(
+  provider: IntegrationProvider,
+  row: { schedules?: ScheduleRows },
+): boolean {
+  return DATA_KINDS_BY_PROVIDER[provider].some(
+    (kind) =>
+      (row.schedules?.find((s) => s.kind === kind)?.consecutiveFailures ?? 0) >
+      0,
+  );
+}
+
+/**
+ * When every data pass of `provider` last came back clean: the oldest of their
+ * success stamps, so one pass that keeps failing (or never ran) cannot be
+ * hidden behind another's success. Null until all of them have succeeded.
+ */
+function lastGoodSyncOf(
+  provider: IntegrationProvider,
+  row: { schedules?: ScheduleRows },
+): Date | null {
+  const stamps = DATA_KINDS_BY_PROVIDER[provider].map(
+    (kind) => row.schedules?.find((s) => s.kind === kind)?.lastSuccessAt,
+  );
+  if (stamps.some((stamp) => !stamp)) return null;
+  return new Date(Math.min(...stamps.map((stamp) => stamp!.getTime())));
+}
 
 function latestJobOf(row: {
   lmsSyncJobs?: LatestJob[];
@@ -82,6 +125,7 @@ interface DecryptedDek {
 export class IntegrationsService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
     private readonly crypto: CryptoService,
     private readonly masterKeys: MasterKeyService,
     private readonly integrationAuth: IntegrationAuthService,
@@ -176,6 +220,8 @@ export class IntegrationsService {
           row?.lastVerifiedAt ?? null,
           !!row,
           row ? latestJobOf(row) : null,
+          row ? lastGoodSyncOf(provider, row) : null,
+          row ? isFailing(provider, row) : false,
         );
       }),
     };
@@ -207,11 +253,24 @@ export class IntegrationsService {
       );
     }
 
+    // At least `SYNC_MANUAL_COOLDOWN_SEC` between two runs of this provider,
+    // whoever ran the last one: a student mashing the button, or pressing it
+    // right after the ticker synced, would only repeat the same DLU requests.
+    const lastRun = await this.ingestionSchedule.lastRunAt(
+      connected.id,
+      provider,
+    );
+    if (lastRun) {
+      const cooldownMs =
+        (this.config.get<number>("SYNC_MANUAL_COOLDOWN_SEC") ?? 900) * 1000;
+      const wait = lastRun.getTime() + cooldownMs - Date.now();
+      if (wait > 0) {
+        throw new SyncCooldownException(this.label(provider), wait);
+      }
+    }
+
     // Upstream circuit breaker open: refuse with 503 + Retry-After instead of
-    // making the student wait out timeouts. A plain check, independent of the
-    // rate limiter, which runs earlier at the controller: that quota slot is
-    // already spent when we refuse here (documented tradeoff; refunding would
-    // couple this to LimitKit).
+    // making the student wait out timeouts.
     const wait = this.ingestionSync.upstreamUnavailableFor(provider);
     if (wait !== null) {
       throw new UpstreamUnavailableHttpException(
@@ -220,22 +279,41 @@ export class IntegrationsService {
       );
     }
 
-    // The 3-per-6h quota is LimitKit's `@RateLimit` on the controller (429);
-    // an in-flight duplicate is a 409 here.
-    await this.syncInflight.run(user.id, provider, () =>
+    // An in-flight duplicate is a 409 here.
+    const outcome = await this.syncInflight.run(user.id, provider, () =>
       this.ingestionSync.syncNow(user.id, provider),
     );
 
-    // The student just got fresh data by hand, so push their rolling schedule
-    // out by a full period — re-walking them minutes later would be pure waste
-    // against DLU. Best-effort: the sync itself already succeeded, and a failure
-    // here only costs one redundant pass.
+    // The student just got fresh data by hand, so push the kinds that came back
+    // clean out by a full period — re-walking them minutes later would be pure
+    // waste against DLU. A failed kind stays due so the ticker retries it.
+    // Best-effort: a failure here only costs one redundant pass.
     try {
-      await this.ingestionSchedule.deferAfterManualSync(connected.id, provider);
+      await this.ingestionSchedule.deferAfterManualSync(
+        connected.id,
+        outcome.synced,
+      );
     } catch {
       // Deliberately swallowed; see above.
     }
 
+    // A pass that failed (no token, rejected login, upstream error) is an error
+    // the student must see, not a 201 that another pass's success papers over.
+    // The job rows still say what happened; the controller charges no quota.
+    if (!outcome.complete) {
+      try {
+        await this.ingestionSchedule.markManualFailure(
+          connected.id,
+          provider,
+          outcome.synced,
+        );
+      } catch {
+        // Best-effort, like the deferral above.
+      }
+      throw new BadGatewayException(
+        `DLU ${this.label(provider)} sync did not complete. Check your account details and try again.`,
+      );
+    }
     return this.statusOf(user.id, provider);
   }
 
@@ -249,7 +327,14 @@ export class IntegrationsService {
       select: { provider: true, lastVerifiedAt: true, ...LATEST_JOB_SELECT },
     });
     if (!row) return this.toStatus(provider, null, false);
-    return this.toStatus(provider, row.lastVerifiedAt, true, latestJobOf(row));
+    return this.toStatus(
+      provider,
+      row.lastVerifiedAt,
+      true,
+      latestJobOf(row),
+      lastGoodSyncOf(provider, row),
+      isFailing(provider, row),
+    );
   }
 
   private async storeCredentials(
@@ -315,6 +400,8 @@ export class IntegrationsService {
       row.lastVerifiedAt,
       true,
       latestJobOf(row),
+      lastGoodSyncOf(provider, row),
+      isFailing(provider, row),
     );
   }
 
@@ -420,6 +507,8 @@ export class IntegrationsService {
     lastVerifiedAt: Date | null,
     connected = true,
     lastSync: LatestJob | null = null,
+    lastSuccess: Date | null = null,
+    failing = false,
   ): IntegrationStatus {
     return {
       provider,
@@ -427,6 +516,8 @@ export class IntegrationsService {
       lastVerifiedAt: lastVerifiedAt ? lastVerifiedAt.toISOString() : null,
       lastSyncedAt: lastSync ? lastSync.createdAt.toISOString() : null,
       lastSyncStatus: lastSync ? lastSync.status : null,
+      lastSuccessAt: lastSuccess ? lastSuccess.toISOString() : null,
+      failing,
     };
   }
 

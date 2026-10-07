@@ -9,10 +9,8 @@ import {
   Patch,
   UseGuards,
 } from "@nestjs/common";
-import { RateLimit } from "@limitkit/nest";
 import type { IntegrationProvider } from "@zenflow/shared";
 import { CookieAuthGuard } from "../auth/guards";
-import { manualSyncRateLimitRules } from "../common/rate-limit";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { type User } from "../../generated/prisma";
 import { IntegrationsService } from "./integrations.service";
@@ -56,22 +54,20 @@ export class IntegrationsController {
    * for the next tick. Returns the provider's status, whose `lastSyncedAt` /
    * `lastSyncStatus` describe the run just performed.
    *
-   * Quota: LimitKit (`SYNC_MANUAL_*`, per user + provider), enforced by the
-   * global guard before `CookieAuthGuard`; it reads `req.user` set by
-   * `passport.session()`. 429 carries `Retry-After`.
+   * Cooldown: 429 + `Retry-After` while the provider's last run (manual or
+   * background) is under `SYNC_MANUAL_COOLDOWN_SEC` old. A failed pass is a 502.
    */
-  @RateLimit({ rules: manualSyncRateLimitRules })
   @Post(":provider/sync")
   async sync(
     @CurrentUser() user: User,
     @Param("provider", new ParseEnumPipe(IntegrationProviderEnum))
     provider: IntegrationProvider,
   ) {
-    const data = await this.integrations.sync(user, provider);
+    const status = await this.integrations.sync(user, provider);
     return {
       success: true,
       message: `${provider} sync finished`,
-      data,
+      data: status,
     };
   }
 

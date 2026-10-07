@@ -80,10 +80,10 @@ Stores a student's LMS/portal login for ingestion. Credentials are never returne
 | Method | Path | Purpose |
 | --- | --- | --- |
 | POST | `/integrations` | Connect `{ provider, username, password }`: live-login probe, then encrypt + upsert. |
-| GET | `/integrations` | `[{ provider, connected, lastVerifiedAt, lastSyncedAt, lastSyncStatus }]`. |
+| GET | `/integrations` | `[{ provider, connected, lastVerifiedAt, lastSyncedAt, lastSyncStatus, lastSuccessAt, failing }]`. `lastSyncedAt` is the newest run of any outcome; `lastSuccessAt` is when every data pass last came back clean (oldest of them), the time to show as "last synced"; `failing` is true while a data pass has consecutive failures. |
 | PATCH | `/integrations/:provider` | Update credentials (same probe-then-write). |
 | DELETE | `/integrations/:provider` | Disconnect. Idempotent; keeps the encryption key. |
-| POST | `/integrations/:provider/sync` | Run this student's watchers now. `404` not connected, `409` already running, `429` + `Retry-After` over the limit, `503 UPSTREAM_UNAVAILABLE` + `Retry-After` while the breaker is open. |
+| POST | `/integrations/:provider/sync` | Run this student's watchers now. `404` not connected, `409` already running, `429` + `Retry-After` inside the cooldown, `502` if a pass failed, `503 UPSTREAM_UNAVAILABLE` + `Retry-After` while the breaker is open. |
 
 Limits and breaker: [ingestion.md](ingestion.md#manual-sync).
 
@@ -114,17 +114,15 @@ The ingestion inbox, written by the materializer, never by a client. `eventName`
 
 ## Rate limits
 
-Built with LimitKit; helpers `slidingWindowRule()` / `syncRateLimitKey()` in `common/rate-limit/`. Env vars: [config.md](config.md#rate-limits).
+Built with LimitKit; helper `slidingWindowRule()` in `common/rate-limit/`. Env vars: [config.md](config.md#rate-limits).
 
 | Endpoint | Rule (sliding window) | Over limit |
 | --- | --- | --- |
 | `POST /auth/otp/request` | per IP 5/min; per IP 20/h (loose for campus NAT); per email 3 per 15 min | `429` |
 | `POST /auth/otp/verify` | per IP 20/min; per email 10 per 10 min | `429` |
-| `POST /integrations/:provider/sync` | 3 per 6 h per user + provider | `429` + `Retry-After` |
 
 - OTP email key is normalized (trim, lower-case, `+tag` stripped, Gmail dots dropped) so aliases share a bucket. The address used for login is unchanged.
-- Manual sync: `@RateLimit(manualSyncRateLimitRules)`, key `sync:{userId}:{provider}` (IP bucket if `req.user` is missing). The global guard reads `req.user` from `passport.session()`, which runs first.
-- Attempts count even if the run fails. A concurrent duplicate returns `409` but still spends a slot, so clients should disable the button while syncing.
+- Manual sync is not a LimitKit rule: it is a cooldown measured from the schedule's last run, see [ingestion.md](ingestion.md#manual-sync).
 - **Fail open:** the rate-limit Redis store is wrapped in `ResilientStore` (`common/rate-limit/resilient-store.ts`).
   - Each call races `RATE_LIMIT_STORE_TIMEOUT_MS` (250). A timeout or error allows the request.
   - Failures feed a `CircuitBreaker` (`common/circuit-breaker.ts`, shared with `PlacementClient`): opens after 5 consecutive failures, probes after 15 s, backs off to 60 s.

@@ -82,10 +82,6 @@ const GLOBAL_NOOP_LIMIT = 1_000_000;
             window: configService.get<number>("OTP_VERIFY_EMAIL_WINDOW_SEC")!,
             limit: configService.get<number>("OTP_VERIFY_EMAIL_LIMIT")!,
           },
-          syncManual: {
-            window: configService.get<number>("SYNC_MANUAL_WINDOW_SEC")!,
-            limit: configService.get<number>("SYNC_MANUAL_LIMIT")!,
-          },
         });
 
         return {

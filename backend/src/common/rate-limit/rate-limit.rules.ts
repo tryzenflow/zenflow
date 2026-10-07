@@ -41,8 +41,7 @@ function ipKey(namespace: string) {
 /**
  * Reusable sliding-window rule. `window` is resolved lazily per request (the
  * runtime config only exists after boot) and `key` must be namespaced (see
- * above). Used by the OTP rules and available for other limiters, e.g. the
- * per-user manual-sync limit keyed with {@link syncRateLimitKey}.
+ * above). Used by the OTP rules and available for other limiters.
  */
 export function slidingWindowRule(
   name: string,
@@ -56,37 +55,6 @@ export function slidingWindowRule(
       slidingWindowFor(getRateLimitRuntimeConfig().storeKind, window()),
   };
 }
-
-/** Per-user, per-provider manual-sync limiter key: `sync:{userId}:{provider}`. */
-export function syncRateLimitKey(userId: string, provider: string): string {
-  return `sync:${userId}:${provider}`;
-}
-
-/**
- * Key for `POST /integrations/:provider/sync`. `passport.session()` is global
- * Express middleware, so `req.user` is already set when LimitKit's global guard
- * runs, before `CookieAuthGuard`. An anonymous request gets an IP bucket (the
- * auth guard 401s it anyway) so it can't share or probe a user's quota.
- */
-export function manualSyncKey(req: Request): string {
-  // Express.User (passport) is untyped here; the session user is a Prisma User.
-  const userId = (req as unknown as { user?: { id?: string } }).user?.id;
-  const provider = (req.params as { provider?: string } | undefined)?.provider;
-  if (!userId || !provider) return `sync:ip:${req.ip}`;
-  return syncRateLimitKey(userId, provider);
-}
-
-/**
- * `POST /integrations/:provider/sync` — `SYNC_MANUAL_LIMIT` per
- * `SYNC_MANUAL_WINDOW_SEC` (default 3 per 6 h), per user + provider.
- */
-export const manualSyncRateLimitRules: LimitRule<Request>[] = [
-  slidingWindowRule(
-    "manual-sync",
-    manualSyncKey,
-    () => getRateLimitRuntimeConfig().syncManual,
-  ),
-];
 
 /**
  * Normalized (trim, lower-case, `+tag`, Gmail dots) so aliases of one inbox

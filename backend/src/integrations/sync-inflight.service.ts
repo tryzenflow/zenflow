@@ -12,12 +12,8 @@ export function syncInflightKey(userId: string, provider: string): string {
 
 /**
  * One manual sync at a time per user + provider (`SET NX EX`, released in
- * `finally`). LimitKit has no concurrency primitive, so this stays here; the
- * 3-per-6h quota itself is LimitKit's `@RateLimit` on the controller.
- *
- * Tradeoff: LimitKit's guard runs before the controller, so a duplicate that
- * this lock rejects with 409 has already spent a quota slot. The client should
- * disable the button while a sync is running.
+ * `finally`). LimitKit has no concurrency primitive, so this stays here. The client
+ * should still disable the button while a sync is running.
  *
  * Uses the rate-limit Redis. Fails open if Redis is unreachable (as LimitKit does);
  * it cannot hang because that client has `commandTimeout` and no offline queue.

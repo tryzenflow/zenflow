@@ -15,8 +15,6 @@ export interface RateLimitRuntimeConfig {
   otpRequestEmail: RateLimitWindow;
   otpVerifyIp: RateLimitWindow;
   otpVerifyEmail: RateLimitWindow;
-  /** `POST /integrations/:provider/sync`, per user + provider. */
-  syncManual: RateLimitWindow;
 }
 
 /**

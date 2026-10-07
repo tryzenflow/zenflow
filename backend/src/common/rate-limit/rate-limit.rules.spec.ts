@@ -3,11 +3,8 @@ import type { Request } from "express";
 import { RedisSlidingWindow } from "@limitkit/redis";
 import { InMemorySlidingWindow } from "@limitkit/memory";
 import {
-  manualSyncRateLimitRules,
   otpRequestRateLimitRules,
   otpVerifyRateLimitRules,
-  slidingWindowRule,
-  syncRateLimitKey,
 } from "./rate-limit.rules";
 import {
   resetRateLimitRuntimeConfig,
@@ -53,7 +50,6 @@ describe("otpRequestRateLimitRules / otpVerifyRateLimitRules", () => {
         otpRequestEmail: { window: 900, limit: 3 },
         otpVerifyIp: { window: 60, limit: 20 },
         otpVerifyEmail: { window: 600, limit: 10 },
-        syncManual: { window: 21600, limit: 3 },
       });
     });
 
@@ -92,33 +88,6 @@ describe("otpRequestRateLimitRules / otpVerifyRateLimitRules", () => {
       );
       const policy = await resolvePolicy(hourly, fakeRequest());
       expect(policy.config).toMatchObject({ window: 3600, limit: 20 });
-    });
-
-    it("slidingWindowRule builds a lazily-configured rule; syncRateLimitKey is namespaced", async () => {
-      const rule = slidingWindowRule(
-        "sync",
-        () => syncRateLimitKey("u1", "dlu"),
-        () => ({ window: 21600, limit: 3 }),
-      );
-      expect(resolveKey(rule, fakeRequest())).toBe("sync:u1:dlu");
-      const policy = await resolvePolicy(rule, fakeRequest());
-      expect(policy.config).toMatchObject({ window: 21600, limit: 3 });
-    });
-
-    it("manual-sync rule keys per user + provider, with an IP fallback when anonymous", async () => {
-      const [rule] = manualSyncRateLimitRules;
-      expect(
-        resolveKey(
-          rule,
-          fakeRequest({
-            user: { id: "u1" },
-            params: { provider: "LMS" },
-          }),
-        ),
-      ).toBe("sync:u1:LMS");
-      expect(resolveKey(rule, fakeRequest())).toBe("sync:ip:203.0.113.7");
-      const policy = await resolvePolicy(rule, fakeRequest());
-      expect(policy.config).toMatchObject({ window: 21600, limit: 3 });
     });
 
     it("falls back to a stable key when the body has no email (still consumes quota)", () => {
@@ -165,7 +134,6 @@ describe("otpRequestRateLimitRules / otpVerifyRateLimitRules", () => {
       otpRequestEmail: { window: 900, limit: 3 },
       otpVerifyIp: { window: 60, limit: 20 },
       otpVerifyEmail: { window: 600, limit: 10 },
-      syncManual: { window: 21600, limit: 3 },
     });
     const [ipRule] = otpRequestRateLimitRules;
     const policy = await resolvePolicy(ipRule, fakeRequest());

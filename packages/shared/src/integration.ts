@@ -44,6 +44,20 @@ export interface IntegrationStatus {
   lastSyncedAt: string | null;
   /** How that run ended, or null if there has never been one. */
   lastSyncStatus: IntegrationSyncStatus | null;
+  /**
+   * ISO-8601 instant the provider's data was last fully refreshed — every pass
+   * that feeds the calendar came back clean — or null if that never happened.
+   * Unlike `lastSyncedAt`, a failed or partial run does not move it, so it is
+   * the time to show as "last synced".
+   */
+  lastSuccessAt: string | null;
+  /**
+   * True while a pass that feeds the calendar keeps failing — the last attempt
+   * (background or manual) did not come back clean. Cleared by the next clean
+   * run. A job row alone cannot say this: a run whose login worked but whose
+   * data call failed still ends `COMPLETED`.
+   */
+  failing: boolean;
 }
 
 /** `data` payload for `GET /integrations` — one entry per known provider. */
