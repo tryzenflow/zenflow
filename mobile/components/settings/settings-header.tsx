@@ -5,7 +5,10 @@ import { Text } from "@/components/ui/text";
 export function SettingsSectionLabel({ children }: { children: string }) {
   useLanguage();
   return (
-    <Text className="mx-1 mb-2 mt-[22px] text-xs font-bold uppercase tracking-wider text-muted-foreground">
+    <Text
+      accessibilityRole="header"
+      className="mx-1 mb-2 mt-[22px] text-xs font-bold uppercase tracking-wider text-muted-foreground"
+    >
       {children}
     </Text>
   );

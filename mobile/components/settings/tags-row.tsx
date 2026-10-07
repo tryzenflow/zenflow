@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
+import { haptic } from "@/lib/haptics";
 import { useToast } from "@/components/ui/toast";
 import { mergeTagNames, newTagsForBulk } from "@/lib/onboarding";
 import { useEffect, useState } from "react";
@@ -64,10 +65,13 @@ export function TagsRow() {
       <View className="overflow-hidden rounded-2xl border border-border bg-card">
         <Pressable
           onPress={() => {
+            haptic.select();
             setSelected(saved);
             sheet.open();
           }}
-          className="flex-row items-center gap-[13px] px-4 py-3.5"
+          accessibilityRole="button"
+          accessibilityLabel={`${t("Tags")}, ${saved.length}`}
+          className="min-h-14 flex-row items-center gap-[13px] px-4 py-3.5"
         >
           <View className="h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl bg-muted">
             <List size={18} className="text-foreground" />
@@ -82,7 +86,10 @@ export function TagsRow() {
       <BottomSheet>
         <BottomSheetContent ref={sheet.ref}>
           <BottomSheetView style={{ paddingBottom: 30 }}>
-            <Text className="pb-3 pt-1 text-xl font-bold tracking-tight">
+            <Text
+              accessibilityRole="header"
+              className="pb-3 pt-1 text-xl font-bold tracking-tight"
+            >
               {t("Tags")}
             </Text>
             <TagPicker
@@ -91,8 +98,8 @@ export function TagsRow() {
               InputComponent={BottomSheetInput}
             />
             <Button
-              className="mt-5 rounded-xl"
-              disabled={saving}
+              className="mt-5"
+              loading={saving}
               onPress={save}
             >
               <Text className="font-semibold text-primary-foreground">

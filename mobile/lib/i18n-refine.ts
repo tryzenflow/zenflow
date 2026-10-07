@@ -69,4 +69,8 @@ export default {
   "Not set up yet": "Chưa thiết lập",
   "{count} tags": "{count} nhãn",
   "Step {index} of {total}": "Bước {index} trên {total}",
+  "Sign out?": "Đăng xuất?",
+  "You'll sign back in with a code sent to your email.":
+    "Bạn sẽ đăng nhập lại bằng mã gửi qua email.",
+  "Stay signed in": "Ở lại",
 } as Record<string, string>;
