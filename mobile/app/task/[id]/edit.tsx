@@ -245,7 +245,7 @@ function EditSessionForm() {
         ),
       handleUpdated,
       (error) =>
-        showErrorToast(toast, error, t("Failed to update the session")),
+        showErrorToast(toast, error, t("Couldn't update session")),
     );
   }
 
@@ -296,7 +296,7 @@ function EditSessionForm() {
       );
       router.back();
     } catch (error) {
-      showErrorToast(toast, error, t("Failed to delete the session"));
+      showErrorToast(toast, error, t("Couldn't delete session"));
     } finally {
       setDeleting(false);
     }

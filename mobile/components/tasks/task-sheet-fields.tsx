@@ -111,7 +111,7 @@ export function SessionSheetFields({
           <Field label={t("Description")}>
             <ErrorBoundary
               fallbackMessage={t(
-                "The description editor couldn't load. Everything else on this form still works.",
+                "The editor didn't load. Everything else still works.",
               )}
             >
               <DescriptionField

@@ -168,7 +168,7 @@ export const SessionListSheet = forwardRef<
                 {t("Nothing scheduled")}
               </Text>
               <Text className="text-[13px] text-muted-foreground">
-                {t("This day is free.")}
+                {t("A free day. Plan something?")}
               </Text>
             </View>
           }

@@ -137,7 +137,7 @@ export function GettingStarted() {
               </Text>
               <Text className="mt-[3px] text-[13px] text-muted-foreground">
                 {t(
-                  "{done} of {total} done — they tick off as you try them. Tap a step to be shown.",
+                  "{done} of {total} done. Steps tick off as you try them — tap one for a quick guide.",
                   { done, total },
                 )}
               </Text>

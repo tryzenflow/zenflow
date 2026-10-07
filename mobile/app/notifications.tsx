@@ -401,7 +401,7 @@ export default function NotificationsScreen() {
                 {t("You're all caught up")}
               </Text>
               <Text className="mt-1.5 text-center text-[13px] leading-snug text-muted-foreground">
-                {t("No new notifications from your LMS or student portal.")}
+                {t("Nothing new from your LMS or student portal.")}
               </Text>
             </View>
           }
@@ -433,7 +433,7 @@ export default function NotificationsScreen() {
               </Text>
               <Text className="mt-2 text-sm leading-relaxed text-muted-foreground">
                 {t(
-                  "All notifications in your inbox will be permanently removed. This action cannot be undone.",
+                  "Every notification will be removed for good. This can't be undone.",
                 )}
               </Text>
 

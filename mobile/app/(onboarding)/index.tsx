@@ -97,12 +97,12 @@ const COPY = {
     },
     get body() {
       return t(
-        "Zenflow watches your timetable, exams and LMS for changes and new assignments. Your login is only used to check DLU on your behalf.",
+        "Zenflow keeps an eye on your timetable, exams and LMS, so new assignments land on your calendar. Your login is only used to check DLU for you.",
       );
     },
     get hint() {
       return t(
-        "Opens the same sign-in sheet as Settings → Connect your DLU account. You can connect later.",
+        "You can also do this later in Settings → Connect your DLU account.",
       );
     },
   },
@@ -112,7 +112,7 @@ const COPY = {
     },
     get body() {
       return t(
-        "Zenflow sends a push when a reminder is due or your schedule changes. We'll ask iOS / Android for permission next.",
+        "Get a nudge when a session is near or your schedule changes. We'll ask for permission next.",
       );
     },
     get rowTitle() {
@@ -137,7 +137,7 @@ const COPY = {
     },
     get blockedBody() {
       return t(
-        "Turn them on in system settings to get reminders. The preference is saved as off for now.",
+        "Turn them on in system settings to get reminders. For now, they stay off.",
       );
     },
     get openSettings() {
@@ -167,11 +167,11 @@ const COPY = {
     },
     get body() {
       return t(
-        "How long before a session should we nudge you? Each task can override this.",
+        "How early should we remind you? You can change it per task.",
       );
     },
     get hint() {
-      return t("Optional step · stored as your default reminder.");
+      return t("Optional · saved as your default reminder.");
     },
   },
   tags: {
@@ -180,12 +180,12 @@ const COPY = {
     },
     get body() {
       return t(
-        "Tags group your tasks and sessions. We've suggested a few for students — tap to keep, add your own, rename them later.",
+        "Tags keep your tasks organised. Tap the ones you like, add your own, and rename them later.",
       );
     },
     footer: (n: number) =>
       t(
-        "{count} selected · saved to your account, available in the task form’s Tags field.",
+        "{count} selected · saved to your account",
         { count: n },
       ),
   },

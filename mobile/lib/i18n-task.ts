@@ -23,8 +23,6 @@ const taskTranslations: Record<string, string> = {
   "What needs doing?": "Bạn cần làm gì?",
   characters: "ký tự",
   Description: "Mô tả",
-  "The description editor couldn't load. Everything else on this form still works.":
-    "Không thể tải trình soạn mô tả. Các phần khác của biểu mẫu vẫn hoạt động.",
   Location: "Địa điểm",
   "Room, building, or link (optional)":
     "Phòng, tòa nhà hoặc liên kết (không bắt buộc)",
@@ -141,5 +139,7 @@ const taskTranslations: Record<string, string> = {
   "Couldn't open photo library": "Chưa mở được thư viện ảnh",
   "Couldn't upload file": "Chưa tải được tệp lên",
   "Couldn't upload image": "Chưa tải được ảnh lên",
+  "The editor didn't load. Everything else still works.":
+    "Trình soạn mô tả chưa tải được. Bạn vẫn dùng được các phần khác của biểu mẫu.",
 };
 export default taskTranslations;

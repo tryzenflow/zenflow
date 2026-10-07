@@ -1007,7 +1007,7 @@ export function DayTimeline({
             </Text>
             <Text className="mt-1.5 max-w-[280px] text-center text-[13.5px] leading-normal text-muted-foreground">
               {t(
-                "We couldn't reach the scheduler. Check your connection and try again.",
+                "Couldn't reach the scheduler. Check your connection and try again.",
               )}
             </Text>
             <Button

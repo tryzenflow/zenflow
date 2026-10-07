@@ -13,7 +13,7 @@ function ErrorFallback({ message }: { message?: string }) {
       <Text className="flex-1 text-[12.5px] text-muted-foreground">
         {t(
           message ??
-            "This part couldn't load. The rest of the form still works.",
+            "This part didn't load. Everything else still works.",
         )}
       </Text>
     </View>

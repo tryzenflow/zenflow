@@ -183,12 +183,12 @@ function syncErrorToast(error: unknown): {
 function errorMessageFor(error: unknown): string {
   if (isAxiosError(error)) {
     if (error.code === "ERR_CANCELED")
-      return t("Connection timed out. DLU may be unavailable — try again.");
+      return t("DLU is taking too long. Try again in a bit.");
     if (error.response?.status === 503)
-      return t("Couldn't reach DLU right now — try again in a bit.");
+      return t("Couldn't reach DLU. Try again in a bit.");
   }
   return t(
-    "That didn't work. Double-check your student ID and password and try again.",
+    "Sign-in didn't work. Check your student ID and password.",
   );
 }
 
@@ -317,7 +317,7 @@ export function DluAccountsSection({
       toast(t("Disconnected"), "success");
       confirmSheet.close();
     } catch {
-      toast(t("Failed to disconnect"), "destructive");
+      toast(t("Couldn't disconnect"), "destructive");
     } finally {
       setIsSubmitting(false);
     }

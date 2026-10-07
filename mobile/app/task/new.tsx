@@ -303,7 +303,7 @@ function NewSessionForm() {
         showErrorToast(
           toast,
           error,
-          t("Something went wrong when creating the session"),
+          t("Couldn't create the session"),
         ),
     );
   }

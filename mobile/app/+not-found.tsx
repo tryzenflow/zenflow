@@ -13,7 +13,7 @@ export default function NotFoundScreen() {
     <>
       <Stack.Screen options={{ title: t("Oops!") }} />
       <View>
-        <Text>{t("This screen doesn't exist.")}</Text>
+        <Text>{t("We can't find that screen.")}</Text>
 
         <Link href="/">
           <Text>{t("Go to home screen!")}</Text>

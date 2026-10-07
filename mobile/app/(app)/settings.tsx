@@ -149,7 +149,7 @@ export default function SettingsScreen() {
                 {t("Dark mode")}
               </Text>
               <Text className="mt-0.5 text-[13px] text-muted-foreground">
-                {t("Follow the warm-sunrise night palette")}
+                {t("Easy on the eyes at night")}
               </Text>
             </View>
             <Switch

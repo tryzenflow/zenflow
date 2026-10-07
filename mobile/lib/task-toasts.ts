@@ -65,7 +65,13 @@ export function showErrorToast(
   error: unknown,
   fallback: string,
 ): void {
-  showSplitToast(toast, describeSaveError(error, fallback), "destructive");
+  const message = describeSaveError(error, fallback);
+  // Only the generic fallback is known: add a next step so it isn't a dead end.
+  showSplitToast(
+    toast,
+    message === fallback ? `${fallback}\n${t("Try again in a moment.")}` : message,
+    "destructive",
+  );
 }
 
 /**

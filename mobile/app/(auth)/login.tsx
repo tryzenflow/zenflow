@@ -203,7 +203,7 @@ export default function LoginScreen() {
     clearErrors("email");
     try {
       await requestOtp(data.email);
-      toast(t("Email sent successfully"), "info");
+      toast(t("Check your inbox"), "info");
       requestLockout.clear();
       setStage("otp");
       form.setValue("otp", "");
@@ -216,8 +216,8 @@ export default function LoginScreen() {
         const message =
           isAxiosError(error) && error.response
             ? (error.response.data?.message ??
-              t("Failed to send OTP. Please try again."))
-            : t("Network error. Could not connect to the server.");
+              t("Couldn't send the code. Try again."))
+            : t("No connection. Check your internet and try again.");
         setError("email", { type: "manual", message });
       }
     } finally {
@@ -231,7 +231,7 @@ export default function LoginScreen() {
     clearErrors("otp");
     try {
       const result = await verifyOtp(getValues("email"), data.otp);
-      toast(t("Login successfully"), "success");
+      toast(t("Welcome back"), "success");
       let user: User = result.data;
       // The language shown on this screen (the top-right select, or the
       // Vietnamese default) overrides the account's stored preference.
@@ -252,8 +252,8 @@ export default function LoginScreen() {
         const message =
           isAxiosError(error) && error.response
             ? (error.response.data?.message ??
-              t("Failed to verify OTP. Please try again."))
-            : t("Network error. Could not connect to the server.");
+              t("Couldn't verify the code. Try again."))
+            : t("No connection. Check your internet and try again.");
         setError("otp", { type: "manual", message });
       }
     } finally {
@@ -314,7 +314,7 @@ export default function LoginScreen() {
               />
               {requestLockout.active && (
                 <LockoutNotice>
-                  {t("Too many requests. Please wait before trying again.")}
+                  {t("Too many requests. Wait a moment, then try again.")}
                 </LockoutNotice>
               )}
             </View>

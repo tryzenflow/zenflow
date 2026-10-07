@@ -76,7 +76,7 @@ export function ProfileRow({
     } catch (error) {
       const message =
         (isAxiosError(error) && error.response?.data?.message) ||
-        t("Failed to update profile");
+        t("Couldn't update profile");
       toast(message, "destructive");
     } finally {
       setSaving(false);
@@ -151,7 +151,7 @@ export function ProfileRow({
                 <Lock size={16} className="shrink-0 text-muted-foreground" />
               </View>
               <Text className="mt-[7px] text-[13px] leading-snug text-muted-foreground">
-                {t("Email is your sign-in identity and can't be changed here.")}
+                {t("Your email is how you sign in, so it can't be changed here.")}
               </Text>
             </View>
           </View>
