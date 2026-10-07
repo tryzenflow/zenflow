@@ -10,9 +10,12 @@ import {
 import { Text } from "@/components/ui/text";
 import { completeStep, useChecklist } from "@/hooks/use-checklist";
 import { useSpotlight } from "@/hooks/use-spotlight";
+import { useUserStore } from "@/hooks/use-user-store";
 import { STEP_SCREEN } from "@/lib/checklist";
+import { findNearestTaskDate } from "@/lib/nearest-task-date";
 import { FAB_GLOW_INNER, FAB_GLOW_OUTER } from "@/lib/fab-glow";
 import { cn } from "@/lib/utils";
+import { zonedNow } from "@zenflow/core";
 import type { ChecklistStep } from "@zenflow/shared";
 import * as Haptics from "expo-haptics";
 import { type Href, useRouter } from "expo-router";
@@ -77,11 +80,21 @@ export function GettingStarted() {
 
   // Tap a step: close the sheet, go to its screen, then spotlight its control.
   // If nothing turns up to point at (no task yet), point at + instead.
-  const showMe = (tapped: ChecklistStep, blockedBy: ChecklistStep | null) => {
+  const showMe = async (
+    tapped: ChecklistStep,
+    blockedBy: ChecklistStep | null,
+  ) => {
     Haptics.selectionAsync().catch(() => {});
     sheet.close();
-    // A step that needs a task: point at the + button instead.
-    const step = blockedBy ?? tapped;
+    // A step that needs a task: point at the + button instead — unless the
+    // user already has tasks (made before the checklist, or by the planner),
+    // in which case use one of those; the week view hops to the nearest day
+    // that has one.
+    let step = blockedBy ?? tapped;
+    if (blockedBy === "create-task") {
+      const tz = useUserStore.getState().user?.timezone || "UTC";
+      if (await findNearestTaskDate(zonedNow(tz), tz)) step = tapped;
+    }
     const screen = STEP_SCREEN[step];
     setTimeout(() => {
       if (screen) router.navigate((screen === "week" ? "/" : "/month") as Href);
@@ -151,7 +164,7 @@ export function GettingStarted() {
                 {group.items.map((item) => (
                   <Pressable
                     key={item.id}
-                    onPress={() => showMe(item.id, item.blockedBy)}
+                    onPress={() => void showMe(item.id, item.blockedBy)}
                     accessibilityRole="button"
                     accessibilityLabel={t("Show me: {title}", { title: item.title })}
                     className="flex-row items-start gap-3 rounded-xl px-1 py-2.5 active:opacity-70"

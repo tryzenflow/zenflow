@@ -41,7 +41,10 @@ import { NotificationBell } from "@/components/notification-bell";
 import { GettingStarted } from "@/components/checklist/getting-started";
 import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { completeStep } from "@/hooks/use-checklist";
+import { useSpotlight } from "@/hooks/use-spotlight";
 import { useUserStore } from "@/hooks/use-user-store";
+import { findNearestTaskDate } from "@/lib/nearest-task-date";
+import { getCachedDaySessions } from "@/lib/session-cache";
 import { useWeekDayTypes } from "@/hooks/use-week-day-types";
 import {
   type PendingSlotPick,
@@ -140,6 +143,25 @@ export default function WeekScreen() {
     },
     [],
   );
+
+  // Getting-started "move a task" (and "block actions") needs a task to point
+  // at. If the focused day is empty, hop to the nearest day that has one.
+  const spotlightStep = useSpotlight((s) => s.step);
+  useEffect(() => {
+    if (spotlightStep !== "move-task" && spotlightStep !== "block-actions") {
+      return;
+    }
+    if (timelineState !== "ready") return;
+    const cached = getCachedDaySessions(dateKey(focusedDate));
+    if (!cached || cached.length > 0) return;
+    let cancelled = false;
+    findNearestTaskDate(focusedDate, tz).then((day) => {
+      if (!cancelled && day) commitFocusedDate(day);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [spotlightStep, timelineState, focusedDate, tz, commitFocusedDate]);
 
   const tabBarOverlay = useTabBarOverlayHeight();
 
