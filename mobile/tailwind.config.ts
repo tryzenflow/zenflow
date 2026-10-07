@@ -65,7 +65,11 @@ export default {
           yellow: "rgb(var(--brand-yellow) / <alpha-value>)",
           lime: "rgb(var(--brand-lime) / <alpha-value>)",
         },
-        success: "rgb(var(--success) / <alpha-value>)",
+        success: {
+          DEFAULT: "rgb(var(--success) / <alpha-value>)",
+          // Green for text/icons on surfaces (the fill green is 2.5:1 in light mode).
+          text: "rgb(var(--success-text) / <alpha-value>)",
+        },
         // Amber for text/icons on surfaces (brand-yellow is for fills only).
         warning: "rgb(var(--warning) / <alpha-value>)",
       },

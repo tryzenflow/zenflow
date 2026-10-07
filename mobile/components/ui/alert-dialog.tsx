@@ -4,7 +4,8 @@ import { TextClassContext } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import * as React from "react";
 import { Platform, StyleSheet, View } from "react-native";
-import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import { useMotion } from "@/hooks/use-motion";
+import Animated from "react-native-reanimated";
 
 const AlertDialog = AlertDialogPrimitive.Root;
 
@@ -39,6 +40,7 @@ const AlertDialogOverlayNative = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Overlay>
 >(({ className, children, ...props }, ref) => {
+  const motion = useMotion();
   return (
     <AlertDialogPrimitive.Overlay
       style={StyleSheet.absoluteFill}
@@ -50,10 +52,7 @@ const AlertDialogOverlayNative = React.forwardRef<
       ref={ref}
       asChild
     >
-      <Animated.View
-        entering={FadeIn.duration(150)}
-        exiting={FadeOut.duration(150)}
-      >
+      <Animated.View {...motion.fade(150)}>
         {children}
       </Animated.View>
     </AlertDialogPrimitive.Overlay>

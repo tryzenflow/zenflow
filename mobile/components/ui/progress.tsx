@@ -1,3 +1,4 @@
+import { useMotion } from "@/hooks/use-motion";
 import { cn } from "@/lib/utils";
 import * as React from "react";
 import { Platform } from "react-native";
@@ -37,19 +38,21 @@ function Indicator({
   value,
   className,
 }: { value: number | undefined | null; className?: string }) {
+  const { reduced } = useMotion();
   const progress = useDerivedValue(() => value ?? 0);
 
   const indicator = useAnimatedStyle(() => {
+    const width = `${interpolate(
+      progress.value,
+      [0, 100],
+      [1, 100],
+      Extrapolation.CLAMP,
+    )}%` as `${number}%`;
     return {
-      width: withSpring(
-        `${interpolate(
-          progress.value,
-          [0, 100],
-          [1, 100],
-          Extrapolation.CLAMP,
-        )}%`,
-        { overshootClamping: true },
-      ),
+      // Reduce Motion: jump to the value instead of springing there.
+      width: reduced
+        ? width
+        : withSpring(width, { overshootClamping: true }),
     };
   });
 

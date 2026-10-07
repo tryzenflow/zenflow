@@ -1,3 +1,4 @@
+import { NAV_THEME } from "./constants";
 import { t } from "./i18n";
 import { format } from "./i18n";
 import type { useToast } from "@/components/ui/toast";
@@ -228,7 +229,6 @@ export async function withInfeasibleRetry<T>(
       title,
       description,
       variant: "warning",
-      duration: 12000,
       position: "bottom",
       showProgress: false,
       actions: infeasible.options.map((policy) => ({
@@ -315,7 +315,10 @@ export function showSeriesAlternativesPrompt(
     action: {
       label: t("View"),
       onPress: onView,
-      color: { light: "#f97316", dark: "#fb923c" },
+      color: {
+        light: NAV_THEME.light.primaryText,
+        dark: NAV_THEME.dark.primaryText,
+      },
       inline: true,
       mockup: true,
     },

@@ -1,11 +1,14 @@
 import { TextClassContext } from "@/components/ui/text";
+import { NAV_THEME } from "@/lib/constants";
+import { haptic } from "@/lib/haptics";
+import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
 import { type VariantProps, cva } from "class-variance-authority";
 import * as React from "react";
-import { Pressable } from "react-native";
+import { ActivityIndicator, Pressable } from "react-native";
 
 const buttonVariants = cva(
-  "group flex flex-row items-center justify-center rounded-md web:ring-offset-background web:transition-colors web:focus-visible:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring web:focus-visible:ring-offset-2",
+  "group flex flex-row items-center justify-center rounded-xl web:ring-offset-background web:transition-colors web:focus-visible:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring web:focus-visible:ring-offset-2",
   {
     variants: {
       variant: {
@@ -20,8 +23,8 @@ const buttonVariants = cva(
       },
       size: {
         default: "h-10 px-4 py-2 native:h-12 native:px-5 native:py-3",
-        sm: "h-9 min-h-11 rounded-md px-3",
-        lg: "h-11 rounded-md px-8 native:h-14",
+        sm: "h-9 min-h-11 px-3",
+        lg: "h-11 px-8 native:h-14",
         icon: "h-10 w-10",
       },
     },
@@ -60,6 +63,10 @@ const buttonTextVariants = cva(
 );
 
 type ButtonProps = {
+  /** Spinner + disabled + announced as busy. Keep the label; say what is happening ("Saving…"). */
+  loading?: boolean;
+  /** Light tap on press. Defaults on for `default` and `destructive` (the primary actions). */
+  haptic?: boolean;
   className?: string;
   children?: React.ReactNode;
   disabled?: boolean;
@@ -78,26 +85,72 @@ type ButtonProps = {
 const Button = React.forwardRef<
   React.ElementRef<typeof Pressable>,
   ButtonProps
->(({ className, variant, size, ...props }, ref) => {
+>(
+  (
+    {
+      className,
+      variant,
+      size,
+      loading,
+      haptic: withHaptic,
+      onPress,
+      children,
+      ...props
+    },
+    ref,
+  ) => {
+  const { isDarkColorScheme } = useColorScheme();
+  const palette = isDarkColorScheme ? NAV_THEME.dark : NAV_THEME.light;
+  const spinner =
+    variant === "destructive"
+      ? NAV_THEME.light.card
+      : !variant || variant === "default"
+        ? palette.primaryForeground
+        : palette.text;
+  const disabled = props.disabled || loading;
+  const tap = withHaptic ?? (!variant || variant === "default" || variant === "destructive");
   return (
     <TextClassContext.Provider
       value={cn(
-        props.disabled && "web:pointer-events-none",
+        disabled && "web:pointer-events-none",
         buttonTextVariants({ variant, size }),
       )}
     >
       <Pressable
         className={cn(
-          props.disabled && "opacity-50 web:pointer-events-none",
+          props.disabled && "opacity-50",
+          disabled && "web:pointer-events-none",
           buttonVariants({ variant, size, className }),
         )}
         ref={ref}
         role="button"
         {...props}
-      />
+        disabled={disabled}
+        onPress={
+          onPress
+            ? () => {
+                if (tap) haptic.tap();
+                onPress();
+              }
+            : undefined
+        }
+        accessibilityState={{
+          ...props.accessibilityState,
+          disabled: !!disabled,
+          busy: loading || props.accessibilityState?.busy,
+        }}
+      >
+        {loading ? <ActivityIndicator
+            size="small"
+            color={spinner}
+            style={{ marginRight: 8 }}
+          /> : null}
+        {children}
+      </Pressable>
     </TextClassContext.Provider>
   );
-});
+  },
+);
 Button.displayName = "Button";
 
 export { Button, buttonTextVariants, buttonVariants };

@@ -12,7 +12,8 @@
  * --muted-foreground (light) is darker so small text passes on --muted (5.11:1, was 4.40),
  * --primary-text is the orange to use for TEXT and ICONS on surfaces (light 5.37:1 on background,
  * 5.50 card, 4.97 muted; the brand orange is 2.07-2.28 and stays for fills), --warning is the amber
- * for text/icons (light 6.26:1 on background). Dark values already passed.
+ * for text/icons (light 6.26:1 on background), --success-text is the green for text/icons (light 5.36:1
+ * on background, 5.48 card, 4.96 muted; emerald-600 was 3.68-3.77, the --success fill stays). Dark values already passed.
  *
  * Stored as space-separated "R G B" channels (not hex) and consumed via rgb(var(--x) / <alpha-value>)
  * in tailwind.config.ts — that's what lets Tailwind's /NN opacity modifiers (bg-primary/10, etc.)
@@ -46,6 +47,7 @@
     --brand-yellow: 240 177 1;
     --brand-lime: 216 249 152;
     --success: 16 185 129;
+    --success-text: 4 120 87;
   }
 
   .dark:root {
@@ -74,6 +76,7 @@
     --brand-yellow: 246 185 21;
     --brand-lime: 203 237 134;
     --success: 52 211 153;
+    --success-text: 52 211 153;
   }
 }
 

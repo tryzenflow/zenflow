@@ -1,8 +1,9 @@
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
-import { NAV_THEME } from "@/lib/constants";
+import { useMotion } from "@/hooks/use-motion";
+import { NAV_THEME, withAlpha } from "@/lib/constants";
 import { useColorScheme } from "@/lib/useColorScheme";
-import * as Haptics from "expo-haptics";
+import { haptic } from "@/lib/haptics";
 import {
   createContext,
   useCallback,
@@ -12,7 +13,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import {
+  AccessibilityInfo,
+  Platform,
+  Pressable,
+  ScrollView,
+  View,
+} from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -119,17 +126,24 @@ type ToastVariant = keyof typeof TOAST_VARIANTS;
  * `bg-*` tokens on a reanimated `Animated.View` proved unreliable on native
  * (the card rendered untinted with an invisible icon), so the toast paints its
  * icon, badge tint, confirm button and progress bar straight from these instead
- * of relying on utility classes. Amber/blue/green mirror the Tailwind 600/400
- * pairs the web toast uses.
+ * of relying on utility classes.
  */
+const INFO_BLUE = { light: "#2563eb", dark: "#60a5fa" };
 const VARIANT_ACCENT: Record<ToastVariant, { light: string; dark: string }> = {
-  // Plain notices read as info — blue, not the foreground ink.
-  default: { light: "#2563eb", dark: "#60a5fa" },
-  destructive: { light: "#e7000b", dark: "#ff6467" },
-  warning: { light: "#d97706", dark: "#fbbf24" },
-  success: { light: "#059669", dark: "#34d399" },
-  info: { light: "#2563eb", dark: "#60a5fa" },
-  tip: { light: "#f97316", dark: "#fb923c" },
+  // Plain notices read as info — blue (the one accent with no theme token).
+  default: INFO_BLUE,
+  info: INFO_BLUE,
+  // The rest come from the theme mirror, so they follow the palette.
+  destructive: {
+    light: NAV_THEME.light.notification,
+    dark: NAV_THEME.dark.notification,
+  },
+  warning: { light: NAV_THEME.light.warning, dark: NAV_THEME.dark.warning },
+  success: {
+    light: NAV_THEME.light.successText,
+    dark: NAV_THEME.dark.successText,
+  },
+  tip: { light: NAV_THEME.light.primaryText, dark: NAV_THEME.dark.primaryText },
 };
 
 /** Back-compat export — was a `variant → bg` map, now just the badge tints. */
@@ -158,7 +172,8 @@ export interface ToastConfirmOptions extends ToastConfirm {
 }
 
 // iOS-style stack: newest in front, peeking slivers behind, a pill to expand.
-// Only `success` toasts auto-dismiss.
+// Errors, confirms and actionable toasts without an explicit duration stay up
+// until closed or acted on; everything else dismisses after its duration.
 const STACK_PEEK_LAYERS = 2;
 /** How far each card behind the front one peeks out below it. */
 const STACK_PEEK_PX = 7;
@@ -197,8 +212,7 @@ interface ToastProps {
   /** Optional second line under the message, rendered muted. When set (and
    * this isn't a confirm toast) the `message` becomes a compact title. */
   description?: string;
-  /** Stop the auto-dismiss clock (the stack is expanded); restarts on resume.
-   * Only a `success` toast has one — every other variant stays up until closed. */
+  /** Stop the auto-dismiss clock (the stack is expanded); restarts on resume. */
   paused?: boolean;
   /** Behind the front card of a collapsed stack: mounted (its timer keeps
    * running) but not drawn. */
@@ -214,7 +228,7 @@ function Toast({
   message,
   onHide,
   variant = "default",
-  duration = 3000,
+  duration,
   showProgress = true,
   action,
   actions,
@@ -231,6 +245,7 @@ function Toast({
   const [dragging, setDragging] = useState(false);
   const progress = useSharedValue(0);
   const dismissedRef = useRef(false);
+  const motion = useMotion();
 
   useLanguage();
   const { isDarkColorScheme } = useColorScheme();
@@ -241,7 +256,15 @@ function Toast({
     isDarkColorScheme ? "dark" : "light"
   ];
 
-  const autoDismiss = !confirm && variant === "success";
+  const actionable = Boolean(action || actions?.length);
+  const autoDismiss =
+    !confirm &&
+    variant !== "destructive" &&
+    (duration !== undefined || !actionable);
+  // Time to read a description is on top of the base duration.
+  const dismissAfter = Math.max(duration ?? 3000, description ? 5000 : 0);
+  // Text on an accent fill: dark ink on the light dark-mode accents, white on the deep light-mode ones.
+  const onAccent = isDarkColorScheme ? palette.background : palette.card;
   const buttons = confirm
     ? []
     : (actions ?? (action && !action.inline ? [action] : []));
@@ -257,28 +280,37 @@ function Toast({
     (direction: 0 | 1 | -1 = 0, vertical: 0 | 1 | -1 = 0) => {
       if (dismissedRef.current) return;
       dismissedRef.current = true;
-      if (direction !== 0) {
+      // Reduce Motion: fade out in place, no flying off the screen.
+      if (direction !== 0 && !motion.reduced) {
         translateX.value = withTiming(direction * 400, {
           duration: EXIT_DURATION,
         });
       }
-      if (vertical !== 0) {
+      if (vertical !== 0 && !motion.reduced) {
         translateY.value = withTiming(vertical * 240, {
           duration: EXIT_DURATION,
         });
       }
-      opacity.value = withTiming(0, { duration: EXIT_DURATION }, (finished) => {
-        if (finished) runOnJS(hide)();
-      });
+      opacity.value = withTiming(
+        0,
+        { duration: motion.duration(EXIT_DURATION) },
+        (finished) => {
+          if (finished) runOnJS(hide)();
+        },
+      );
     },
-    [hide, opacity, translateX, translateY],
+    [hide, opacity, translateX, translateY, motion],
   );
 
   useEffect(() => {
     opacity.value = withTiming(1, { duration: ENTRANCE_DURATION });
-    if (confirm) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(
-        () => {},
+    if (confirm) haptic.warning();
+    // Android reads the live region on the card; iOS needs an explicit announcement.
+    if (Platform.OS === "ios") {
+      AccessibilityInfo.announceForAccessibility(
+        [message, description ?? confirm?.description]
+          .filter(Boolean)
+          .join(". "),
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -293,12 +325,12 @@ function Toast({
     // Paused while expanded or being dragged; restarts on release.
     if (paused || dragging) return;
     progress.value = withTiming(1, {
-      duration: Math.max(duration - ENTRANCE_DURATION, 100),
+      duration: Math.max(dismissAfter - ENTRANCE_DURATION, 100),
     });
-    const timer = setTimeout(() => dismiss(0), duration);
+    const timer = setTimeout(() => dismiss(0), dismissAfter);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [duration, paused, dragging]);
+  }, [dismissAfter, autoDismiss, paused, dragging]);
 
   // Swiping a toast away dismisses it; for a confirm toast that also counts as
   // pressing Cancel.
@@ -338,14 +370,14 @@ function Toast({
         } else if (pastX) {
           runOnJS(handleSwipeDismiss)(e.translationX > 0 ? 1 : -1);
         } else {
-          translateX.value = withTiming(0, { duration: 150 });
-          translateY.value = withTiming(0, { duration: 150 });
+          translateX.value = withTiming(0, { duration: motion.duration(150) });
+          translateY.value = withTiming(0, { duration: motion.duration(150) });
         }
       })
       .onFinalize(() => {
         runOnJS(setDragging)(false);
       });
-  }, [handleSwipeDismiss, translateX, translateY, stackPosition, paused]);
+  }, [handleSwipeDismiss, translateX, translateY, stackPosition, paused, motion]);
 
   const containerStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
@@ -354,7 +386,9 @@ function Toast({
       {
         translateY:
           translateY.value +
-          interpolate(opacity.value, [0, 1], [14, 0], Extrapolation.CLAMP),
+          (motion.reduced
+            ? 0
+            : interpolate(opacity.value, [0, 1], [14, 0], Extrapolation.CLAMP)),
       },
     ],
   }));
@@ -376,12 +410,10 @@ function Toast({
             borderRadius: action?.mockup ? 16 : 18,
             borderWidth: 1,
             borderColor: action?.mockup
-              ? isDarkColorScheme
-                ? "rgba(255,255,255,0.24)"
-                : "rgba(0,0,0,0.6)"
+              ? withAlpha(palette.text, isDarkColorScheme ? 0.24 : 0.6)
               : palette.border,
-            backgroundColor: action?.mockup ? palette.card : palette.card,
-            padding: action?.mockup ? 14 : 14,
+            backgroundColor: palette.card,
+            padding: 14,
             shadowColor: "#000",
             shadowOpacity: isDarkColorScheme ? 0.45 : 0.16,
             shadowRadius: 18,
@@ -390,6 +422,8 @@ function Toast({
           },
           containerStyle,
         ]}
+        accessibilityLiveRegion={variant === "destructive" ? "assertive" : "polite"}
+        accessibilityRole={variant === "destructive" ? "alert" : undefined}
       >
         <View className="flex-row items-center" style={{ gap: 10 }}>
           <View
@@ -399,7 +433,7 @@ function Toast({
               borderRadius: 9,
               alignItems: "center",
               justifyContent: "center",
-              backgroundColor: `${accent}22`,
+              backgroundColor: withAlpha(accent, 0.13),
             }}
           >
             {meta.fillIcon ? (
@@ -416,6 +450,7 @@ function Toast({
 
           <Pressable
             className="flex-1"
+            accessibilityRole={action && !action.inline ? "button" : undefined}
             disabled={!action || Boolean(confirm) || Boolean(actions)}
             onPress={() => {
               if (action && !confirm && !actions) {
@@ -449,8 +484,12 @@ function Toast({
                 action.onPress();
                 dismiss(0);
               }}
-              hitSlop={8}
+              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+              accessibilityRole="button"
+              accessibilityLabel={action.label}
               style={{
+                minHeight: 36,
+                justifyContent: "center",
                 borderRadius: 8,
                 paddingHorizontal: 12,
                 paddingVertical: 6,
@@ -461,7 +500,9 @@ function Toast({
             >
               <Text
                 className="text-[12.5px] font-semibold"
-                style={{ color: "#fff" }}
+                style={{
+                  color: action.color ? onAccent : palette.primaryForeground,
+                }}
               >
                 {action.label}
               </Text>
@@ -471,7 +512,8 @@ function Toast({
           {!confirm && !action?.inline && (
             <Pressable
               onPress={() => dismiss(0)}
-              hitSlop={10}
+              hitSlop={14}
+              accessibilityRole="button"
               accessibilityLabel={t("Dismiss notification")}
               style={{ paddingTop: 2 }}
             >
@@ -494,23 +536,23 @@ function Toast({
                     b.onPress();
                     dismiss(0);
                   }}
-                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={b.label}
                   style={{
+                    minHeight: 44,
+                    justifyContent: "center",
                     borderRadius: 999,
                     borderWidth: 1,
-                    borderColor: tint ? `${tint}66` : palette.border,
+                    borderColor: tint ? withAlpha(tint, 0.4) : palette.border,
                     paddingHorizontal: 14,
-                    paddingVertical: 5,
                     backgroundColor: tint
                       ? tint
-                      : isDarkColorScheme
-                        ? "rgba(255, 255, 255, 0.06)"
-                        : "rgba(0, 0, 0, 0.04)",
+                      : withAlpha(palette.text, isDarkColorScheme ? 0.08 : 0.05),
                   }}
                 >
                   <Text
                     className="text-[13px] font-semibold"
-                    style={{ color: tint ? "#fff" : palette.text }}
+                    style={{ color: tint ? onAccent : palette.text }}
                   >
                     {b.label}
                   </Text>
@@ -527,13 +569,15 @@ function Toast({
                 confirm.onCancel?.();
                 dismiss(0);
               }}
-              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={confirm.cancelLabel ?? t("Cancel")}
               style={{
+                minHeight: 44,
+                justifyContent: "center",
                 borderRadius: 999,
                 borderWidth: 1,
                 borderColor: palette.border,
                 paddingHorizontal: 16,
-                paddingVertical: 6,
               }}
             >
               <Text
@@ -548,15 +592,20 @@ function Toast({
                 confirm.onConfirm();
                 dismiss(0);
               }}
-              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={confirm.confirmLabel ?? t("Confirm")}
               style={{
+                minHeight: 44,
+                justifyContent: "center",
                 borderRadius: 999,
                 paddingHorizontal: 16,
-                paddingVertical: 6,
                 backgroundColor: accent,
               }}
             >
-              <Text className="text-[13px] font-bold" style={{ color: "#fff" }}>
+              <Text
+                className="text-[13px] font-bold"
+                style={{ color: onAccent }}
+              >
                 {confirm.confirmLabel ?? t("Confirm")}
               </Text>
             </Pressable>
@@ -569,7 +618,7 @@ function Toast({
             style={{
               height: 2,
               borderRadius: 999,
-              backgroundColor: `${accent}1f`,
+              backgroundColor: withAlpha(accent, 0.12),
             }}
           >
             <Animated.View
@@ -603,6 +652,7 @@ function StackLayer({
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
       accessibilityLabel={t("Show all notifications")}
       style={{
         position: "absolute",
@@ -661,7 +711,13 @@ function StackControls({
       style={{ gap: 8, marginBottom: 8 }}
       pointerEvents="box-none"
     >
-      <Pressable onPress={onToggle} hitSlop={6} style={pill}>
+      <Pressable
+        onPress={onToggle}
+        hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        style={pill}
+      >
         <Text
           className="text-[12px] font-semibold"
           style={{ color: palette.text }}
@@ -669,7 +725,12 @@ function StackControls({
           {expanded ? t("Show less") : t("{count} notifications", { count })}
         </Text>
       </Pressable>
-      <Pressable onPress={onClearAll} hitSlop={6} style={pill}>
+      <Pressable
+        onPress={onClearAll}
+        hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+        accessibilityRole="button"
+        style={pill}
+      >
         <Text
           className="text-[12px] font-semibold"
           style={{ color: palette.mutedForeground }}
@@ -771,7 +832,7 @@ function ToastProvider({
     const {
       title,
       variant = "default",
-      duration = 3000,
+      duration,
       position = "top",
       showProgress = true,
       action,
@@ -802,7 +863,6 @@ function ToastProvider({
         id: ++toastIdCounter,
         text: message,
         variant,
-        duration: 0,
         showProgress: false,
         confirm: rest,
       },
