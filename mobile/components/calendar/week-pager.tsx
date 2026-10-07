@@ -1,5 +1,7 @@
+import { listSessions } from "@/api/tasks";
 import { useLanguage } from "@/hooks/use-language";
 import { NAV_THEME } from "@/lib/constants";
+import { fetchDaySessions, isDayCacheFresh } from "@/lib/session-cache";
 import type { PeekBlock } from "@/lib/peek";
 import { useColorScheme } from "@/lib/useColorScheme";
 import {
@@ -20,6 +22,7 @@ import {
   shouldSlideWeek,
 } from "@/lib/week-pager-math";
 import type { Session } from "@zenflow/shared";
+import { format } from "date-fns";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   type ForwardedRef,
@@ -349,8 +352,34 @@ function WeekPagerImpl(
   useLayoutEffect(() => {
     if (!pendingSettleRef.current) return;
     pendingSettleRef.current = false;
+    // Roles and position change together, after React committed the new
+    // window: resetting roles earlier (in `settleRoles`) leaves a frame where
+    // the old page is visible at the centre.
     progress.value = -width;
-  }, [days, progress, width]);
+    fromSV.value = 1;
+    toSV.value = 1;
+  }, [days, progress, width, fromSV, toSV]);
+
+  // Warm the days just outside the 3-page window so a quick second swipe lands
+  // on cached data instead of a cold mount. `fetchDaySessions` de-dupes with
+  // the pages' own fetches; failures are ignored (the page retries on mount).
+  useEffect(() => {
+    const first = days[0];
+    const last = days[days.length - 1];
+    if (!first || !last) return;
+    for (const offset of [
+      { base: first, delta: -1 },
+      { base: last, delta: 1 },
+    ]) {
+      const d = new Date(offset.base);
+      d.setDate(d.getDate() + offset.delta);
+      const key = format(d, "yyyy-MM-dd");
+      if (isDayCacheFresh(key)) continue;
+      fetchDaySessions(key, () =>
+        listSessions("day", d).then((res) => res.sessions),
+      ).catch(() => {});
+    }
+  }, [days]);
 
   const commitRoles = useCallback(
     (index: number) => {
@@ -389,9 +418,8 @@ function WeekPagerImpl(
       pendingSettleRef.current = true;
       setDays(centeredDays(landed));
       setFocusedIndex(1);
-      commitRoles(1);
     },
-    [centeredDays, commitRoles, days],
+    [centeredDays, days],
   );
 
   // ── Week slide (header-driven, or a day-swipe that crosses a week edge) ────

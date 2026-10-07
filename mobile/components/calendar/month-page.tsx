@@ -1,6 +1,6 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
-import { useMinSkeleton } from "@/hooks/use-min-skeleton";
+import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import { format } from "@/lib/i18n";
 import { listSessions, updateSession } from "@/api/tasks";
 import { Text } from "@/components/ui/text";
@@ -35,7 +35,7 @@ import type { Session } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 
 import * as Haptics from "expo-haptics";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, type ViewInstance } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -118,7 +118,7 @@ interface MonthPageProps {
  * there is no edge-drag cross-month advance. Each page mounted by the outer
  * `MonthPager`/`month-pager.tsx` fetches independently.
  */
-export function MonthPage({
+export const MonthPage = memo(function MonthPage({
   monthDate,
   tz,
   reloadToken,
@@ -137,7 +137,7 @@ export function MonthPage({
   const [sessions, setSessions] = useState<Session[] | null>(
     () => getCachedDaySessions(monthKey) ?? null,
   );
-  const showSkeleton = useMinSkeleton(sessions === null);
+  const showSkeleton = useDelayedLoading(sessions === null);
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   // A day key to pulse for a moment right after a drop lands on it.
@@ -507,7 +507,7 @@ export function MonthPage({
 
   return (
     <View ref={pageRef} onLayout={measureGeometry} className="flex-1">
-      {sessions === null || showSkeleton ? (
+      {showSkeleton ? (
         <MonthGridSkeleton />
       ) : (
         <MonthGrid
@@ -568,4 +568,4 @@ export function MonthPage({
       )}
     </View>
   );
-}
+});

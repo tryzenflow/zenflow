@@ -92,10 +92,15 @@ export default function MonthScreen() {
   // `drag` comes from the `MonthPage` that opened the sheet — i.e. the month
   // actually on screen — so long-press-dragging a row out of the sheet routes
   // straight back into that page's drag machinery.
-  function openDay(day: Date, tasks: Session[], drag: MonthDragHandle) {
-    completeStep("open-day");
-    taskListSheetRef.current?.open(day, tasks, drag);
-  }
+  // Stable identity: `MonthPage` is memoized, so a header update mid-swipe
+  // must not re-render pages whose props didn't change.
+  const openDay = useCallback(
+    (day: Date, tasks: Session[], drag: MonthDragHandle) => {
+      completeStep("open-day");
+      taskListSheetRef.current?.open(day, tasks, drag);
+    },
+    [],
+  );
 
   // Double tap a day cell → Week view with that day selected. The Week screen
   // reads `date` as a UTC instant and re-homes it to the tz wall clock.

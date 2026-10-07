@@ -10,7 +10,7 @@ import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { completeStep } from "@/hooks/use-checklist";
 import { useLastCreated } from "@/hooks/use-last-created";
-import { useMinSkeleton } from "@/hooks/use-min-skeleton";
+import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import { useNow } from "@/hooks/use-now";
 import { useUserStore } from "@/hooks/use-user-store";
 import { isPastDeadlineDrop } from "@/lib/overdue";
@@ -387,10 +387,10 @@ export function DayTimeline({
     onStateChange?.(loading ? "loading" : error ? "error" : "ready");
   }, [loading, error, onStateChange]);
 
-  // A cold day shows the skeleton straight away and keeps it up for a moment
-  // (`useMinSkeleton`), so the grid swaps in once instead of flickering from
-  // empty to filled. Warm days aren't `loading`, so they stay instant.
-  const showSkeleton = useMinSkeleton(loading);
+  // A cold day shows the skeleton only if the load outlasts a short delay,
+  // then keeps it up for a moment (`useDelayedLoading`), so the grid swaps in
+  // once instead of flickering. Warm days aren't `loading`, so they stay instant.
+  const showSkeleton = useDelayedLoading(loading);
 
   const refetch = useCallback(async () => {
     try {
@@ -1073,7 +1073,7 @@ export function DayTimeline({
                   />
                 ))}
 
-                {segments.length === 0 && (
+                {segments.length === 0 && !loading && (
                   <Pressable
                     onPress={openNewTaskForm}
                     accessibilityRole="button"
