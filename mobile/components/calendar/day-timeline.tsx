@@ -10,6 +10,7 @@ import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { completeStep } from "@/hooks/use-checklist";
 import { useLastCreated } from "@/hooks/use-last-created";
+import { type DayStatus, deriveDayStatus } from "@/lib/day-status";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import { useNow } from "@/hooks/use-now";
 import { useUserStore } from "@/hooks/use-user-store";
@@ -165,6 +166,9 @@ interface DayTimelineProps {
   onSessionPress?: (taskId: string) => void;
   refreshKey?: number;
   onStateChange?: (state: TimelineState) => void;
+  /** Reports today's "next up" session (else `none`) while this is the active
+   * page, so the Week screen can float it over the timeline. */
+  onStatusChange?: (status: DayStatus) => void;
   /** Hide the per-day header — the Week screen renders its own sticky
    * `WeekHeader` strip above the pager. Default `true` preserves the Day
    * screen. */
@@ -242,6 +246,7 @@ export function DayTimeline({
   onSessionPress,
   refreshKey,
   onStateChange,
+  onStatusChange,
   showHeader = true,
   contentBottomInset,
   onSubtitleChange,
@@ -681,6 +686,22 @@ export function DayTimeline({
       live.getDate() === date.getDate()
     );
   }, [date, now, tz]);
+
+  const dayStatus = useMemo<DayStatus>(
+    () =>
+      isToday && !loading && !error
+        ? deriveDayStatus(segments, now.getTime())
+        : { kind: "none" },
+    [isToday, loading, error, segments, now],
+  );
+  const statusKey =
+    dayStatus.kind === "next"
+      ? `next:${dayStatus.taskId}:${dayStatus.startISO}`
+      : dayStatus.kind;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `statusKey` is the identity of `dayStatus`.
+  useEffect(() => {
+    if (isActive) onStatusChange?.(dayStatus);
+  }, [isActive, statusKey, onStatusChange]);
 
   // Tapping the empty-day zone opens the new-task form seeded at 8:00 (or the
   // next quarter hour when today is already past it) — it never creates a

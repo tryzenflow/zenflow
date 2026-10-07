@@ -512,4 +512,7 @@ export default {
     "Chưa kết nối được DLU để xác thực tài khoản. Bạn thử lại sau nhé.",
   "Change it any time in Settings.":
     "Bạn có thể đổi lại bất cứ lúc nào trong Cài đặt.",
+  "Next up": "Sắp tới",
+  "Next up: {title}, {time}": "Sắp tới: {title}, {time}",
+  "in {count} min": "sau {count} phút",
 } as Record<string, string>;

@@ -1,6 +1,7 @@
 import { listSessions } from "@/api/tasks";
 import { useLanguage } from "@/hooks/use-language";
 import { NAV_THEME } from "@/lib/constants";
+import type { DayStatus } from "@/lib/day-status";
 import { fetchDaySessions, isDayCacheFresh } from "@/lib/session-cache";
 import type { PeekBlock } from "@/lib/peek";
 import { useColorScheme } from "@/lib/useColorScheme";
@@ -112,6 +113,8 @@ interface WeekPagerProps {
   /** Load state of the focused page only — the pre-mounted neighbours must not
    * drive the screen's FAB. */
   onActiveStateChange?: (state: TimelineState) => void;
+  /** Today's "next up" session from the focused page only. */
+  onStatusChange?: (status: DayStatus) => void;
   /** Fired when a still-finger long-press on a block asks to move it — the
    * screen opens the "Move to…" sheet with this session. Forwarded straight
    * through from the active `DayTimeline`. */
@@ -197,6 +200,7 @@ function WeekPagerImpl(
     onWeekSlideStart,
     onWeekSlideEnd,
     onActiveStateChange,
+    onStatusChange,
     onRequestReschedule,
     onRequestBlockMenu,
     onRequestScopedUpdate,
@@ -1026,6 +1030,7 @@ function WeekPagerImpl(
                   onPeekChange={handlePeekChange}
                   rightInset={PEEK_STRIP_W}
                   onStateChange={active ? onActiveStateChange : undefined}
+                  onStatusChange={active ? onStatusChange : undefined}
                   flashSessionId={active ? flashSessionId : null}
                 />
               </PagerPage>
