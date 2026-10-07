@@ -2,6 +2,7 @@ import { Check } from "@/components/Icons";
 import * as CheckboxPrimitive from "@/components/primitives/checkbox";
 import * as React from "react";
 
+import { haptic } from "@/lib/haptics";
 import { cn } from "@/lib/utils";
 import { Platform } from "react-native";
 
@@ -17,7 +18,13 @@ const Checkbox = React.forwardRef<
         props.checked && "bg-primary",
         className,
       )}
+      // 24pt mark, 44pt touch target.
+      hitSlop={10}
       {...props}
+      onCheckedChange={(next: boolean) => {
+        haptic.select();
+        props.onCheckedChange?.(next);
+      }}
     >
       <CheckboxPrimitive.Indicator
         className={cn("items-center justify-center h-full w-full")}
