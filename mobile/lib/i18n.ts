@@ -56,6 +56,8 @@ export function format(
     language === "vi"
       ? pattern
           .replace("'on'", "'ngày'")
+          // A bare month header reads "tháng 10/2026" (`formatTitle` capitalises it).
+          .replace(/^MMMM yyyy$/, "'tháng' M/yyyy")
           .replace(/h:mm a/g, "HH:mm")
           .replace(/h:mm/g, "HH:mm")
           .replace(/EEE MMM d/g, "EEE, d/M")
