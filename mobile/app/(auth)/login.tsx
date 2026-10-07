@@ -1,4 +1,4 @@
-import { CircleUserRound, Mail } from "@/components/Icons";
+import { ChevronLeft, CircleUserRound, Mail } from "@/components/Icons";
 import { getLanguage, t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -332,14 +332,17 @@ export default function LoginScreen() {
                   resendCooldown.clear();
                 }}
               >
-                <Text
+                <View
                   className={cn(
-                    "text-[13px] underline text-muted-foreground underline-offset-[3px]",
-                    otpLockout.active && "text-muted-foreground opacity-50",
+                    "flex-row items-center gap-1",
+                    otpLockout.active && "opacity-50",
                   )}
                 >
-                  {t("Change email")}
-                </Text>
+                  <ChevronLeft size={15} className="text-brand-orange" />
+                  <Text className="text-[13px] font-semibold text-brand-orange">
+                    {t("Change email")}
+                  </Text>
+                </View>
               </Pressable>
               <Controller
                 control={form.control}
@@ -460,11 +463,11 @@ export default function LoginScreen() {
 
         <Text className="mt-[22px] px-2.5 text-center text-[12px] leading-normal text-muted-foreground">
           {t("By continuing, you agree to our")}{" "}
-          <Text className="text-[12px] text-foreground underline underline-offset-2">
+          <Text className="text-[12px] font-medium text-brand-orange">
             {t("Terms of Service")}
           </Text>{" "}
           {t("and")}{" "}
-          <Text className="text-[12px] text-foreground underline underline-offset-2">
+          <Text className="text-[12px] font-medium text-brand-orange">
             {t("Privacy Policy")}
           </Text>
           .
