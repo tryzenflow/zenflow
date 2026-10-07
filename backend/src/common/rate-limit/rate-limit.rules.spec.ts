@@ -3,8 +3,11 @@ import type { Request } from "express";
 import { RedisSlidingWindow } from "@limitkit/redis";
 import { InMemorySlidingWindow } from "@limitkit/memory";
 import {
+  manualSyncRateLimitRules,
   otpRequestRateLimitRules,
   otpVerifyRateLimitRules,
+  slidingWindowRule,
+  syncRateLimitKey,
 } from "./rate-limit.rules";
 import {
   resetRateLimitRuntimeConfig,
@@ -46,9 +49,11 @@ describe("otpRequestRateLimitRules / otpVerifyRateLimitRules", () => {
       setRateLimitRuntimeConfig({
         storeKind: "memory",
         otpRequestIp: { window: 60, limit: 5 },
+        otpRequestIpHourly: { window: 3600, limit: 20 },
         otpRequestEmail: { window: 900, limit: 3 },
         otpVerifyIp: { window: 60, limit: 20 },
         otpVerifyEmail: { window: 600, limit: 10 },
+        syncManual: { window: 21600, limit: 3 },
       });
     });
 
@@ -65,6 +70,55 @@ describe("otpRequestRateLimitRules / otpVerifyRateLimitRules", () => {
         fakeRequest({ body: { email: "Foo@Bar.com" } }),
       );
       expect(key).toBe("otp-request:email:foo@bar.com");
+    });
+
+    it("shares one email bucket across aliases (case, +tag, gmail dots)", () => {
+      const [, emailRule] = otpRequestRateLimitRules;
+      const keys = [
+        "Foo.Bar@gmail.com",
+        " foobar+a@gmail.com",
+        "f.o.o.b.a.r+zz@googlemail.com",
+      ].map((email) => resolveKey(emailRule, fakeRequest({ body: { email } })));
+      expect(new Set(keys)).toEqual(
+        new Set(["otp-request:email:foobar@gmail.com"]),
+      );
+    });
+
+    it("adds a per-IP hourly rule with its own namespace and window", async () => {
+      const hourly = otpRequestRateLimitRules[2];
+      expect(hourly.name).toBe("otp-request-ip-hourly");
+      expect(resolveKey(hourly, fakeRequest({ ip: "198.51.100.9" }))).toBe(
+        "otp-request-hourly:ip:198.51.100.9",
+      );
+      const policy = await resolvePolicy(hourly, fakeRequest());
+      expect(policy.config).toMatchObject({ window: 3600, limit: 20 });
+    });
+
+    it("slidingWindowRule builds a lazily-configured rule; syncRateLimitKey is namespaced", async () => {
+      const rule = slidingWindowRule(
+        "sync",
+        () => syncRateLimitKey("u1", "dlu"),
+        () => ({ window: 21600, limit: 3 }),
+      );
+      expect(resolveKey(rule, fakeRequest())).toBe("sync:u1:dlu");
+      const policy = await resolvePolicy(rule, fakeRequest());
+      expect(policy.config).toMatchObject({ window: 21600, limit: 3 });
+    });
+
+    it("manual-sync rule keys per user + provider, with an IP fallback when anonymous", async () => {
+      const [rule] = manualSyncRateLimitRules;
+      expect(
+        resolveKey(
+          rule,
+          fakeRequest({
+            user: { id: "u1" },
+            params: { provider: "LMS" },
+          }),
+        ),
+      ).toBe("sync:u1:LMS");
+      expect(resolveKey(rule, fakeRequest())).toBe("sync:ip:203.0.113.7");
+      const policy = await resolvePolicy(rule, fakeRequest());
+      expect(policy.config).toMatchObject({ window: 21600, limit: 3 });
     });
 
     it("falls back to a stable key when the body has no email (still consumes quota)", () => {
@@ -107,9 +161,11 @@ describe("otpRequestRateLimitRules / otpVerifyRateLimitRules", () => {
     setRateLimitRuntimeConfig({
       storeKind: "redis",
       otpRequestIp: { window: 60, limit: 5 },
+      otpRequestIpHourly: { window: 3600, limit: 20 },
       otpRequestEmail: { window: 900, limit: 3 },
       otpVerifyIp: { window: 60, limit: 20 },
       otpVerifyEmail: { window: 600, limit: 10 },
+      syncManual: { window: 21600, limit: 3 },
     });
     const [ipRule] = otpRequestRateLimitRules;
     const policy = await resolvePolicy(ipRule, fakeRequest());

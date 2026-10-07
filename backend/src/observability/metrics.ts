@@ -185,3 +185,12 @@ export const schedulerPlacementShadowMismatch = meter.createCounter(
       "Shadow mode: Python /v1/place disagreed with the legacy TS pick, by kind",
   },
 );
+
+// --- Rate limiting ----------------------------------------------------------
+export const rateLimitStoreFailOpen = meter.createCounter(
+  "rate_limit.store.fail_open",
+  {
+    description:
+      "Requests allowed because the rate-limit store was down/slow, by reason (breaker_open|timeout|error)",
+  },
+);

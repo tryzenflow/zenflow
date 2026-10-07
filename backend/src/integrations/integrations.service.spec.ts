@@ -16,6 +16,7 @@ import {
 import { ENCRYPTION_ALGORITHM } from "../common/constants";
 import { IntegrationAuthService } from "./integration-auth.service";
 import { IntegrationsService } from "./integrations.service";
+import { SyncInflightGuard } from "./sync-inflight.service";
 import { IngestionSyncService } from "../ingestion/ingestion-sync.service";
 import { IngestionScheduleService } from "../ingestion/ingestion-schedule.service";
 
@@ -200,6 +201,7 @@ describe("IntegrationsService", () => {
   // and a manual sync pushes them out so the ticker does not re-walk at once.
   let ensureRows: jest.Mock;
   let deferAfterManualSync: jest.Mock;
+  let inflightRun: jest.Mock;
   let db: ReturnType<typeof makePrismaDouble>;
 
   beforeEach(async () => {
@@ -208,6 +210,9 @@ describe("IntegrationsService", () => {
     syncNow = jest.fn().mockResolvedValue(undefined);
     ensureRows = jest.fn().mockResolvedValue(3);
     deferAfterManualSync = jest.fn().mockResolvedValue(undefined);
+    inflightRun = jest.fn(
+      (_u: string, _p: string, fn: () => Promise<unknown>) => fn(),
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -221,6 +226,10 @@ describe("IntegrationsService", () => {
         {
           provide: IngestionScheduleService,
           useValue: { ensureRows, deferAfterManualSync },
+        },
+        {
+          provide: SyncInflightGuard,
+          useValue: { run: inflightRun },
         },
       ],
     }).compile();
@@ -501,6 +510,24 @@ describe("IntegrationsService", () => {
         lastSyncStatus: "FAILED",
       });
     });
+
+    it("runs under the in-flight lock", async () => {
+      await service.connect(USER, creds);
+      await service.sync(USER, "LMS");
+      expect(inflightRun).toHaveBeenCalledWith(
+        "u1",
+        "LMS",
+        expect.any(Function),
+      );
+    });
+
+    it("does not run the watchers when the in-flight lock rejects", async () => {
+      await service.connect(USER, creds);
+      inflightRun.mockRejectedValue(new Error("busy"));
+      await expect(service.sync(USER, "LMS")).rejects.toThrow("busy");
+      expect(syncNow).not.toHaveBeenCalled();
+    });
+
 
     it("404s when the provider is not connected, and runs nothing", async () => {
       await expect(service.sync(USER, "PORTAL")).rejects.toBeInstanceOf(

@@ -42,6 +42,12 @@ export class CircuitBreaker {
     return this.current;
   }
 
+  /** Ms until an OPEN breaker admits its HALF_OPEN probe; 0 when not open. */
+  get remainingOpenMs(): number {
+    if (this.current !== "open") return 0;
+    return Math.max(0, this.currentOpenMs - (this.now() - this.openedAt));
+  }
+
   /** `true` when a call may go out. In HALF_OPEN only the first caller (the probe) is admitted. */
   tryAcquire(): boolean {
     this.maybeHalfOpen();

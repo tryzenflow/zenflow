@@ -165,6 +165,29 @@ evening/sleep) best-effort, so the scheduler avoids them from day one.
 
 ### Sessions (`/sessions`)
 
+Rate limits on `otp/request` (sliding windows, env-tunable in `app.module.ts`): per IP
+`OTP_REQUEST_IP_*` (default 5/min), per IP hourly `OTP_REQUEST_IP_HOURLY_*` (20/h, loose for campus
+NAT), per email `OTP_REQUEST_EMAIL_*` (3/15 min). The email key is normalized (trim, lower-case,
+`+tag` stripped, Gmail dots dropped) so aliases share a bucket; the address used for login/OTP is
+unchanged. `slidingWindowRule()` / `syncRateLimitKey()` in `common/rate-limit/` build further rules.
+
+Manual sync (`POST /integrations/:provider/sync`) is limited per user + provider with LimitKit
+`@RateLimit(manualSyncRateLimitRules)`: `SYNC_MANUAL_LIMIT` (3) per `SYNC_MANUAL_WINDOW_SEC` (21600 = 6 h),
+sliding window, key `sync:{userId}:{provider}` (IP bucket if `req.user` is missing). The global guard
+reads `req.user` from `passport.session()`, which runs before it. Over the limit: `429` with
+`Retry-After`. A `SET NX EX 120` lock `sync:inflight:{userId}:{provider}`
+(`integrations/sync-inflight.service.ts`) rejects a concurrent duplicate with `409`; the quota guard
+runs first, so that duplicate still spends a slot (clients should disable the button while syncing).
+Attempts count even if the run fails. Redis errors fail open.
+
+Fail-open: the rate-limit Redis store is wrapped in `ResilientStore` (`common/rate-limit/resilient-store.ts`).
+Each call races `RATE_LIMIT_STORE_TIMEOUT_MS` (default 250); a timeout or error allows the request and
+counts toward a `CircuitBreaker` (`common/circuit-breaker.ts`, shared with `PlacementClient`) that opens after
+5 consecutive failures and then skips the store (probe after 15 s, backing off to 60 s). Warnings are
+throttled to one per 30 s; the `rate_limit.store.fail_open` counter has a `reason` label. The
+`RATE_LIMIT_REDIS_CLIENT` uses `commandTimeout`, `maxRetriesPerRequest: 1` and no offline queue (the
+sessions client is unchanged). Tests use the in-memory store, which is not wrapped.
+
 `@Controller("sessions")` — drag, resize and reschedule are all one `PATCH /sessions/:id`
 (a `MOVE` signal). No status/completion, `/reschedule`, `/resize`, `/optimize` or `/undo`.
 
@@ -214,7 +237,7 @@ returned, only status.
 | GET    | `/integrations`                | `[{ provider, connected, lastVerifiedAt, lastSyncedAt, lastSyncStatus }]`.     |
 | PATCH  | `/integrations/:provider`      | update credentials — same probe-then-write.                                   |
 | DELETE | `/integrations/:provider`      | disconnect (idempotent, keeps the encryption key).                            |
-| POST   | `/integrations/:provider/sync` | run this student's watchers now.                                              |
+| POST   | `/integrations/:provider/sync` | run this student's watchers now. `404` not connected, `409` already running, `429` + `Retry-After` over the limit (3 per 6 h). |
 
 ### Notifications (`/notifications`) + live stream
 
@@ -439,7 +462,7 @@ Full sequence diagrams for create/deadline-edit/reward/resize flows:
 | pass-through `sessions/` calls (arithmetic guard + persist)                          | `scheduler/io/task-placement.service.ts`                                               |
 | gather → `POST /v1/place` → apply → persist → `SlotProposal`; degraded fallback     | `scheduler/io/python-placer.service.ts`                                                |
 | `PlaceRequest` builder + two-phase infeasible call                                   | `scheduler/io/placement-gateway.service.ts`                                            |
-| timeout/retry/circuit-breaker HTTP client                                            | `scheduler/io/placement-client.service.ts`, `scheduler/io/circuit-breaker.ts`         |
+| timeout/retry/circuit-breaker HTTP client                                            | `scheduler/io/placement-client.service.ts`, `common/circuit-breaker.ts`       |
 | `TASK` series lifecycle (create, redistribute, resize/promote)                       | `sessions/series.service.ts`                                                           |
 | delayed reward (first-`MOVE` + `RETAINED`)                                           | `scheduler/io/scheduling-feedback.service.ts`, `scheduler/io/retained-sessions.service.ts` |
 | `primaryPolicy` 50/50 + pairwise-sample draw + `SlotProposal` write                   | `experiments/experiment.service.ts`                                                    |

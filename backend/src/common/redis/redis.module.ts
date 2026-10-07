@@ -26,10 +26,21 @@ const logger = new Logger("RedisModule");
 function createRedisClient(
   configService: ConfigService,
   urlKey: string,
+  fastFail = false,
 ): Redis {
   const isTest = configService.get<string>("NODE_ENV") === "test";
   const client = new Redis(configService.get<string>(urlKey)!, {
     lazyConnect: isTest,
+    // Fail fast instead of queueing/retrying: callers (rate limiter, in-flight
+    // lock) fail open, so a down Redis must not stall requests.
+    ...(fastFail
+      ? {
+          commandTimeout:
+            configService.get<number>("RATE_LIMIT_STORE_TIMEOUT_MS") ?? 250,
+          maxRetriesPerRequest: 1,
+          enableOfflineQueue: false,
+        }
+      : {}),
   });
   // An `EventEmitter` with no `error` listener throws on emit, which would
   // crash the whole process on the first connection failure instead of
@@ -64,7 +75,7 @@ function createRedisClient(
       provide: RATE_LIMIT_REDIS_CLIENT,
       inject: [ConfigService],
       useFactory: (configService: ConfigService) =>
-        createRedisClient(configService, "RATE_LIMIT_CACHE_URL"),
+        createRedisClient(configService, "RATE_LIMIT_CACHE_URL", true),
     },
   ],
   exports: [REDIS_CLIENT, RATE_LIMIT_REDIS_CLIENT],

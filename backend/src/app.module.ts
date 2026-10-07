@@ -95,6 +95,15 @@ import { ObservabilityModule } from "./observability/observability.module";
           .positive()
           .default(60),
         OTP_REQUEST_IP_LIMIT: Joi.number().integer().positive().default(5),
+        // Longer per-IP window: loose on purpose (campus NAT shares one IP).
+        OTP_REQUEST_IP_HOURLY_WINDOW_SEC: Joi.number()
+          .integer()
+          .positive()
+          .default(3600),
+        OTP_REQUEST_IP_HOURLY_LIMIT: Joi.number()
+          .integer()
+          .positive()
+          .default(20),
         OTP_REQUEST_EMAIL_WINDOW_SEC: Joi.number()
           .integer()
           .positive()
@@ -107,6 +116,19 @@ import { ObservabilityModule } from "./observability/observability.module";
           .positive()
           .default(600), // 10 min
         OTP_VERIFY_EMAIL_LIMIT: Joi.number().integer().positive().default(10),
+        // Manual `POST /integrations/:provider/sync`, per user + provider
+        // (`@RateLimit` on the controller, common/rate-limit/). Sliding window.
+        SYNC_MANUAL_LIMIT: Joi.number().integer().positive().default(3),
+        SYNC_MANUAL_WINDOW_SEC: Joi.number()
+          .integer()
+          .positive()
+          .default(21600), // 6 h
+        // Per-command timeout for the rate-limit Redis; on timeout/error the
+        // limiter fails open (common/rate-limit/resilient-store.ts).
+        RATE_LIMIT_STORE_TIMEOUT_MS: Joi.number()
+          .integer()
+          .positive()
+          .default(250),
         PORTAL_API_KEY: Joi.string().required(),
         // DKHP (course-registration) API: base URL and key for the
         // registration-history call that drives enrolment discovery. No

@@ -22,6 +22,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { CryptoService } from "../crypto/crypto.service";
 import { MasterKeyService } from "../crypto/master-key.service";
+import { SyncInflightGuard } from "./sync-inflight.service";
 import { IntegrationAuthService } from "./integration-auth.service";
 import { IngestionSyncService } from "../ingestion/ingestion-sync.service";
 import { IngestionScheduleService } from "../ingestion/ingestion-schedule.service";
@@ -83,6 +84,7 @@ export class IntegrationsService {
     private readonly crypto: CryptoService,
     private readonly masterKeys: MasterKeyService,
     private readonly integrationAuth: IntegrationAuthService,
+    private readonly syncInflight: SyncInflightGuard,
     // Mutually dependent by design: the watchers need `revealCredentials`, and
     // the manual sync trigger needs the watchers. See `IngestionModule`.
     @Inject(forwardRef(() => IngestionSyncService))
@@ -204,7 +206,12 @@ export class IntegrationsService {
       );
     }
 
-    await this.ingestionSync.syncNow(user.id, provider);
+
+    // The 3-per-6h quota is LimitKit's `@RateLimit` on the controller (429);
+    // an in-flight duplicate is a 409 here.
+    await this.syncInflight.run(user.id, provider, () =>
+      this.ingestionSync.syncNow(user.id, provider),
+    );
 
     // The student just got fresh data by hand, so push their rolling schedule
     // out by a full period — re-walking them minutes later would be pure waste

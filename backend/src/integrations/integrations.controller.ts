@@ -9,8 +9,10 @@ import {
   Patch,
   UseGuards,
 } from "@nestjs/common";
+import { RateLimit } from "@limitkit/nest";
 import type { IntegrationProvider } from "@zenflow/shared";
 import { CookieAuthGuard } from "../auth/guards";
+import { manualSyncRateLimitRules } from "../common/rate-limit";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { type User } from "../../generated/prisma";
 import { IntegrationsService } from "./integrations.service";
@@ -53,7 +55,12 @@ export class IntegrationsController {
    * student — so a connected account can be verified end to end without waiting
    * for the next tick. Returns the provider's status, whose `lastSyncedAt` /
    * `lastSyncStatus` describe the run just performed.
+   *
+   * Quota: LimitKit (`SYNC_MANUAL_*`, per user + provider), enforced by the
+   * global guard before `CookieAuthGuard`; it reads `req.user` set by
+   * `passport.session()`. 429 carries `Retry-After`.
    */
+  @RateLimit({ rules: manualSyncRateLimitRules })
   @Post(":provider/sync")
   async sync(
     @CurrentUser() user: User,
