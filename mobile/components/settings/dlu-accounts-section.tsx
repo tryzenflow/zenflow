@@ -37,6 +37,7 @@ import type { IntegrationProvider, IntegrationStatus } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const PROVIDERS: IntegrationProvider[] = ["LMS", "PORTAL"];
 
@@ -47,8 +48,16 @@ const PROVIDER_LABEL: Record<IntegrationProvider, string> = {
   },
 };
 
-/** Connect/update give up after this long — DLU is often slow or down. */
+/** Connect/update give up after this long — the school's servers are often slow or down. */
 const REQUEST_TIMEOUT_MS = 15000;
+
+/** The provider as it reads mid-sentence ("Sign in to your student portal"). */
+const PROVIDER_NAME: Record<IntegrationProvider, string> = {
+  LMS: "LMS",
+  get PORTAL() {
+    return t("student portal");
+  },
+};
 
 type SheetMode = "connect" | "update";
 
@@ -144,7 +153,10 @@ async function settleStatus(
 }
 
 /** Why a manual sync did not go through, in words a student can act on. */
-function syncErrorToast(error: unknown): {
+function syncErrorToast(
+  error: unknown,
+  provider: IntegrationProvider,
+): {
   title: string;
   description: string;
 } {
@@ -174,19 +186,26 @@ function syncErrorToast(error: unknown): {
       };
     if (status === 503)
       return {
-        title: t("Couldn't reach DLU"),
+        title: t("Couldn't reach {provider}", { provider: PROVIDER_LABEL[provider] }),
         description: t("Try again in a bit."),
       };
   }
   return { title: t("Sync failed"), description: t("Try again in a moment.") };
 }
 
-function errorMessageFor(error: unknown): string {
+function errorMessageFor(
+  error: unknown,
+  provider: IntegrationProvider,
+): string {
   if (isAxiosError(error)) {
     if (error.code === "ERR_CANCELED")
-      return t("DLU is taking too long. Try again in a bit.");
+      return t("{provider} is taking too long. Try again in a bit.", {
+        provider: PROVIDER_LABEL[provider],
+      });
     if (error.response?.status === 503)
-      return t("Couldn't reach DLU. Try again in a bit.");
+      return t("Couldn't reach {provider}. Try again in a bit.", {
+        provider: PROVIDER_LABEL[provider],
+      });
   }
   return t(
     "Sign-in didn't work. Check your student ID and password.",
@@ -214,6 +233,7 @@ export function DluAccountsSection({
   // Per provider, so syncing one account never locks the other's button.
   const [syncing, setSyncing] = useState<IntegrationProvider[]>([]);
 
+  const insets = useSafeAreaInsets();
   const manageSheet = useBottomSheet();
   const signInSheet = useBottomSheet();
   const confirmSheet = useBottomSheet();
@@ -282,7 +302,7 @@ export function DluAccountsSection({
       );
       closeSignInSheet();
     } catch (err) {
-      setError(errorMessageFor(err));
+      setError(errorMessageFor(err, selectedProvider));
     } finally {
       clearTimeout(timeoutId);
       setIsSubmitting(false);
@@ -301,7 +321,7 @@ export function DluAccountsSection({
       );
     } catch (err) {
       toast({
-        ...syncErrorToast(err),
+        ...syncErrorToast(err, provider),
         variant: "destructive",
         icon: RefreshCw,
       });
@@ -338,11 +358,14 @@ export function DluAccountsSection({
   const selectedLabel = selectedProvider
     ? PROVIDER_LABEL[selectedProvider]
     : "";
+  const selectedName = selectedProvider ? PROVIDER_NAME[selectedProvider] : "";
+  // Sheets sit well clear of the home indicator / screen edge.
+  const sheetBottom = insets.bottom + 32;
 
   return (
     <>
       {!hideLabel && (
-        <SettingsSectionLabel>{t("DLU accounts")}</SettingsSectionLabel>
+        <SettingsSectionLabel>{t("LMS & portal")}</SettingsSectionLabel>
       )}
       <View className="overflow-hidden rounded-2xl border border-border bg-card">
         {PROVIDERS.map((provider, index) => {
@@ -479,26 +502,26 @@ export function DluAccountsSection({
 
         {/* Sign-in / update-credentials sheet */}
         <BottomSheetContent ref={signInSheet.ref}>
-          <BottomSheetView style={{ paddingBottom: 30 }}>
+          <BottomSheetView hadHeader={false} style={{ paddingBottom: sheetBottom }}>
             <View className="pb-3 pt-1">
               <Text className="text-xl font-bold tracking-tight">
                 {mode === "connect"
-                  ? t("Sign in to your {provider}", { provider: selectedLabel })
+                  ? t("Sign in to your {provider}", { provider: selectedName })
                   : t("Update your {provider} login", {
-                      provider: selectedLabel,
+                      provider: selectedName,
                     })}
               </Text>
             </View>
             {error ? (
-              <View className="mb-4 flex-row items-start gap-2.5 rounded-2xl border border-destructive/40 bg-destructive/10 px-3 py-3">
-                <View className="mt-0.5 size-5 shrink-0 items-center justify-center rounded-full bg-destructive/15">
+              <View className="mb-4 flex-row items-center gap-3 rounded-2xl border border-destructive/40 bg-destructive/10 px-3.5 py-3.5">
+                <View className="size-9 shrink-0 items-center justify-center rounded-full bg-destructive/15">
                   <AlertCircle
-                    size={14}
-                    strokeWidth={2.5}
+                    size={22}
+                    strokeWidth={2.25}
                     className="text-destructive"
                   />
                 </View>
-                <Text className="flex-1 text-[12.5px] leading-snug text-destructive/90">
+                <Text className="flex-1 text-[14px] leading-5 text-destructive">
                   {error}
                 </Text>
               </View>
@@ -506,7 +529,8 @@ export function DluAccountsSection({
               <Text className="mb-4 text-[13.5px] leading-relaxed text-muted-foreground">
                 {mode === "connect"
                   ? t(
-                      "Your DLU student ID and password — only used to check DLU for you.",
+                      "Use the login you have for {provider}. Zenflow only uses it to check for new assignments and classes.",
+                      { provider: selectedName },
                     )
                   : t("Leave a field blank to keep what's saved.")}
               </Text>
@@ -565,7 +589,7 @@ export function DluAccountsSection({
               />
             </View>
             <Button
-              className="w-full"
+              className="h-[52px] w-full rounded-2xl"
               disabled={!canSubmit}
               onPress={handleSubmit}
             >
@@ -586,22 +610,22 @@ export function DluAccountsSection({
 
         {/* Disconnect confirm sheet */}
         <BottomSheetContent ref={confirmSheet.ref}>
-          <BottomSheetView style={{ paddingBottom: 30 }}>
+          <BottomSheetView hadHeader={false} style={{ paddingBottom: sheetBottom }}>
             <View className="pb-3 pt-1">
               <Text className="text-xl font-bold tracking-tight">
-                {t("Disconnect the")}
-                {selectedLabel}?
+                {t("Disconnect {provider}?", { provider: selectedName })}
               </Text>
             </View>
             <Text className="mb-5 mt-1.5 text-[13px] leading-snug text-muted-foreground">
               {t(
-                "Zenflow will stop checking it for new assignments. You can reconnect any time.",
+                "Zenflow will stop checking {provider} for new assignments. You can reconnect any time.",
+                { provider: selectedName },
               )}
             </Text>
             <View className="flex-row gap-2.5">
               <Button
                 variant="outline"
-                className="flex-1"
+                className="h-[52px] flex-1 rounded-2xl"
                 onPress={() => confirmSheet.close()}
                 disabled={isSubmitting}
               >
@@ -611,7 +635,7 @@ export function DluAccountsSection({
               </Button>
               <Button
                 variant="destructive"
-                className="flex-1"
+                className="h-[52px] flex-1 rounded-2xl"
                 onPress={handleDisconnect}
                 disabled={isSubmitting}
               >

@@ -19,7 +19,7 @@ const ITEMS: Record<SetupItem, { title: string; Icon: typeof Bell }> = {
   },
   dlu: {
     get title() {
-      return t("Connect your DLU account");
+      return t("Connect your LMS or portal");
     },
     Icon: GraduationCap,
   },

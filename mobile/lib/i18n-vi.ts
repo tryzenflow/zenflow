@@ -34,14 +34,13 @@ export default {
   "Close — keeps everything as scheduled": "Đóng — giữ nguyên tất cả lịch",
   Confirm: "Xác nhận",
   Connect: "Kết nối",
-  "Connect your DLU account": "Kết nối tài khoản DLU",
+  "Connect your LMS or portal": "Kết nối LMS hoặc cổng sinh viên",
   "Continued from yesterday": "Tiếp từ hôm qua",
   "Couldn't clear notifications": "Chưa xóa được thông báo",
   "Couldn't dismiss notification": "Chưa xóa được thông báo",
   "Credentials updated": "Đã cập nhật thông tin đăng nhập",
   "Currently scheduled": "Lịch hiện tại",
-  "DLU account": "Tài khoản DLU",
-  "DLU accounts": "Tài khoản DLU",
+  "LMS & portal": "LMS và cổng sinh viên",
   "Dark mode": "Chế độ tối",
   Date: "Ngày",
   "Default reminder": "Nhắc nhở mặc định",
@@ -52,7 +51,8 @@ export default {
   "Detected from device": "Nhận diện từ thiết bị",
   "Device settings": "Cài đặt thiết bị",
   Disconnect: "Ngắt kết nối",
-  "Disconnect the": "Ngắt kết nối",
+  "Disconnect {provider}?": "Ngắt kết nối {provider}?",
+  "student portal": "cổng sinh viên",
   Dismiss: "Xóa",
   "Dismiss — keeps the current time": "Đóng — giữ nguyên thời gian hiện tại",
   "Display name": "Tên hiển thị",
@@ -203,12 +203,12 @@ export default {
   "What should we call you?": "Bạn muốn được gọi là gì?",
   "Where are you?": "Bạn đang ở đâu?",
   "You're all caught up": "Bạn đã xem hết thông báo",
-  "Your DLU student ID and password — only used to check DLU for you.":
-    "Mã sinh viên và mật khẩu DLU — chỉ dùng để kiểm tra DLU cho bạn.",
+  "Use the login you have for {provider}. Zenflow only uses it to check for new assignments and classes.":
+    "Dùng tài khoản bạn có ở {provider}. Zenflow chỉ dùng để kiểm tra bài tập mới và lịch học.",
   "Your one-time password must be 6 digits.": "Mã xác thực phải có 6 chữ số.",
   "You’re all set": "Bạn đã sẵn sàng",
-  "Zenflow will stop checking it for new assignments. You can reconnect any time.":
-    "Zenflow sẽ ngừng kiểm tra bài tập mới. Bạn có thể kết nối lại bất cứ lúc nào.",
+  "Zenflow will stop checking {provider} for new assignments. You can reconnect any time.":
+    "Zenflow sẽ ngừng kiểm tra bài tập mới từ {provider}. Bạn có thể kết nối lại bất cứ lúc nào.",
   and: "và",
   "just now": "vừa xong",
   late: "quá hạn",
@@ -417,7 +417,7 @@ export default {
   "Sync didn't finish": "Đồng bộ chưa xong",
   "Check your account details and try again.":
     "Kiểm tra thông tin tài khoản rồi thử lại nhé.",
-  "Couldn't reach DLU": "Chưa kết nối được DLU",
+  "Couldn't reach {provider}": "Chưa kết nối được {provider}",
   "Try again in a bit.": "Bạn thử lại sau nhé.",
   "Sync failed": "Đồng bộ thất bại",
   "This session now ends past its due time.":
@@ -447,12 +447,12 @@ export default {
     "Bạn thao tác hơi nhanh. Chờ một chút rồi thử lại nhé.",
   "Your email is how you sign in, so it can't be changed here.":
     "Email dùng để đăng nhập nên không thể đổi ở đây.",
-  "You can also do this later in Settings → Connect your DLU account.":
-    "Bạn cũng có thể làm sau trong Cài đặt → Kết nối tài khoản DLU.",
+  "You can also do this later in Settings → Connect your LMS or portal.":
+    "Bạn cũng có thể làm sau trong Cài đặt → Kết nối LMS hoặc cổng sinh viên.",
   "Get a nudge when a session is near or your schedule changes. We'll ask for permission next.":
     "Nhận nhắc nhở khi sắp đến giờ hoặc lịch thay đổi. Tiếp theo, Zenflow sẽ xin quyền gửi thông báo.",
-  "Zenflow keeps an eye on your timetable, exams and LMS, so new assignments land on your calendar. Your login is only used to check DLU for you.":
-    "Zenflow theo dõi thời khóa biểu, lịch thi và LMS để bài tập mới tự vào lịch của bạn. Thông tin đăng nhập chỉ dùng để kiểm tra DLU giúp bạn.",
+  "Zenflow keeps an eye on your timetable, exams and assignments, so they land on your calendar. Your login is only used to check your LMS and portal for you.":
+    "Zenflow theo dõi thời khóa biểu, lịch thi và bài tập để mọi thứ tự vào lịch của bạn. Thông tin đăng nhập chỉ dùng để kiểm tra LMS và cổng sinh viên giúp bạn.",
   "Turn them on in system settings to get reminders. For now, they stay off.":
     "Bật trong cài đặt hệ thống để nhận nhắc nhở. Hiện tại thông báo vẫn đang tắt.",
   "Optional · saved as your default reminder.":
@@ -464,10 +464,10 @@ export default {
   "Easy on the eyes at night": "Dịu mắt khi dùng ban đêm",
   "How early should we remind you? You can change it per task.":
     "Bạn muốn được nhắc trước bao lâu? Có thể đổi riêng cho từng công việc.",
-  "DLU is taking too long. Try again in a bit.":
-    "DLU phản hồi chậm. Bạn thử lại sau nhé.",
-  "Couldn't reach DLU. Try again in a bit.":
-    "Chưa kết nối được DLU. Bạn thử lại sau nhé.",
+  "{provider} is taking too long. Try again in a bit.":
+    "{provider} phản hồi chậm. Bạn thử lại sau nhé.",
+  "Couldn't reach {provider}. Try again in a bit.":
+    "Chưa kết nối được {provider}. Bạn thử lại sau nhé.",
   "Sign-in didn't work. Check your student ID and password.":
     "Chưa đăng nhập được. Bạn kiểm tra lại mã sinh viên và mật khẩu nhé.",
   "Nothing new from your LMS or student portal.":

@@ -94,16 +94,16 @@ const COPY = {
   },
   dlu: {
     get title() {
-      return t("Connect your DLU account");
+      return t("Connect your LMS or portal");
     },
     get body() {
       return t(
-        "Zenflow keeps an eye on your timetable, exams and LMS, so new assignments land on your calendar. Your login is only used to check DLU for you.",
+        "Zenflow keeps an eye on your timetable, exams and assignments, so they land on your calendar. Your login is only used to check your LMS and portal for you.",
       );
     },
     get hint() {
       return t(
-        "You can also do this later in Settings → Connect your DLU account.",
+        "You can also do this later in Settings → Connect your LMS or portal.",
       );
     },
   },
@@ -782,7 +782,7 @@ export default function OnboardingScreen() {
         },
         { k: t("Name"), v: user?.name ?? "" },
         {
-          k: t("DLU account"),
+          k: t("LMS & portal"),
           v: dluConnected ? t("Connected") : t("Skipped"),
           skipped: !dluConnected,
           step: "dlu",
