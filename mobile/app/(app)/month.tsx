@@ -27,13 +27,14 @@ import { GettingStarted } from "@/components/checklist/getting-started";
 import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { Text } from "@/components/ui/text";
 import { completeStep } from "@/hooks/use-checklist";
+import { useCalendarJump } from "@/hooks/use-calendar-jump";
 import { useUserStore } from "@/hooks/use-user-store";
 import { addMonths, monthLabel } from "@/lib/month-date-math";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { zonedNow, zonedWallClockToUtc } from "@zenflow/core";
 import type { Session, UpdateScope } from "@zenflow/shared";
 import { type Href, useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -77,6 +78,19 @@ export default function MonthScreen() {
     setMonthDate(next);
     setVisibleMonth(next);
   }
+
+  // Getting-started "show me": publish the month on screen, and move to a
+  // month the checklist picked because it has a task (`use-calendar-jump.ts`).
+  const monthJump = useCalendarJump((s) => s.monthJump);
+  useEffect(() => {
+    useCalendarJump.getState().setFocusedMonth(monthDate);
+  }, [monthDate]);
+  useEffect(() => {
+    if (!monthJump) return;
+    goToMonth(monthJump);
+    useCalendarJump.getState().clearMonthJump();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthJump]);
 
   useFocusEffect(
     useCallback(() => {

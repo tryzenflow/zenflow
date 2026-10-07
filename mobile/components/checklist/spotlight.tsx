@@ -20,6 +20,19 @@ import {
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FullWindowOverlay } from "react-native-screens";
+import { Hand } from "lucide-react-native";
+import Animated, {
+  Easing,
+  cancelAnimation,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
+import { useEffect } from "react";
 
 const GUTTER = 16;
 const FALLBACK_BUBBLE_HEIGHT = 120;
@@ -56,6 +69,96 @@ function Layer({
     >
       {children}
     </Modal>
+  );
+}
+
+/** Steps whose how-to is a gesture; shown as a looping hand over the control. */
+const GESTURE: Partial<Record<ChecklistStep, "drag-y" | "drag-x" | "hold">> = {
+  "move-task": "drag-y",
+  "block-actions": "hold",
+  "move-day": "drag-x",
+};
+const HAND = 40;
+
+/**
+ * A looping hand: press down on the control, drag (vertically for a task,
+ * sideways for a day cell) or just hold, release, repeat. Purely decorative.
+ */
+function GestureHint({
+  kind,
+  spot,
+  screenWidth,
+}: {
+  kind: "drag-y" | "drag-x" | "hold";
+  spot: Rect;
+  screenWidth: number;
+}) {
+  const t = useSharedValue(0);
+  useEffect(() => {
+    t.value = withRepeat(
+      withSequence(
+        withTiming(1, {
+          duration: kind === "hold" ? 1800 : 2000,
+          easing: Easing.linear,
+        }),
+        withDelay(500, withTiming(0, { duration: 0 })),
+      ),
+      -1,
+    );
+    return () => cancelAnimation(t);
+  }, [kind, t]);
+
+  const cx = spot.x + spot.width / 2;
+  const cy = spot.y + spot.height / 2;
+  // Drag toward whichever side has room: down for a task, the roomier
+  // horizontal side for a day cell.
+  const dx =
+    kind === "drag-x" ? (cx > screenWidth * 0.6 ? -1 : 1) * (spot.width + 6) : 0;
+  const dy = kind === "drag-y" ? Math.min(spot.height * 0.5 + 20, 80) : 0;
+
+  const handStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(t.value, [0, 0.08, 0.88, 1], [0, 1, 1, 0]),
+    transform: [
+      { translateX: interpolate(t.value, [0, 0.3, 0.8, 1], [0, 0, dx, dx]) },
+      { translateY: interpolate(t.value, [0, 0.3, 0.8, 1], [0, 0, dy, dy]) },
+      {
+        scale: interpolate(
+          t.value,
+          kind === "hold" ? [0, 0.15, 0.25, 0.9, 1] : [0, 0.2, 0.3, 0.8, 0.9],
+          kind === "hold" ? [1, 1, 0.82, 0.82, 1] : [1, 1, 0.82, 0.82, 1],
+        ),
+      },
+    ],
+  }));
+  // Ripple under the fingertip while it is pressed.
+  const rippleStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(
+      t.value,
+      kind === "hold" ? [0.2, 0.3, 0.9] : [0.25, 0.3, 0.8],
+      [0, 0.5, 0],
+      "clamp",
+    ),
+    transform: [
+      { translateX: interpolate(t.value, [0, 0.3, 0.8, 1], [0, 0, dx, dx]) },
+      { translateY: interpolate(t.value, [0, 0.3, 0.8, 1], [0, 0, dy, dy]) },
+      { scale: interpolate(t.value, [0.25, 0.9], [0.6, kind === "hold" ? 1.8 : 1.2], "clamp") },
+    ],
+  }));
+
+  return (
+    <View
+      pointerEvents="none"
+      className="absolute"
+      style={{ left: cx - HAND / 2, top: cy - HAND / 2, width: HAND, height: HAND }}
+    >
+      <Animated.View
+        className="absolute inset-0 rounded-full bg-white"
+        style={rippleStyle}
+      />
+      <Animated.View style={handStyle}>
+        <Hand size={HAND} color="#fff" fill="rgba(255,255,255,0.25)" />
+      </Animated.View>
+    </View>
   );
 }
 
@@ -121,6 +224,14 @@ export function Spotlight({
           }}
         />
       </View>
+
+      {GESTURE[step] ? (
+        <GestureHint
+          kind={GESTURE[step]!}
+          spot={spot}
+          screenWidth={screen.width}
+        />
+      ) : null}
 
       <View
         accessibilityViewIsModal

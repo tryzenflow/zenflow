@@ -17,6 +17,7 @@ import { useUserStore } from "@/hooks/use-user-store";
 import { isPastDeadlineDrop } from "@/lib/overdue";
 import { showErrorToast } from "@/lib/task-toasts";
 import { type PeekBlock, peekBlocksFromSegments } from "@/lib/peek";
+import { useSpotlight } from "@/hooks/use-spotlight";
 import {
   fetchDaySessions,
   getCachedDaySessions,
@@ -541,6 +542,42 @@ export function DayTimeline({
   useEffect(() => {
     positionScroll();
   }, [positionScroll]);
+
+  // Getting-started "Move a task" / "Hold a task": the spotlight can only point
+  // at a block that is on screen, and the timeline opens scrolled to "now" (or
+  // to the shared week position) — so bring the tip block into view first, or
+  // the checklist gives up and points at + instead. Declared after
+  // `positionScroll`'s effect so it runs later in the same commit and wins.
+  const tipStep = useSpotlight((s) =>
+    s.step === "move-task" || s.step === "block-actions" ? s.step : null,
+  );
+  const segmentsRef = useRef(segments);
+  segmentsRef.current = segments;
+  useEffect(() => {
+    if (!tipStep || !isActive || loading || error || !tipSegmentId) return;
+    const segment = segmentsRef.current.find(
+      (s) => s.segmentId === tipSegmentId,
+    );
+    if (!segment) return;
+    const start = toZonedTime(new Date(segment.start), tz);
+    const end = toZonedTime(new Date(segment.end), tz);
+    const startMin = start.getHours() * 60 + start.getMinutes();
+    const durationMin = Math.max(
+      15,
+      (end.getTime() - start.getTime()) / 60_000,
+    );
+    const top = (startMin / DAILY_HORIZON) * totalHeight;
+    const height = (durationMin / DAILY_HORIZON) * totalHeight;
+    const viewport = viewportHRef.current || 500;
+    const y =
+      height >= viewport - 48 ? top - 24 : top - (viewport - height) / 2;
+    // Next tick: let the ScrollView finish its own layout/positioning first.
+    const timer = setTimeout(
+      () => scrollRef.current?.scrollTo({ y: Math.max(0, y), animated: false }),
+      60,
+    );
+    return () => clearTimeout(timer);
+  }, [tipStep, isActive, loading, error, tipSegmentId, totalHeight, tz]);
 
   // Teleport to a session (`flashSessionId` — notification tap, create/edit,
   // cross-day move): once this day has it loaded and is the visible page,

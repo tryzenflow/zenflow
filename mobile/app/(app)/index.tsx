@@ -41,10 +41,8 @@ import { NotificationBell } from "@/components/notification-bell";
 import { GettingStarted } from "@/components/checklist/getting-started";
 import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { completeStep } from "@/hooks/use-checklist";
-import { useSpotlight } from "@/hooks/use-spotlight";
+import { useCalendarJump } from "@/hooks/use-calendar-jump";
 import { useUserStore } from "@/hooks/use-user-store";
-import { findNearestTaskDate } from "@/lib/nearest-task-date";
-import { getCachedDaySessions } from "@/lib/session-cache";
 import { useWeekDayTypes } from "@/hooks/use-week-day-types";
 import {
   type PendingSlotPick,
@@ -144,24 +142,17 @@ export default function WeekScreen() {
     [],
   );
 
-  // Getting-started "move a task" (and "block actions") needs a task to point
-  // at. If the focused day is empty, hop to the nearest day that has one.
-  const spotlightStep = useSpotlight((s) => s.step);
+  // Getting-started "show me" (see `use-calendar-jump.ts`): publish the day we
+  // are on, and move to a day it picked that has a task to point at.
+  const weekJump = useCalendarJump((s) => s.weekJump);
   useEffect(() => {
-    if (spotlightStep !== "move-task" && spotlightStep !== "block-actions") {
-      return;
-    }
-    if (timelineState !== "ready") return;
-    const cached = getCachedDaySessions(dateKey(focusedDate));
-    if (!cached || cached.length > 0) return;
-    let cancelled = false;
-    findNearestTaskDate(focusedDate, tz).then((day) => {
-      if (!cancelled && day) commitFocusedDate(day);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [spotlightStep, timelineState, focusedDate, tz, commitFocusedDate]);
+    useCalendarJump.getState().setFocusedWeekDay(focusedDate);
+  }, [focusedDate]);
+  useEffect(() => {
+    if (!weekJump) return;
+    commitFocusedDate(weekJump);
+    useCalendarJump.getState().clearWeekJump();
+  }, [weekJump, commitFocusedDate]);
 
   const tabBarOverlay = useTabBarOverlayHeight();
 

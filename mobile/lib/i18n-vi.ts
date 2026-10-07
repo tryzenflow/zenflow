@@ -360,8 +360,8 @@ export default {
     "Chạm vào một ngày trong tháng để xem công việc của ngày đó.",
   "Move a task to another day":
     "Chuyển công việc sang ngày khác",
-  "Hold a task and drag it onto another day, or tap the calendar button.":
-    "Nhấn giữ công việc rồi kéo sang ngày khác, hoặc chạm nút lịch.",
+  "Hold a task in the highlighted day and drag it onto another day.":
+    "Nhấn giữ một công việc trong ngày được đánh dấu rồi kéo sang ngày khác.",
   "{title} · {count} of {total} have alternatives":
     "{title} · {count}/{total} buổi có thời gian khác",
   "Pick a time, then confirm.":
