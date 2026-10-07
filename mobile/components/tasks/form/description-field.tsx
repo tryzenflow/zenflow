@@ -270,7 +270,11 @@ function DescriptionFieldEditor({
       const { file, mimeType, name } = await downloadFileToCache(id);
       await file.preview({ mimeType, title: name });
     } catch {
-      toast(t("Couldn't open that file."), "destructive");
+      toast({
+        title: t("Couldn't open file"),
+        description: t("Try again in a moment."),
+        variant: "destructive",
+      });
     }
   }
 
@@ -294,7 +298,11 @@ function DescriptionFieldEditor({
           return;
         }
         Linking.openURL(href).catch(() => {
-          toast(t("Couldn't open that link."), "destructive");
+          toast({
+            title: t("Couldn't open link"),
+            description: t("Try again in a moment."),
+            variant: "destructive",
+          });
         });
       }
     }
@@ -381,7 +389,11 @@ function DescriptionFieldEditor({
       editor.setContent(html);
       onChange(html);
     } catch {
-      toast(failureMessage, "destructive");
+      toast({
+        title: failureMessage,
+        description: t("Check your connection and try again."),
+        variant: "destructive",
+      });
     }
   }
 
@@ -394,7 +406,11 @@ function DescriptionFieldEditor({
         copyToCacheDirectory: true,
       });
     } catch {
-      toast(t("Couldn't open the file picker."), "destructive");
+      toast({
+        title: t("Couldn't open file picker"),
+        description: t("Try again in a moment."),
+        variant: "destructive",
+      });
       return;
     }
     if (result.canceled) return;
@@ -405,7 +421,7 @@ function DescriptionFieldEditor({
         name: asset.name,
         mimeType: asset.mimeType ?? "application/octet-stream",
       })),
-      t("Couldn't upload the file. Try again."),
+      t("Couldn't upload file"),
     );
   }
 
@@ -422,7 +438,11 @@ function DescriptionFieldEditor({
         quality: 0.8,
       });
     } catch {
-      toast(t("Couldn't open the photo library."), "destructive");
+      toast({
+        title: t("Couldn't open photo library"),
+        description: t("Try again in a moment."),
+        variant: "destructive",
+      });
       return;
     }
     if (result.canceled) return;
@@ -435,7 +455,7 @@ function DescriptionFieldEditor({
           mimeType: asset.mimeType,
         }),
       ),
-      t("Couldn't upload the image. Try again."),
+      t("Couldn't upload image"),
     );
   }
 

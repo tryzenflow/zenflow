@@ -194,15 +194,22 @@ export default function NotificationsScreen() {
         const res = await rescheduleConflicts(n.id);
         const ok = res.rescheduled.length;
         const failed = res.failedSessionIds.length;
-        toast(
-          failed
-            ? t("Rescheduled {ok}; {failed} still conflict", { ok, failed })
+        toast({
+          title: failed
+            ? t("Rescheduled {ok}, {failed} left", { ok, failed })
             : t("Rescheduled {count} tasks", { count: ok }),
-          failed ? "warning" : "success",
-        );
+          description: failed
+            ? t("The rest still overlap. Move them by hand.")
+            : undefined,
+          variant: failed ? "warning" : "success",
+        });
         void fetchNotifications("refresh");
       } catch {
-        toast(t("Couldn't reschedule the conflicting tasks."), "destructive");
+        toast({
+          title: t("Couldn't reschedule tasks"),
+          description: t("Try again in a moment."),
+          variant: "destructive",
+        });
       } finally {
         setReschedulingId(null);
       }
@@ -216,7 +223,11 @@ export default function NotificationsScreen() {
       try {
         await dismiss(id);
       } catch {
-        toast(t("Couldn't dismiss that notification."), "destructive");
+        toast({
+          title: t("Couldn't dismiss notification"),
+          description: t("Try again in a moment."),
+          variant: "destructive",
+        });
       }
     },
     [dismiss, toast],
@@ -233,7 +244,11 @@ export default function NotificationsScreen() {
       await dismissMany(ids);
       toast(t("Deleted {count} notifications", { count }), "default");
     } catch {
-      toast(t("Couldn't delete selected notifications."), "destructive");
+      toast({
+        title: t("Couldn't delete notifications"),
+        description: t("Try again in a moment."),
+        variant: "destructive",
+      });
     }
   }, [selectedIds, dismissMany, toast]);
 
@@ -246,7 +261,11 @@ export default function NotificationsScreen() {
       await clearAll();
       toast(t("All notifications cleared"), "default");
     } catch {
-      toast(t("Couldn't clear all notifications."), "destructive");
+      toast({
+        title: t("Couldn't clear notifications"),
+        description: t("Try again in a moment."),
+        variant: "destructive",
+      });
     }
   }, [clearAll, toast]);
 

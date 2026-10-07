@@ -48,7 +48,11 @@ export function TagsRow() {
       );
       sheet.close();
     } catch {
-      toast(t("Couldn't save tags. Try again."), "destructive");
+      toast({
+        title: t("Couldn't save tags"),
+        description: t("Try again in a moment."),
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }

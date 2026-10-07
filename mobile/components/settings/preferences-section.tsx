@@ -99,7 +99,11 @@ export function PreferencesSection() {
 
   async function save(patch: Parameters<typeof update>[0]) {
     if (!(await update(patch))) {
-      toast(t("Couldn't save preference. Try again."), "destructive");
+      toast({
+        title: t("Couldn't save preference"),
+        description: t("Try again in a moment."),
+        variant: "destructive",
+      });
     }
   }
 

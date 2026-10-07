@@ -33,24 +33,20 @@ describe("splitToastMessage", () => {
 });
 
 describe("showSplitToast", () => {
-  it("calls toast with the split title/description and default positional args", () => {
+  it("calls toast with the split title/description", () => {
     const toast = vi.fn();
     showSplitToast(toast, "Can't fit 3 sessions\nLoosen the deadline.");
-    expect(toast).toHaveBeenCalledWith(
-      "Can't fit 3 sessions",
-      "destructive",
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      { description: "Loosen the deadline." },
-    );
+    expect(toast).toHaveBeenCalledWith({
+      title: "Can't fit 3 sessions",
+      variant: "destructive",
+      description: "Loosen the deadline.",
+    });
   });
 
   it("defaults to the destructive variant, honors an explicit one", () => {
     const toast = vi.fn();
     showSplitToast(toast, "Scheduled for Mon 9am", "success");
-    expect(toast.mock.calls[0][1]).toBe("success");
+    expect(toast.mock.calls[0][0].variant).toBe("success");
   });
 });
 
@@ -62,8 +58,8 @@ describe("showErrorToast", () => {
       response: { data: { message: "Can't fit 3 sessions\nLoosen the deadline." } },
     };
     showErrorToast(toast, error, "fallback");
-    expect(toast.mock.calls[0][0]).toBe("Can't fit 3 sessions");
-    expect(toast.mock.calls[0][6]).toEqual({
+    expect(toast.mock.calls[0][0]).toMatchObject({
+      title: "Can't fit 3 sessions",
       description: "Loosen the deadline.",
     });
   });
@@ -71,7 +67,7 @@ describe("showErrorToast", () => {
   it("falls back for a non-axios error", () => {
     const toast = vi.fn();
     showErrorToast(toast, new Error("boom"), "Something went wrong");
-    expect(toast.mock.calls[0][0]).toBe("Something went wrong");
+    expect(toast.mock.calls[0][0].title).toBe("Something went wrong");
   });
 });
 
@@ -134,8 +130,8 @@ describe("showSeriesAlternativesPrompt", () => {
     const toast = vi.fn();
     const onView = vi.fn();
     showSeriesAlternativesPrompt(toast, 3, 5, onView);
-    const [title, variant, duration, position, , action, opts] =
-      toast.mock.calls[0];
+    const { title, variant, duration, position, action, description } =
+      toast.mock.calls[0][0];
     expect(title).toBe("3 sittings have an alternative");
     // "tip" is what keeps it up: only `success` auto-dismisses.
     expect(variant).toBe("tip");
@@ -144,14 +140,14 @@ describe("showSeriesAlternativesPrompt", () => {
     expect(action.label).toBe("View");
     action.onPress();
     expect(onView).toHaveBeenCalled();
-    expect(opts.description).toContain("All 5 are already scheduled");
+    expect(description).toContain("All 5 are already scheduled");
   });
 
   it("uses singular copy for a single divergent sitting", () => {
     const toast = vi.fn();
     showSeriesAlternativesPrompt(toast, 1, 1, vi.fn());
-    expect(toast.mock.calls[0][0]).toBe("1 sitting has an alternative");
-    expect(toast.mock.calls[0][6].description).toContain("All 1 are");
+    expect(toast.mock.calls[0][0].title).toBe("1 sitting has an alternative");
+    expect(toast.mock.calls[0][0].description).toContain("All 1 are");
   });
 });
 
@@ -159,10 +155,10 @@ describe("showSlotTakenToast", () => {
   it("is destructive and states that nothing moved", () => {
     const toast = vi.fn();
     showSlotTakenToast(toast);
-    const [title, variant, , , , , opts] = toast.mock.calls[0];
+    const { title, variant, description } = toast.mock.calls[0][0];
     expect(title).toBe("That time was just taken");
     expect(variant).toBe("destructive");
-    expect(opts.description).toContain("stayed put");
+    expect(description).toContain("Nothing moved");
   });
 });
 
@@ -170,7 +166,7 @@ describe("showBulkPickToast", () => {
   it("is a plain success when nothing failed", () => {
     const toast = vi.fn();
     showBulkPickToast(toast, 3, 0);
-    const [title, variant] = toast.mock.calls[0];
+    const { title, variant } = toast.mock.calls[0][0];
     expect(title).toBe("Updated 3 sittings");
     expect(variant).toBe("success");
   });
@@ -178,9 +174,9 @@ describe("showBulkPickToast", () => {
   it("warns and names the failure count on a partial pass", () => {
     const toast = vi.fn();
     showBulkPickToast(toast, 2, 1);
-    const [title, variant, , , , , opts] = toast.mock.calls[0];
-    expect(title).toBe("2 updated, 1 couldn't be");
+    const { title, variant, description } = toast.mock.calls[0][0];
+    expect(title).toBe("Updated 2, skipped 1");
     expect(variant).toBe("warning");
-    expect(opts.description).toContain("stayed where they are");
+    expect(description).toContain("stayed put");
   });
 });

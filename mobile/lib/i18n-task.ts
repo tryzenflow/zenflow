@@ -16,8 +16,6 @@ const taskTranslations: Record<string, string> = {
     "Thời lượng phải là bội số của 15 phút",
   "Not enough time left before this deadline\nChoose a later deadline to leave room for this session.":
     "Không còn đủ thời gian trước hạn chót\nChọn hạn chót muộn hơn để có đủ thời gian cho buổi này.",
-  "Couldn't open that file.": "Không thể mở tệp này.",
-  "Couldn't open that link.": "Không thể mở liên kết này.",
   "New task": "Công việc mới",
   Close: "Đóng",
   Cancel: "Hủy",
@@ -137,10 +135,11 @@ const taskTranslations: Record<string, string> = {
   "Link URL": "Địa chỉ liên kết",
   "Confirm link": "Xác nhận liên kết",
   "Cancel link": "Hủy liên kết",
-  "Couldn't open the file picker.": "Không thể mở trình chọn tệp.",
-  "Couldn't upload the file. Try again.": "Không thể tải tệp lên. Hãy thử lại.",
-  "Couldn't open the photo library.": "Không thể mở thư viện ảnh.",
-  "Couldn't upload the image. Try again.":
-    "Không thể tải ảnh lên. Hãy thử lại.",
+  "Couldn't open file": "Chưa mở được tệp",
+  "Couldn't open link": "Chưa mở được liên kết",
+  "Couldn't open file picker": "Chưa mở được trình chọn tệp",
+  "Couldn't open photo library": "Chưa mở được thư viện ảnh",
+  "Couldn't upload file": "Chưa tải được tệp lên",
+  "Couldn't upload image": "Chưa tải được ảnh lên",
 };
 export default taskTranslations;

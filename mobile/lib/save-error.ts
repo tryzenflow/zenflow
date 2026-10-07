@@ -4,14 +4,15 @@ import { isAxiosError } from "axios";
  * body on a mobile uplink, well past the client-wide 8s default. */
 export const SAVE_TIMEOUT_MS = 30_000;
 
+// "Title\nDescription" (see `splitToastMessage`): title <= 5 words, verb-first.
 export const NETWORK_ERROR_MESSAGE =
-  "Couldn't reach the server\nCheck your connection and try again.";
+  "Check your connection\nCouldn't reach the server. Try again in a moment.";
 export const TIMEOUT_ERROR_MESSAGE =
-  "The server took too long to respond\nYour changes may not have been saved. Check your connection and try again.";
+  "Try saving again\nThe server was slow, so your changes may not be saved. Check your connection and retry.";
 export const TOO_LARGE_ERROR_MESSAGE =
-  "That note is too large to save\nRemove large images from the note and try again.";
+  "Shrink your note\nIt's too large to save. Remove large images and try again.";
 export const SERVER_ERROR_MESSAGE =
-  "Something went wrong on our end\nTry again in a moment.";
+  "Try again shortly\nSomething went wrong on our end.";
 
 /** A server-sent `message` as a non-empty string (Nest validation pipes send
  * `string[]`), else undefined. HTML/proxy bodies are ignored. */

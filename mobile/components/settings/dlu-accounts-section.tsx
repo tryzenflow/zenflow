@@ -143,23 +143,41 @@ async function settleStatus(
 }
 
 /** Why a manual sync did not go through, in words a student can act on. */
-function syncErrorMessage(error: unknown): string {
+function syncErrorToast(error: unknown): {
+  title: string;
+  description: string;
+} {
   if (isAxiosError(error)) {
     const status = error.response?.status;
     if (status === 429) {
       const seconds = Number(error.response?.headers?.["retry-after"]);
-      return Number.isFinite(seconds) && seconds > 0
-        ? t("Synced a moment ago. Try again in {count} min.", {
-            count: Math.ceil(seconds / 60),
-          })
-        : t("Synced a moment ago. Try again shortly.");
+      return {
+        title: t("Synced a moment ago"),
+        description:
+          Number.isFinite(seconds) && seconds > 0
+            ? t("Try again in {count} min.", {
+                count: Math.ceil(seconds / 60),
+              })
+            : t("Try again shortly."),
+      };
     }
-    if (status === 409) return t("A sync is already running.");
+    if (status === 409)
+      return {
+        title: t("Sync in progress"),
+        description: t("It will finish soon."),
+      };
     if (status === 502)
-      return t("Sync didn't finish. Check your account details and try again.");
-    if (status === 503) return t("Couldn't reach DLU right now.");
+      return {
+        title: t("Sync didn't finish"),
+        description: t("Check your account details and try again."),
+      };
+    if (status === 503)
+      return {
+        title: t("Couldn't reach DLU"),
+        description: t("Try again in a bit."),
+      };
   }
-  return t("Sync failed");
+  return { title: t("Sync failed"), description: t("Try again in a moment.") };
 }
 
 function errorMessageFor(error: unknown): string {
@@ -279,7 +297,7 @@ export function DluAccountsSection({
         "success",
       );
     } catch (err) {
-      toast(syncErrorMessage(err), "destructive");
+      toast({ ...syncErrorToast(err), variant: "destructive" });
       // A refused or failed sync can still have moved the status (a new failed
       // run, or a background sync we had not seen). If the server is still
       // mid-run — we gave up waiting, it did not — keep re-reading until it

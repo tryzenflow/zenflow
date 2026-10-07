@@ -39,13 +39,9 @@ export default {
   "Connection timed out. DLU may be unavailable — try again.":
     "Kết nối hết thời gian chờ. DLU có thể đang gián đoạn — hãy thử lại.",
   "Continued from yesterday": "Tiếp từ hôm qua",
-  "Couldn't clear all notifications.": "Không thể xóa tất cả thông báo.",
-  "Couldn't clear notifications": "Không thể xóa thông báo",
-  "Couldn't delete selected notifications.":
-    "Không thể xóa các thông báo đã chọn.",
-  "Couldn't dismiss notification": "Không thể xóa thông báo",
+  "Couldn't clear notifications": "Chưa xóa được thông báo",
+  "Couldn't dismiss notification": "Chưa xóa được thông báo",
   "Couldn't dismiss notifications": "Không thể xóa thông báo",
-  "Couldn't dismiss that notification.": "Không thể xóa thông báo này.",
   "Couldn't load this month's tasks": "Không thể tải công việc trong tháng này",
   "Couldn't load your day": "Không thể tải lịch trong ngày",
   "Couldn't move that sitting": "Không thể chuyển buổi này",
@@ -53,17 +49,10 @@ export default {
   "Couldn't open this session": "Không thể mở lịch này",
   "Couldn't reach DLU right now — try again in a bit.":
     "Hiện không thể kết nối DLU — hãy thử lại sau.",
-  "Couldn't reach DLU right now.": "Hiện không thể kết nối DLU.",
   "Couldn't record this choice": "Không thể lưu lựa chọn này",
   "Couldn't reschedule task": "Không thể xếp lại công việc",
-  "Couldn't reschedule the conflicting tasks.":
-    "Không thể xếp lại các công việc bị trùng lịch.",
-  "Couldn't save preference. Try again.":
-    "Không thể lưu tùy chọn. Hãy thử lại.",
-  "Couldn't save tags. Try again.": "Không thể lưu nhãn. Hãy thử lại.",
   "Couldn't save. Try again.": "Không thể lưu. Hãy thử lại.",
   "Couldn't sync": "Không thể đồng bộ",
-  "Couldn't turn on notifications.": "Không thể bật thông báo.",
   "Couldn't update this session": "Không thể cập nhật lịch này",
   "Credentials updated": "Đã cập nhật thông tin đăng nhập",
   "Currently scheduled": "Lịch hiện tại",
@@ -114,8 +103,6 @@ export default {
     "Bạn muốn được nhắc trước bao lâu? Có thể thay đổi cho từng công việc.",
   Inbox: "Hộp thư",
   "Invalid email address.": "Địa chỉ email không hợp lệ.",
-  "It now overlaps another sitting of this task, so that one stayed put. Try another time, or keep it as scheduled.":
-    "Thời gian này trùng với một buổi khác nên buổi đó được giữ nguyên. Hãy thử giờ khác hoặc giữ lịch hiện tại.",
   "Jump to today": "Về hôm nay",
   "Keep all as scheduled": "Giữ nguyên tất cả lịch",
   "Keep every undecided sitting where it is scheduled":
@@ -155,8 +142,6 @@ export default {
   "Nothing scheduled": "Chưa có lịch",
   Notifications: "Thông báo",
   "Notifications are blocked": "Thông báo bị chặn",
-  "Notifications are blocked. Allow them in system settings.":
-    "Thông báo bị chặn. Hãy cho phép trong cài đặt hệ thống.",
   "Occurrences from this one onward move to the new time.":
     "Các lần lặp từ lần này trở đi sẽ chuyển sang thời gian mới.",
   "One-Time Password": "Mã xác thực một lần",
@@ -222,16 +207,8 @@ export default {
   "Switch all to alternatives": "Chuyển tất cả sang giờ khác",
   "Switch every undecided sitting to its alternative":
     "Chuyển các buổi chưa chọn sang giờ thay thế",
-  "Sync failed": "Đồng bộ thất bại",
   "Sync failing": "Đồng bộ đang lỗi",
   "Sync failing · last synced {time}": "Đồng bộ đang lỗi · lần cuối {time}",
-  "Synced a moment ago. Try again in {count} min.":
-    "Vừa đồng bộ xong. Thử lại sau {count} phút.",
-  "Synced a moment ago. Try again shortly.":
-    "Vừa đồng bộ xong. Thử lại sau ít phút.",
-  "A sync is already running.": "Đang đồng bộ, vui lòng chờ.",
-  "Sync didn't finish. Check your account details and try again.":
-    "Đồng bộ chưa hoàn tất. Kiểm tra thông tin tài khoản rồi thử lại.",
   "Sync now": "Đồng bộ ngay",
   Tags: "Nhãn",
   "Tags group your tasks and sessions. We've suggested a few for students — tap to keep, add your own, rename them later.":
@@ -239,22 +216,15 @@ export default {
   "Tap an alternative to swap that sitting — applied right away.":
     "Nhấn giờ thay thế để chuyển buổi đó — áp dụng ngay.",
   "Terms of Service": "Điều khoản sử dụng",
-  "Thanks — noted for next time": "Cảm ơn — đã ghi nhận cho lần sau",
   "That didn't work. Double-check your student ID and password and try again.":
     "Chưa đăng nhập được. Kiểm tra mã sinh viên và mật khẩu rồi thử lại.",
-  "That item isn't on your calendar anymore.":
-    "Mục này không còn trong lịch của bạn.",
   "That time was just taken": "Thời gian này vừa được sử dụng",
-  "The ones that clashed with another sitting stayed where they are.":
-    "Các buổi bị trùng với buổi khác được giữ nguyên.",
   "This and following": "Lần này và các lần sau",
   "This and later occurrences removed": "Đã xóa lần này và các lần sau",
   "This and later sittings": "Buổi này và các buổi sau",
   "This and later sittings removed": "Đã xóa buổi này và các buổi sau",
   "This day is free.": "Ngày này chưa có lịch.",
   "This screen doesn't exist.": "Màn hình này không tồn tại.",
-  "This session is now scheduled after its deadline.":
-    "Lịch này hiện được xếp sau hạn chót.",
   "This session will start past its due time.":
     "Lịch này sẽ bắt đầu sau hạn chót.",
   "This sitting": "Buổi này",
@@ -329,8 +299,6 @@ export default {
   "30 min before": "Trước 30 phút",
   "1 hour before": "Trước 1 giờ",
   ", today": ", hôm nay",
-  " — past its deadline": " — quá hạn chót",
-  "Moved to ": "Đã chuyển đến ",
   Skip: "Bỏ qua",
   Continue: "Tiếp tục",
   Tip: "Mẹo",
@@ -349,8 +317,6 @@ export default {
   "cont. → {time}": "tiếp → {time}",
   "due {date}": "hạn {date}",
   "{category} conflict": "Trùng lịch {category}",
-  "Rescheduled {ok}; {failed} still conflict":
-    "Đã xếp lại {ok}; {failed} vẫn bị trùng",
   "Rescheduled {count} tasks": "Đã xếp lại {count} công việc",
   "Deleted {count} notifications": "Đã xóa {count} thông báo",
   "Sent to {email}": "Đã gửi đến {email}",
@@ -370,15 +336,10 @@ export default {
   "Sign in to your {provider}": "Đăng nhập {provider}",
   "Update your {provider} login": "Cập nhật đăng nhập {provider}",
   '"{title}" created': 'Đã tạo "{title}"',
-  "Scheduled for {when}{suffix}": "Đã xếp lịch {when}{suffix}",
-  "Moved {count} flexible tasks to make room":
-    "Đã chuyển {count} công việc linh hoạt để tạo chỗ trống",
   "{count} sittings have an alternative": "{count} buổi có giờ thay thế",
   "All {total} are already scheduled — swap any you like":
     "Cả {total} buổi đã có lịch — bạn có thể đổi buổi tùy ý",
   "Updated {count} sittings": "Đã cập nhật {count} buổi",
-  "{applied} updated, {failed} couldn't be":
-    "Đã cập nhật {applied}, không thể cập nhật {failed}",
   "{count} selected · saved to your account, available in the task form’s Tags field.":
     "Đã chọn {count} · lưu vào tài khoản và dùng trong trường Nhãn của biểu mẫu công việc.",
   "{count} selected": "Đã chọn {count}",
@@ -393,14 +354,6 @@ export default {
   Health: "Sức khỏe",
   Social: "Giao lưu",
   Errands: "Việc vặt",
-  "Couldn't reach the server\nCheck your connection and try again.":
-    "Không thể kết nối máy chủ\nKiểm tra kết nối rồi thử lại.",
-  "The server took too long to respond\nYour changes may not have been saved. Check your connection and try again.":
-    "Máy chủ phản hồi quá lâu\nThay đổi có thể chưa được lưu. Kiểm tra kết nối rồi thử lại.",
-  "That note is too large to save\nRemove large images from the note and try again.":
-    "Ghi chú quá lớn để lưu\nXóa ảnh lớn khỏi ghi chú rồi thử lại.",
-  "Something went wrong on our end\nTry again in a moment.":
-    "Có lỗi từ hệ thống\nHãy thử lại sau.",
   "Sending…": "Đang gửi…",
   Skipped: "Đã bỏ qua",
   On: "Đã bật",
@@ -514,4 +467,52 @@ export default {
     "Chuẩn bị cho {title}",
   "Nothing scheduled for this day":
     "Chưa có lịch cho ngày này",
+  "Check your connection\nCouldn't reach the server. Try again in a moment.":
+    "Kiểm tra kết nối\nChưa kết nối được máy chủ. Bạn thử lại sau ít phút nhé.",
+  "Try saving again\nThe server was slow, so your changes may not be saved. Check your connection and retry.":
+    "Thử lưu lại\nMáy chủ phản hồi chậm nên thay đổi có thể chưa được lưu. Bạn kiểm tra kết nối rồi thử lại nhé.",
+  "Shrink your note\nIt's too large to save. Remove large images and try again.":
+    "Giảm dung lượng ghi chú\nGhi chú quá lớn để lưu. Bạn xóa bớt ảnh lớn rồi thử lại nhé.",
+  "Try again shortly\nSomething went wrong on our end.":
+    "Thử lại sau chút nhé\nHệ thống đang gặp trục trặc.",
+  "Try again in a moment.": "Bạn thử lại sau ít phút nhé.",
+  "Rescheduled {ok}, {failed} left": "Đã xếp lại {ok}, còn {failed}",
+  "The rest still overlap. Move them by hand.":
+    "Các việc còn lại vẫn trùng lịch. Bạn chuyển thủ công nhé.",
+  "Couldn't reschedule tasks": "Chưa xếp lại được công việc",
+  "Couldn't delete notifications": "Chưa xóa được thông báo",
+  "Couldn't find that item": "Không tìm thấy mục này",
+  "It's no longer on your calendar.": "Mục này không còn trên lịch của bạn.",
+  "Couldn't save preference": "Chưa lưu được tùy chọn",
+  "Couldn't save tags": "Chưa lưu được nhãn",
+  "Check your connection and try again.": "Kiểm tra kết nối rồi thử lại nhé.",
+  "Allow them in system settings.": "Hãy bật lại trong cài đặt hệ thống nhé.",
+  "Couldn't turn on notifications": "Chưa bật được thông báo",
+  "Try again in {count} min.": "Thử lại sau {count} phút nhé.",
+  "Try again shortly.": "Bạn thử lại sau ít phút nhé.",
+  "Synced a moment ago": "Vừa đồng bộ xong",
+  "Sync in progress": "Đang đồng bộ",
+  "It will finish soon.": "Sẽ xong ngay thôi, bạn chờ chút nhé.",
+  "Sync didn't finish": "Đồng bộ chưa xong",
+  "Check your account details and try again.":
+    "Kiểm tra thông tin tài khoản rồi thử lại nhé.",
+  "Couldn't reach DLU": "Chưa kết nối được DLU",
+  "Try again in a bit.": "Bạn thử lại sau nhé.",
+  "Sync failed": "Đồng bộ thất bại",
+  "This session now ends past its due time.":
+    "Lịch này giờ kết thúc sau hạn chót.",
+  "Scheduled after deadline": "Xếp sau hạn chót",
+  "Moved {count} flexible tasks": "Đã dời {count} việc linh hoạt",
+  "To make room for the new session.": "Để nhường chỗ cho lịch mới.",
+  "Moved to new slot": "Đã chuyển sang khung giờ mới",
+  "{when}. Thanks, noted for next time.":
+    "{when}. Cảm ơn bạn, mình đã ghi nhớ cho lần sau.",
+  "Nothing moved. Pick another time or keep this one.":
+    "Chưa có gì thay đổi. Bạn chọn giờ khác hoặc giữ giờ này nhé.",
+  "Updated {applied}, skipped {failed}":
+    "Đã cập nhật {applied}, bỏ qua {failed}",
+  "Skipped ones clashed with another sitting and stayed put.":
+    "Các buổi bị bỏ qua trùng với buổi khác nên giữ nguyên.",
+  "It's past its deadline.": "Đã quá hạn chót.",
+  "Scheduled for {when}": "Đã xếp lịch {when}",
 } as Record<string, string>;

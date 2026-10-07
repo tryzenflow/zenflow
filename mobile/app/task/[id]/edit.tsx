@@ -215,11 +215,12 @@ function EditSessionForm() {
       showDisplacedToast(toast, updated.displacedSessions);
       toast(t("Session updated"), "success");
       if (isSessionPastDeadline(updated)) {
-        toast(
-          t("This session is now scheduled after its deadline."),
-          "warning",
-          5000,
-        );
+        toast({
+          title: t("Scheduled after deadline"),
+          description: t("This session now ends past its due time."),
+          variant: "warning",
+          duration: 5000,
+        });
       } else if (shouldSurfaceRescheduleHint()) {
         toast(t("Tip"), "tip", 6000, "top", false, undefined, {
           description: t(RESCHEDULE_HINT),

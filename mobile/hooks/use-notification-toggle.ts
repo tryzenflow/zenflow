@@ -60,21 +60,22 @@ export function useNotificationToggle() {
     const ok = await enable();
     if (!ok && !quiet) {
       const blocked = usePushStatusStore.getState().permission !== "granted";
-      toast(
-        blocked
-          ? t("Notifications are blocked. Allow them in system settings.")
-          : t("Couldn't turn on notifications."),
-        "destructive",
-        6000,
-        "top",
-        true,
-        blocked
+      toast({
+        title: blocked
+          ? t("Notifications are blocked")
+          : t("Couldn't turn on notifications"),
+        description: blocked
+          ? t("Allow them in system settings.")
+          : t("Try again in a moment."),
+        variant: "destructive",
+        duration: 6000,
+        action: blocked
           ? {
               label: t("Open settings"),
               onPress: () => void Linking.openSettings(),
             }
           : undefined,
-      );
+      });
     }
     return ok;
   };

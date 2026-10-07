@@ -199,7 +199,11 @@ export async function jumpToSession(
       router.push(`/task/${encodeURIComponent(sessionId)}/edit` as Href);
     }
   } catch {
-    toast(t("That item isn't on your calendar anymore."), "destructive");
+    toast({
+    title: t("Couldn't find that item"),
+    description: t("It's no longer on your calendar."),
+    variant: "destructive",
+  });
   }
 }
 
@@ -223,7 +227,11 @@ export async function viewSessionOnCalendar(
       params: { date: targetDate, flash: session.id },
     } as Href);
   } catch {
-    toast(t("That item isn't on your calendar anymore."), "destructive");
+    toast({
+    title: t("Couldn't find that item"),
+    description: t("It's no longer on your calendar."),
+    variant: "destructive",
+  });
   }
 }
 

@@ -79,7 +79,11 @@ export function usePushRegistration(): void {
           } as Href);
           return;
         } catch {
-          toast(t("That item isn't on your calendar anymore."), "destructive");
+          toast({
+            title: t("Couldn't find that item"),
+            description: t("It's no longer on your calendar."),
+            variant: "destructive",
+          });
           return;
         }
       }
@@ -133,10 +137,11 @@ export function usePushRegistration(): void {
                       params: { date: targetDate, flash: session.id },
                     } as Href);
                   } catch {
-                    toast(
-                      t("That item isn't on your calendar anymore."),
-                      "destructive",
-                    );
+                    toast({
+                      title: t("Couldn't find that item"),
+                      description: t("It's no longer on your calendar."),
+                      variant: "destructive",
+                    });
                   }
                 },
               }

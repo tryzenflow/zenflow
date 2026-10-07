@@ -166,6 +166,7 @@ const STACK_PEEK_PX = 7;
 const STACK_INSET_PX = 10;
 const EXPANDED_MAX_HEIGHT = 440;
 const SWIPE_DISMISS_THRESHOLD = 72;
+const SWIPE_DISMISS_VELOCITY = 600;
 const ENTRANCE_DURATION = 220;
 const EXIT_DURATION = 180;
 
@@ -204,6 +205,9 @@ interface ToastProps {
   hidden?: boolean;
   /** Gap below the card. */
   spacing?: number;
+  /** Where the stack sits; a swipe toward the nearest screen edge dismisses
+   * (down for bottom, up for top), sideways swipes always do. */
+  stackPosition?: "top" | "bottom";
 }
 function Toast({
   id,
@@ -219,9 +223,12 @@ function Toast({
   paused = false,
   hidden = false,
   spacing = 10,
+  stackPosition = "bottom",
 }: ToastProps) {
   const opacity = useSharedValue(0);
   const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const [dragging, setDragging] = useState(false);
   const progress = useSharedValue(0);
   const dismissedRef = useRef(false);
 
@@ -247,7 +254,7 @@ function Toast({
   // `dismissedRef` guards against both firing (e.g. a swipe landing right as
   // the timer expires) so `onHide` never double-fires for the same toast.
   const dismiss = useCallback(
-    (direction: 0 | 1 | -1 = 0) => {
+    (direction: 0 | 1 | -1 = 0, vertical: 0 | 1 | -1 = 0) => {
       if (dismissedRef.current) return;
       dismissedRef.current = true;
       if (direction !== 0) {
@@ -255,11 +262,16 @@ function Toast({
           duration: EXIT_DURATION,
         });
       }
+      if (vertical !== 0) {
+        translateY.value = withTiming(vertical * 240, {
+          duration: EXIT_DURATION,
+        });
+      }
       opacity.value = withTiming(0, { duration: EXIT_DURATION }, (finished) => {
         if (finished) runOnJS(hide)();
       });
     },
-    [hide, opacity, translateX],
+    [hide, opacity, translateX, translateY],
   );
 
   useEffect(() => {
@@ -278,54 +290,71 @@ function Toast({
     cancelAnimation(progress);
     progress.value = 0;
     // Paused while expanded; restarts on collapse.
-    if (paused) return;
+    // Paused while expanded or being dragged; restarts on release.
+    if (paused || dragging) return;
     progress.value = withTiming(1, {
       duration: Math.max(duration - ENTRANCE_DURATION, 100),
     });
     const timer = setTimeout(() => dismiss(0), duration);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [duration, paused]);
+  }, [duration, paused, dragging]);
 
   // Swiping a toast away dismisses it; for a confirm toast that also counts as
   // pressing Cancel.
   const handleSwipeDismiss = useCallback(
-    (direction: 0 | 1 | -1) => {
+    (direction: 0 | 1 | -1, vertical: 0 | 1 | -1 = 0) => {
       if (confirm && !dismissedRef.current) confirm.onCancel?.();
-      dismiss(direction);
+      dismiss(direction, vertical);
     },
     [confirm, dismiss],
   );
 
-  const panGesture = useMemo(
-    () =>
-      Gesture.Pan()
-        .activeOffsetX([-10, 10])
-        .failOffsetY([-16, 16])
-        .onUpdate((e) => {
-          translateX.value = e.translationX;
-        })
-        .onEnd((e) => {
-          if (Math.abs(e.translationX) > SWIPE_DISMISS_THRESHOLD) {
-            runOnJS(handleSwipeDismiss)(e.translationX > 0 ? 1 : -1);
-          } else {
-            translateX.value = withTiming(0, { duration: 150 });
-          }
-        }),
-    [handleSwipeDismiss, translateX],
-  );
+  const panGesture = useMemo(() => {
+    // +1 = down (bottom stack), -1 = up (top stack).
+    const dir = stackPosition === "top" ? -1 : 1;
+    const pan = Gesture.Pan().activeOffsetX([-10, 10]);
+    // Expanded stack scrolls vertically; keep vertical swipes for the scroll.
+    if (paused) pan.failOffsetY([-16, 16]);
+    else pan.activeOffsetY([-10, 10]);
+    return pan
+      .onStart(() => {
+        runOnJS(setDragging)(true);
+      })
+      .onUpdate((e) => {
+        translateX.value = e.translationX;
+        // Only follow the finger toward the dismiss edge.
+        translateY.value = dir * Math.max(0, dir * e.translationY);
+      })
+      .onEnd((e) => {
+        const pastX = Math.abs(e.translationX) > SWIPE_DISMISS_THRESHOLD;
+        const towardEdge = dir * e.translationY;
+        const pastY =
+          towardEdge > SWIPE_DISMISS_THRESHOLD / 2 &&
+          (towardEdge > SWIPE_DISMISS_THRESHOLD ||
+            dir * e.velocityY > SWIPE_DISMISS_VELOCITY);
+        if (pastY && !(pastX && Math.abs(e.translationX) > towardEdge)) {
+          runOnJS(handleSwipeDismiss)(0, dir);
+        } else if (pastX) {
+          runOnJS(handleSwipeDismiss)(e.translationX > 0 ? 1 : -1);
+        } else {
+          translateX.value = withTiming(0, { duration: 150 });
+          translateY.value = withTiming(0, { duration: 150 });
+        }
+      })
+      .onFinalize(() => {
+        runOnJS(setDragging)(false);
+      });
+  }, [handleSwipeDismiss, translateX, translateY, stackPosition, paused]);
 
   const containerStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
     transform: [
       { translateX: translateX.value },
       {
-        translateY: interpolate(
-          opacity.value,
-          [0, 1],
-          [14, 0],
-          Extrapolation.CLAMP,
-        ),
+        translateY:
+          translateY.value +
+          interpolate(opacity.value, [0, 1], [14, 0], Extrapolation.CLAMP),
       },
     ],
   }));
@@ -400,6 +429,7 @@ function Toast({
                 description ? "text-sm font-medium" : "text-sm font-semibold"
               }
               style={{ color: palette.text }}
+              numberOfLines={2}
             >
               {message}
             </Text>
@@ -663,16 +693,55 @@ interface ToastMessage {
   confirm?: ToastConfirm;
   description?: string;
 }
+/**
+ * Object form of `toast()`. Copy rule: `title` is at most 5 words, verb-first,
+ * no trailing period; the explanation or next step goes in `description`.
+ */
+export interface ToastInput {
+  title: string;
+  description?: string;
+  variant?: ToastVariant;
+  duration?: number;
+  position?: "top" | "bottom";
+  showProgress?: boolean;
+  action?: ToastAction;
+  actions?: ToastAction[];
+}
+type ToastPositionalArgs = [
+  message: string,
+  variant?: ToastVariant,
+  duration?: number,
+  position?: "top" | "bottom",
+  showProgress?: boolean,
+  action?: ToastAction,
+  opts?: { description?: string; actions?: ToastAction[] },
+];
+export interface ToastFn {
+  (input: ToastInput): void;
+  (...args: ToastPositionalArgs): void;
+}
+
+/** Normalise either `toast()` call shape to one object. */
+export function normalizeToastArgs(
+  args: [ToastInput] | ToastPositionalArgs,
+): ToastInput {
+  const first = args[0];
+  if (typeof first === "object") return first;
+  const [message, variant, duration, position, showProgress, action, opts] =
+    args as ToastPositionalArgs;
+  return {
+    title: message,
+    variant,
+    duration,
+    position,
+    showProgress,
+    action,
+    description: opts?.description,
+    actions: opts?.actions,
+  };
+}
 interface ToastContextProps {
-  toast: (
-    message: string,
-    variant?: ToastVariant,
-    duration?: number,
-    position?: "top" | "bottom",
-    showProgress?: boolean,
-    action?: ToastAction,
-    opts?: { description?: string; actions?: ToastAction[] },
-  ) => void;
+  toast: ToastFn;
   /** Blocking yes/no rendered as a toast — resolves via its callbacks, not a
    * return value. See {@link ToastConfirmOptions}. */
   confirm: (message: string, options: ToastConfirmOptions) => void;
@@ -696,27 +765,31 @@ function ToastProvider({
 }) {
   const [messages, setMessages] = useState<ToastMessage[]>([]);
 
-  const toast: ToastContextProps["toast"] = (
-    message: string,
-    variant: ToastVariant = "default",
-    duration = 3000,
-    position: "top" | "bottom" = "top",
-    showProgress = true,
-    action?: ToastAction,
-    opts?: { description?: string; actions?: ToastAction[] },
-  ) => {
+  const toast: ToastFn = (
+    ...args: [ToastInput] | ToastPositionalArgs
+  ): void => {
+    const {
+      title,
+      variant = "default",
+      duration = 3000,
+      position = "top",
+      showProgress = true,
+      action,
+      actions,
+      description,
+    } = normalizeToastArgs(args);
     setMessages((prev) => [
       ...prev,
       {
         id: ++toastIdCounter,
-        text: message,
+        text: title,
         variant,
         duration,
         position,
         showProgress,
         action,
-        actions: opts?.actions,
-        description: opts?.description,
+        actions,
+        description,
       },
     ]);
   };
@@ -774,6 +847,7 @@ function ToastProvider({
       paused={expanded}
       hidden={hidden}
       spacing={expanded ? 8 : 0}
+      stackPosition={position}
     />
   );
 
