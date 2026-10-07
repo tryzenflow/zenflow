@@ -67,7 +67,7 @@ export function dateKey(day: Date): string {
 
 /** Header label for the paginated month header, e.g. "June 2026". */
 export function monthLabel(monthDate: Date): string {
-  return formatTitle(monthDate, "MMMM yyyy");
+  return formatTitle(monthDate, "MMMM/yyyy");
 }
 
 /** Same-named wrapper around `date-fns`' `addMonths`, re-exported so callers

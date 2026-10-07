@@ -13,6 +13,7 @@ import {
   weekStart,
 } from "@/lib/week-date-math";
 import { SETTLE_MS } from "@/lib/week-pager-math";
+import { monthLabel } from "@/lib/month-date-math"
 import type { SessionType } from "@zenflow/shared";
 
 import { toZonedTime } from "date-fns-tz";
@@ -350,7 +351,7 @@ function WeekHeaderImpl(
       >
         <View className="px-4 pb-2">
           <Text className="text-xl font-bold tracking-tight">
-            {formatTitle(shownDate, "MMMM yyyy")}
+            {monthLabel(shownDate)}
           </Text>
           <Text className="mt-px text-[11.5px] font-medium text-muted-foreground">
             {format(titleDays[0], "MMM d")} – {format(titleDays[6], "MMM d")}

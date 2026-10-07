@@ -1,5 +1,6 @@
 /** Vietnamese UI copy. English keys remain the English fallback. */
 export default {
+  "Auto-scheduled": "Tự động xếp lịch",
   "Continue · {count} tags": "Tiếp tục · {count} nhãn",
   "A focus-first planner that schedules for you.":
     "Ứng dụng lập kế hoạch giúp bạn tập trung và tự động xếp lịch.",

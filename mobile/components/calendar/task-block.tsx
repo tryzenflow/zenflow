@@ -146,7 +146,7 @@ function DueChip({ late, label }: { late: boolean; label: string }) {
           late ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground",
         )}
       >
-        {t("Due")}
+        {t("Due")}{' '}
         {label}
       </Text>
     </View>

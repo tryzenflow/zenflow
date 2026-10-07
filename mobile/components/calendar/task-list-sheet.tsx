@@ -212,7 +212,7 @@ export const SessionListSheet = forwardRef<
 SessionListSheet.displayName = "SessionListSheet";
 
 const ROW_STATE_LABELS: Record<SessionCardState, string> = {
-  fluid: "Auto-scheduled",
+  fluid: t("Auto-scheduled"),
   get conflict() {
     return t("Conflict");
   },
