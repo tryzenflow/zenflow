@@ -7,14 +7,13 @@ never move or displace another session.
 
 ## 1. Compared policies
 
-Both share the same downstream mapping in [`reranking.md`](./reranking.md) (candidate-day
-scan, hard-constraint + empty-slot filter, single-pass slot scoring, earliest-start
-tie-break) and differ only in how a slot's temporal-preference score is computed.
+Both share the downstream mapping in [`reranking.md`](./reranking.md) (candidate-day scan,
+empty-slot filter, single-pass slot scoring) and differ only in how a slot is scored.
 
 | Policy | Slot score |
 | ------ | ---------- |
 | **A — Preference heuristic** | overlap-weighted sum of `User.preferenceMatrix[weekday, hour]` over the interval — `slotPreferenceScore`/`bestFreeSlot` (`services/bandit/src/core/slot_score.py`, frozen TS port in `backend/src/scheduler/core/slot-score.ts`) |
-| **B — Disjoint LinUCB** | `Σ_arm overlap_rate(slot, arm) × linucbScore(day, arm) + slotPreferenceScore(slot)` — the preference term is a cold-start blend so a slot ranks sensibly before any arm has reward ([ADR-0001](../adr/0001-linucb-model-design.md)) |
+| **B — Disjoint LinUCB** | `Σ_arm overlap_rate(slot, arm) × linucbScore(day, arm) + wS × stability` — no preference term, so LinUCB is tested on its own; `linucb_best_slot` in `services/bandit/src/core/` ([ADR-0001](../adr/0001-linucb-model-design.md)) |
 
 Neither policy has a deviation/move-cost term — the empty-slot-only guarantee is shared by
 both.

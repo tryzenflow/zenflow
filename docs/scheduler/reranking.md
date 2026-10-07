@@ -34,15 +34,15 @@ Only `TASK` sessions reach this path — fixed types and `DND` are user-pinned (
 3. **Score each slot** in one pass:
 
    ```text
-   slot_score(c) = Σ_arm overlap_rate(c, arm) × score(day(c), arm) + slotPreferenceScore(c)
+   slot_score(c) = Σ_arm overlap_rate(c, arm) × score(day(c), arm) + wS × stability(c)
    ```
 
-   The `slotPreferenceScore` addend is Policy A's overlap-weighted preference score — the
-   cold-start blend, since a cold arm scores its exploration bonus rather than a flat 0 but
-   still needs a tie-breaker signal early on.
+   - There is no preference-matrix term; Policy A alone reads the matrix.
+   - `wS` is 1.0 for a task starting within 24h and fades linearly to 0.05 at 7 days.
 
-4. **Rank and pick** the highest `slot_score`; earliest start breaks ties. Because step 2
-   already filtered to empty slots, there's no "prefer empty" trade-off to make.
+4. **Rank and pick** the highest `slot_score`. Exact ties break by seeded band order,
+   then distance from the band's centre, then the earlier start
+   ([core.md](../bandit/core.md)). Step 2 already filtered to empty slots.
 
 5. **Fallback.** If the top slot is somehow unavailable, walk down the ranked list — e.g. a
    fully-booked preferred day loses to the next day's best slot.
