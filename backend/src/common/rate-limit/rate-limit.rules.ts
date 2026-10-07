@@ -2,6 +2,7 @@ import type { Algorithm, LimitRule, SlidingWindowConfig } from "@limitkit/core";
 import { slidingWindow as redisSlidingWindow } from "@limitkit/redis";
 import { slidingWindow as memorySlidingWindow } from "@limitkit/memory";
 import type { Request } from "express";
+import { normalizeEmailForRateLimit } from "./normalize-email";
 import {
   getRateLimitRuntimeConfig,
   type RateLimitStoreKind,
@@ -37,12 +38,33 @@ function ipKey(namespace: string) {
   return (req: Request) => `${namespace}:ip:${req.ip}`;
 }
 
-/** Lower-cased so `Foo@Bar.com` and `foo@bar.com` share one bucket. */
+/**
+ * Reusable sliding-window rule. `window` is resolved lazily per request (the
+ * runtime config only exists after boot) and `key` must be namespaced (see
+ * above). Used by the OTP rules and available for other limiters.
+ */
+export function slidingWindowRule(
+  name: string,
+  key: (req: Request) => string,
+  window: () => RateLimitWindow,
+): LimitRule<Request> {
+  return {
+    name,
+    key,
+    policy: () =>
+      slidingWindowFor(getRateLimitRuntimeConfig().storeKind, window()),
+  };
+}
+
+/**
+ * Normalized (trim, lower-case, `+tag`, Gmail dots) so aliases of one inbox
+ * share a bucket. Only the key is normalized; the login email is untouched.
+ */
 function emailKey(namespace: string) {
   return (req: Request) => {
     const email = (req.body as { email?: unknown } | undefined)?.email;
     const normalized =
-      typeof email === "string" ? email.toLowerCase() : "unknown";
+      typeof email === "string" ? normalizeEmailForRateLimit(email) : "unknown";
     return `${namespace}:email:${normalized}`;
   };
 }
@@ -71,6 +93,13 @@ export const otpRequestRateLimitRules: LimitRule<Request>[] = [
         getRateLimitRuntimeConfig().otpRequestEmail,
       ),
   },
+  // Hourly per-IP cap on top of the per-minute one; deliberately loose so a
+  // campus NAT sharing one IP is not locked out.
+  slidingWindowRule(
+    "otp-request-ip-hourly",
+    ipKey("otp-request-hourly"),
+    () => getRateLimitRuntimeConfig().otpRequestIpHourly,
+  ),
 ];
 
 /**

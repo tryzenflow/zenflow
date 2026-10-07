@@ -96,6 +96,19 @@ export class IngestionJobsService {
   }
 
   /**
+   * Remove a run that never made a request because the upstream's breaker was
+   * open. The student did nothing wrong and nothing happened, so it must not
+   * show up as their newest (FAILED) sync; items cascade with the job.
+   */
+  async discardJob(kind: JobKind, jobId: string): Promise<void> {
+    if (kind === "LMS") {
+      await this.prisma.lmsSyncJob.delete({ where: { id: jobId } });
+      return;
+    }
+    await this.prisma.portalAPIJob.delete({ where: { id: jobId } });
+  }
+
+  /**
    * Record an outbound request as in-flight, before it is made, so a request
    * that never returns is still visible as a `PENDING` item afterwards.
    *

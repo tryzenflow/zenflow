@@ -1,3 +1,4 @@
+import { UpstreamUnavailableError } from "../common/outbound-breaker";
 import { forwardRef, Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
@@ -171,6 +172,9 @@ export class LmsWatcherService {
     // read as "everything that month was cancelled").
     const seenKeys = new Set<string>();
     let allFetchesOk = true;
+    // Items fetched OK so far, and the breaker error that cut the walk short.
+    let okItems = 0;
+    let upstreamDown: UpstreamUnavailableError | undefined;
     // Every item across both months, for the cache. Items are keyed by Moodle
     // instance, so a quiz that shows up in both months is recorded once.
     const walked = new Map<string, ParsedLmsItem>();
@@ -219,10 +223,20 @@ export class LmsWatcherService {
           operation: "lms_calendar",
           status: "COMPLETED",
         });
+        okItems += 1;
       } catch (error) {
         // One bad month does not abort the run: the other month may well have
         // come back fine, and the item row records exactly what went wrong.
         allFetchesOk = false;
+        if (error instanceof UpstreamUnavailableError) {
+          if (okItems === 0) {
+            // Nothing came back at all: drop the run, no student failure.
+            await this.jobs.discardJob("LMS", jobId);
+            throw error;
+          }
+          // Keep what was fetched; stop walking, the rest would be refused.
+          upstreamDown = error;
+        }
         await this.jobs.completeItem("LMS", itemId, {
           status: "FAILED",
           statusCode: statusCodeOf(error),
@@ -236,6 +250,7 @@ export class LmsWatcherService {
           `LMS calendar ${year}-${month} failed for integration ` +
             `${target.integrationId}: ${errorMessage(error)}`,
         );
+        if (upstreamDown) break;
       }
     }
 
@@ -270,7 +285,7 @@ export class LmsWatcherService {
       );
     }
 
-    return { ok: allFetchesOk, servedFromCache: false };
+    return { ok: allFetchesOk, servedFromCache: false, upstreamDown };
   }
 
   /**
@@ -505,6 +520,10 @@ export class LmsWatcherService {
       }
       return result.session;
     } catch (error) {
+      if (error instanceof UpstreamUnavailableError) {
+        await this.jobs.discardJob("LMS", jobId);
+        throw error;
+      }
       await this.jobs.finishJob("LMS", jobId, "FAILED");
       this.logger.warn(
         `LMS sign-in failed for integration ${target.integrationId}: ${errorMessage(error)}`,

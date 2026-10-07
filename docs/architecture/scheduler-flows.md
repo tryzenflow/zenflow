@@ -2,7 +2,7 @@
 
 Companion to [ARCHITECTURE.md](../../ARCHITECTURE.md), which has the component-level
 picture; this one has the call sequences. See
-[backend/README.md](../../backend/README.md) for the module map and
+[docs/backend/scheduler.md](../backend/scheduler.md) for the file map and
 [ADR-0003](../adr/0003-python-authoritative-placement.md) for why ranking lives in Python.
 
 ## Create a single task

@@ -53,6 +53,9 @@ export class IntegrationsController {
    * student — so a connected account can be verified end to end without waiting
    * for the next tick. Returns the provider's status, whose `lastSyncedAt` /
    * `lastSyncStatus` describe the run just performed.
+   *
+   * Cooldown: 429 + `Retry-After` while the provider's last run (manual or
+   * background) is under `SYNC_MANUAL_COOLDOWN_SEC` old. A failed pass is a 502.
    */
   @Post(":provider/sync")
   async sync(
@@ -60,11 +63,11 @@ export class IntegrationsController {
     @Param("provider", new ParseEnumPipe(IntegrationProviderEnum))
     provider: IntegrationProvider,
   ) {
-    const data = await this.integrations.sync(user, provider);
+    const status = await this.integrations.sync(user, provider);
     return {
       success: true,
       message: `${provider} sync finished`,
-      data,
+      data: status,
     };
   }
 

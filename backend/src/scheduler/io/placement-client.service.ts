@@ -10,7 +10,7 @@ import {
   schedulerBreakerState,
 } from "../../observability/metrics";
 
-import { CircuitBreaker } from "./circuit-breaker";
+import { CircuitBreaker } from "../../common/circuit-breaker";
 import type { DegradedReason } from "./placement-mode";
 
 /** Total per-call budget (ADR-0003 section 3.4). Override with `PLACE_TIMEOUT_MS`. */

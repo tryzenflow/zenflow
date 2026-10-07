@@ -92,12 +92,28 @@ const KINDS_BY_PROVIDER: Record<IntegrationProvider, SyncKindName[]> = {
   LMS: ["LMS_DISCOVERY", "LMS_CALENDAR"],
 };
 
+/**
+ * The kinds that feed the calendar. Discovery is a means to these, so neither
+ * "last good sync" nor "failing" is judged on it.
+ */
+export const DATA_KINDS_BY_PROVIDER: Record<
+  IntegrationProvider,
+  SyncKindName[]
+> = {
+  PORTAL: ["PORTAL_TIMETABLE", "PORTAL_EXAM"],
+  LMS: ["LMS_CALENDAR"],
+};
+
 /** One claimed target, plus the scheduling state its pass needs. */
 export interface ClaimedTarget extends IntegrationTarget {
   /** The `IngestionSchedule` row id, for {@link IngestionScheduleService.recordOutcome}. */
   scheduleId: string;
   /** Consecutive cache-served passes so far — drives the periodic full-walk audit. */
   cacheHitStreak: number;
+  /** The row's `nextDueAt` before this claim, for {@link IngestionScheduleService.releaseClaim}. */
+  dueAt: Date;
+  /** When this claim was made; {@link IngestionScheduleService.releaseClaim}'s CAS token. */
+  claimedAt: Date;
 }
 
 /** What one pass did, as far as the schedule is concerned. */
@@ -290,9 +306,28 @@ export class IngestionScheduleService {
         integrationId: row.integrationId,
         userId: row.integration.userId,
         cacheHitStreak: row.cacheHitStreak,
+        dueAt: row.nextDueAt,
+        claimedAt: now,
       });
     }
     return claimed;
+  }
+
+  /**
+   * Hand a claim back unrun because the upstream's breaker is open.
+   *
+   * Restores the pre-claim `nextDueAt` (already in the past), so the row is
+   * still due and still ordered by how overdue it is; the ticker simply does not
+   * claim for that upstream while the breaker is open. `consecutiveFailures`,
+   * `lastRunAt` and the cache streak are untouched: this is not a student
+   * failure. The `lastClaimedAt` match keeps it from undoing a later write (a
+   * manual sync's deferral, or another tick's claim).
+   */
+  async releaseClaim(target: ClaimedTarget): Promise<void> {
+    await this.prisma.ingestionSchedule.updateMany({
+      where: { id: target.scheduleId, lastClaimedAt: target.claimedAt },
+      data: { nextDueAt: target.dueAt },
+    });
   }
 
   /**
@@ -352,15 +387,24 @@ export class IngestionScheduleService {
    * Record that a clean PORTAL_DISCOVERY pass covered `term` for this
    * integration. Called by the discovery pass itself, so a run triggered inline
    * by the timetable gate counts exactly like one the ticker claimed.
+   *
+   * `reopensAt` moves the row's next check to when the next term's window
+   * opens: DKHP is asked once per term, not on a fixed period. Omitted, the
+   * period the claim already set stands.
    */
   async markDiscovered(
     integrationId: string,
     term: { academicYear: string; semester: string },
     now: Date,
+    reopensAt?: Date,
   ): Promise<void> {
     await this.prisma.ingestionSchedule.updateMany({
       where: { integrationId, kind: "PORTAL_DISCOVERY" },
-      data: { lastSuccessAt: now, lastSuccessTerm: termKey(term) },
+      data: {
+        lastSuccessAt: now,
+        lastSuccessTerm: termKey(term),
+        ...(reopensAt ? { nextDueAt: reopensAt } : {}),
+      },
     });
   }
 
@@ -415,26 +459,64 @@ export class IngestionScheduleService {
   }
 
   /**
-   * Push a kind's next check out by a full target period.
+   * When this provider's integration was last run by anyone — the ticker or a
+   * manual sync — or `null` if never. The manual-sync cooldown measures from it.
+   */
+  async lastRunAt(
+    integrationId: string,
+    provider: IntegrationProvider,
+  ): Promise<Date | null> {
+    const { _max } = await this.prisma.ingestionSchedule.aggregate({
+      where: { integrationId, kind: { in: KINDS_BY_PROVIDER[provider] } },
+      _max: { lastRunAt: true },
+    });
+    return _max.lastRunAt;
+  }
+
+  /**
+   * Push the given kinds' next check out by a full target period.
    *
    * Used after a manual `POST /integrations/:provider/sync`: the student just
    * got fresh data, so re-walking them minutes later on the rolling schedule
-   * would be pure waste against DLU.
+   * would be pure waste against DLU. Only kinds whose pass succeeded belong
+   * here — deferring a failed one would hide it from the ticker for a period.
    */
   async deferAfterManualSync(
     integrationId: string,
-    provider: IntegrationProvider,
+    kinds: readonly SyncKindName[],
     now: Date = new Date(),
   ): Promise<void> {
-    for (const kind of KINDS_BY_PROVIDER[provider]) {
+    for (const kind of kinds) {
       await this.prisma.ingestionSchedule.updateMany({
-        where: { integrationId, kind: kind },
+        where: { integrationId, kind },
         data: {
           nextDueAt: nextDueAfterRun(now, this.planFor(kind).targetPeriodMs),
           lastRunAt: now,
+          // These kinds just came back clean; the status endpoint reads it.
+          lastSuccessAt: now,
+          consecutiveFailures: 0,
         },
       });
     }
+  }
+
+  /**
+   * Count a manual sync that did not complete against the data kinds it did not
+   * get clean, so the status shows the account as failing until a run succeeds.
+   */
+  async markManualFailure(
+    integrationId: string,
+    provider: IntegrationProvider,
+    synced: readonly SyncKindName[],
+  ): Promise<void> {
+    const failed = DATA_KINDS_BY_PROVIDER[provider].filter(
+      (kind) => !synced.includes(kind),
+    );
+    if (failed.length === 0) return;
+    await this.prisma.ingestionSchedule.updateMany({
+      where: { integrationId, kind: { in: failed } },
+      data: { consecutiveFailures: { increment: 1 } },
+    });
   }
 
   /**

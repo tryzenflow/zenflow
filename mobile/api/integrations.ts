@@ -50,9 +50,17 @@ export async function disconnectIntegration(
  * Run this student's watchers now — the manual counterpart to the crons.
  * Resolves with the provider's status once the sync finishes.
  */
+const SYNC_TIMEOUT_MS = 120_000;
+
 export async function syncIntegration(
   provider: IntegrationProvider,
 ): Promise<IntegrationStatus> {
-  const { data } = await api.post(`/integrations/${provider}/sync`);
+  // A sync walks DLU request by request (up to ~22 for the portal), far past
+  // the client's default 8 s. The server gives up on its own at 120 s.
+  const { data } = await api.post(
+    `/integrations/${provider}/sync`,
+    undefined,
+    { timeout: SYNC_TIMEOUT_MS },
+  );
   return data.data;
 }

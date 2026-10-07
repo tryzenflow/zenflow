@@ -6,6 +6,7 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import type { MoodleMonthlyView } from "./core/parse-lms";
 import { EnrollmentDiscoveryService } from "./enrollment-discovery.service";
+import { UpstreamUnavailableError } from "../common/outbound-breaker";
 import { IngestionJobsService } from "./ingestion-jobs.service";
 import { IngestionScheduleService } from "./ingestion-schedule.service";
 import { LmsWatcherService } from "./lms-watcher.service";
@@ -75,6 +76,11 @@ function makePrismaDouble(
         jobs.push(row);
         jobStatusLog.push("PENDING");
         return Promise.resolve({ id: row.id });
+      },
+      delete: (args: { where: { id: string } }) => {
+        const i = jobs.findIndex((j) => j.id === args.where.id);
+        const [row] = jobs.splice(i, 1);
+        return Promise.resolve(row);
       },
       update: (args: { where: { id: string }; data: { status: string } }) => {
         const row = jobs.find((j) => j.id === args.where.id)!;
@@ -447,6 +453,34 @@ describe("LmsWatcherService", () => {
 
       expect(w.db.jobs[0].status).toBe("FAILED");
       expect(w.db.items).toHaveLength(0);
+    });
+
+    it("discards the job (no FAILED status) when the breaker is open, and stops the sweep", async () => {
+      const login = jest
+        .fn()
+        .mockRejectedValue(new UpstreamUnavailableError("dlu-lms", 60_000));
+      const w = await makeWatcher({
+        login,
+        integrations: [
+          { id: "int-1", userId: "u1", timezone: "Asia/Ho_Chi_Minh" },
+          { id: "int-2", userId: "u2", timezone: "Asia/Ho_Chi_Minh" },
+        ],
+      });
+
+      await expect(w.service.run(NOW)).resolves.toBe(0);
+
+      expect(login).toHaveBeenCalledTimes(1);
+      expect(w.db.jobs).toHaveLength(0);
+      expect(w.db.jobStatusLog).not.toContain("FAILED");
+    });
+
+    it("syncOne rethrows the breaker error so the ticker can release the claim", async () => {
+      const err = new UpstreamUnavailableError("dlu-lms", 60_000);
+      const w = await makeWatcher({ login: jest.fn().mockRejectedValue(err) });
+
+      await expect(
+        w.service.syncOne({ integrationId: "int-1", userId: "u1" }, NOW),
+      ).rejects.toBe(err);
     });
 
     it("does not let one student's failure stop the sweep", async () => {

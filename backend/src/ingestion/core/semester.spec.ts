@@ -4,6 +4,7 @@ import {
   monthsFrom,
   monthsWindow,
   isoWeekStart,
+  discoveryReopensAt,
   resolveSemester,
   SEMESTER_LOOKAHEAD_WEEKS,
 } from "./semester";
@@ -307,5 +308,21 @@ describe("isoWeekStart", () => {
     expect(
       isoWeekStart(new Date("2026-09-27T15:00:00.000Z"), "Asia/Ho_Chi_Minh"),
     ).toEqual(new Date("2026-09-20T17:00:00.000Z"));
+  });
+});
+
+describe("discoveryReopensAt", () => {
+  it("is the next term's lookahead window: two weeks before it opens", () => {
+    const tz = "Asia/Ho_Chi_Minh";
+    // Mid-September 2026 is HK01; HK02 opens Mon 28 Dec 2026.
+    const term = resolveSemester(new Date("2026-09-15T00:00:00Z"), tz);
+
+    const reopens = discoveryReopensAt(term);
+
+    expect(resolveSemester(reopens, tz).semester).toBe("HK02");
+    // One millisecond earlier is still HK01: the window opens exactly there.
+    expect(resolveSemester(new Date(reopens.getTime() - 1), tz).semester).toBe(
+      "HK01",
+    );
   });
 });

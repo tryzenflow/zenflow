@@ -3,6 +3,7 @@ import { useLanguage } from "@/hooks/use-language";
 import {
   connectIntegration,
   disconnectIntegration,
+  listIntegrations,
   syncIntegration,
   updateIntegration as updateIntegrationRequest,
 } from "@/api/integrations";
@@ -98,14 +99,67 @@ function rowSubtitle(
   if (!status?.connected) return { text: t("Not connected"), tone: "muted" };
   if (syncing || status.lastSyncStatus === "PROCESSING")
     return { text: t("Syncing…"), tone: "muted" };
-  if (status.lastSyncStatus === "FAILED")
-    return { text: t("Last sync failed"), tone: "error" };
-  if (status.lastSyncedAt)
+  // `lastSuccessAt` is the last time everything came back clean; a failed or
+  // partial run does not move it, so it stays the honest "last synced".
+  if (status.failing || status.lastSyncStatus === "FAILED")
     return {
-      text: t("Synced {time}", { time: shortAgo(status.lastSyncedAt) }),
+      text: status.lastSuccessAt
+        ? t("Sync failing · last synced {time}", {
+            time: shortAgo(status.lastSuccessAt),
+          })
+        : t("Sync failing"),
+      tone: "error",
+    };
+  if (status.lastSuccessAt)
+    return {
+      text: t("Synced {time}", { time: shortAgo(status.lastSuccessAt) }),
       tone: "ok",
     };
   return { text: t("Connected"), tone: "ok" };
+}
+
+const SETTLE_POLL_MS = 3000;
+const SETTLE_MAX_POLLS = 40;
+
+/** Re-read `provider`'s status until its run is no longer in progress. */
+async function settleStatus(
+  provider: IntegrationProvider,
+  update: (provider: IntegrationProvider, status: IntegrationStatus) => void,
+): Promise<void> {
+  for (let i = 0; i < SETTLE_MAX_POLLS; i++) {
+    try {
+      const fresh = (await listIntegrations()).find(
+        (s) => s.provider === provider,
+      );
+      if (fresh) {
+        update(provider, fresh);
+        if (fresh.lastSyncStatus !== "PROCESSING") return;
+      }
+    } catch {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, SETTLE_POLL_MS));
+  }
+}
+
+/** Why a manual sync did not go through, in words a student can act on. */
+function syncErrorMessage(error: unknown): string {
+  if (isAxiosError(error)) {
+    const status = error.response?.status;
+    if (status === 429) {
+      const seconds = Number(error.response?.headers?.["retry-after"]);
+      return Number.isFinite(seconds) && seconds > 0
+        ? t("Synced a moment ago. Try again in {count} min.", {
+            count: Math.ceil(seconds / 60),
+          })
+        : t("Synced a moment ago. Try again shortly.");
+    }
+    if (status === 409) return t("A sync is already running.");
+    if (status === 502)
+      return t("Sync didn't finish. Check your account details and try again.");
+    if (status === 503) return t("Couldn't reach DLU right now.");
+  }
+  return t("Sync failed");
 }
 
 function errorMessageFor(error: unknown): string {
@@ -138,7 +192,8 @@ export function DluAccountsSection({
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [syncing, setSyncing] = useState<IntegrationProvider | null>(null);
+  // Per provider, so syncing one account never locks the other's button.
+  const [syncing, setSyncing] = useState<IntegrationProvider[]>([]);
 
   const manageSheet = useBottomSheet();
   const signInSheet = useBottomSheet();
@@ -215,7 +270,7 @@ export function DluAccountsSection({
   };
 
   const handleSync = async (provider: IntegrationProvider) => {
-    setSyncing(provider);
+    setSyncing((current) => [...current, provider]);
     try {
       const status = await syncIntegration(provider);
       updateIntegration(provider, status);
@@ -224,14 +279,14 @@ export function DluAccountsSection({
         "success",
       );
     } catch (err) {
-      toast(
-        isAxiosError(err) && err.response?.status === 503
-          ? t("Couldn't reach DLU right now.")
-          : t("Sync failed"),
-        "destructive",
-      );
+      toast(syncErrorMessage(err), "destructive");
+      // A refused or failed sync can still have moved the status (a new failed
+      // run, or a background sync we had not seen). If the server is still
+      // mid-run — we gave up waiting, it did not — keep re-reading until it
+      // settles, so the row never stays on "Syncing…".
+      void settleStatus(provider, updateIntegration);
     } finally {
-      setSyncing(null);
+      setSyncing((current) => current.filter((p) => p !== provider));
     }
   };
 
@@ -285,7 +340,7 @@ export function DluAccountsSection({
           }
           const status = statusOf(provider);
           const connected = !!status?.connected;
-          const subtitle = rowSubtitle(status, syncing === provider);
+          const subtitle = rowSubtitle(status, syncing.includes(provider));
           return (
             <View
               key={provider}
@@ -346,7 +401,7 @@ export function DluAccountsSection({
                   <Button
                     size="sm"
                     className="flex-row items-center gap-1.5 rounded-lg"
-                    disabled={syncing !== null}
+                    disabled={syncing.includes(provider)}
                     onPress={() => handleSync(provider)}
                     accessibilityLabel={t("Sync {provider} now", {
                       provider: PROVIDER_LABEL[provider],
@@ -354,7 +409,7 @@ export function DluAccountsSection({
                   >
                     <RefreshCw size={14} className="text-primary-foreground" />
                     <Text className="text-[13px] font-semibold text-primary-foreground">
-                      {syncing === provider ? t("Syncing…") : t("Sync now")}
+                      {syncing.includes(provider) ? t("Syncing…") : t("Sync now")}
                     </Text>
                   </Button>
                 </View>

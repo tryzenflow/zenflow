@@ -36,6 +36,7 @@ You own how Zenflow is built, shipped, watched and load-tested.
 - Metrics names and labels are an API: dashboards in `backend/observability/grafana/` must be updated with them.
 - Benchmarks state setup, results, findings and limits; no code walkthroughs.
 - Load tests use synthetic users only.
+- Docs stay lean (AGENTS.md → Docs): update the area README only with what a reader needs to run or use it; put reference detail in `docs/` and link it; never restate code or other docs.
 
 ## Done when
 Changed compose files pass `docker compose -f <file> config`, workflows are valid YAML, and docs for the touched ops area are current.

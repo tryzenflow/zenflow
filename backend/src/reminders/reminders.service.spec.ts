@@ -7,6 +7,7 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { NotificationEvent } from "../notifications/types";
 import {
   ARM_HORIZON_MS,
+  REMINDER_RANDOM,
   RemindersService,
   reminderJobName,
 } from "./reminders.service";
@@ -51,6 +52,7 @@ describe("RemindersService", () => {
   };
   let notifications: { create: jest.Mock; notify: jest.Mock };
   let service: RemindersService;
+  let rand: jest.Mock;
 
   beforeEach(async () => {
     jest.useFakeTimers({ now: NOW });
@@ -65,12 +67,14 @@ describe("RemindersService", () => {
       create: jest.fn().mockResolvedValue({ id: "n1", userId: "u1" }),
       notify: jest.fn(),
     };
+    rand = jest.fn().mockReturnValue(0);
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         RemindersService,
         SchedulerRegistry,
         { provide: PrismaService, useValue: prisma },
         { provide: NotificationsService, useValue: notifications },
+        { provide: REMINDER_RANDOM, useValue: rand },
       ],
     }).compile();
     service = module.get<RemindersService>(RemindersService);
@@ -125,8 +129,10 @@ describe("RemindersService", () => {
           deleteMany: jest.Mock;
           createMany: jest.Mock;
         };
+        session: { findMany: jest.Mock };
         $transaction: jest.Mock;
       };
+      p.session = { findMany: jest.fn().mockResolvedValue([]) };
       p.sessionReminder.deleteMany = jest.fn().mockReturnValue("del");
       p.sessionReminder.createMany = jest.fn().mockReturnValue("add");
       p.$transaction = jest.fn().mockResolvedValue(undefined);
@@ -142,6 +148,54 @@ describe("RemindersService", () => {
       expect(p.$transaction).not.toHaveBeenCalled();
       expect(p.sessionReminder.deleteMany).not.toHaveBeenCalled();
       expect(p.sessionReminder.createMany).not.toHaveBeenCalled();
+    });
+
+    describe("skips reminders that are too late", () => {
+      const start = (ms: number) => ({
+        id: "s1",
+        scheduledStartTime: new Date(NOW.getTime() + ms),
+        series: null,
+      });
+      const run = async (startsInMs: number, minutes: number[]) => {
+        const p = withWrites();
+        p.sessionReminder.findMany.mockResolvedValue([]);
+        p.session.findMany.mockResolvedValue([start(startsInMs)]);
+        const res = await service.replace(["s1"], minutes, NOW);
+        return { p, res };
+      };
+
+      it("past nominal time: not stored, reported skipped", async () => {
+        const { p, res } = await run(20 * 60_000, [60]);
+        expect(res).toEqual({ applied: [], skipped: [60] });
+        expect(p.sessionReminder.createMany).not.toHaveBeenCalled();
+      });
+      it("nominal exactly now: skipped", async () => {
+        const { res } = await run(60 * 60_000, [60]);
+        expect(res.skipped).toEqual([60]);
+      });
+      it("nominal 59 s ahead is skipped, 60 s ahead is stored", async () => {
+        expect((await run(60 * 60_000 + 59_000, [60])).res.skipped).toEqual([
+          60,
+        ]);
+        const { p, res } = await run(60 * 60_000 + 60_000, [60]);
+        expect(res).toEqual({ applied: [60], skipped: [] });
+        expect(p.sessionReminder.createMany).toHaveBeenCalledWith({
+          data: [{ sessionId: "s1", remindBeforeMinutes: 60 }],
+        });
+      });
+      it("near start: only the too-early lead is dropped", async () => {
+        const { res } = await run(10 * 60_000, [60, 5]);
+        expect(res).toEqual({ applied: [5], skipped: [60] });
+      });
+      it("never skips a recurring series (later occurrences are ahead)", async () => {
+        const p = withWrites();
+        p.sessionReminder.findMany.mockResolvedValue([]);
+        p.session.findMany.mockResolvedValue([
+          { ...start(-HOUR), series: { rrule: "FREQ=DAILY" } },
+        ]);
+        const res = await service.replace(["s1"], [60], NOW);
+        expect(res).toEqual({ applied: [60], skipped: [] });
+      });
     });
 
     it("keeps unchanged rows, drops removed ones, adds new ones", async () => {
@@ -180,6 +234,40 @@ describe("RemindersService", () => {
       await service.sweep();
       expect(registry.getTimeouts()).toHaveLength(0);
       expect(ARM_HORIZON_MS).toBeLessThan(2 ** 31 - 1);
+    });
+
+    describe("jitter", () => {
+      const armWith = async (r: number, startsInMs: number, before = 60) => {
+        rand.mockReturnValue(r);
+        const row = makeRow({ startsInMs, before });
+        prisma.sessionReminder.findMany.mockResolvedValue([row]);
+        prisma.sessionReminder.findUnique.mockResolvedValue(row);
+        await service.sweep();
+      };
+      const firedAfter = async (ms: number) => {
+        await jest.advanceTimersByTimeAsync(ms);
+        return notifications.create.mock.calls.length > 0;
+      };
+
+      it("delays by 5 s at the low bound, never earlier", async () => {
+        await armWith(0, 3 * HOUR);
+        const nominal = 2 * HOUR;
+        expect(await firedAfter(nominal + 4_999)).toBe(false);
+        expect(await firedAfter(1)).toBe(true);
+      });
+      it("delays by 10 s at the high bound", async () => {
+        await armWith(1, 3 * HOUR);
+        const nominal = 2 * HOUR;
+        expect(await firedAfter(nominal + 9_999)).toBe(false);
+        expect(await firedAfter(1)).toBe(true);
+      });
+      it("is capped so it never lands after session start", async () => {
+        // lead 0 -> nominal == start (3 s away): jitter would overshoot, so
+        // it fires 1 s before start (a timer at start would find it started).
+        await armWith(1, 3_000, 0);
+        expect(await firedAfter(1_999)).toBe(false);
+        expect(await firedAfter(1)).toBe(true);
+      });
     });
 
     it("cancels a timer whose reminder no longer exists", async () => {
@@ -242,16 +330,25 @@ describe("RemindersService", () => {
       );
     });
 
-    it("fires immediately with the real time left when the window was missed", async () => {
-      const row = makeRow({ startsInMs: 20 * 60_000, before: 60 });
+    it("restart catch-up: fires a reminder missed by <= 2 min, with the real time left", async () => {
+      const row = makeRow({ startsInMs: 59 * 60_000, before: 60 });
       prisma.sessionReminder.findMany.mockResolvedValue([row]);
       prisma.sessionReminder.findUnique.mockResolvedValue(row);
       await service.sweep();
-      await jest.advanceTimersByTimeAsync(0);
+      await jest.advanceTimersByTimeAsync(10_000);
       expect(notifications.create).toHaveBeenCalledWith(
         "u1",
-        expect.objectContaining({ title: "Class in 20 minutes: Standup" }),
+        expect.objectContaining({ title: "Class in 59 minutes: Standup" }),
       );
+    });
+
+    it("restart catch-up: drops a reminder missed by more than 2 min", async () => {
+      const row = makeRow({ startsInMs: 20 * 60_000, before: 60 });
+      prisma.sessionReminder.findMany.mockResolvedValue([row]);
+      await service.sweep();
+      expect(registry.getTimeouts()).toHaveLength(0);
+      await jest.advanceTimersByTimeAsync(60_000);
+      expect(notifications.create).not.toHaveBeenCalled();
     });
 
     it("does not fire when the session was moved (re-arms instead)", async () => {

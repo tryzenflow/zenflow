@@ -55,6 +55,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
       );
     }
 
+    // Open outbound circuit breaker -> tell the client when to come back.
+    const retryAfter = (exception as { retryAfterSeconds?: unknown })
+      ?.retryAfterSeconds;
+    if (typeof retryAfter === "number") {
+      res.setHeader("Retry-After", String(retryAfter));
+    }
+
     res.status(status).json({
       success: false,
       message,

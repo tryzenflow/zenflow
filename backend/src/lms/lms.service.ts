@@ -1,4 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
+import {
+  classifyHttpResult,
+  OutboundBreakers,
+} from "../common/outbound-breaker";
 import { ConfigService } from "@nestjs/config";
 import type { MoodleMonthlyView } from "../ingestion/core/parse-lms";
 import type { MoodleEnrolledCourse } from "../ingestion/core/parse-enrolled-courses";
@@ -97,12 +101,23 @@ export class LMSService {
   private readonly endpoint: string;
   private readonly requestTimeout: number;
 
-  constructor(private readonly configService: ConfigService) {
+  /** Breaker name; also the `upstream` label on its metrics. */
+  static readonly BREAKER = "dlu-lms";
+
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly breakers: OutboundBreakers,
+  ) {
     this.endpoint = this.configService
       .getOrThrow<string>("LMS_URL")
       .replace(/\/+$/, "");
     this.requestTimeout =
       +this.configService.getOrThrow("LMS_TIMEOUT_MS") || 15000;
+  }
+
+  /** Ms until the LMS breaker may admit a call, or `null` when it can. */
+  unavailableFor(): number | null {
+    return this.breakers.unavailableFor(LMSService.BREAKER);
   }
 
   /**
@@ -341,6 +356,14 @@ export class LMSService {
    * the URL's query string or any body — a login POST carries a password.
    */
   private async fetch(url: string, init: RequestInit): Promise<Response> {
+    // The breaker refuses (UpstreamUnavailableError) without a request while
+    // open. Only transport trouble counts; see `classifyHttpResult`.
+    return this.breakers.run(LMSService.BREAKER, () => this.send(url, init), {
+      classify: (r) => classifyHttpResult(r),
+    });
+  }
+
+  private async send(url: string, init: RequestInit): Promise<Response> {
     const operation = lmsOperation(url);
     const start = process.hrtime.bigint();
     const record = (status: string) =>

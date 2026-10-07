@@ -1,10 +1,16 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { ConfigService } from "@nestjs/config";
+import {
+  OUTBOUND_CLOCK,
+  OutboundBreakers,
+  UpstreamUnavailableError,
+} from "../common/outbound-breaker";
 import { LMSService } from "./lms.service";
 
 const BASE = "https://lms.dlu.edu.vn";
 
 const config = {
+  get: () => undefined,
   getOrThrow: (key: string) =>
     ({ LMS_URL: BASE, LMS_TIMEOUT_MS: "15000" })[key],
 } as unknown as ConfigService;
@@ -60,9 +66,16 @@ const DASHBOARD = reply({
   body: '<script>M.cfg = {"wwwroot":"https://lms.dlu.edu.vn","sesskey":"TESTSESSKEY"};</script>',
 });
 
-async function makeService(): Promise<LMSService> {
+async function makeService(
+  clock: () => number = Date.now,
+): Promise<LMSService> {
   const module: TestingModule = await Test.createTestingModule({
-    providers: [LMSService, { provide: ConfigService, useValue: config }],
+    providers: [
+      LMSService,
+      OutboundBreakers,
+      { provide: OUTBOUND_CLOCK, useValue: clock },
+      { provide: ConfigService, useValue: config },
+    ],
   }).compile();
   return module.get<LMSService>(LMSService);
 }
@@ -405,5 +418,125 @@ describe("LMSService.fetchEnrolledCourses (issue #56 discovery)", () => {
       reply({ json: [{ error: false, data: {} }] }),
     );
     await expect(service.fetchEnrolledCourses(session)).resolves.toEqual([]);
+  });
+});
+
+describe("LMSService circuit breaker", () => {
+  let service: LMSService;
+  let fetchMock: jest.Mock;
+  let t: number;
+
+  const timeout = () =>
+    Object.assign(new Error("timed out"), { name: "TimeoutError" });
+
+  beforeEach(async () => {
+    t = 1_000_000;
+    service = await makeService(() => t);
+    fetchMock = jest.fn();
+    global.fetch = fetchMock;
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  async function trip() {
+    fetchMock.mockRejectedValue(timeout());
+    for (let i = 0; i < 5; i++) {
+      await expect(service.login("sv", "pw")).rejects.toThrow(/unreachable/);
+    }
+  }
+
+  it("opens after 5 consecutive timeouts, then short-circuits without calling fetch", async () => {
+    await trip();
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(service.unavailableFor()).toBeGreaterThan(0);
+
+    const err = await service.login("sv", "pw").catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(UpstreamUnavailableError);
+    expect((err as UpstreamUnavailableError).upstream).toBe("dlu-lms");
+    expect((err as UpstreamUnavailableError).retryAfterMs).toBeGreaterThan(0);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it("does not count a rejected login (student-specific) however many times", async () => {
+    for (let i = 0; i < 10; i++) {
+      fetchMock.mockReset();
+      fetchMock.mockResolvedValueOnce(LOGIN_FORM).mockResolvedValueOnce(
+        reply({
+          status: 303,
+          location: `${BASE}/login/index.php`,
+          setCookie: ["MoodleSession=anonymous; path=/"],
+        }),
+      );
+      await expect(service.login("sv", "wrong")).resolves.toMatchObject({
+        ok: false,
+      });
+    }
+    expect(service.unavailableFor()).toBeNull();
+  });
+
+  it("does not count 4xx statuses or parse errors", async () => {
+    for (let i = 0; i < 10; i++) {
+      fetchMock.mockResolvedValueOnce(reply({ status: 403 }));
+      await expect(
+        service.fetchMonthlyView({ cookie: "c", sesskey: "k" }, 2026, 9),
+      ).rejects.toThrow(/status 403/);
+    }
+    expect(service.unavailableFor()).toBeNull();
+  });
+
+  it("counts 5xx and 429 as transport trouble", async () => {
+    for (const status of [500, 502, 503, 504, 429]) {
+      fetchMock.mockResolvedValueOnce(reply({ status }));
+      await expect(
+        service.fetchMonthlyView({ cookie: "c", sesskey: "k" }, 2026, 9),
+      ).rejects.toThrow();
+    }
+    expect(service.unavailableFor()).not.toBeNull();
+  });
+
+  it("half-open admits one probe whose success closes the breaker", async () => {
+    await trip();
+    t += 60_001; // default open time
+
+    expect(service.unavailableFor()).toBeNull(); // peek does not eat the probe
+    fetchMock.mockReset();
+    fetchMock
+      .mockResolvedValueOnce(LOGIN_FORM)
+      .mockResolvedValueOnce(LOGIN_REDIRECT)
+      .mockResolvedValueOnce(DASHBOARD);
+    await expect(service.login("sv", "pw")).resolves.toMatchObject({
+      ok: true,
+    });
+
+    expect(service.unavailableFor()).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("a failed probe re-opens with the open time doubled", async () => {
+    await trip();
+    t += 60_001;
+    fetchMock.mockRejectedValue(timeout());
+    await expect(service.login("sv", "pw")).rejects.toThrow(/unreachable/);
+
+    t += 60_001; // would have been enough before doubling
+    expect(service.unavailableFor()).toBeGreaterThan(0);
+  });
+
+  it("honours Retry-After on 429 beyond the base open time", async () => {
+    fetchMock.mockResolvedValue({
+      ...reply({ status: 429 }),
+      headers: {
+        getSetCookie: () => [],
+        get: (n: string) => (n === "retry-after" ? "120" : null),
+      },
+    });
+    for (let i = 0; i < 5; i++) {
+      await service.login("sv", "pw").catch(() => undefined);
+    }
+    t += 60_001; // half-open by the breaker's own clock, but held by Retry-After
+    expect(service.unavailableFor()).toBeGreaterThan(0);
+    t += 60_000;
+    expect(service.unavailableFor()).toBeNull();
   });
 });

@@ -1,14 +1,14 @@
 # CI/CD
 
-Issue #75. Workflows live in `.github/workflows/`.
+For maintainers (issue #75). Workflows live in `.github/workflows/`.
 
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
 | `ci.yml` | every PR, merge queue | See "CI jobs" below. Final job **`CI ok`** is the only required check. |
-| `images.yml` | push to `master` | `build_images.sh` builds `zenflow-api` and `zenflow-bandit`, pushes `ghcr.io/<owner>/<image>:<git-sha>` (+ `:latest`), then deploys that SHA to **staging** automatically. |
-| `release.yml` | GitHub Release published (tag `vX.Y.Z`) | Resolves the tag to its commit (must be on `master`), then deploys the **already built** images for that SHA to **production**. Gated by the `production` Environment's required reviewers. No rebuild: what ran in staging is what ships. |
-| `deploy.yml` | called by the two above, or run manually | The single deploy entry point (see "Deploy target" below). Manual run = rollback. |
-| `audit.yml` | weekly, and PRs touching the lockfile | `pnpm audit`, informational only (never required). |
+| `images.yml` | push to `master` | Builds `zenflow-api` and `zenflow-bandit` (`build_images.sh`), pushes `ghcr.io/<owner>/<image>:<git-sha>` and `:latest`, deploys that SHA to **staging**. |
+| `release.yml` | GitHub Release published (tag `vX.Y.Z`) | Resolves the tag to its commit (must be on `master`), deploys the **already built** images for that SHA to **production**. Gated by `production` required reviewers. No rebuild. |
+| `deploy.yml` | called by the two above, or manual | Single deploy entry point (see Deploy target). Manual run = rollback. |
+| `audit.yml` | weekly, and PRs touching the lockfile | `pnpm audit`; informational, never required. |
 | `.github/dependabot.yml` | weekly | npm, GitHub Actions, Docker, uv. |
 
 ## CI jobs
@@ -20,20 +20,28 @@ Issue #75. Workflows live in `.github/workflows/`.
 - Vault: `docker compose config` for every compose file; Vault absent from dev/staging/test and loopback-only in prod; `render-secrets.sh` against a throwaway `vault server -dev`; prod Vault config boots.
 - Agents: `.claude/` and `.codex/` match `.agents/` (`node scripts/sync-agents.mjs --check`), hook tests, ownership check.
 
-Prisma check: `prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --exit-code` against a throwaway shadow Postgres. It fails if `schema.prisma` has changes without a migration, or if the migration history does not apply cleanly.
+Prisma check, against a throwaway shadow Postgres:
 
-Backend e2e and Playwright generate a throwaway `backend/.env.test` with random secrets (`.github/scripts/write-test-env.sh`), so nothing secret-shaped is committed.
+```bash
+prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --exit-code
+```
+
+It fails on schema changes without a migration, or a migration history that does not apply cleanly.
+
+Backend e2e and Playwright generate a throwaway `backend/.env.test` with random secrets (`.github/scripts/write-test-env.sh`). Nothing secret-shaped is committed.
 
 ## Deploy target
 
-`scripts/deploy/deploy.sh` assumes docker compose on a Linux host over SSH (`backend/compose.{staging,prod}.yml`, images from GHCR). Nothing about the host is hard-coded; for ECS/Fly/K8s replace its `REMOTE STEPS` block. The frontend deploys separately through Netlify (`frontend/netlify.toml`).
+- `scripts/deploy/deploy.sh` assumes docker compose on a Linux host over SSH (`backend/compose.{staging,prod}.yml`, images from GHCR).
+- Nothing about the host is hard-coded; for ECS/Fly/K8s replace its `REMOTE STEPS` block.
+- The frontend deploys separately through Netlify (`frontend/netlify.toml`).
 
 - Deploys are off until `DEPLOY_ENABLED` is set; unset, the job warns and skips.
 - Compose files read `ZENFLOW_API_IMAGE` / `ZENFLOW_BANDIT_IMAGE`; defaults keep the local `build:` behaviour.
 
 ### GitHub Environments
 
-Create two Environments (Settings, Environments): `staging` (no reviewers) and `production` (required reviewers, deployment branches limited to `master` and tags). Per Environment:
+Create `staging` (no reviewers) and `production` (required reviewers; branches limited to `master` and tags). Per Environment:
 
 | Kind | Name | Purpose |
 | --- | --- | --- |
@@ -56,11 +64,12 @@ gh api -X PUT repos/tryzenflow/zenflow/environments/production \
 gh variable set DEPLOY_ENABLED --env staging --body true
 ```
 
-Also allow GitHub Actions to create/publish packages (`packages: write` is requested by `images.yml`). Make the GHCR packages readable by the deploy host (or set `REGISTRY_TOKEN`).
+- Allow GitHub Actions to publish packages (`images.yml` requests `packages: write`).
+- Make the GHCR packages readable by the deploy host, or set `REGISTRY_TOKEN`.
 
 ## Branch protection (cannot be applied from code)
 
-Settings, Branches, rule for `master`, or run (needs repo admin; "CI ok" must have run at least once so the check name exists):
+Needs repo admin, and `CI ok` must have run once so the check name exists. Settings, Branches, rule for `master`, or:
 
 ```bash
 gh api -X PUT repos/tryzenflow/zenflow/branches/master/protection --input - <<'JSON'
@@ -80,7 +89,11 @@ gh api -X PUT repos/tryzenflow/zenflow/branches/master/protection --input - <<'J
 JSON
 ```
 
-Result: PR required, up to date, `CI ok` green, squash-merge only (Settings, General: disable merge commits and rebase merging). Also protect tags `v*` (Settings, Rules, Rulesets). Other jobs are covered by `CI ok`, so adding or renaming jobs needs no settings change.
+Result: PR required, up to date, `CI ok` green, linear history.
+
+- Squash-merge only: Settings, General, disable merge commits and rebase merging.
+- Protect tags `v*`: Settings, Rules, Rulesets.
+- Other jobs roll up into `CI ok`, so adding or renaming jobs needs no settings change.
 
 ## Releasing to production
 
@@ -90,10 +103,10 @@ Result: PR required, up to date, `CI ok` green, squash-merge only (Settings, Gen
 
 ## Rollback runbook (redeploy the previous SHA)
 
-Rollback is just a deploy of an older, already-built SHA, which restores the matching compose/proxy config too.
+Rollback is a deploy of an older, already-built SHA. It restores the matching compose and proxy config too.
 
-1. Find the last good SHA: the previous successful run of `Images & staging deploy`/`Release (production)`, `git log master`, or on the host `tail -n 5 $DEPLOY_PATH/.deploy-history` (each line records `timestamp sha prev=<previous sha>`).
-2. Run it: Actions, **Deploy**, Run workflow, choose the environment and paste the full SHA. Or `gh workflow run deploy.yml -f environment=production -f image_tag=<sha>`. Production still requires reviewer approval; that is intentional but approvers can respond quickly during an incident.
+1. Find the last good SHA: previous green `Images & staging deploy` / `Release (production)` run, `git log master`, or on the host `tail -n 5 $DEPLOY_PATH/.deploy-history` (lines: `timestamp sha prev=<previous sha>`).
+2. Run it: Actions, **Deploy**, Run workflow, pick the environment, paste the full SHA. Or `gh workflow run deploy.yml -f environment=production -f image_tag=<sha>`. Production still needs reviewer approval.
 3. Verify (`HEALTHCHECK_URL`, `docker compose ps`, Grafana).
 4. Migrations only move forward; rolling back across a destructive one is unsafe.
    - Check what shipped: `git diff --stat <good>..<bad> -- backend/prisma/migrations`.
@@ -102,6 +115,6 @@ Rollback is just a deploy of an older, already-built SHA, which restores the mat
 
 ## Known gaps
 
-- Existing lint debt (about 32 backend and 5 frontend eslint errors) means `lint` checks only files changed in the PR. Clean up, then switch to a whole-repo lint.
+- Lint debt (about 32 backend, 5 frontend eslint errors): `lint` checks only changed files. Clean up, then lint the whole repo.
 - `frontend/e2e/` does not exist yet; the Playwright job skips itself until specs land.
-- The backend e2e suite has not been run in CI yet; first run may need fixes (it was authored against a local `.env.test`).
+- The backend e2e suite was authored against a local `.env.test`; its first CI run may need fixes.

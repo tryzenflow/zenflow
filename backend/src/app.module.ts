@@ -95,6 +95,15 @@ import { ObservabilityModule } from "./observability/observability.module";
           .positive()
           .default(60),
         OTP_REQUEST_IP_LIMIT: Joi.number().integer().positive().default(5),
+        // Longer per-IP window: loose on purpose (campus NAT shares one IP).
+        OTP_REQUEST_IP_HOURLY_WINDOW_SEC: Joi.number()
+          .integer()
+          .positive()
+          .default(3600),
+        OTP_REQUEST_IP_HOURLY_LIMIT: Joi.number()
+          .integer()
+          .positive()
+          .default(20),
         OTP_REQUEST_EMAIL_WINDOW_SEC: Joi.number()
           .integer()
           .positive()
@@ -107,6 +116,18 @@ import { ObservabilityModule } from "./observability/observability.module";
           .positive()
           .default(600), // 10 min
         OTP_VERIFY_EMAIL_LIMIT: Joi.number().integer().positive().default(10),
+        // Minimum gap between two syncs of one provider for a student, manual or
+        // background (`POST /integrations/:provider/sync` answers 429 inside it).
+        SYNC_MANUAL_COOLDOWN_SEC: Joi.number()
+          .integer()
+          .positive()
+          .default(900), // 15 min
+        // Per-command timeout for the rate-limit Redis; on timeout/error the
+        // limiter fails open (common/rate-limit/resilient-store.ts).
+        RATE_LIMIT_STORE_TIMEOUT_MS: Joi.number()
+          .integer()
+          .positive()
+          .default(250),
         PORTAL_API_KEY: Joi.string().required(),
         // DKHP (course-registration) API: base URL and key for the
         // registration-history call that drives enrolment discovery. No
@@ -159,10 +180,12 @@ import { ObservabilityModule } from "./observability/observability.module";
         // How often each student should be refreshed, per kind. The LMS calendar
         // is the only frequent one: a deadline can move at any hour, while a
         // timetable or exam schedule changes a handful of times a term.
+        // DKHP is asked once per term (a clean pass parks the row until the next
+        // term's window opens); this period is only the safety net.
         INGESTION_PORTAL_DISCOVERY_PERIOD_MS: Joi.number()
           .integer()
           .positive()
-          .default(24 * 60 * 60_000),
+          .default(120 * 24 * 60 * 60_000),
         INGESTION_LMS_DISCOVERY_PERIOD_MS: Joi.number()
           .integer()
           .positive()
@@ -191,6 +214,23 @@ import { ObservabilityModule } from "./observability/observability.module";
           .integer()
           .positive()
           .default(48_000),
+        // Outbound circuit breakers (common/outbound-breaker.ts), one per external
+        // API, currently "dlu-lms" and "dlu-portal". Opens after N consecutive
+        // transport failures (timeout, connect, 5xx, 429), stays open OPEN_MS,
+        // then admits one probe; a failed probe doubles the open time up to MAX.
+        // The INGESTION_ prefix is historical: the values apply to every breaker.
+        INGESTION_BREAKER_FAILURES: Joi.number()
+          .integer()
+          .positive()
+          .default(5),
+        INGESTION_BREAKER_OPEN_MS: Joi.number()
+          .integer()
+          .positive()
+          .default(60_000),
+        INGESTION_BREAKER_MAX_OPEN_MS: Joi.number()
+          .integer()
+          .positive()
+          .default(600_000),
         // --- DLU ingestion: the cross-student occurrence cache (issue #56) --
         // The rollout gate. Off by default, and the inverse of
         // INGESTION_ENABLED's "absent means on": this one lets a walk be SKIPPED

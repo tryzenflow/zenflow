@@ -58,9 +58,10 @@ export class SessionsService {
     );
     const res = await this.crud.create(dto, user);
     const ids = res.sessions?.length ? res.sessions.map((s) => s.id) : [res.id];
-    await this.reminders.replace(ids, minutes);
-    res.reminders = minutes;
-    res.sessions?.forEach((s) => (s.reminders = minutes));
+    const { applied, skipped } = await this.reminders.replace(ids, minutes);
+    res.reminders = applied;
+    res.sessions?.forEach((s) => (s.reminders = applied));
+    if (skipped.length > 0) res.skippedReminders = skipped;
     await this.reminders.syncUser(user.id);
     return res;
   }
@@ -91,11 +92,15 @@ export class SessionsService {
         : null;
     const res = await this.updates.update(id, dto, user);
     if (target) {
-      await this.reminders.replace(target.sessionIds, target.minutes);
-      res.reminders = target.minutes;
+      const { applied, skipped } = await this.reminders.replace(
+        target.sessionIds,
+        target.minutes,
+      );
+      res.reminders = applied;
       res.sessions?.forEach((s) => {
-        if (target.sessionIds.includes(s.id)) s.reminders = target.minutes;
+        if (target.sessionIds.includes(s.id)) s.reminders = applied;
       });
+      if (skipped.length > 0) res.skippedReminders = skipped;
     } else if (dto.sessionCount !== undefined && res.seriesId) {
       // New sittings of a grown series inherit the series' reminders.
       await this.reminders.propagateSeries(res.seriesId);

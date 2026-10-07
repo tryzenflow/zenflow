@@ -1,6 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { ArgumentsHost, ConflictException } from "@nestjs/common";
 import { PinoLogger } from "nestjs-pino";
+import { UpstreamUnavailableHttpException } from "../common/upstream-unavailable.exception";
 import { ScheduleInfeasibleException } from "../scheduler/schedule-infeasible.exception";
 import { SchedulerDegradedException } from "../scheduler/schedule-degraded.exception";
 import { AllExceptionsFilter } from "./all-exceptions.filter";
@@ -10,10 +11,11 @@ async function run(exception: unknown) {
   const status = jest.fn<{ json: typeof json }, [number]>().mockReturnValue({
     json,
   });
+  const setHeader = jest.fn();
   const host = {
     getType: () => "http",
     switchToHttp: () => ({
-      getResponse: () => ({ status }),
+      getResponse: () => ({ status, setHeader }),
       getRequest: () => ({ method: "POST", path: "/x" }),
     }),
   } as unknown as ArgumentsHost;
@@ -25,6 +27,7 @@ async function run(exception: unknown) {
   return {
     status: status.mock.calls[0][0],
     body: json.mock.calls[0][0],
+    setHeader,
   };
 }
 
@@ -44,6 +47,19 @@ describe("AllExceptionsFilter machine-readable codes", () => {
     expect(status).toBe(503);
     expect(body).toMatchObject({ success: false, code: "SCHEDULER_DEGRADED" });
     expect(body.options).toBeUndefined();
+  });
+
+  it("emits Retry-After and the code on an open-breaker 503", async () => {
+    const { status, body, setHeader } = await run(
+      new UpstreamUnavailableHttpException("DLU is down", 61_200),
+    );
+    expect(status).toBe(503);
+    expect(setHeader).toHaveBeenCalledWith("Retry-After", "62");
+    expect(body).toMatchObject({
+      success: false,
+      message: "DLU is down",
+      code: "UPSTREAM_UNAVAILABLE",
+    });
   });
 
   it("leaves plain HttpExceptions on the bare envelope", async () => {

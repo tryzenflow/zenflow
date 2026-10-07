@@ -1,157 +1,125 @@
 # Zenflow Mobile
 
-Expo + React Native app (iOS/Android/web). Shares the `@zenflow/shared` contract and
-`@zenflow/core` logic with the web [`frontend/`](../frontend/README.md). Part of the
-[Zenflow monorepo](../README.md).
+For developers. Expo + React Native app (iOS, Android, web) that shares `@zenflow/shared`
+(contract) and `@zenflow/core` (logic) with the web [`frontend/`](../frontend/README.md).
+Part of the [Zenflow monorepo](../README.md). Screens are designed first in [`mockups/`](../mockups/).
 
----
+## Run it
+
+Needs Node 20+, pnpm, and an Android emulator or iOS simulator (iOS needs macOS).
+The app uses native modules, so it runs as a **dev client**, not Expo Go.
+
+```bash
+pnpm install                          # repo root, once
+cp mobile/.env.example mobile/.env.local
+
+# Scripts: inside mobile/, or `pnpm --filter mobile <script>`
+pnpm android        # expo run:android: build + install the dev client
+pnpm ios            # expo run:ios (macOS only)
+pnpm dev            # expo start --dev-client --clear: Metro for an installed client
+pnpm dev:android    # expo start -c --android (reuses an installed build)
+pnpm dev:ios        # expo start -c --ios
+pnpm dev:web        # expo start -c --web -> http://localhost:8081
+pnpm ios:personal-team  # prebuild + run on a device with a free Apple team
+pnpm export         # static web export -> dist/
+pnpm typecheck      # tsc --noEmit
+pnpm test           # vitest run (lib/**/*.test.ts only)
+pnpm format         # Biome
+```
+
+A new native module needs a fresh dev-client build (`pnpm android` / `pnpm ios`).
+Components have no automated coverage; Vitest covers pure RN-free `lib/` logic only.
+
+## Environment
+
+| Variable                | Used for                                                                      |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| `EXPO_PUBLIC_API_URL`   | API base URL (`.env.local`; example `http://localhost:8000/api/v1`)           |
+| `EXPO_IOS_BUNDLE_ID`    | Override iOS bundle id (default `com.zenflow.app`) for personal-team builds   |
+| `EXPO_APPLE_TEAM_ID`    | Apple team for local device builds (set by `pnpm ios:personal-team`)          |
+
+- A loopback API host is rewritten to the dev machine's LAN address on device/emulator ([`lib/api-client.ts`](lib/api-client.ts)).
+- Android push needs `google-services.json` next to `app.config.ts` (absent: push inert).
+- iOS push needs the `expo-notifications` plugin, a backend APNs key and a real device.
 
 ## Tech stack
 
-| Concern       | Choice                                                |
-| ------------- | ----------------------------------------------------- |
-| Framework     | Expo SDK 52, Expo Router, React Native 0.76, React 18 |
-| Styling       | Tailwind v3 via NativeWind v4                         |
-| UI primitives | Hand-rolled shadcn/RN-Reusables in `components/ui/`   |
-| Fonts         | Geist, local via `expo-font`                          |
-| Language      | TypeScript (strict, `@/*` alias)                      |
-| State         | Zustand                                               |
-| Forms         | React Hook Form + Zod                                 |
-| HTTP          | axios (`api/`), cookie session                        |
-| Bottom sheets | `@gorhom/bottom-sheet` v5                             |
-| Date picker   | `@react-native-community/datetimepicker`              |
-| Rich text     | `@10play/tentap-editor`                               |
-| Formatter     | Biome                                                 |
+| Concern       | Choice                                                                        |
+| ------------- | ----------------------------------------------------------------------------- |
+| Framework     | Expo SDK 58, Expo Router, React Native 0.88 (New Architecture only), React 19 |
+| Styling       | Tailwind v3 via NativeWind v4                                                 |
+| UI            | Hand-rolled shadcn/RN-Reusables in `components/ui/` + `components/primitives/` |
+| Fonts         | Geist, local via `expo-font`                                                  |
+| Language      | TypeScript (strict, `@/*` alias)                                              |
+| State / forms | Zustand; React Hook Form + Zod                                                |
+| HTTP          | axios (`api/`), cookie session                                                |
+| UI libs       | `@gorhom/bottom-sheet` v5, `@react-native-community/datetimepicker`, `@10play/tentap-editor` (rich text) |
+| Formatter     | Biome                                                                         |
 
-## Project structure
+## Structure
 
 ```
 mobile/
-├── app/                       # Expo Router (file-based)
-│   ├── _layout.tsx            # root Stack + AuthGate + providers
-│   ├── +not-found.tsx
-│   ├── (auth)/_layout.tsx, login.tsx
-│   ├── (app)/_layout.tsx      # custom 3-tab bar (Week / Month / Settings)
-│   ├── (app)/index.tsx        # Week view (paginated day timeline + 7-day chip strip)
-│   ├── (app)/month.tsx        # Month grid
-│   ├── (app)/settings.tsx     # flat settings screen
-│   ├── task/new.tsx           # create session (modal)
-│   ├── task/[id]/edit.tsx     # edit session (modal)
-│   └── notifications.tsx      # ingestion inbox (modal)
-├── api/                       # auth, tasks, users, tags, files, integrations, notifications
-├── components/
-│   ├── ui/  primitives/       # hand-rolled shadcn/RN-Reusables primitives
-│   ├── calendar/              # day-timeline, week/month pagers, task-block,
-│   │                          #   reschedule-sheet, update-recurring-sheet, session-type-badge
-│   ├── tasks/                 # task-form-screen, task-sheet-fields, delete-recurring-sheet
-│   │   └── form/              # session-type-tabs, recurrence, fixed-time, session-count,
-│   │                          #   deadline-chip, duration-stepper, tag-autocomplete, description
-│   ├── settings/              # profile-row, integrations-section, settings-header
-│   ├── notification-bell.tsx  # floating bell → app/notifications.tsx
-│   ├── tab-bar.tsx, tab-icons.tsx, Icons.tsx, logo.tsx, error-boundary.tsx
-├── hooks/                     # use-user-store, use-task-form, use-week-day-types, use-now, …
-├── lib/                       # api-client, session(-cache), blocks, overlap, peek,
-│                              #   week-/month-date-math, timeline-scroll, task-toasts, tag-match, utils
-├── plugins/withAndroidBuildFixes.js
-├── global.css / tailwind.config.ts / metro.config.js / babel.config.js  # NativeWind wiring
-└── components.json / biome.json / vitest.config.ts
+├── app/            # Expo Router: _layout (AuthGate), (auth), (onboarding), (app) tabs, task/, notifications
+├── api/            # the only HTTP layer: auth, tasks, users, tags, files, devices, integrations, notifications
+├── components/     # ui/, primitives/ (.native/.web), calendar/, tasks/ (+ form/), settings/, checklist/, onboarding/
+├── hooks/          # use-user-store, use-task-form, use-checklist, use-notifications, use-push-registration, ...
+├── lib/            # api-client, session, i18n*, push, blocks, overlap, date math, checklist, spotlight, ...
+├── plugins/        # Expo config plugins: withAndroidBuildFixes, withIosBuildFixes
+├── scripts/        # iOS personal-team helpers
+└── global.css, tailwind.config.ts, metro.config.js, babel.config.js   # NativeWind wiring
 ```
 
-## Screens & routing
+## Routing
 
-`AuthGate` (root layout, Zustand-driven) gates two route groups. Custom tab bar: **Week**,
-**Month**, **Settings**.
+`AuthGate` (root layout, Zustand-driven) redirects: signed out to login, signed in without
+`onboardedAt` to onboarding, else to the app. Custom tab bar: Week, Month, Settings.
 
-| Route               | Screen                       | Notes                                                                                                     |
-| ------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `/(auth)/login`     | email → OTP                  | timezone captured on verify                                                                               |
-| `/(app)` (Week tab) | `index.tsx`                  | home; day view folded in                                                                                  |
-| `/(app)/month`      | `month.tsx`                  | Monday-first month grid                                                                                   |
-| `/(app)/settings`   | `settings.tsx`               | profile, appearance, preferences (language, timezone, default reminder — synced to the API), integrations |
-| `/task/new`         | `task/new.tsx` (modal)       | create                                                                                                    |
-| `/task/[id]/edit`   | `task/[id]/edit.tsx` (modal) | edit; type read-only                                                                                      |
-| `/notifications`    | `notifications.tsx` (modal)  | ingestion inbox                                                                                           |
+| Route               | Screen                                                                            |
+| ------------------- | --------------------------------------------------------------------------------- |
+| `/(auth)/login`     | email then OTP; timezone captured on verify                                       |
+| `/(onboarding)`     | first-run setup (tag picker)                                                      |
+| `/(app)` (Week)     | home: paginated day timeline + 7-day chip strip                                   |
+| `/(app)/month`      | Monday-first month grid                                                           |
+| `/(app)/settings`   | profile, appearance, preferences (language, timezone, default reminder; synced to API), integrations |
+| `/task/new`         | create session (modal)                                                            |
+| `/task/[id]/edit`   | edit session (modal); type read-only                                              |
+| `/notifications`    | ingestion inbox (modal)                                                           |
 
-### Getting started checklist
-
-First-run help is a "Getting started" pill floating at the top of Week and Month, left of the
-notification bell (`components/checklist/getting-started.tsx`), that opens a sheet of steps grouped Week view /
-Month view, each with a one-line how-to.
-A step ticks itself off when the user does it — `completeStep(id)` (`hooks/use-checklist.ts`) is
-called where the action succeeds: switch day, create a task, drag a task, hold a task, open Month,
-open a day, move a task to another day. Steps and copy live in `lib/checklist.ts`; step ids in
-`CHECKLIST_STEPS` (`@zenflow/shared`, rebuild it after editing). Done steps (and `checklist-hidden`,
-set by "Hide this checklist") are stored on `User.seenTips` via
-`PATCH /users/update/basic-info { seenTip }`, so progress follows the user across devices. The pill
-disappears when every step is done or it's hidden.
-
-Tapping a step closes the sheet, switches to the screen it lives on and spotlights the control
-(dim, how-to bubble with **Got it**): `<SpotlightAnchor step="…" />`
-(`components/checklist/spotlight-anchor.tsx`) goes inside that control, and `hooks/use-spotlight.ts`
-carries the request. It points at the task you just created (`hooks/use-last-created.ts`) and a step
-that needs a task (`STEP_NEEDS`) points at the + button until one exists. Placement math is in `lib/spotlight.ts`.
-
-Session model, series-scope editing, recurrence and reschedule match the web client — see
+Session model, series-scope editing, recurrence and reschedule match web: see
 [ADR-0002](../docs/adr/0002-scheduling-simplification.md).
+Reminders UI is `components/tasks/form/reminder-field.tsx` (hidden for `DND`); labels and the no-duplicate rule come from `@zenflow/core`.
 
-## Local development
+## Getting started checklist
 
-```bash
-# From repo root, once:
-pnpm install
+- A "Getting started" pill on Week and Month ([`components/checklist/getting-started.tsx`](components/checklist/getting-started.tsx)) opens a sheet of steps.
+- A step ticks itself via `completeStep(id)` ([`hooks/use-checklist.ts`](hooks/use-checklist.ts)) where the action succeeds.
+- Steps and copy: [`lib/checklist.ts`](lib/checklist.ts). Ids: `CHECKLIST_STEPS` in `@zenflow/shared` (rebuild it after editing).
+- Done steps and `checklist-hidden` live on `User.seenTips` via `PATCH /users/update/basic-info { seenTip }`, so progress follows the user.
+- The pill disappears when every step is done or hidden.
+- Tapping a step spotlights its control: put `<SpotlightAnchor step="..." />` inside it; [`hooks/use-spotlight.ts`](hooks/use-spotlight.ts) carries the request.
+- Steps needing a task (`STEP_NEEDS`) point at the + button until one exists. Placement math: [`lib/spotlight.ts`](lib/spotlight.ts).
 
-# Mobile scripts (inside mobile/, or `pnpm --filter mobile <script>`):
-pnpm dev            # expo start --dev-client --clear
-pnpm dev:web        # expo start -c --web       → http://localhost:8081
-pnpm dev:android    # expo start -c --android   (reuses an installed dev-client build)
-pnpm android        # expo run:android          (full native rebuild — no cache clear, see above)
-pnpm ios            # expo run:ios              (macOS only)
-pnpm export         # static web export → dist/
-pnpm typecheck      # tsc --noEmit
-pnpm test           # vitest run — lib/**/*.test.ts only, see below
-```
+## Push and live notifications
 
-**Testing:** Vitest, scoped to `lib/**/*.test.ts` — pure RN-free logic only. Components
-have no automated coverage.
+Backend: `backend/src/devices/`, `backend/src/notifications/`.
 
-`EXPO_PUBLIC_API_URL` (`.env.development`, default `http://localhost:5000/api/v1`) points
-the axios client at the API; a loopback host is auto-rewritten to the dev machine's LAN
-address on device/emulator.
-
-## Push & live notifications
-
-The backend (`backend/src/devices/`, `backend/src/notifications/`) drives direct push and
-live SSE:
-
-- **SSE:** the bell badge and inbox consume `GET /notifications/stream` via
-  `react-native-sse` (`api/notifications.ts`, session cookie); no polling —
-  `GET /notifications` is only for the initial list and reconnect catch-up.
-- **Inbox** (`app/notifications.tsx`): per-topic icon/tint, kind badges
-  (`NEW`/`CHANGE`/`DROP`), relative time, `eventEndsAt`. Swipe left to dismiss
-  (`DELETE /notifications/:id`, optimistic).
+- **SSE:** bell badge and inbox read `GET /notifications/stream` via `react-native-sse` ([`api/notifications.ts`](api/notifications.ts)); no polling. `GET /notifications` is for the initial list and reconnect catch-up.
+- **Inbox** ([`app/notifications.tsx`](app/notifications.tsx)): per-topic icon, `NEW`/`CHANGE`/`DROP` badges, relative time, `eventEndsAt`. Swipe left dismisses (`DELETE /notifications/:id`, optimistic).
 - **Foreground:** a tap-to-act toast jumps to the affected session (404-guarded).
-- **Native push:** the backend speaks FCM/APNs directly, so the app registers the raw
-  device token (not an Expo token) via `POST /devices` — `lib/push.ts` + the
-  `use-push-registration`/`use-notifications` hooks handle lifecycle and background tap
-  routing; sign-out unregisters.
-- **Android** needs `google-services.json` next to `app.config.ts` (absent → push inert).
-  **iOS** needs the `expo-notifications` plugin + a backend APNs key + a real device.
-- Adding a native module needs a fresh dev-client build (`pnpm android` / `pnpm ios`).
+- **Native push:** the backend speaks FCM/APNs directly, so the app registers the raw device token (not an Expo token) via `POST /devices`. See [`lib/push.ts`](lib/push.ts) and the `use-push-registration` / `use-notifications` hooks. Sign-out unregisters.
+
+## Language
+
+- Tiếng Việt is the default; English is selectable on the login screen and in Settings, and applies without resetting navigation or forms.
+- Account `User.lang` is authoritative; the cached preference covers pre-login and offline. Login updates the account to the language shown. Failed saves roll back.
+- Use `t()` from [`lib/i18n.ts`](lib/i18n.ts) for copy and `useLanguage()` in display components, including memoized ones.
+- Use `locale()`, `dateFnsLocale()` and the localized `format()` for display dates. API dates keep their numeric format.
+- Dictionaries: [`i18n-vi.ts`](lib/i18n-vi.ts), [`i18n-task.ts`](lib/i18n-task.ts), [`i18n-common.ts`](lib/i18n-common.ts). Shared validation messages translate at the mobile boundary.
+- Leave task titles, notes, names, locations and existing tags unchanged; suggested tags follow the language.
+- Backend notifications use the account language, so sync the preference before sending.
+- Vietnamese on Android uses an in-app date grid; iOS passes the locale to its native picker.
 
 ## Contributing
 
-Biome (`pnpm --filter mobile format`), 2-space indent, Conventional Commits. See the
-repo-wide [CONTRIBUTING.md](../CONTRIBUTING.md).
-
-- **Reminders:** `components/tasks/form/reminder-field.tsx` — chips (tap to edit in place, × to remove) + a bottom sheet of presets (At start · 15 min … 1 week) and a custom amount/unit; logic (labels, no-duplicate rule) is shared from `@zenflow/core`'s `reminders.ts`. Not shown for `DND`.
-
-## Language (developer guide)
-
-- Tiếng Việt is the default. Select English or Tiếng Việt from the select at the top right of the login screen, or later in Settings → Language; screens update immediately without resetting navigation or forms.
-- Account `User.lang` is authoritative; the cached preference supplies the language before login and while offline. On login, the account is updated to the language shown on the login screen. Failed preference saves roll back.
-- Use `t()` in [`lib/i18n.ts`](lib/i18n.ts) for application copy and `useLanguage()` in display components, including memoized components.
-- Keep task titles, notes, names, locations and existing tags unchanged. Suggested tags follow the selected language.
-- Use `locale()`, `dateFnsLocale()` and the localized `format()` for display dates and times. API dates keep their numeric format.
-- Dictionaries: [`i18n-vi.ts`](lib/i18n-vi.ts), [`i18n-task.ts`](lib/i18n-task.ts), [`i18n-common.ts`](lib/i18n-common.ts). Shared validation messages translate at the mobile boundary.
-- Backend notifications use the account language for inbox, SSE and native push; sync the preference before sending a notification.
-- Vietnamese on Android uses an in-app date grid; iOS passes the selected locale to its native picker.
+Biome, 2-space indent, Conventional Commits: see [CONTRIBUTING.md](../CONTRIBUTING.md).

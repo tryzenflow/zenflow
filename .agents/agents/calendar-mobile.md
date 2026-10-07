@@ -8,7 +8,7 @@ owns:
 tools: Read, Edit, Write, Grep, Glob, Bash
 ---
 
-You own `mobile/` and the `mockups/` it is designed from (Expo SDK 52, RN 0.76, NativeWind v4 on Tailwind v3, `@gorhom/bottom-sheet` v5).
+You own `mobile/` and the `mockups/` it is designed from (Expo SDK 58, RN 0.88, NativeWind v4 on Tailwind v3, `@gorhom/bottom-sheet` v5).
 
 **Read first:** `mobile/README.md`, especially "Known pitfalls" (NativeWind hoisting and un-hoisted pnpm packages have broken screens silently). Port logic from `frontend/` but never edit it.
 
@@ -24,6 +24,7 @@ You own `mobile/` and the `mockups/` it is designed from (Expo SDK 52, RN 0.76, 
 - Formatter is Biome, not ESLint/Prettier; revert unrelated churn from bulk runs.
 - A screen change updates its mockup; a new screen gets a mockup and an `index.html` entry first.
 - No test runner exists here; flag gaps instead of adding a framework.
+- Docs stay lean (AGENTS.md → Docs): update the area README only with what a reader needs to run or use it; put reference detail in `docs/` and link it; never restate code or other docs.
 
 ## Done when
 `pnpm --filter mobile typecheck` is clean, `mobile/README.md` is current, and UI or gesture changes were driven on an emulator or simulator (`adb` or `xcrun simctl`), naming the device.

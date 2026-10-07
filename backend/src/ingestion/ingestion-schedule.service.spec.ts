@@ -85,6 +85,21 @@ function makePrismaDouble(
         }
         return Promise.resolve({ count });
       },
+      aggregate: (args: {
+        where: { integrationId: string; kind: { in: string[] } };
+      }) => {
+        const runs = schedules
+          .filter(
+            (s) =>
+              s.integrationId === args.where.integrationId &&
+              args.where.kind.in.includes(s.kind) &&
+              s.lastRunAt,
+          )
+          .map((s) => (s.lastRunAt as Date).getTime());
+        return Promise.resolve({
+          _max: { lastRunAt: runs.length ? new Date(Math.max(...runs)) : null },
+        });
+      },
       findMany: (args: {
         where: { kind: string; nextDueAt: { lte: Date } };
         take: number;
@@ -120,9 +135,10 @@ function makePrismaDouble(
           id?: string;
           nextDueAt?: Date | { gt: Date };
           integrationId?: string;
-          kind?: string;
+          kind?: string | { in: string[] };
           lastSuccessTerm?: { not: string };
           OR?: { lastClaimedAt: null | { lt: Date } }[];
+          lastClaimedAt?: Date;
         };
         data: Record<string, unknown>;
       }) => {
@@ -134,7 +150,15 @@ function makePrismaDouble(
             s.integrationId !== args.where.integrationId
           )
             return false;
-          if (args.where.kind !== undefined && s.kind !== args.where.kind)
+          const kindFilter = args.where.kind;
+          if (typeof kindFilter === "string" && s.kind !== kindFilter)
+            return false;
+          if (typeof kindFilter === "object" && !kindFilter.in.includes(s.kind))
+            return false;
+          if (
+            args.where.lastClaimedAt instanceof Date &&
+            s.lastClaimedAt?.getTime() !== args.where.lastClaimedAt.getTime()
+          )
             return false;
           // The compare-and-set: the row must still hold the value the caller
           // read, or this matches nothing.
@@ -164,7 +188,18 @@ function makePrismaDouble(
             return false;
           return true;
         });
-        for (const row of matches) Object.assign(row, args.data);
+        for (const row of matches) {
+          for (const [k, v] of Object.entries(args.data)) {
+            // Prisma's { increment: n } atomic operator.
+            if (v && typeof v === "object" && "increment" in v) {
+              (row as unknown as Record<string, number>)[k] += (
+                v as { increment: number }
+              ).increment;
+            } else {
+              (row as unknown as Record<string, unknown>)[k] = v;
+            }
+          }
+        }
         return Promise.resolve({ count: matches.length });
       },
       update: (args: {
@@ -449,7 +484,22 @@ describe("IngestionScheduleService — claimDue", () => {
       integrationId: "int2",
       userId: "u2",
       cacheHitStreak: 4,
+      dueAt: NOW,
+      claimedAt: NOW,
     });
+  });
+
+  it("releaseClaim restores the pre-claim due time and touches no failure counter", async () => {
+    const { db, service } = await makeService(PORTAL_INTEGRATIONS, [
+      schedule({ id: "a", consecutiveFailures: 2 }),
+    ]);
+    const [claimed] = await service.claimDue(kind, NOW, 10);
+    expect(db.schedules[0].nextDueAt.getTime()).toBeGreaterThan(NOW.getTime());
+
+    await service.releaseClaim(claimed);
+
+    expect(db.schedules[0].nextDueAt).toEqual(NOW);
+    expect(db.schedules[0].consecutiveFailures).toBe(2);
   });
 
   it("claims nothing for a zero or negative batch size", async () => {
@@ -617,7 +667,7 @@ describe("IngestionScheduleService — reads", () => {
 });
 
 describe("IngestionScheduleService — deferAfterManualSync", () => {
-  it("pushes every kind of that provider out by its own period", async () => {
+  it("pushes the given kinds out by their own period, and nothing else", async () => {
     // A student who just pressed "sync now" must not be re-walked minutes later.
     const { db, service } = await makeService(PORTAL_INTEGRATIONS, [
       schedule({ id: "a", kind: "PORTAL_TIMETABLE" }),
@@ -625,12 +675,50 @@ describe("IngestionScheduleService — deferAfterManualSync", () => {
       schedule({ id: "c", kind: "LMS_CALENDAR", integrationId: "int2" }),
     ]);
 
-    await service.deferAfterManualSync("int1", "PORTAL", NOW);
+    await service.deferAfterManualSync("int1", ["PORTAL_TIMETABLE"], NOW);
 
     expect(db.schedules[0].nextDueAt).toEqual(new Date(NOW.getTime() + DAY));
-    expect(db.schedules[1].nextDueAt).toEqual(new Date(NOW.getTime() + DAY));
+    // A kind that was not reported clean stays due for the ticker.
+    expect(db.schedules[1].nextDueAt).toEqual(NOW);
     // A different integration's row is untouched.
     expect(db.schedules[2].nextDueAt).toEqual(NOW);
+  });
+});
+
+describe("IngestionScheduleService — markManualFailure", () => {
+  it("counts a failure against the data kinds that did not come back clean", async () => {
+    const { db, service } = await makeService(PORTAL_INTEGRATIONS, [
+      schedule({ id: "a", kind: "PORTAL_TIMETABLE" }),
+      schedule({ id: "b", kind: "PORTAL_EXAM" }),
+      schedule({ id: "c", kind: "PORTAL_DISCOVERY" }),
+    ]);
+
+    await service.markManualFailure("int1", "PORTAL", ["PORTAL_EXAM"]);
+
+    expect(db.schedules[0].consecutiveFailures).toBe(1);
+    expect(db.schedules[1].consecutiveFailures).toBe(0);
+    // Discovery is a means, not a data kind.
+    expect(db.schedules[2].consecutiveFailures).toBe(0);
+  });
+});
+
+describe("IngestionScheduleService — lastRunAt", () => {
+  it("is the newest run across the provider's kinds, null if none ran", async () => {
+    const earlier = new Date(NOW.getTime() - 60_000);
+    const { service } = await makeService(PORTAL_INTEGRATIONS, [
+      schedule({ id: "a", kind: "PORTAL_TIMETABLE", lastRunAt: earlier }),
+      schedule({ id: "b", kind: "PORTAL_EXAM", lastRunAt: NOW }),
+      schedule({
+        id: "c",
+        kind: "LMS_CALENDAR",
+        integrationId: "int2",
+        lastRunAt: NOW,
+      }),
+    ]);
+
+    expect(await service.lastRunAt("int1", "PORTAL")).toEqual(NOW);
+    // Another provider's rows never count, and a never-run integration is null.
+    expect(await service.lastRunAt("int1", "LMS")).toBeNull();
   });
 });
 
@@ -649,6 +737,17 @@ describe("IngestionScheduleService — discovery per term", () => {
     expect(await service.isDiscovered("int1", TERM)).toBe(true);
     // A new term is not covered by the last one's pass.
     expect(await service.isDiscovered("int1", NEXT_TERM)).toBe(false);
+  });
+
+  it("markDiscovered parks the row until the next term's window opens", async () => {
+    const { db, service } = await makeService(PORTAL_INTEGRATIONS, [
+      schedule({ id: "a", kind: "PORTAL_DISCOVERY" }),
+    ]);
+    const reopensAt = new Date(NOW.getTime() + 90 * DAY);
+
+    await service.markDiscovered("int1", TERM, NOW, reopensAt);
+
+    expect(db.schedules[0].nextDueAt).toEqual(reopensAt);
   });
 
   it("markDiscovered also advances lastSuccessAt", async () => {

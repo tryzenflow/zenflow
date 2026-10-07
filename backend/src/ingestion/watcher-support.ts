@@ -1,5 +1,6 @@
 import type { ConfigService } from "@nestjs/config";
 import type { IntegrationProvider } from "@zenflow/shared";
+import { UpstreamUnavailableError } from "../common/outbound-breaker";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { SkippedItem } from "./core/types";
 
@@ -64,6 +65,12 @@ export interface PassOutcome {
    * cannot sit on cached data indefinitely (`mustFullWalk`).
    */
   servedFromCache: boolean;
+  /**
+   * Set when the pass stopped because the upstream's circuit breaker is open.
+   * Not a student failure: the ticker must not count it in
+   * `consecutiveFailures` and releases the claim so the row stays due.
+   */
+  upstreamDown?: UpstreamUnavailableError;
 }
 
 /** A pass that never got off the ground — a rejected or unreachable login. */
@@ -166,10 +173,17 @@ export async function eachIntegrationTarget(
     cursor = page[page.length - 1].id;
 
     for (const row of page) {
-      await handle({
-        integrationId: row.id,
-        userId: row.userId,
-      });
+      try {
+        await handle({
+          integrationId: row.id,
+          userId: row.userId,
+        });
+      } catch (error) {
+        // Upstream is down (breaker open): the rest of the sweep would only be
+        // refused too, so stop it. Anything else is a real bug; surface it.
+        if (error instanceof UpstreamUnavailableError) return visited;
+        throw error;
+      }
       visited += 1;
     }
 
@@ -218,6 +232,8 @@ export function jobItemBody(input: JobItemBody): string {
  * error class for the watchers' benefit.
  */
 export function statusCodeOf(error: unknown): number | null {
+  // A short-circuited call never reached the upstream; record it as a 503.
+  if (error instanceof UpstreamUnavailableError) return 503;
   const message = error instanceof Error ? error.message : String(error);
   const match = /status (\d{3})/.exec(message);
   return match ? Number(match[1]) : null;

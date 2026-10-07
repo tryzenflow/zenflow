@@ -6,6 +6,9 @@ import { IngestionScheduleService } from "./ingestion-schedule.service";
 import { IngestionTickerService } from "./ingestion-ticker.service";
 import { LmsWatcherService } from "./lms-watcher.service";
 import { TimetableWatcherService } from "./timetable-watcher.service";
+import { UpstreamUnavailableError } from "../common/outbound-breaker";
+import { LMSService } from "../lms/lms.service";
+import { PortalAPIService } from "../portal/portal-api.service";
 import { TICK_INTERVAL_MS, type SyncKindName } from "./core/schedule-plan";
 import type { ClaimedTarget } from "./ingestion-schedule.service";
 import type { PassOutcome } from "./watcher-support";
@@ -72,6 +75,7 @@ function makeScheduleDouble(
     servedFromCache: boolean;
   }[] = [];
   const order: string[] = [];
+  const released: string[] = [];
   const pulledForward: { academicYear: string; semester: string }[] = [];
   let ensureAllRowsCalls = 0;
 
@@ -97,6 +101,10 @@ function makeScheduleDouble(
       claims.push({ kind, batchSize });
       return Promise.resolve((due[kind] ?? []).slice(0, batchSize));
     },
+    releaseClaim: (t: ClaimedTarget) => {
+      released.push(t.scheduleId);
+      return Promise.resolve();
+    },
     recordOutcome: (
       scheduleId: string,
       outcome: PassOutcome & { now: Date },
@@ -114,6 +122,7 @@ function makeScheduleDouble(
     service: service as unknown as IngestionScheduleService,
     claims,
     outcomes,
+    released,
     order,
     pulledForward,
     get ensureAllRowsCalls() {
@@ -128,6 +137,8 @@ function target(over: Partial<ClaimedTarget> = {}): ClaimedTarget {
     integrationId: "int1",
     userId: "u1",
     cacheHitStreak: 0,
+    dueAt: new Date("2026-10-26T02:00:00.000Z"),
+    claimedAt: NOW,
     ...over,
   };
 }
@@ -143,6 +154,8 @@ async function makeTicker(
     lms?: jest.Mock;
     syncPortal?: jest.Mock;
     syncLms?: jest.Mock;
+    /** Per-upstream breaker wait in ms (`null` = closed). */
+    breakers?: { LMS: number | null; PORTAL: number | null };
   } = {},
 ) {
   const env = { ...ENV, ...(opts.env ?? {}) };
@@ -152,6 +165,7 @@ async function makeTicker(
   const lms = opts.lms ?? jest.fn().mockResolvedValue(OK);
   const syncPortal = opts.syncPortal ?? jest.fn().mockResolvedValue(OK);
   const syncLms = opts.syncLms ?? jest.fn().mockResolvedValue(OK);
+  const breakers = opts.breakers ?? { LMS: null, PORTAL: null };
   // Order in which the watchers were called, so "discovery first" and "one kind
   // at a time" are assertable.
   const module: TestingModule = await Test.createTestingModule({
@@ -169,6 +183,11 @@ async function makeTicker(
         provide: EnrollmentDiscoveryService,
         useValue: { syncPortal, syncLms },
       },
+      { provide: LMSService, useValue: { unavailableFor: () => breakers.LMS } },
+      {
+        provide: PortalAPIService,
+        useValue: { unavailableFor: () => breakers.PORTAL },
+      },
     ],
   }).compile();
 
@@ -180,6 +199,7 @@ async function makeTicker(
     lms,
     syncPortal,
     syncLms,
+    breakers,
   };
 }
 
@@ -501,5 +521,98 @@ describe("IngestionTickerService — overlap and budget", () => {
   it("keeps the tick interval and the @Cron expression in step", () => {
     // If one is changed without the other, batch sizing is silently wrong.
     expect(TICK_INTERVAL_MS).toBe(60_000);
+  });
+});
+
+describe("IngestionTickerService — upstream circuit breaker", () => {
+  const down = () => new UpstreamUnavailableError("dlu-portal", 60_000);
+
+  it("does not claim for an upstream whose breaker is open; the other keeps going", async () => {
+    const schedule = makeScheduleDouble({
+      PORTAL_TIMETABLE: [target({ scheduleId: "t" })],
+      PORTAL_EXAM: [target({ scheduleId: "e" })],
+      LMS_CALENDAR: [target({ scheduleId: "l" })],
+    });
+    const { ticker, timetable, exam, lms } = await makeTicker({
+      schedule,
+      breakers: { LMS: null, PORTAL: 30_000 },
+    });
+
+    const summary = await ticker.tick(NOW);
+
+    expect(schedule.claims.map((c) => c.kind)).not.toContain(
+      "PORTAL_TIMETABLE",
+    );
+    expect(schedule.claims.map((c) => c.kind)).not.toContain("PORTAL_EXAM");
+    expect(schedule.claims.map((c) => c.kind)).toContain("LMS_CALENDAR");
+    expect(timetable).not.toHaveBeenCalled();
+    expect(exam).not.toHaveBeenCalled();
+    expect(lms).toHaveBeenCalledTimes(1);
+    expect(summary.pausedProviders).toEqual(["PORTAL"]);
+  });
+
+  it("an UpstreamUnavailableError stops the upstream for the tick, releases the claims and records no failure", async () => {
+    const schedule = makeScheduleDouble(
+      {
+        PORTAL_TIMETABLE: [
+          target({ scheduleId: "t1" }),
+          target({ scheduleId: "t2" }),
+        ],
+        PORTAL_EXAM: [target({ scheduleId: "e1" })],
+        LMS_CALENDAR: [target({ scheduleId: "l1" })],
+      },
+      { PORTAL_TIMETABLE: 5000 },
+    );
+    const timetable = jest.fn().mockRejectedValue(down());
+    const { ticker, exam, lms } = await makeTicker({ schedule, timetable });
+
+    const summary = await ticker.tick(NOW);
+
+    expect(timetable).toHaveBeenCalledTimes(1);
+    // t1 tripped, t2 never ran, e1 was never claimed at all.
+    expect(schedule.released).toEqual(["t1", "t2"]);
+    expect(schedule.claims.map((c) => c.kind)).not.toContain("PORTAL_EXAM");
+    expect(exam).not.toHaveBeenCalled();
+    // No consecutiveFailures bump for the paused upstream; LMS unaffected.
+    expect(schedule.outcomes.map((o) => o.scheduleId)).toEqual(["l1"]);
+    expect(lms).toHaveBeenCalledTimes(1);
+    expect(summary).toMatchObject({ claimed: 1, failed: 0, released: 2 });
+  });
+
+  it("a partial walk cut short by the breaker is released, not recorded", async () => {
+    const schedule = makeScheduleDouble({
+      LMS_CALENDAR: [target({ scheduleId: "l1" })],
+    });
+    const lms = jest.fn().mockResolvedValue({
+      ok: false,
+      servedFromCache: false,
+      upstreamDown: down(),
+    });
+    const { ticker } = await makeTicker({ schedule, lms });
+
+    await ticker.tick(NOW);
+
+    expect(schedule.released).toEqual(["l1"]);
+    expect(schedule.outcomes).toEqual([]);
+  });
+
+  it("resumes automatically once the breaker closes", async () => {
+    const schedule = makeScheduleDouble({
+      PORTAL_EXAM: [target({ scheduleId: "e1" })],
+    });
+    const { ticker, exam, breakers } = await makeTicker({
+      schedule,
+      breakers: { LMS: null, PORTAL: 60_000 },
+    });
+
+    await ticker.tick(NOW);
+    expect(exam).not.toHaveBeenCalled();
+
+    breakers.PORTAL = null;
+    await ticker.tick(NOW);
+    expect(exam).toHaveBeenCalledTimes(1);
+    expect(schedule.outcomes).toEqual([
+      { scheduleId: "e1", ok: true, servedFromCache: false },
+    ]);
   });
 });

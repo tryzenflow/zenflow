@@ -15,7 +15,7 @@ tools: Read, Edit, Write, Grep, Glob, Bash
 
 You own the path from a student's campus accounts to sessions on their calendar.
 
-**Read first:** `backend/README.md` (ingestion and integrations sections), `docs/architecture/ingestion-components.svg`.
+**Read first:** `docs/backend/ingestion.md`, `docs/backend/api.md` (integrations), `docs/architecture/ingestion-components.svg`.
 
 ## Map
 - `ingestion/`: `timetable-watcher`, `exam-watcher`, `lms-watcher` poll sources; `materializer.service.ts` turns detected items into sessions; `sync-conflicts.service.ts` resolves clashes with user edits; `ingestion-sync.service.ts` and `ingestion-jobs.service.ts` drive runs; `core/` is pure.
@@ -28,6 +28,7 @@ You own the path from a student's campus accounts to sessions on their calendar.
 - Synced fixed sessions are virtual series (AGENTS.md invariant 4); sync must not null a `TASK` start or drop user edits (`sync-conflicts`).
 - Placement of detected items goes through `scheduler`; do not rank here.
 - Upstream is unreliable: watchers must be idempotent and tolerate partial failures.
+- Docs stay lean (AGENTS.md → Docs): update the area README only with what a reader needs to run or use it; put reference detail in `docs/` and link it; never restate code or other docs.
 
 ## Done when
 `pnpm --filter backend test` (ingestion/integrations specs) and `typecheck` pass, and a run against `dlu:fake` produces the expected sessions.

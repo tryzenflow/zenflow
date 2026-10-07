@@ -42,17 +42,17 @@ importers:
         specifier: ^5.1.0
         version: 5.1.6(@opentelemetry/api@1.9.1)(keyv@5.6.0)
       '@limitkit/core':
+        specifier: ^1.6.0
+        version: 1.6.0
+      '@limitkit/memory':
         specifier: ^1.2.0
         version: 1.2.0
-      '@limitkit/memory':
-        specifier: ^1.1.1
-        version: 1.1.1
       '@limitkit/nest':
-        specifier: ^1.1.0
-        version: 1.1.0(@nestjs/platform-express@11.1.24)(class-transformer@0.5.1)(class-validator@0.14.4)
-      '@limitkit/redis':
         specifier: ^1.2.0
-        version: 1.2.0(ioredis@5.11.1)(redis@5.12.1(@opentelemetry/api@1.9.1))
+        version: 1.2.0(@nestjs/platform-express@11.1.24)(class-transformer@0.5.1)(class-validator@0.14.4)
+      '@limitkit/redis':
+        specifier: ^1.3.0
+        version: 1.3.0(ioredis@5.11.1)(redis@5.12.1(@opentelemetry/api@1.9.1))
       '@nestjs-modules/mailer':
         specifier: ^2.0.2
         version: 2.3.6(@nestjs/common@11.1.24(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.24)(@nestjs/event-emitter@3.1.0(@nestjs/common@11.1.24(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.24))(chokidar@4.0.3)(nodemailer@7.0.13)(svgo@4.0.1)(terser@5.48.0)(typescript@5.7.3)
@@ -2864,17 +2864,17 @@ packages:
   '@keyv/serialize@1.1.1':
     resolution: {integrity: sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA==}
 
-  '@limitkit/core@1.2.0':
-    resolution: {integrity: sha512-VvRSgSCfVEcfEYBoL2n8MpKU0ACc2v9tMUce2esDXk94p4GXtsMO+YAMvr2vnRWuyTUKkofTvJRqhPMBDPlN/w==}
+  '@limitkit/core@1.6.0':
+    resolution: {integrity: sha512-SP+U31Q+8tVnqaHUZ3OKpfGPgA69Nwx183H2idUamT110u8VmNm0BNMY8PGalesodRPcR7K2QkFZHaJXyLkGFw==}
 
-  '@limitkit/memory@1.1.1':
-    resolution: {integrity: sha512-81t4IZk5eIqJuZunXqKtdw5ar/nbEpXY0f59weqAY0gdxH7fXChLHh7+Yp53nFSYcKIxu1VQSa0LawybwQ2avQ==}
+  '@limitkit/memory@1.2.0':
+    resolution: {integrity: sha512-n/QQT4iTq1BtX1f5pOs0FrZUr0WTTzn0+c+F6H1AyLaoi6TKQEo5b7QCHInmC7PWzXp70plNmnVzT5c93dXT+A==}
 
-  '@limitkit/nest@1.1.0':
-    resolution: {integrity: sha512-n1g5JFTfvEijw5vuSpjToNYgv8p7G2OEJqe/QChHt5hZe30/8mevCgLc7eprfOd2KEozMdSHBTQ8d3ljkPksrg==}
+  '@limitkit/nest@1.2.0':
+    resolution: {integrity: sha512-uophFkzoYuPchQHnAm7DYS1YkU7XeVn2OVXdHIQY3Q7P7n6KThuGQBoPP35jzUKL3u2txys8ZIbucdGlh3denQ==}
 
-  '@limitkit/redis@1.2.0':
-    resolution: {integrity: sha512-L/bB11XdtE6DC+yNxiagAc3oBX5bLoCGvGud/r+v1qTUbwFZJBA6cW0eoppJgsyvaeH0lMoeN/Vjbt5MG03TNw==}
+  '@limitkit/redis@1.3.0':
+    resolution: {integrity: sha512-rIbjG0c2DUO6PX2DQtbDPZam/Uca/yX6vQH086udg4HKqv+QmC2zbLcfV3RTVvfLEOsnqdvvguvCpXduvJboTw==}
     peerDependencies:
       ioredis: ^5.0.0
       redis: ^5.0.0
@@ -14521,15 +14521,15 @@ snapshots:
 
   '@keyv/serialize@1.1.1': {}
 
-  '@limitkit/core@1.2.0': {}
+  '@limitkit/core@1.6.0': {}
 
-  '@limitkit/memory@1.1.1':
+  '@limitkit/memory@1.2.0':
     dependencies:
-      '@limitkit/core': 1.2.0
+      '@limitkit/core': 1.6.0
 
-  '@limitkit/nest@1.1.0(@nestjs/platform-express@11.1.24)(class-transformer@0.5.1)(class-validator@0.14.4)':
+  '@limitkit/nest@1.2.0(@nestjs/platform-express@11.1.24)(class-transformer@0.5.1)(class-validator@0.14.4)':
     dependencies:
-      '@limitkit/core': 1.2.0
+      '@limitkit/core': 1.6.0
       '@nestjs/common': 11.1.24(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/core': 11.1.24(@nestjs/common@11.1.24(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@11.1.24)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       reflect-metadata: 0.2.2
@@ -14542,9 +14542,9 @@ snapshots:
       - class-validator
       - supports-color
 
-  '@limitkit/redis@1.2.0(ioredis@5.11.1)(redis@5.12.1(@opentelemetry/api@1.9.1))':
+  '@limitkit/redis@1.3.0(ioredis@5.11.1)(redis@5.12.1(@opentelemetry/api@1.9.1))':
     dependencies:
-      '@limitkit/core': 1.2.0
+      '@limitkit/core': 1.6.0
     optionalDependencies:
       ioredis: 5.11.1
       redis: 5.12.1(@opentelemetry/api@1.9.1)
@@ -16652,7 +16652,9 @@ snapshots:
       metro-runtime: 0.87.1
     transitivePeerDependencies:
       - '@babel/core'
+      - bufferutil
       - supports-color
+      - utf-8-validate
 
   '@react-native/normalize-colors@0.74.89': {}
 

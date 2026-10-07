@@ -185,3 +185,28 @@ export const schedulerPlacementShadowMismatch = meter.createCounter(
       "Shadow mode: Python /v1/place disagreed with the legacy TS pick, by kind",
   },
 );
+
+// --- Outbound circuit breakers (common/outbound-breaker.ts) -----------------
+export const outboundBreakerState = meter.createGauge(
+  "outbound.breaker_state",
+  {
+    description:
+      "Outbound circuit breaker by upstream name: 0 closed, 1 half-open, 2 open",
+  },
+);
+export const outboundBreakerShortCircuited = meter.createCounter(
+  "outbound.breaker_short_circuited",
+  {
+    description:
+      "Outbound calls refused without a request because the breaker was open, by upstream",
+  },
+);
+
+// --- Rate limiting ----------------------------------------------------------
+export const rateLimitStoreFailOpen = meter.createCounter(
+  "rate_limit.store.fail_open",
+  {
+    description:
+      "Requests allowed because the rate-limit store was down/slow, by reason (breaker_open|timeout|error)",
+  },
+);

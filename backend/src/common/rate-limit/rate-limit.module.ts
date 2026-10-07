@@ -12,6 +12,12 @@ import { RedisModule } from "../redis/redis.module";
 import { RATE_LIMIT_REDIS_CLIENT } from "../redis/redis.constants";
 import { setRateLimitRuntimeConfig } from "./rate-limit.constants";
 import { TooManyRequestsFilter } from "./too-many-requests.filter";
+import {
+  DEFAULT_RATE_LIMIT_STORE_TIMEOUT_MS,
+  ResilientStore,
+} from "./resilient-store";
+import { CircuitBreaker } from "../circuit-breaker";
+import { rateLimitStoreFailOpen } from "../../observability/metrics";
 
 // `RateLimiter`'s constructor throws `EmptyRulesException` if given zero
 // rules, so the module-level (global) config can't just be `rules: []`.
@@ -35,6 +41,10 @@ const GLOBAL_NOOP_LIMIT = 1_000_000;
  * `InMemoryStore` when `NODE_ENV === "test"`, so tests never depend on a
  * running Redis for rate-limit state (they may still need Redis for
  * whatever else they exercise — this only concerns the limiter).
+ *
+ * The Redis store is wrapped in `ResilientStore`: it fails open (allows the
+ * request) on timeout/error and behind a circuit breaker, because the global
+ * guard runs on every route and has no error handling of its own.
  */
 @Module({
   imports: [
@@ -54,6 +64,12 @@ const GLOBAL_NOOP_LIMIT = 1_000_000;
             window: configService.get<number>("OTP_REQUEST_IP_WINDOW_SEC")!,
             limit: configService.get<number>("OTP_REQUEST_IP_LIMIT")!,
           },
+          otpRequestIpHourly: {
+            window: configService.get<number>(
+              "OTP_REQUEST_IP_HOURLY_WINDOW_SEC",
+            )!,
+            limit: configService.get<number>("OTP_REQUEST_IP_HOURLY_LIMIT")!,
+          },
           otpRequestEmail: {
             window: configService.get<number>("OTP_REQUEST_EMAIL_WINDOW_SEC")!,
             limit: configService.get<number>("OTP_REQUEST_EMAIL_LIMIT")!,
@@ -71,7 +87,17 @@ const GLOBAL_NOOP_LIMIT = 1_000_000;
         return {
           store: isTest
             ? new InMemoryStore()
-            : new RedisStore(rateLimitRedisClient),
+            : new ResilientStore(
+                new RedisStore(rateLimitRedisClient),
+                new CircuitBreaker(Date.now),
+                {
+                  timeoutMs:
+                    configService.get<number>("RATE_LIMIT_STORE_TIMEOUT_MS") ??
+                    DEFAULT_RATE_LIMIT_STORE_TIMEOUT_MS,
+                  onFailOpen: (reason) =>
+                    rateLimitStoreFailOpen.add(1, { reason }),
+                },
+              ),
           rules: [
             {
               name: "global-noop",

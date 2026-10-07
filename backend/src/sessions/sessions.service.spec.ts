@@ -134,7 +134,11 @@ function fakeReminders() {
       (type: string, req?: number[]) => req ?? (type === "DND" ? [] : [60]),
     ),
     resolveUpdateTargets: jest.fn(),
-    replace: jest.fn().mockResolvedValue(undefined),
+    replace: jest
+      .fn()
+      .mockImplementation((_ids: string[], minutes: number[]) =>
+        Promise.resolve({ applied: minutes, skipped: [] }),
+      ),
     propagateSeries: jest.fn().mockResolvedValue(undefined),
     syncUser: jest.fn().mockResolvedValue(undefined),
   };

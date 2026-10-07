@@ -11,6 +11,7 @@ export type RateLimitStoreKind = "redis" | "memory";
 export interface RateLimitRuntimeConfig {
   storeKind: RateLimitStoreKind;
   otpRequestIp: RateLimitWindow;
+  otpRequestIpHourly: RateLimitWindow;
   otpRequestEmail: RateLimitWindow;
   otpVerifyIp: RateLimitWindow;
   otpVerifyEmail: RateLimitWindow;

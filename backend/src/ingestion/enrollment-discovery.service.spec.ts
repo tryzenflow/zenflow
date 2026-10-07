@@ -388,7 +388,12 @@ describe("EnrollmentDiscoveryService — syncPortal", () => {
       "int1",
       expect.objectContaining({ academicYear: "2026-2027", semester: "HK01" }),
       NOW,
+      // HK02's window opens a fortnight before it does; DKHP is not asked
+      // again until then.
+      expect.any(Date),
     );
+    const reopensAt = (markDiscovered.mock.calls as unknown[][])[0][3] as Date;
+    expect(reopensAt.getTime()).toBeGreaterThan(NOW.getTime());
   });
 
   it("writes the enrolment against the resolved term", async () => {

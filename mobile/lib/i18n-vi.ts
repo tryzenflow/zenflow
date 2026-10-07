@@ -123,7 +123,6 @@ export default {
   "Keep it": "Giữ nguyên",
   "LMS Assignment": "Bài tập LMS",
   Language: "Ngôn ngữ",
-  "Last sync failed": "Lần đồng bộ gần nhất thất bại",
   "Later sittings keep their dates but move to the new time.":
     "Các buổi sau giữ nguyên ngày và chuyển sang giờ mới.",
   "Leave a field blank to keep what's saved.":
@@ -224,6 +223,15 @@ export default {
   "Switch every undecided sitting to its alternative":
     "Chuyển các buổi chưa chọn sang giờ thay thế",
   "Sync failed": "Đồng bộ thất bại",
+  "Sync failing": "Đồng bộ đang lỗi",
+  "Sync failing · last synced {time}": "Đồng bộ đang lỗi · lần cuối {time}",
+  "Synced a moment ago. Try again in {count} min.":
+    "Vừa đồng bộ xong. Thử lại sau {count} phút.",
+  "Synced a moment ago. Try again shortly.":
+    "Vừa đồng bộ xong. Thử lại sau ít phút.",
+  "A sync is already running.": "Đang đồng bộ, vui lòng chờ.",
+  "Sync didn't finish. Check your account details and try again.":
+    "Đồng bộ chưa hoàn tất. Kiểm tra thông tin tài khoản rồi thử lại.",
   "Sync now": "Đồng bộ ngay",
   Tags: "Nhãn",
   "Tags group your tasks and sessions. We've suggested a few for students — tap to keep, add your own, rename them later.":
