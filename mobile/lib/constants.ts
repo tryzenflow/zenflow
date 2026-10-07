@@ -17,6 +17,7 @@ export const NAV_THEME = {
     primary: "#FF8E3E",
     // Orange for text/icons (AA on light surfaces); `primary` stays the fill.
     primaryText: "#B24800",
+    primaryForeground: "#2B1406",
     warning: "#825600",
     text: "#0F0D0A",
     mutedForeground: "#6E665C",
@@ -28,6 +29,7 @@ export const NAV_THEME = {
     notification: "#FF6467",
     primary: "#FF7A24",
     primaryText: "#FF7A24",
+    primaryForeground: "#2B1406",
     warning: "#F6B915",
     text: "#FBFAF8",
     mutedForeground: "#ACA397",

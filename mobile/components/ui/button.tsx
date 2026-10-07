@@ -20,7 +20,7 @@ const buttonVariants = cva(
       },
       size: {
         default: "h-10 px-4 py-2 native:h-12 native:px-5 native:py-3",
-        sm: "h-9 rounded-md px-3",
+        sm: "h-9 min-h-11 rounded-md px-3",
         lg: "h-11 rounded-md px-8 native:h-14",
         icon: "h-10 w-10",
       },
@@ -69,6 +69,8 @@ type ButtonProps = {
   testID?: string;
   accessible?: boolean;
   accessibilityLabel?: string;
+  accessibilityHint?: string;
+  accessibilityState?: { disabled?: boolean; busy?: boolean; selected?: boolean };
   hitSlop?: number | { top?: number; bottom?: number; left?: number; right?: number };
   delayLongPress?: number;
 } & VariantProps<typeof buttonVariants>;
