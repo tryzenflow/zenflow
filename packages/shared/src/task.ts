@@ -375,6 +375,12 @@ export type SeriesSession = Session & SeriesSittingProposal;
 export interface CreateSessionResponse extends Session, SlotProposalFields {
   /** Present only for a `TASK` series create — all N sessions, `sessionIndex` order. */
   sessions?: SeriesSession[];
+  /**
+   * Reminder leads (minutes) not stored for at least one targeted session
+   * because their fire time was already past or under a minute away. Omitted
+   * when nothing was skipped. Recurring series are never skipped.
+   */
+  skippedReminders?: number[];
 }
 
 /**
@@ -387,6 +393,12 @@ export interface UpdateSessionResponse extends Session, SlotProposalFields {
   sessions?: SeriesSession[];
   /** Ids left untouched by a `skipConflicting` update because their new landing slot conflicted. */
   skippedSessionIds?: string[];
+  /**
+   * Reminder leads (minutes) not stored for at least one targeted session
+   * because their fire time was already past or under a minute away. Omitted
+   * when nothing was skipped. Recurring series are never skipped.
+   */
+  skippedReminders?: number[];
 }
 export type SessionDetailResponse = Session;
 

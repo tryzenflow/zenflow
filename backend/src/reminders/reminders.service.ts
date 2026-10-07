@@ -1,8 +1,10 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   type OnApplicationBootstrap,
 } from "@nestjs/common";
 import { Cron, CronExpression, SchedulerRegistry } from "@nestjs/schedule";
@@ -16,7 +18,9 @@ import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { NotificationEvent } from "../notifications/types";
 import {
+  REMINDER_CATCH_UP_MS,
   buildReminderText,
+  isReminderTooLate,
   normalizeReminderMinutes,
   pickReminderStart,
   planReminder,
@@ -30,6 +34,21 @@ import { expandRrule, parseOccurrenceId } from "../scheduler/core/recurrence";
  */
 export const ARM_HORIZON_MS = 24 * 60 * 60 * 1000;
 const LOOKAHEAD_MS = ARM_HORIZON_MS + MAX_REMINDER_MINUTES * 60_000;
+
+/** Delivery jitter window: a uniform 5-10 s delay, never earlier. */
+export const REMINDER_JITTER_MIN_MS = 5_000;
+export const REMINDER_JITTER_MAX_MS = 10_000;
+
+/** Injection token for the jitter RNG (`() => [0, 1)`); defaults to `Math.random`. */
+export const REMINDER_RANDOM = Symbol("REMINDER_RANDOM");
+
+/** Result of {@link RemindersService.replace}. */
+export interface ReplaceRemindersResult {
+  /** Leads stored for every targeted session. */
+  applied: number[];
+  /** Leads dropped for at least one session (nominal time past / < 60 s away). */
+  skipped: number[];
+}
 
 export const reminderJobName = (id: string): string => `reminder:${id}`;
 
@@ -70,6 +89,9 @@ export class RemindersService implements OnApplicationBootstrap {
     private readonly prisma: PrismaService,
     private readonly registry: SchedulerRegistry,
     private readonly notifications: NotificationsService,
+    @Optional()
+    @Inject(REMINDER_RANDOM)
+    private readonly random: () => number = Math.random,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -123,14 +145,29 @@ export class RemindersService implements OnApplicationBootstrap {
 
   /**
    * Set the reminders of every session in `sessionIds` to `minutes` as a
-   * diff, keeping unchanged rows (and their `firedForStart`).
+   * diff, keeping unchanged rows (and their `firedForStart`). New rows whose
+   * nominal time is already past or under a minute away are not stored
+   * (rather than firing immediately); they are reported in `skipped`.
+   * Recurring series are exempt: their later occurrences are still ahead.
    */
-  async replace(sessionIds: string[], minutes: number[]): Promise<void> {
-    if (sessionIds.length === 0) return;
+  async replace(
+    sessionIds: string[],
+    minutes: number[],
+    now: Date = new Date(),
+  ): Promise<ReplaceRemindersResult> {
+    if (sessionIds.length === 0) return { applied: minutes, skipped: [] };
     const wanted = new Set(minutes);
     const existing = await this.prisma.sessionReminder.findMany({
       where: { sessionId: { in: sessionIds } },
       select: { id: true, sessionId: true, remindBeforeMinutes: true },
+    });
+    const sessions = await this.prisma.session.findMany({
+      where: { id: { in: sessionIds } },
+      select: {
+        id: true,
+        scheduledStartTime: true,
+        series: { select: { rrule: true } },
+      },
     });
     const stale = existing.filter((r) => !wanted.has(r.remindBeforeMinutes));
     const kept = new Set(
@@ -138,18 +175,38 @@ export class RemindersService implements OnApplicationBootstrap {
         .filter((r) => wanted.has(r.remindBeforeMinutes))
         .map((r) => `${r.sessionId}:${r.remindBeforeMinutes}`),
     );
+    const startOf = new Map<string, Date | null>(
+      sessions.map((s): [string, Date | null] => [
+        s.id,
+        s.series?.rrule ? null : s.scheduledStartTime,
+      ]),
+    );
+    const skipped = new Set<number>();
     const missing = sessionIds.flatMap((sessionId) =>
       minutes
         .filter((m) => !kept.has(`${sessionId}:${m}`))
+        .filter((m) => {
+          const start = startOf.get(sessionId);
+          if (start && isReminderTooLate(start, m, now)) {
+            skipped.add(m);
+            return false;
+          }
+          return true;
+        })
         .map((remindBeforeMinutes) => ({ sessionId, remindBeforeMinutes })),
     );
-    if (stale.length === 0 && missing.length === 0) return;
+    const result = {
+      applied: minutes.filter((m) => !skipped.has(m)),
+      skipped: minutes.filter((m) => skipped.has(m)),
+    };
+    if (stale.length === 0 && missing.length === 0) return result;
     await this.prisma.$transaction([
       this.prisma.sessionReminder.deleteMany({
         where: { id: { in: stale.map((r) => r.id) } },
       }),
       this.prisma.sessionReminder.createMany({ data: missing }),
     ]);
+    return result;
   }
 
   /**
@@ -282,14 +339,20 @@ export class RemindersService implements OnApplicationBootstrap {
     return [s.scheduledStartTime];
   }
 
-  private planFor(row: ReminderRow, now: Date) {
+  private planFor(
+    row: ReminderRow,
+    now: Date,
+    catchUpMs: number = REMINDER_CATCH_UP_MS,
+  ) {
     if (row.session.type === "DND") return null;
     const start = pickReminderStart(
       this.candidateStarts(row, now),
       row.firedForStart,
       now,
     );
-    return start ? planReminder(start, row.remindBeforeMinutes, now) : null;
+    return start
+      ? planReminder(start, row.remindBeforeMinutes, now, catchUpMs)
+      : null;
   }
 
   private arm(
@@ -304,11 +367,25 @@ export class RemindersService implements OnApplicationBootstrap {
     this.cancel(id);
     const timer = setTimeout(
       () => void this.fire(id, startsAt.getTime()),
-      Math.max(0, fireAt.getTime() - now.getTime()),
+      this.delayMs(startsAt, fireAt, now),
     );
     timer.unref?.();
     this.registry.addTimeout(reminderJobName(id), timer);
     this.armed.set(id, { userId, startsAt: startsAt.getTime() });
+  }
+
+  /**
+   * Timer delay: the time until `fireAt` plus a uniform 5-10 s jitter (spreads
+   * push bursts), capped so delivery never lands after the session starts.
+   */
+  private delayMs(startsAt: Date, fireAt: Date, now: Date): number {
+    const jitter =
+      REMINDER_JITTER_MIN_MS +
+      this.random() * (REMINDER_JITTER_MAX_MS - REMINDER_JITTER_MIN_MS);
+    const base = Math.max(0, fireAt.getTime() - now.getTime());
+    // 1 s margin: at the start instant the session counts as started.
+    const untilStart = Math.max(0, startsAt.getTime() - now.getTime() - 1_000);
+    return Math.min(base + jitter, untilStart);
   }
 
   /** Remove the timer for one reminder (no-op if absent). */
@@ -332,7 +409,12 @@ export class RemindersService implements OnApplicationBootstrap {
         include: WITH_SESSION,
       });
       if (!row) return;
-      const plan = this.planFor(row, now);
+      // Allow for the arming jitter on top of the catch-up window.
+      const plan = this.planFor(
+        row,
+        now,
+        REMINDER_CATCH_UP_MS + REMINDER_JITTER_MAX_MS,
+      );
       if (!plan) return; // moved into the past / deleted occurrence / DND
       if (plan.startsAt.getTime() !== armedStart) {
         // Session moved since arming: re-arm for the new start, don't fire.

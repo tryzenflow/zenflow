@@ -421,7 +421,9 @@ Full sequence diagrams for create/deadline-edit/reward/resize flows:
 - **Session reminders** (`reminders/`): one-shot `SchedulerRegistry` timers, re-armed on
   every create/update/delete via `syncUser()`; a 5-min sweep re-arms anything firing within
   24h (the `setTimeout` overflow guard) and claims fired occurrences via `firedForStart` so
-  restarts don't double-send.
+  restarts don't double-send. `replace()` skips a new reminder whose time is past or < 60 s
+  away (responses list those leads in `skippedReminders`); a reminder missed by <= 2 min still
+  fires after a restart; `arm()` adds a 5-10 s jitter (`REMINDER_RANDOM`, injectable).
 
 ### Trace it in the source
 

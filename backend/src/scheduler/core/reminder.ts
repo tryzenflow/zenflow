@@ -36,20 +36,41 @@ export function pickReminderStart(
   return null;
 }
 
+/** A reminder set on create/edit must fire at least this far in the future. */
+export const MIN_REMINDER_LEAD_MS = MIN_MS;
+/** A reminder missed (e.g. by a restart) by at most this much still fires. */
+export const REMINDER_CATCH_UP_MS = 2 * MIN_MS;
+
+/**
+ * Create/edit path: is a reminder `remindBeforeMinutes` before `startsAt` too
+ * late to be worth storing? True when its nominal instant is already past or
+ * within {@link MIN_REMINDER_LEAD_MS} of `now`.
+ */
+export function isReminderTooLate(
+  startsAt: Date,
+  remindBeforeMinutes: number,
+  now: Date,
+): boolean {
+  const nominal = startsAt.getTime() - remindBeforeMinutes * MIN_MS;
+  return nominal - now.getTime() < MIN_REMINDER_LEAD_MS;
+}
+
 /**
  * When to fire a reminder for `startsAt`. The nominal instant is
- * `startsAt - remindBeforeMinutes`; if that is already past but the session has
- * not started (the deadline-supersedes-reminder rule — a late-set "1 hour
- * before" for something starting in 20 min), it fires right now instead. A
- * session that already started yields `null`.
+ * `startsAt - remindBeforeMinutes`. If it is still ahead, that is the fire
+ * time. If it was missed by at most `catchUpMs` (restart / sweep catch-up) it
+ * fires right now; anything older is dropped (`null`), as is a session that
+ * already started.
  */
 export function planReminder(
   startsAt: Date,
   remindBeforeMinutes: number,
   now: Date,
+  catchUpMs: number = REMINDER_CATCH_UP_MS,
 ): ReminderPlan | null {
   if (startsAt.getTime() <= now.getTime()) return null;
   const nominal = startsAt.getTime() - remindBeforeMinutes * MIN_MS;
+  if (now.getTime() - nominal > catchUpMs) return null;
   return {
     startsAt,
     fireAt: new Date(Math.max(nominal, now.getTime())),
