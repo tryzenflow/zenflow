@@ -1,6 +1,7 @@
 import { listSessions } from "@/api/tasks";
 import { useLanguage } from "@/hooks/use-language";
 import { NAV_THEME } from "@/lib/constants";
+import type { DayStatus } from "@/lib/day-status";
 import { fetchDaySessions, isDayCacheFresh } from "@/lib/session-cache";
 import type { PeekBlock } from "@/lib/peek";
 import { useColorScheme } from "@/lib/useColorScheme";
@@ -44,6 +45,7 @@ import Animated, {
   useAnimatedReaction,
   useAnimatedStyle,
   useDerivedValue,
+  useReducedMotion,
   useSharedValue,
   withTiming,
   type SharedValue,
@@ -58,10 +60,13 @@ import { PEEK_STRIP_W, PeekStrip } from "./week-peek-strip";
 
 /** `withTiming` config for every settle snap (and snap-back) after a swipe
  * ends — `SETTLE_MS` is shared with the Week header so the two land together. */
-const SETTLE = {
+const SETTLE_ANIMATED = {
   duration: SETTLE_MS,
   easing: Easing.out(Easing.cubic),
 } as const;
+/** Reduce Motion: every slide becomes an instant cut (completion callbacks
+ * still fire, so the window re-centres exactly as it does after a slide). */
+const SETTLE_INSTANT = { duration: 0 } as const;
 
 /** Day-navigation edge-hold: while a horizontal *navigation* drag (not a block
  * drag) is held with the finger inside `NAV_EDGE_ZONE` of a screen edge, the
@@ -142,6 +147,8 @@ interface WeekPagerProps {
   /** Session id to pulse on the focused day — a teleport target. Forwarded to
    * the active `DayTimeline` only. */
   flashSessionId?: string | null;
+  /** Today's "next up" / "done" status, from the active day (see `DayTimeline`). */
+  onStatusChange?: (status: DayStatus) => void;
 }
 
 /** Imperative surface the Week header drives during its own week swipe — see
@@ -202,12 +209,15 @@ function WeekPagerImpl(
     onRequestScopedUpdate,
     onRequestSlotPick,
     flashSessionId = null,
+    onStatusChange,
   }: WeekPagerProps,
   ref: ForwardedRef<WeekPagerHandle>,
 ) {
   useLanguage();
   const { width } = useWindowDimensions();
   const { isDarkColorScheme } = useColorScheme();
+  const reduceMotion = useReducedMotion();
+  const SETTLE = reduceMotion ? SETTLE_INSTANT : SETTLE_ANIMATED;
   const borderColor = isDarkColorScheme
     ? NAV_THEME.dark.border
     : NAV_THEME.light.border;
@@ -479,7 +489,7 @@ function WeekPagerImpl(
         runOnJS(finishHeaderWeekRoles)(1 + dir);
       });
     },
-    [toSV, draggingSV, progress, width, finishHeaderWeekRoles],
+    [toSV, draggingSV, progress, width, finishHeaderWeekRoles, SETTLE],
   );
 
   // Header week-swipe released below threshold, or cancelled: collapse the
@@ -528,7 +538,7 @@ function WeekPagerImpl(
       if (animated) {
         progress.value = withTiming(
           -index * width,
-          { duration: SETTLE_MS, easing: Easing.out(Easing.cubic) },
+          SETTLE,
           (finished) => {
             if (!finished) {
               runOnJS(releaseSettle)();
@@ -541,7 +551,7 @@ function WeekPagerImpl(
         progress.value = -index * width;
       }
     },
-    [progress, width, releaseSettle],
+    [progress, width, releaseSettle, SETTLE],
   );
 
   // Animates the strip from the current focus onto `target` with the
@@ -556,7 +566,7 @@ function WeekPagerImpl(
       toSV.value = target;
       progress.value = withTiming(
         -target * width,
-        { duration: SETTLE_MS, easing: Easing.out(Easing.cubic) },
+        SETTLE,
         (finished) => {
           if (!finished) {
             runOnJS(releaseSettle)();
@@ -566,7 +576,16 @@ function WeekPagerImpl(
         },
       );
     },
-    [focusedIndex, fromSV, toSV, progress, settleRoles, width, releaseSettle],
+    [
+      focusedIndex,
+      fromSV,
+      toSV,
+      progress,
+      settleRoles,
+      width,
+      releaseSettle,
+      SETTLE,
+    ],
   );
 
   // External focus change (WeekHeader chip tap): scroll to the day if it's in
@@ -665,6 +684,7 @@ function WeekPagerImpl(
       progress,
       width,
       finishSlideWeek,
+      SETTLE,
     ],
   );
   const settleOn = useCallback(
@@ -854,10 +874,7 @@ function WeekPagerImpl(
             // The edge-hold already committed the focus and kept the window
             // centred — just ease `progress` home and clear nav state.
             runOnJS(endNavHold)();
-            progress.value = withTiming(-focusedIndex * width, {
-              duration: SETTLE_MS,
-              easing: Easing.out(Easing.cubic),
-            });
+            progress.value = withTiming(-focusedIndex * width, SETTLE);
             return;
           }
           runOnJS(endNavHold)();
@@ -880,10 +897,7 @@ function WeekPagerImpl(
           // glitch back.
           if (didSettleSV.value === 0) {
             draggingSV.value = 0;
-            progress.value = withTiming(-focusedIndex * width, {
-              duration: SETTLE_MS,
-              easing: Easing.out(Easing.cubic),
-            });
+            progress.value = withTiming(-focusedIndex * width, SETTLE);
           }
         }),
     [
@@ -899,6 +913,7 @@ function WeekPagerImpl(
       navEdgeSV,
       navRebaseXSV,
       navTranslationXSV,
+      SETTLE,
     ],
   );
 
@@ -942,12 +957,12 @@ function WeekPagerImpl(
   // finger (`armNavEdge`). No longer a block-drag affordance.
   const leftGlowStyle = useAnimatedStyle(() => ({
     opacity: withTiming(armedEdgeSV.value === "left" ? 1 : 0, {
-      duration: 140,
+      duration: reduceMotion ? 0 : 140,
     }),
   }));
   const rightGlowStyle = useAnimatedStyle(() => ({
     opacity: withTiming(armedEdgeSV.value === "right" ? 1 : 0, {
-      duration: 140,
+      duration: reduceMotion ? 0 : 140,
     }),
   }));
 
@@ -958,7 +973,7 @@ function WeekPagerImpl(
     const atRest = Math.abs(progress.value + width) < 2;
     const headerDragging = Math.abs(headerStripSV.value + width) > 1;
     const idle = atRest && !dragActiveSV.value && !headerDragging;
-    return { opacity: withTiming(idle ? 1 : 0, { duration: 120 }) };
+    return { opacity: withTiming(idle ? 1 : 0, { duration: reduceMotion ? 0 : 120 }) };
   });
 
   // Seam shadow strip: an explicit gradient drawn at the incoming page's
@@ -1027,6 +1042,7 @@ function WeekPagerImpl(
                   rightInset={PEEK_STRIP_W}
                   onStateChange={active ? onActiveStateChange : undefined}
                   flashSessionId={active ? flashSessionId : null}
+                  onStatusChange={onStatusChange}
                 />
               </PagerPage>
             );

@@ -4,9 +4,11 @@ import { useLanguage } from "@/hooks/use-language";
 import { format, formatTitle } from "@/lib/i18n";
 import { Text } from "@/components/ui/text";
 import { useNow } from "@/hooks/use-now";
+import { FONT_SCALE_CAP } from "@/lib/constants";
 import { SESSION_TYPE_META, SESSION_TYPE_ORDER } from "@zenflow/core";
 import {
   dateKey,
+  shiftDays,
   shiftWeek,
   weekDays,
   weekHeaderBlocks,
@@ -35,6 +37,7 @@ import Animated, {
   clamp,
   runOnJS,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withTiming,
   type SharedValue,
@@ -46,10 +49,12 @@ const WEEK_SWIPE_VELOCITY = 500;
 
 /** `withTiming` config for the week slide — `SETTLE_MS` is shared with the
  * pager (`week-pager-math.ts`) so header and pager land on the same frame. */
-const SETTLE = {
+const SETTLE_ANIMATED = {
   duration: SETTLE_MS,
   easing: Easing.out(Easing.cubic),
 } as const;
+/** Reduce Motion: the strip jumps instead of sliding (same callbacks fire). */
+const SETTLE_INSTANT = { duration: 0 } as const;
 
 interface WeekHeaderProps {
   /** The *committed* focused day — anchors the chip carousel's week block and
@@ -129,6 +134,7 @@ function WeekHeaderImpl(
   const now = useNow();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const SETTLE = useReducedMotion() ? SETTLE_INSTANT : SETTLE_ANIMATED;
 
   // What the title / range / highlight read. The carousel and anchor logic
   // stay on `focusedDate` so they never re-derive mid-swipe.
@@ -267,6 +273,7 @@ function WeekHeaderImpl(
       progressSV,
       weekModeSV,
       didCommitSV,
+      SETTLE,
     ],
   );
 
@@ -301,6 +308,8 @@ function WeekHeaderImpl(
       <Pressable
         key={key}
         onPress={() => onSelectDay(day)}
+        accessibilityRole="button"
+        accessibilityState={{ selected: isFocused }}
         className={`flex-1 items-center gap-1 rounded-xl py-1.5 ${
           isFocused ? "bg-muted" : ""
         }`}
@@ -312,7 +321,10 @@ function WeekHeaderImpl(
             : ""
         }`}
       >
-        <Text className="text-[10.5px] font-semibold text-muted-foreground">
+        <Text
+          maxFontSizeMultiplier={FONT_SCALE_CAP.chrome}
+          className="text-label font-semibold text-muted-foreground"
+        >
           {formatTitle(day, "EEE")}
         </Text>
         <View
@@ -321,6 +333,7 @@ function WeekHeaderImpl(
           }`}
         >
           <Text
+            maxFontSizeMultiplier={FONT_SCALE_CAP.chrome}
             className={`text-base font-semibold ${
               isToday ? "text-primary-foreground" : "text-foreground"
             }`}
@@ -348,11 +361,40 @@ function WeekHeaderImpl(
         className="overflow-hidden border-b border-border bg-background pb-2"
         style={{ paddingTop: insets.top + 10 }}
       >
-        <View className="px-4 pb-2">
+        {/* The swipe has a non-gesture twin: screen readers adjust the day with
+            increment/decrement, and get week jumps as custom actions. */}
+        <View
+          accessible
+          accessibilityRole="adjustable"
+          accessibilityLabel={`${formatTitle(shownDate, "MMMM yyyy")}, ${format(titleDays[0], "MMM d")} – ${format(titleDays[6], "MMM d")}`}
+          accessibilityValue={{ text: format(shownDate, "EEEE, MMMM d") }}
+          accessibilityHint={t("Swipe up or down to change day")}
+          accessibilityActions={[
+            { name: "increment", label: t("Next day") },
+            { name: "decrement", label: t("Previous day") },
+            { name: "nextWeek", label: t("Next week") },
+            { name: "prevWeek", label: t("Previous week") },
+          ]}
+          onAccessibilityAction={(e) => {
+            const base = latest.current.focusedDate;
+            const next =
+              e.nativeEvent.actionName === "increment"
+                ? shiftDays(base, 1)
+                : e.nativeEvent.actionName === "decrement"
+                  ? shiftDays(base, -1)
+                  : e.nativeEvent.actionName === "nextWeek"
+                    ? shiftWeek(base, 1)
+                    : e.nativeEvent.actionName === "prevWeek"
+                      ? shiftWeek(base, -1)
+                      : null;
+            if (next) onSelectDay(next);
+          }}
+          className="px-4 pb-2"
+        >
           <Text className="text-xl font-bold tracking-tight">
             {formatTitle(shownDate, "MMMM yyyy")}
           </Text>
-          <Text className="mt-px text-[11.5px] font-medium text-muted-foreground">
+          <Text className="mt-px text-xs font-medium text-muted-foreground">
             {format(titleDays[0], "MMM d")} – {format(titleDays[6], "MMM d")}
           </Text>
         </View>

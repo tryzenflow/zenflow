@@ -1,3 +1,4 @@
+import { FONT_SCALE_CAP } from "@/lib/constants";
 import { getLanguage } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { Text } from "@/components/ui/text";
@@ -33,7 +34,10 @@ export function TimeGutter({
           className="items-end justify-start pr-2 pt-0"
         >
           {(hour !== 0 || showZeroLabel) && (
-            <Text className="text-[10px] font-bold text-muted-foreground">
+            <Text
+              maxFontSizeMultiplier={FONT_SCALE_CAP.grid}
+              className="text-label font-bold text-muted-foreground"
+            >
               {getLanguage() === "vi"
                 ? `${String(hour).padStart(2, "0")}:00`
                 : minutesToTime(hour * 60)}
