@@ -64,7 +64,8 @@ Representative files:
 - `mobile/package.json`
 - `mobile/maestro/config.yaml`
 - `mobile/maestro/flows/smoke.yaml`
-- `mobile/maestro/flows/login-otp.yaml`
+- `mobile/maestro/flows/login-request.yaml`
+- `mobile/maestro/flows/login-verify.yaml`
 - `mobile/maestro/flows/onboarding.yaml`
 - `mobile/maestro/flows/task-create.yaml`
 - `mobile/maestro/flows/task-edit.yaml`
@@ -117,16 +118,19 @@ Work (completed):
 
 - Added test-only backend endpoints behind `NODE_ENV === "test"` guard.
 - `POST /test/reset` truncates all data tables in FK-safe order.
-- `POST /test/seed-task` creates sessions for the authenticated user.
+- `POST /test/seed-task` creates sessions for the authenticated user,
+  with optional `scheduledStartTime` to pin calendar placement
+  (seeded rows bypass the engine, so unpinned tasks render nowhere).
 - `reset-test-data.js` calls the reset endpoint + clears MailHog.
 - `seed-task.js` authenticates via OTP, then seeds a task via the test endpoint.
+- `run-suite.js` orchestrates reset → OTP request → MailHog fetch → seed → suite.
 
 Validation:
 
 ```bash
 pnpm --filter backend typecheck   # no new errors from src/test/
 node mobile/maestro/scripts/reset-test-data.js
-E2E_EMAIL=mobile-e2e+test@example.test node mobile/maestro/scripts/seed-task.js "E2E Seeded Task" TASK 2025-01-15 60
+E2E_EMAIL=mobile-e2e+test@example.test node mobile/maestro/scripts/seed-task.js "E2E Seeded Task" TASK 2026-10-08T00:00:00.000Z 60 1 2026-10-07T05:00:00.000Z
 ```
 
 ### Commit 4 — `ci: add mobile e2e Android workflow` ✅ DONE
@@ -263,7 +267,8 @@ mobile/maestro/
 ├── config.yaml
 ├── flows/
 │   ├── smoke.yaml
-│   ├── login-otp.yaml
+│   ├── login-request.yaml
+│   ├── login-verify.yaml
 │   ├── onboarding.yaml
 │   ├── task-create.yaml
 │   ├── task-edit.yaml
@@ -322,22 +327,23 @@ pnpm --filter mobile test
 Planned command model after Maestro is added:
 
 ```bash
-# P0 smoke suite
+# P0 smoke suite (runner owns OTP + seeds — the only supported entry)
 pnpm --filter mobile test:e2e:smoke
 
 # Platform-specific smoke runs
 pnpm --filter mobile test:e2e:android
 pnpm --filter mobile test:e2e:ios
 
-# One flow while developing
-pnpm --filter mobile test:e2e:flow mobile/maestro/flows/login-otp.yaml
+# One flow while developing (only AFTER run-suite logged in + seeded,
+# with E2E_OTP/E2E_TODAY exported — smoke.yaml itself starts at verify)
+pnpm --filter mobile test:e2e:flow mobile/maestro/flows/calendar-week.yaml
 ```
 
-Raw Maestro examples for operators:
+Raw Maestro examples for operators (same logged-in + seeded precondition):
 
 ```bash
-maestro test mobile/maestro/flows/smoke.yaml
-maestro test mobile/maestro/flows/login-otp.yaml
+maestro test mobile/maestro/flows/calendar-week.yaml
+maestro test mobile/maestro/flows/login-request.yaml
 ```
 
 Document expected local run sequence:
