@@ -500,6 +500,11 @@ export default function WeekScreen() {
       />
 
       <View className="flex-1" style={{ paddingBottom: tabBarOverlay }}>
+        <DayStatusRow
+          status={dayStatus}
+          tz={tz}
+          onOpenSession={handleSessionPress}
+        />
         <WeekPager
           ref={pagerRef}
           focusedDate={focusedDate}
@@ -518,11 +523,6 @@ export default function WeekScreen() {
           onRequestScopedUpdate={handleRequestScopedUpdate}
           onRequestSlotPick={handleRequestSlotPick}
           flashSessionId={flashId}
-        />
-        <DayStatusRow
-          status={dayStatus}
-          tz={tz}
-          onOpenSession={handleSessionPress}
         />
       </View>
 

@@ -15,8 +15,8 @@ import { Pressable, View } from "react-native";
 const SOON_MINUTES = 90;
 
 /**
- * Two quiet chips floating over the top of the timeline (no layout shift when
- * they come and go): today's next session (or a calm "done for today"), and a
+ * Two quiet chips in a row above the timeline (in flow, so they never cover
+ * the grid or its hour labels): today's next session (or a calm "done for today"), and a
  * DLU sync note that only appears when sync is stale or failing.
  */
 export function DayStatusRow({
@@ -91,10 +91,9 @@ export function DayStatusRow({
   if (!left && !syncText) return null;
   return (
     <View
-      pointerEvents="box-none"
-      className="absolute inset-x-0 top-2 z-10 flex-row items-center justify-between gap-2 px-3"
+      className="flex-row items-center justify-between gap-2 px-3 pb-1.5 pt-1.5"
     >
-      <View pointerEvents="box-none" className="shrink">
+      <View className="shrink">
         {left}
       </View>
       {syncText ? (

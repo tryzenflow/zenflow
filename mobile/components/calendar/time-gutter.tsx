@@ -1,4 +1,3 @@
-import { FONT_SCALE_CAP } from "@/lib/constants";
 import { getLanguage } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { Text } from "@/components/ui/text";
@@ -35,7 +34,9 @@ export function TimeGutter({
         >
           {(hour !== 0 || showZeroLabel) && (
             <Text
-              maxFontSizeMultiplier={FONT_SCALE_CAP.grid}
+              // The gutter is a fixed-width column: never scale or wrap the hour.
+              maxFontSizeMultiplier={1}
+              numberOfLines={1}
               className="text-label font-bold text-muted-foreground"
             >
               {getLanguage() === "vi"
