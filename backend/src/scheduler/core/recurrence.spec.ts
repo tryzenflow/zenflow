@@ -237,12 +237,7 @@ describe("remapExdatesForTimezone", () => {
       new Date("2026-04-30T00:00:00Z"),
     ];
     const rule = "FREQ=DAILY";
-    const [, second] = expandRrule(
-      rule,
-      dtstart,
-      ...range,
-      "Asia/Ho_Chi_Minh",
-    );
+    const [, second] = expandRrule(rule, dtstart, ...range, "Asia/Ho_Chi_Minh");
     const remapped = remapExdatesForTimezone(
       [second.toISOString()],
       dtstart,
