@@ -282,9 +282,9 @@ export default function LoginScreen() {
             <Text className="text-[22px] font-bold tracking-[-0.02em]">
               {stage === "email" ? t("Login to Zenflow") : t("Enter your code")}
             </Text>
-            <Text className="text-[14px] text-muted-foreground">
+            <Text className="text-[14px] text-center text-muted-foreground">
               {stage === "email"
-                ? t("A focus-first planner that schedules for you.")
+                ? t("Tell Zenflow what needs doing. It finds the time.")
                 : t("Sent to {email}", { email: hideEmail(email) })}
             </Text>
           </View>

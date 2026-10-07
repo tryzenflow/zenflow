@@ -2,8 +2,8 @@
 export default {
   "Auto-scheduled": "Tự động xếp lịch",
   "Continue · {count} tags": "Tiếp tục · {count} nhãn",
-  "A focus-first planner that schedules for you.":
-    "Ứng dụng lập kế hoạch giúp bạn tập trung và tự động xếp lịch.",
+  "Tell Zenflow what needs doing. It finds the time.":
+    "Bạn nói việc cần làm, Zenflow tìm thời gian phù hợp.",
   Account: "Tài khoản",
   "Accept conflicts": "Chấp nhận trùng lịch",
   "Accept late deadline": "Chấp nhận quá hạn",
