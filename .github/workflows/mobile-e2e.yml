@@ -1,4 +1,4 @@
-name: Mobile E2E (Android)
+name: Mobile E2E (Maestro)
 
 # Nightly + release branch + manual trigger.
 # Not on every PR — the emulator + dev-client build is expensive;
@@ -28,17 +28,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
-    services:
-      redis:
-        image: redis:8.8.0-alpine
-        ports: ["6379:6379"]
-      redis-ratelimit:
-        image: redis:8.8.0-alpine
-        ports: ["6380:6379"]
-      mailhog:
-        image: mailhog/mailhog:v1.0.1
-        ports: ["1025:1025", "8025:8025"]
-
     steps:
       - uses: actions/checkout@v4
 
@@ -57,24 +46,30 @@ jobs:
         if: steps.flows.outputs.present == 'true'
 
       # ── Backend test stack ────────────────────────────────────────────
+      # compose.dev.yml owns Postgres, Redis ×2, MailHog and MinIO (bandit is
+      # skipped — the backend self-disables without BANDIT_SERVICE_URL).
+      # It reads per-service env from backend/.env.dev, so mirror the
+      # generated .env.test there. Ports must match dev.yml's mapping.
       - name: Generate throwaway .env.test
         if: steps.flows.outputs.present == 'true'
-        run: .github/scripts/write-test-env.sh backend/.env.test
+        run: |
+          PG_HOST_PORT=5432 S3_HOST_PORT=9000 .github/scripts/write-test-env.sh backend/.env.test
+          cp backend/.env.test backend/.env.dev
 
-      - name: Start Postgres + object storage
+      - name: Start backend services
         if: steps.flows.outputs.present == 'true'
         working-directory: backend
-        run: docker compose -f compose.test.yml up -d
+        run: docker compose -f compose.dev.yml up -d postgres redis redis-ratelimit mail storage
 
       - name: Wait for Postgres
         if: steps.flows.outputs.present == 'true'
         working-directory: backend
         run: |
           for i in $(seq 1 30); do
-            docker exec zenflow-test-db pg_isready -U ci -d zenflow-test && exit 0
+            docker exec zenflow-db pg_isready -U ci -d zenflow-test && exit 0
             sleep 2
           done
-          docker compose -f compose.test.yml logs postgres
+          docker compose -f compose.dev.yml logs postgres
           exit 1
 
       - name: Apply migrations
@@ -236,19 +231,22 @@ jobs:
       - name: Dump compose logs on failure
         if: failure()
         working-directory: backend
-        run: docker compose -f compose.test.yml logs --no-color
+        run: docker compose -f compose.dev.yml logs --no-color
 
       - name: Tear down
         if: always()
         working-directory: backend
-        run: docker compose -f compose.test.yml down -v
+        run: docker compose -f compose.dev.yml down -v
 
   # ═══════════════════════════════════════════════════════════════════════
   # iOS E2E (macos-latest)
   # ═══════════════════════════════════════════════════════════════════════
-  # macOS runners lack Docker, so we install Postgres/Redis/MailHog via
-  # Homebrew and run services natively. MinIO is replaced with local
-  # filesystem storage (S3_ENDPOINT pointed at a local mock).
+  # macOS runners have no Docker host, so this job starts one with Colima
+  # (Lima VM, Rosetta enabled for the amd64-only mailhog image) and then
+  # follows the exact same backend setup as Android: backend/compose.dev.yml
+  # (Postgres, Redis ×2, MailHog, MinIO — bandit skipped) + the shared
+  # write-test-env.sh generator. The only iOS-specific values are the host
+  # ports, which must match compose.dev.yml's mapping (5432/9000).
   # ═══════════════════════════════════════════════════════════════════════
   ios-e2e:
     name: iOS smoke (Maestro)
@@ -272,63 +270,40 @@ jobs:
       - uses: ./.github/actions/setup
         if: steps.flows.outputs.present == 'true'
 
-      # ── Native services via Homebrew ──────────────────────────────────
-      - name: Install and start Postgres + Redis + MailHog
+      # ── Docker host via Colima ────────────────────────────────────────
+      - name: Start Colima
         if: steps.flows.outputs.present == 'true'
         run: |
-          brew install postgresql@17 redis mailhog minio/stable/minio
+          brew install colima docker docker-compose
+          # Rosetta keeps the amd64-only mailhog image runnable on arm64.
+          colima start --vm-type=vz --vz-rosetta --memory 8 --cpu 4
+          # v1 docker-compose reads DOCKER_HOST (not docker contexts), so
+          # export it for all later steps; the v2 CLI uses the context.
+          echo "DOCKER_HOST=unix://${HOME}/.colima/default/docker.sock" >> "$GITHUB_ENV"
+          docker info
 
-          # Postgres
-          brew services start postgresql@17
-          for i in $(seq 1 30); do pg_isready && break; sleep 2; done
-          createuser -s ci 2>/dev/null || true
-          createdb -U ci zenflow-test 2>/dev/null || true
-
-          # Redis (main cache on 6379)
-          redis-server --port 6379 --daemonize yes
-          # Redis (rate-limit on 6380)
-          redis-server --port 6380 --daemonize yes
-
-          # MailHog
-          mailhog &
-          sleep 2
-
-          # MinIO (object storage)
-          mkdir -p /tmp/minio-data/zenflow-test
-          MINIO_ROOT_USER=ci MINIO_ROOT_PASSWORD=ci-secret-key \
-            minio server /tmp/minio-data --address :9010 &
-          sleep 2
-
-      - name: Generate .env.test for macOS
+      # ── Backend test stack (same compose file as Android) ─────────────
+      - name: Generate throwaway .env.test
         if: steps.flows.outputs.present == 'true'
         run: |
-          cat > backend/.env.test <<'ENV'
-          POSTGRES_USER=ci
-          POSTGRES_PASSWORD=ci
-          POSTGRES_DB=zenflow-test
-          DATABASE_URL=postgresql://ci@localhost:5432/zenflow-test?schema=public
-          CACHE_URL=redis://localhost:6379
-          RATE_LIMIT_CACHE_URL=redis://localhost:6380
-          CORS_ORIGIN=http://localhost:5173
-          MAIL_TRANSPORT=smtp://localhost:1025
-          MAIL_FROM=noreply@example.com
-          SESSION_SECRET=ci-session-secret-for-ios-e2e-testing
-          FILE_URL_SECRET=ci-file-url-secret-for-ios-e2e-testing
-          COOKIE_SECURE=false
-          COOKIE_SAMESITE=lax
-          MASTER_LMS_ENCRYPTION_KEY_V1=ci-lms-key-placeholder-32-chars-xx
-          MASTER_PORTAL_ENCRYPTION_KEY_V1=ci-portal-key-placeholder-32-chrs
-          PORTAL_API_KEY=ci-portal-key
-          S3_ENDPOINT=http://localhost:9010
-          S3_REGION=us-east-1
-          S3_ACCESS_KEY_ID=ci
-          S3_SECRET_ACCESS_KEY=ci-secret-key
-          S3_BUCKET=zenflow-test
-          INGESTION_ENABLED=false
-          INGESTION_REQUEST_DELAY_MS=0
-          OTEL_SDK_DISABLED=true
-          NODE_ENV=test
-          ENV
+          PG_HOST_PORT=5432 S3_HOST_PORT=9000 .github/scripts/write-test-env.sh backend/.env.test
+          cp backend/.env.test backend/.env.dev
+
+      - name: Start backend services
+        if: steps.flows.outputs.present == 'true'
+        working-directory: backend
+        run: docker-compose -f compose.dev.yml up -d postgres redis redis-ratelimit mail storage
+
+      - name: Wait for Postgres
+        if: steps.flows.outputs.present == 'true'
+        working-directory: backend
+        run: |
+          for i in $(seq 1 30); do
+            docker exec zenflow-db pg_isready -U ci -d zenflow-test && exit 0
+            sleep 2
+          done
+          docker-compose -f compose.dev.yml logs postgres
+          exit 1
 
       - name: Apply migrations
         if: steps.flows.outputs.present == 'true'
@@ -450,3 +425,16 @@ jobs:
           path: mobile/maestro-report.xml
           if-no-files-found: ignore
           retention-days: 7
+
+      # ── Teardown ──────────────────────────────────────────────────────
+      - name: Dump compose logs on failure
+        if: failure()
+        working-directory: backend
+        run: docker-compose -f compose.dev.yml logs --no-color
+
+      - name: Tear down
+        if: always()
+        working-directory: backend
+        run: |
+          docker-compose -f compose.dev.yml down -v
+          colima stop
