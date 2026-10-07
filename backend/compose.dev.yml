@@ -33,8 +33,6 @@ services:
     build: ../services/bandit
     ports:
       - "8100:8000"
-    environment:
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     networks:
       - bandit
 

@@ -1,6 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
+import { Test, TestingModule } from "@nestjs/testing";
 import { BadRequestException } from "@nestjs/common";
 import { SchedulerRegistry } from "@nestjs/schedule";
+import { PrismaService } from "../prisma/prisma.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import { NotificationEvent } from "../notifications/types";
 import {
   ARM_HORIZON_MS,
@@ -49,9 +52,8 @@ describe("RemindersService", () => {
   let notifications: { create: jest.Mock; notify: jest.Mock };
   let service: RemindersService;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.useFakeTimers({ now: NOW });
-    registry = new SchedulerRegistry();
     prisma = {
       sessionReminder: {
         findMany: jest.fn(),
@@ -63,11 +65,16 @@ describe("RemindersService", () => {
       create: jest.fn().mockResolvedValue({ id: "n1", userId: "u1" }),
       notify: jest.fn(),
     };
-    service = new RemindersService(
-      prisma as never,
-      registry,
-      notifications as never,
-    );
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        RemindersService,
+        SchedulerRegistry,
+        { provide: PrismaService, useValue: prisma },
+        { provide: NotificationsService, useValue: notifications },
+      ],
+    }).compile();
+    service = module.get<RemindersService>(RemindersService);
+    registry = module.get<SchedulerRegistry>(SchedulerRegistry);
   });
 
   afterEach(() => {

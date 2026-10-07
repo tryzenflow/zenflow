@@ -1,3 +1,4 @@
+import { lmsAssignKey, lmsQuizKey } from "./external-key";
 import { GRID_MINUTES, floorToGrid, snapInstantsToGrid } from "./grid";
 import type { ParsedLmsCourse, ParsedLmsItem, SkippedItem } from "./types";
 
@@ -200,7 +201,7 @@ export function parseMonthlyView(
     }
     const submissionLinkHtml = `<p><a href="${event.url}">Submission Link</a></p>`;
     items.push({
-      externalKey: `lms:assign:${event.instance}`,
+      externalKey: lmsAssignKey(event.instance!),
       title: event.name,
       type: "ASSIGNMENT",
       // `timestart` IS the due instant; the block sits just before it.
@@ -228,7 +229,7 @@ export function parseMonthlyView(
   }
 
   for (const [instance, group] of quizzes) {
-    const externalKey = `lms:quiz:${instance}`;
+    const externalKey = lmsQuizKey(instance);
     const open = group.find((e) => e.eventtype === "open");
     const close = group.find((e) => e.eventtype === "close");
 

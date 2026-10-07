@@ -10,17 +10,21 @@
  *  - backend `start:dev` on :5000, .env.dev LMS_URL/PORTAL_API_URL pointed at
  *    the fake server, OTP rate limits raised (see .env.dev)
  *  - `node scripts/fake-dlu-server.ts` (ts-node) on :4100
- *  - the three ingestion watchers' @Cron temporarily set to EVERY_MINUTE
+ *  - the issue-#56 measurement block in .env.dev (every period = one tick, batch
+ *    ceiling lifted) — no code edits; the watchers no longer carry a @Cron
  *
  * Run: node seed-and-sync.js [--limit N]
+ * Env: ZENFLOW_API, MAIL_URL, FAKE_DLU_URL override the localhost defaults.
  */
 "use strict";
 const fs = require("fs");
 const path = require("path");
 
-const API = "http://localhost:5000/api/v1";
-const MAIL = "http://localhost:8025"; // Mailpit UI/API from compose.dev.yml
-const FAKE_DLU = "http://localhost:4100";
+// Overridable because :5000 is not always free — macOS's AirPlay receiver
+// holds it by default.
+const API = process.env.ZENFLOW_API ?? "http://localhost:5000/api/v1";
+const MAIL = process.env.MAIL_URL ?? "http://localhost:8025"; // Mailpit UI/API from compose.dev.yml
+const FAKE_DLU = process.env.FAKE_DLU_URL ?? "http://localhost:4100";
 const CONCURRENCY = 8;
 
 const students = JSON.parse(fs.readFileSync(path.join(__dirname, "students.json"), "utf8"));

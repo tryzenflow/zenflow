@@ -1,3 +1,4 @@
+import { Test, TestingModule } from "@nestjs/testing";
 import { type User } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
 import { DevicesService } from "./devices.service";
@@ -48,18 +49,21 @@ function makePrismaDouble(rows: Row[]) {
 
 const USER = { id: "u1" } as User;
 
-function makeService(rows: Row[] = []) {
+async function makeService(rows: Row[] = []) {
   const db = makePrismaDouble(rows);
-  return {
-    db,
-    service: new DevicesService(db.client as unknown as PrismaService),
-  };
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      DevicesService,
+      { provide: PrismaService, useValue: db.client },
+    ],
+  }).compile();
+  return { db, service: module.get<DevicesService>(DevicesService) };
 }
 
 describe("DevicesService", () => {
   describe("registerDevice", () => {
     it("creates a row for a new token, stamping the owner", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
 
       const { id } = await service.registerDevice(USER, {
         platform: "ANDROID",
@@ -77,7 +81,7 @@ describe("DevicesService", () => {
     });
 
     it("re-homes an existing token to the caller instead of duplicating", async () => {
-      const { db, service } = makeService([
+      const { db, service } = await makeService([
         {
           id: "d1",
           platform: "IOS",
@@ -104,7 +108,7 @@ describe("DevicesService", () => {
 
   describe("unregisterDevice", () => {
     it("removes the caller's row and echoes the token", async () => {
-      const { db, service } = makeService([
+      const { db, service } = await makeService([
         {
           id: "d1",
           platform: "ANDROID",
@@ -121,7 +125,7 @@ describe("DevicesService", () => {
     });
 
     it("is a no-op for another user's token, leaving it in place", async () => {
-      const { db, service } = makeService([
+      const { db, service } = await makeService([
         {
           id: "d1",
           platform: "ANDROID",
@@ -138,7 +142,7 @@ describe("DevicesService", () => {
     });
 
     it("is a no-op (not an error) for an unknown token", async () => {
-      const { service } = makeService([]);
+      const { service } = await makeService([]);
 
       await expect(service.unregisterDevice(USER, "nope")).resolves.toEqual({
         pushToken: "nope",

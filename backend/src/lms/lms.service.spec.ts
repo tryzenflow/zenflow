@@ -1,3 +1,4 @@
+import { Test, TestingModule } from "@nestjs/testing";
 import { ConfigService } from "@nestjs/config";
 import { LMSService } from "./lms.service";
 
@@ -59,12 +60,19 @@ const DASHBOARD = reply({
   body: '<script>M.cfg = {"wwwroot":"https://lms.dlu.edu.vn","sesskey":"TESTSESSKEY"};</script>',
 });
 
+async function makeService(): Promise<LMSService> {
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [LMSService, { provide: ConfigService, useValue: config }],
+  }).compile();
+  return module.get<LMSService>(LMSService);
+}
+
 describe("LMSService.login", () => {
   let service: LMSService;
   let fetchMock: jest.Mock;
 
-  beforeEach(() => {
-    service = new LMSService(config);
+  beforeEach(async () => {
+    service = await makeService();
     fetchMock = jest.fn();
     global.fetch = fetchMock;
   });
@@ -190,8 +198,8 @@ describe("LMSService.fetchMonthlyView", () => {
   let fetchMock: jest.Mock;
   const session = { cookie: "MoodleSession=abc", sesskey: "TESTSESSKEY" };
 
-  beforeEach(() => {
-    service = new LMSService(config);
+  beforeEach(async () => {
+    service = await makeService();
     fetchMock = jest.fn();
     global.fetch = fetchMock;
   });
@@ -243,5 +251,159 @@ describe("LMSService.fetchMonthlyView", () => {
     await expect(service.fetchMonthlyView(session, 2026, 4)).rejects.toThrow(
       /status 403/,
     );
+  });
+});
+
+describe("LMSService.fetchEnrolledCourses (issue #56 discovery)", () => {
+  let service: LMSService;
+  let fetchMock: jest.Mock;
+  const session = { cookie: "MoodleSession=abc", sesskey: "TESTSESSKEY" };
+
+  /** One page of the enrolled-courses response. */
+  const page = (ids: number[], nextoffset?: number | null) =>
+    reply({
+      json: [
+        {
+          error: false,
+          data: {
+            courses: ids.map((id) => ({
+              id,
+              fullname: `Môn học Mẫu ${id}`,
+              shortname: `TESTCUR-${id}`,
+              coursecategory: "Học kỳ 1",
+              startdate: 1790737200,
+              visible: true,
+              hidden: false,
+            })),
+            ...(nextoffset === undefined ? {} : { nextoffset }),
+          },
+        },
+      ],
+    });
+
+  beforeEach(async () => {
+    service = await makeService();
+    fetchMock = jest.fn();
+    global.fetch = fetchMock;
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it("posts the documented args and unwraps the course list", async () => {
+    fetchMock.mockResolvedValueOnce(page([20001, 20002], null));
+
+    await expect(service.fetchEnrolledCourses(session)).resolves.toMatchObject([
+      { id: 20001 },
+      { id: 20002 },
+    ]);
+
+    const [url, init] = fetchMock.mock.calls[0] as FetchCall;
+    expect(url).toBe(
+      `${BASE}/lib/ajax/service.php?sesskey=TESTSESSKEY&info=core_course_get_enrolled_courses_by_timeline_classification`,
+    );
+    expect(init.headers.cookie).toBe("MoodleSession=abc");
+    expect(JSON.parse(init.body)).toEqual([
+      {
+        index: 0,
+        methodname:
+          "core_course_get_enrolled_courses_by_timeline_classification",
+        args: {
+          offset: 0,
+          // `limit: 0` asks Moodle for its own page size, which is exactly why
+          // the `nextoffset` cursor has to be followed rather than assumed.
+          limit: 0,
+          // The whole enrolment history — the current-term filter is ours, not
+          // Moodle's, which is why classifyCurrentTerm exists.
+          classification: "allincludinghidden",
+          sort: "fullname",
+          customfieldname: "",
+          customfieldvalue: "",
+        },
+      },
+    ]);
+  });
+
+  it("follows nextoffset across pages and concatenates the result", async () => {
+    fetchMock
+      .mockResolvedValueOnce(page([20001, 20002], 2))
+      .mockResolvedValueOnce(page([20003], 3))
+      .mockResolvedValueOnce(page([], 4));
+
+    await expect(
+      service.fetchEnrolledCourses(session, { pageSize: 2 }),
+    ).resolves.toHaveLength(3);
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const offsets = fetchMock.mock.calls.map(
+      (call) =>
+        (
+          JSON.parse((call as FetchCall)[1].body) as {
+            args: { offset: number; limit: number };
+          }[]
+        )[0].args,
+    );
+    expect(offsets).toEqual([
+      expect.objectContaining({ offset: 0, limit: 2 }),
+      expect.objectContaining({ offset: 2, limit: 2 }),
+      expect.objectContaining({ offset: 3, limit: 2 }),
+    ]);
+  });
+
+  it("stops when a page carries no nextoffset at all", async () => {
+    fetchMock.mockResolvedValueOnce(page([20001]));
+
+    await expect(service.fetchEnrolledCourses(session)).resolves.toHaveLength(
+      1,
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops rather than spinning when nextoffset does not advance", async () => {
+    // A server that keeps echoing the same cursor would otherwise loop forever
+    // inside one sync pass.
+    fetchMock.mockResolvedValue(page([20001], 0));
+
+    await expect(service.fetchEnrolledCourses(session)).resolves.toHaveLength(
+      1,
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops on an empty page even with a cursor that advances", async () => {
+    fetchMock
+      .mockResolvedValueOnce(page([20001], 1))
+      .mockResolvedValueOnce(page([], 2));
+
+    await expect(service.fetchEnrolledCourses(session)).resolves.toHaveLength(
+      1,
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("throws on an envelope-level error, which Moodle reports inside a 200", async () => {
+    fetchMock.mockResolvedValueOnce(
+      reply({
+        json: [{ error: true, exception: { errorcode: "invalidsesskey" } }],
+      }),
+    );
+
+    await expect(service.fetchEnrolledCourses(session)).rejects.toThrow(
+      /invalidsesskey/,
+    );
+  });
+
+  it("throws on a non-2xx status, naming the call", async () => {
+    fetchMock.mockResolvedValueOnce(reply({ status: 403 }));
+
+    await expect(service.fetchEnrolledCourses(session)).rejects.toThrow(
+      /enrolled courses request failed \(status 403\)/,
+    );
+  });
+
+  it("tolerates a data payload with no courses key", async () => {
+    fetchMock.mockResolvedValueOnce(
+      reply({ json: [{ error: false, data: {} }] }),
+    );
+    await expect(service.fetchEnrolledCourses(session)).resolves.toEqual([]);
   });
 });

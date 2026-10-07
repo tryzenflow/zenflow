@@ -1,11 +1,24 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { MoodleMonthlyView } from "../ingestion/core/parse-lms";
+import type { MoodleEnrolledCourse } from "../ingestion/core/parse-enrolled-courses";
 import { lmsClientDuration } from "../observability/metrics";
 
 /** Low-cardinality operation label for the LMS RED histogram. */
+/**
+ * Low-cardinality operation label for the LMS RED histogram.
+ *
+ * Every AJAX method shares one path (`/lib/ajax/service.php`), so the label has
+ * to come from the `info=` query parameter — otherwise two very differently
+ * priced calls would share one histogram.
+ */
 function lmsOperation(url: string): string {
-  if (url.includes("/lib/ajax/service.php")) return "fetch_monthly_view";
+  if (url.includes("/lib/ajax/service.php")) {
+    const method = /[?&]info=([^&]+)/.exec(url)?.[1] ?? "";
+    if (method.includes("calendar_monthly_view")) return "fetch_monthly_view";
+    if (method.includes("enrolled_courses")) return "fetch_enrolled_courses";
+    return "ajax_other";
+  }
   if (url.includes("/login/") || url.includes("/my/")) return "login";
   return "other";
 }
@@ -41,6 +54,15 @@ function lmsOperation(url: string): string {
  * holds one {@link LmsSession} for the duration of a single run so the cost is
  * `1 login + N fetches` rather than `N × (login + fetch)`.
  */
+
+/**
+ * Safety stop for the enrolled-courses cursor walk.
+ *
+ * A student has tens of enrolments, not thousands, so reaching this means the
+ * server is not advancing `nextoffset` — better to log and return what we have
+ * than to loop forever inside one sync pass.
+ */
+const MAX_ENROLLED_COURSE_PAGES = 50;
 
 /** One authenticated Moodle session: the cookie plus its bound CSRF token. */
 export interface LmsSession {
@@ -166,16 +188,117 @@ export class LMSService {
    * `month` is 1-based, as Moodle expects. `courseid: 1` is the site course —
    * it scopes the request to "everything the user can see", not to one course.
    * Feed the result to `parseMonthlyView` (`ingestion/core/parse-lms.ts`).
+   *
+   * Note there is deliberately no per-course variant available: Moodle's AJAX
+   * surface has no "this course's calendar" method, which is why the issue-#56
+   * occurrence cache for the LMS can only be filled by a student's own walk.
    */
   async fetchMonthlyView(
     session: LmsSession,
     year: number,
     month: number,
   ): Promise<MoodleMonthlyView> {
-    const methodname = "core_calendar_get_calendar_monthly_view";
-    const url = `${this.endpoint}/lib/ajax/service.php?sesskey=${encodeURIComponent(
-      session.sesskey,
-    )}&info=${methodname}`;
+    return this.callAjax<MoodleMonthlyView>(
+      session,
+      "core_calendar_get_calendar_monthly_view",
+      {
+        year,
+        month,
+        courseid: 1,
+        includenavigation: false,
+        mini: true,
+        day: 1,
+      },
+      "calendar",
+    ).then((data) => data ?? {});
+  }
+
+  /**
+   * Every course the student is enrolled in, across every term.
+   *
+   * The LMS half of enrolment discovery (issue #56): it answers "which courses
+   * might this student have items in" without walking their calendar, so a
+   * student whose courses are all cache-fresh can be skipped.
+   *
+   * `classification: "allincludinghidden"` returns the student's **entire**
+   * enrolment history, not the current term — which is why the caller has to run
+   * `classifyCurrentTerm` over the result, and why that filter is advisory until
+   * it has been checked against a real account.
+   *
+   * Paginates on `nextoffset`. `limit: 0` asks Moodle for its own page size, so
+   * the cursor has to be followed rather than assumed; `pageSize` overrides it,
+   * which is how the fixture server exercises a multi-page walk.
+   */
+  async fetchEnrolledCourses(
+    session: LmsSession,
+    opts: { pageSize?: number } = {},
+  ): Promise<MoodleEnrolledCourse[]> {
+    const courses: MoodleEnrolledCourse[] = [];
+    let offset = 0;
+
+    for (let page = 0; page < MAX_ENROLLED_COURSE_PAGES; page++) {
+      const data = await this.callAjax<{
+        courses?: MoodleEnrolledCourse[] | null;
+        nextoffset?: number | null;
+      }>(
+        session,
+        "core_course_get_enrolled_courses_by_timeline_classification",
+        {
+          offset,
+          limit: opts.pageSize ?? 0,
+          classification: "allincludinghidden",
+          sort: "fullname",
+          customfieldname: "",
+          customfieldvalue: "",
+        },
+        "enrolled courses",
+      );
+
+      const batch = data?.courses ?? [];
+      courses.push(...batch);
+
+      const next = data?.nextoffset;
+      // Stop on an empty page, a missing cursor, or a cursor that does not
+      // advance. The last guard matters: a server that keeps echoing the same
+      // `nextoffset` would otherwise spin forever. Same belt-and-braces as the
+      // `page.length < BATCH_SIZE` check in `eachIntegrationTarget`.
+      if (
+        batch.length === 0 ||
+        typeof next !== "number" ||
+        !Number.isFinite(next) ||
+        next <= offset
+      ) {
+        return courses;
+      }
+      offset = next;
+    }
+
+    this.logger.warn(
+      `Stopped paginating enrolled courses after ${MAX_ENROLLED_COURSE_PAGES} pages`,
+    );
+    return courses;
+  }
+
+  /**
+   * One Moodle AJAX call, unwrapped.
+   *
+   * Extracted so the request envelope exists once: the `[{ index, methodname,
+   * args }]` body, the `?sesskey=&info=` query, and — the part that is easy to
+   * get wrong — the fact that this endpoint **always answers HTTP 200** and puts
+   * failures in the payload's `error` / `exception` instead of in the status.
+   *
+   * `label` only shapes the error message, so a failure names the call a reader
+   * recognises rather than the method's full Moodle identifier.
+   */
+  private async callAjax<T>(
+    session: LmsSession,
+    methodname: string,
+    args: Record<string, unknown>,
+    label: string,
+  ): Promise<T | null> {
+    const url =
+      `${this.endpoint}/lib/ajax/service.php` +
+      `?sesskey=${encodeURIComponent(session.sesskey)}&info=${methodname}`;
 
     const res = await this.fetch(url, {
       method: "POST",
@@ -183,39 +306,24 @@ export class LMSService {
         "content-type": "application/json",
         cookie: session.cookie,
       },
-      body: JSON.stringify([
-        {
-          index: 0,
-          methodname,
-          args: {
-            year,
-            month,
-            courseid: 1,
-            includenavigation: false,
-            mini: true,
-            day: 1,
-          },
-        },
-      ]),
+      body: JSON.stringify([{ index: 0, methodname, args }]),
     });
 
     if (!res.ok) {
-      throw new Error(`LMS calendar request failed (status ${res.status})`);
+      throw new Error(`LMS ${label} request failed (status ${res.status})`);
     }
 
-    // The AJAX endpoint always answers 200 with an array of one envelope per
-    // request; failures live in `error` / `exception`, not in the status code.
     const payload = (await res.json()) as
-      | { error?: unknown; data?: MoodleMonthlyView; exception?: unknown }[]
+      | { error?: unknown; data?: T; exception?: unknown }[]
       | null;
     const envelope = payload?.[0];
-    if (!envelope) throw new Error("Empty LMS calendar response");
+    if (!envelope) throw new Error(`Empty LMS ${label} response`);
     if (envelope.error) {
       throw new Error(
-        `LMS calendar returned an error: ${JSON.stringify(envelope.exception ?? envelope.error)}`,
+        `LMS ${label} returned an error: ${JSON.stringify(envelope.exception ?? envelope.error)}`,
       );
     }
-    return envelope.data ?? {};
+    return envelope.data ?? null;
   }
 
   /** `MoodleSession=<id>` from a response's `Set-Cookie`, if it sets one. */

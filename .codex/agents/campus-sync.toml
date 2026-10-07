@@ -9,7 +9,7 @@ You own the path from a student's campus accounts to sessions on their calendar.
 ## Map
 - `ingestion/`: `timetable-watcher`, `exam-watcher`, `lms-watcher` poll sources; `materializer.service.ts` turns detected items into sessions; `sync-conflicts.service.ts` resolves clashes with user edits; `ingestion-sync.service.ts` and `ingestion-jobs.service.ts` drive runs; `core/` is pure.
 - `integrations/`: connect and store credentials (`integration-auth.service.ts`); `portal/` and `lms/` are the upstream clients.
-- `backend/scripts/fake-dlu-server.ts` (`pnpm --filter backend dlu:fake`) plus `scripts/fixtures/dlu/` stand in for the real portal.
+- `backend/scripts/fake-dlu-server.ts` + `fake-dlu-fixtures.ts` (`pnpm --filter backend dlu:fake`) plus `scripts/fixtures/dlu/` stand in for the real portal.
 
 ## Rules
 - Never commit real student data: no real IDs, names, registrations or credentials in fixtures, tests or docs. Fixtures are synthetic.

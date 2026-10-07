@@ -111,6 +111,24 @@ function differsFromUpstream(
   );
 }
 
+/**
+ * The projection both `externalKey` lookups use.
+ *
+ * One const rather than two literals so the legacy lookup and the primary
+ * lookup can never drift into selecting different fields — the legacy hit falls
+ * straight into the same diff path, so it needs exactly the same shape.
+ */
+const EXISTING_SESSION_SELECT = {
+  id: true,
+  title: true,
+  note: true,
+  location: true,
+  durationMinutes: true,
+  scheduledStartTime: true,
+  deleted: true,
+  lastMovedAt: true,
+} as const;
+
 function isUniqueViolation(error: unknown): boolean {
   return (
     error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -172,21 +190,19 @@ export class MaterializerService {
     };
 
     for (const block of blocks) {
-      const existing = await this.prisma.session.findUnique({
+      let existing = await this.prisma.session.findUnique({
         where: {
           userId_externalKey: { userId, externalKey: block.externalKey },
         },
-        select: {
-          id: true,
-          title: true,
-          note: true,
-          location: true,
-          durationMinutes: true,
-          scheduledStartTime: true,
-          deleted: true,
-          lastMovedAt: true,
-        },
+        select: EXISTING_SESSION_SELECT,
       });
+
+      // A miss might only mean the row predates the issue-#56 lecture re-key.
+      // Adopt it under its new name before deciding anything else — see
+      // `adoptLegacyKey`.
+      if (!existing) {
+        existing = await this.adoptLegacyKey(userId, block);
+      }
 
       if (existing?.deleted) {
         outcome.skippedDeleted += 1;
@@ -304,6 +320,75 @@ export class MaterializerService {
     return { deleted: removable.length };
   }
 
+  /**
+   * Soft-delete the named ingested sessions.
+   *
+   * The fan-out sibling of {@link reconcileDeleted}: same rules — no
+   * `SessionEvent` (not a user action, so it stays out of the reward trail), a
+   * `removed` digest entry, and it only ever touches rows this `source`
+   * ingested — but driven by an explicit key list instead of by "everything in
+   * the window this run did not see".
+   *
+   * It needs to exist because a fan-out has no seen-set to reason from. The
+   * occurrence cache knows precisely which activities a complete re-read stopped
+   * listing; it does not know, and must not assume, anything about the rest of a
+   * given student's window. Calling `reconcileDeleted` here would retire every
+   * ingested row of that type outside the fanned-out set.
+   */
+  async retireExternalKeys(
+    userId: string,
+    source: IngestedSource,
+    keys: readonly string[],
+    now: Date = new Date(),
+    digest?: SyncDigest,
+  ): Promise<ReconcileOutcome> {
+    if (keys.length === 0) return { deleted: 0 };
+
+    const rows = await this.prisma.session.findMany({
+      where: {
+        userId,
+        source,
+        externalKey: { in: [...keys] },
+        deleted: false,
+      },
+      select: {
+        id: true,
+        title: true,
+        type: true,
+      },
+    });
+    if (rows.length === 0) return { deleted: 0 };
+
+    for (const row of rows) {
+      // Upstream cancelled the activity, so it goes even if the student had
+      // moved it — matching `reconcileDeleted`, which also removes a moved row
+      // whose upstream item disappeared.
+      await this.prisma.session.update({
+        where: { id: row.id },
+        data: { deleted: true },
+      });
+    }
+
+    const runDigest = digest ?? new SyncDigest(new Date());
+    for (const row of rows) {
+      runDigest.add(
+        {
+          type: row.type as IngestedSessionType,
+          kind: "removed",
+          sessionId: null,
+          title: row.title,
+          startsAt: null,
+          endsAt: null,
+        },
+        source,
+      );
+    }
+    if (!digest) await this.flushDigest(userId, runDigest, now);
+
+    ingestionReconcileDeleted.add(rows.length, { source });
+    return { deleted: rows.length };
+  }
+
   /** The forward span a run of `source` covers — its deletion horizon. */
   private reconcileWindow(
     source: IngestedSource,
@@ -381,6 +466,75 @@ export class MaterializerService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Rename a pre-#56 lecture row onto its new `externalKey`, returning the row
+   * so the caller can carry on as if the lookup had hit.
+   *
+   * Issue #56 re-keyed portal lectures from the per-student
+   * `portal:meeting:<WeekScheduleID>` to the section-scoped
+   * `portal:lecture:<section>:<date>:<period>` (see `core/external-key.ts`).
+   * Without this step the first run after deploy would, for every lecture on
+   * every calendar: miss on the new key, insert a duplicate, and then have
+   * `reconcileDeleted` soft-delete the original because its old key is not in
+   * the run's `seenKeys`. That would discard each row's `lastMovedAt` (the
+   * student's own move), orphan the `Notification.sessionId` and
+   * `SessionReminder.sessionId` rows pointing at it, and announce every
+   * student's entire timetable as cancelled and re-created.
+   *
+   * Renaming in place instead keeps the row id, its tags and its reminders, and
+   * raises nothing: the row then goes through the ordinary diff, so it is
+   * reported `unchanged` unless the payload genuinely differs too. A
+   * soft-deleted legacy row is renamed as well, so "the student deleted this
+   * class" keeps holding.
+   *
+   * Returns `null` when there is nothing to adopt — no alias on the block (an
+   * exam, an LMS item, or a timetable row with no `WeekScheduleID`), or no row
+   * stored under the old name.
+   */
+  private async adoptLegacyKey(
+    userId: string,
+    block: ParsedBlock,
+  ): Promise<{
+    id: string;
+    title: string;
+    note: string | null;
+    location: string | null;
+    durationMinutes: number;
+    scheduledStartTime: Date | null;
+    deleted: boolean;
+    lastMovedAt: Date | null;
+  } | null> {
+    const legacyKey = (block as Partial<ParsedPortalItem>).legacyExternalKey;
+    if (!legacyKey) return null;
+
+    const legacy = await this.prisma.session.findUnique({
+      where: { userId_externalKey: { userId, externalKey: legacyKey } },
+      select: EXISTING_SESSION_SELECT,
+    });
+    if (!legacy) return null;
+
+    try {
+      await this.prisma.session.update({
+        where: { id: legacy.id },
+        data: { externalKey: block.externalKey },
+      });
+    } catch (error) {
+      // Two legacy rows mapping onto one new key — only reachable from
+      // pre-existing duplicate data. Leave the loser on its old key and let
+      // `reconcileDeleted` retire it; adopting neither is safer than guessing.
+      if (isUniqueViolation(error)) {
+        this.logger.debug(
+          `Could not adopt ${legacyKey} as ${block.externalKey}: key already taken`,
+        );
+        return null;
+      }
+      throw error;
+    }
+
+    this.logger.debug(`Adopted ${legacyKey} as ${block.externalKey}`);
+    return legacy;
   }
 
   /**

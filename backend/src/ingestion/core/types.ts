@@ -59,6 +59,34 @@ export interface ParsedLmsCourse {
 export interface ParsedPortalItem extends ParsedBlock {
   /** Portal `ScheduleStudyUnitID`; joins to `PortalSection.scheduleStudyUnitId`. */
   scheduleStudyUnitId: string | null;
+
+  /**
+   * The row's **pre-#56** `externalKey` (`portal:meeting:<WeekScheduleID>`), set
+   * only for a `LECTURE`.
+   *
+   * Carried so `MaterializerService` can find an already-stored session under its
+   * old name and rename it in place. Without it, the first run after the #56
+   * re-key would insert a duplicate of every lecture and then soft-delete every
+   * original — losing each student's `lastMovedAt` and announcing their whole
+   * timetable as cancelled. See `external-key.ts` for when this can be removed.
+   */
+  legacyExternalKey?: string | null;
+
+  /**
+   * Meeting day as a `DLU_TZ` wall-clock `'YYYY-MM-DD'`, and the meeting's
+   * period span — the coordinates `PortalSectionOccurrence` is keyed on, and the
+   * two halves of the lecture `externalKey` that are not the section id.
+   *
+   * A string rather than a `Date` on purpose: it is the upstream row's own
+   * `Ngay`, and storing it as an instant would make the key depend on which
+   * timezone read it back.
+   *
+   * Absent on an `EXAM` (the exam endpoint has no periods — it gives real clock
+   * times, and its key is the already-shared `Examination` id).
+   */
+  meetingDate?: string | null;
+  periodId?: number | null;
+  numberOfPeriods?: number | null;
 }
 
 /** A distinct portal section seen in a timetable response — upserted as `PortalSection`. */

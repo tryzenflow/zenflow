@@ -1,9 +1,13 @@
 import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
+import { Test, TestingModule } from "@nestjs/testing";
 import type { PlaceContractFixture, PlacedMember } from "@zenflow/shared";
 import type { User } from "../../../generated/prisma";
+import { PrismaService } from "../../prisma/prisma.service";
+import { BanditArmStateRepository } from "../../bandit/bandit-arm-state.repository";
 import { FallbackPlacer } from "./fallback-placer.service";
 import { HeuristicPlacer } from "./heuristic-placer.service";
+import { PlacementClient } from "./placement-client.service";
 import { PlacementGateway } from "./placement-gateway.service";
 
 /**
@@ -82,8 +86,14 @@ describe("placement contract fixtures", () => {
     "%s: frozen TS heuristic agrees with the fixture picks",
     async (_name, f) => {
       const prisma = prismaFor(f);
-      const heuristic = new HeuristicPlacer(prisma as never);
-      const fallback = new FallbackPlacer(heuristic);
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          HeuristicPlacer,
+          FallbackPlacer,
+          { provide: PrismaService, useValue: prisma },
+        ],
+      }).compile();
+      const fallback = module.get<FallbackPlacer>(FallbackPlacer);
       const user = userOf(f);
       const now = new Date(f.request.nowMs);
       const deadline = new Date(f.request.deadlineMs);
@@ -118,11 +128,18 @@ describe("placement contract fixtures", () => {
   it("single-heuristic-placed: gateway builds exactly the fixture request", async () => {
     const f = fixtures.find((x) => x.name === "single-heuristic-placed");
     if (!f) throw new Error("fixture missing");
-    const gateway = new PlacementGateway(
-      prismaFor(f) as never,
-      {} as never,
-      { loadAll: jest.fn() } as never,
-    );
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        PlacementGateway,
+        { provide: PrismaService, useValue: prismaFor(f) },
+        { provide: PlacementClient, useValue: {} },
+        {
+          provide: BanditArmStateRepository,
+          useValue: { loadAll: jest.fn() },
+        },
+      ],
+    }).compile();
+    const gateway = module.get<PlacementGateway>(PlacementGateway);
     const built = await gateway.buildRequest({
       user: userOf(f),
       members: f.request.members,

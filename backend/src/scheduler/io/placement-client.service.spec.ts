@@ -1,10 +1,14 @@
-import type { ConfigService } from "@nestjs/config";
+import { Test, TestingModule } from "@nestjs/testing";
+import { ConfigService } from "@nestjs/config";
 import {
   PLACEMENT_CONTRACT_VERSION,
   type PlaceRequest,
   type PlaceResponse,
 } from "@zenflow/shared";
-import { PlacementClient } from "./placement-client.service";
+import {
+  PLACEMENT_CLIENT_DEPS,
+  PlacementClient,
+} from "./placement-client.service";
 
 const req = {
   contractVersion: 1,
@@ -35,19 +39,29 @@ const json = (status: number, body: unknown) =>
     }),
   );
 
-function make(
+async function make(
   fetchImpl: jest.Mock,
   cfg: Record<string, unknown> = { BANDIT_SERVICE_URL: "http://py:8100/" },
 ) {
   let t = 0;
   const sleep = jest.fn().mockResolvedValue(undefined);
-  const config = { get: (k: string) => cfg[k] } as unknown as ConfigService;
-  const client = new PlacementClient(config, {
-    fetch: fetchImpl as never,
-    now: () => t,
-    sleep,
-    random: () => 0.5,
-  });
+  const config = { get: (k: string) => cfg[k] };
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      PlacementClient,
+      { provide: ConfigService, useValue: config },
+      {
+        provide: PLACEMENT_CLIENT_DEPS,
+        useValue: {
+          fetch: fetchImpl as never,
+          now: () => t,
+          sleep,
+          random: () => 0.5,
+        },
+      },
+    ],
+  }).compile();
+  const client = module.get<PlacementClient>(PlacementClient);
   return { client, sleep, advance: (ms: number) => (t += ms) };
 }
 
@@ -60,7 +74,7 @@ const timeoutErr = () => {
 describe("PlacementClient", () => {
   it("reports `disabled` without a URL and never calls fetch", async () => {
     const f = jest.fn();
-    const { client } = make(f, {});
+    const { client } = await make(f, {});
     expect(client.enabled).toBe(false);
     expect(await client.place(req)).toEqual({ ok: false, reason: "disabled" });
     expect(f).not.toHaveBeenCalled();
@@ -68,7 +82,7 @@ describe("PlacementClient", () => {
 
   it("POSTs to /v1/place with the bearer token and returns the body", async () => {
     const f = jest.fn().mockImplementation(() => json(200, okBody));
-    const { client } = make(f, {
+    const { client } = await make(f, {
       BANDIT_SERVICE_URL: "http://py:8100/",
       BANDIT_SERVICE_TOKEN: "s3cret",
     });
@@ -83,7 +97,7 @@ describe("PlacementClient", () => {
 
   it("omits the authorization header when no token is configured", async () => {
     const f = jest.fn().mockImplementation(() => json(200, okBody));
-    const { client } = make(f);
+    const { client } = await make(f);
     await client.place(req);
     const init = (f.mock.calls[0] as [string, RequestInit])[1];
     expect(
@@ -96,7 +110,7 @@ describe("PlacementClient", () => {
       .fn()
       .mockRejectedValueOnce(new TypeError("ECONNREFUSED"))
       .mockImplementationOnce(() => json(200, okBody));
-    const { client, sleep } = make(f);
+    const { client, sleep } = await make(f);
     expect((await client.place(req)).ok).toBe(true);
     expect(f).toHaveBeenCalledTimes(2);
     expect(sleep).toHaveBeenCalledTimes(1);
@@ -105,14 +119,14 @@ describe("PlacementClient", () => {
 
   it("retries a fast 503 once, and reports http_5xx if it fails again", async () => {
     const f = jest.fn().mockImplementation(() => json(503, {}));
-    const { client } = make(f);
+    const { client } = await make(f);
     expect(await client.place(req)).toEqual({ ok: false, reason: "http_5xx" });
     expect(f).toHaveBeenCalledTimes(2);
   });
 
   it("does NOT retry a 500 (only 502-504)", async () => {
     const f = jest.fn().mockImplementation(() => json(500, {}));
-    const { client } = make(f);
+    const { client } = await make(f);
     expect(await client.place(req)).toEqual({ ok: false, reason: "http_5xx" });
     expect(f).toHaveBeenCalledTimes(1);
   });
@@ -123,7 +137,7 @@ describe("PlacementClient", () => {
       holder.advance?.(301);
       return json(503, {});
     });
-    const made = make(f);
+    const made = await make(f);
     holder.advance = made.advance;
     expect((await made.client.place(req)).ok).toBe(false);
     expect(f).toHaveBeenCalledTimes(1);
@@ -131,7 +145,7 @@ describe("PlacementClient", () => {
 
   it("never retries a timeout", async () => {
     const f = jest.fn().mockRejectedValue(timeoutErr());
-    const { client } = make(f);
+    const { client } = await make(f);
     expect(await client.place(req)).toEqual({ ok: false, reason: "timeout" });
     expect(f).toHaveBeenCalledTimes(1);
   });
@@ -140,14 +154,14 @@ describe("PlacementClient", () => {
     const f = jest
       .fn()
       .mockImplementation(() => json(422, { code: "CONTRACT_VERSION" }));
-    const { client } = make(f);
+    const { client } = await make(f);
     expect(await client.place(req)).toEqual({ ok: false, reason: "version" });
     expect(f).toHaveBeenCalledTimes(1);
   });
 
   it("maps 401 to http_4xx and does not trip the breaker", async () => {
     const f = jest.fn().mockImplementation(() => json(401, {}));
-    const { client } = make(f);
+    const { client } = await make(f);
     for (let i = 0; i < 8; i++) {
       expect(await client.place(req)).toEqual({
         ok: false,
@@ -164,7 +178,7 @@ describe("PlacementClient", () => {
       .mockImplementation(() =>
         bad ? json(422, { detail: "bad matrix" }) : json(200, okBody),
       );
-    const { client } = make(f);
+    const { client } = await make(f);
     for (let i = 0; i < 50; i++) {
       expect(await client.place(req)).toEqual({
         ok: false,
@@ -181,7 +195,7 @@ describe("PlacementClient", () => {
     const f = jest
       .fn()
       .mockImplementation(() => json(200, { ...okBody, contractVersion: 9 }));
-    const { client } = make(f);
+    const { client } = await make(f);
     expect(await client.place(req)).toEqual({
       ok: false,
       reason: "invalid_response",
@@ -190,7 +204,7 @@ describe("PlacementClient", () => {
 
   it("opens the breaker after 5 failed calls, then fails fast without fetch", async () => {
     const f = jest.fn().mockRejectedValue(timeoutErr());
-    const { client } = make(f);
+    const { client } = await make(f);
     for (let i = 0; i < 5; i++) await client.place(req);
     expect(client.breaker.state).toBe("open");
     f.mockClear();
@@ -203,7 +217,7 @@ describe("PlacementClient", () => {
 
   it("recovers: after the open window a successful probe closes the breaker", async () => {
     const f = jest.fn().mockRejectedValue(timeoutErr());
-    const { client, advance } = make(f);
+    const { client, advance } = await make(f);
     for (let i = 0; i < 5; i++) await client.place(req);
     advance(15_000);
     f.mockImplementation(() => json(200, okBody));

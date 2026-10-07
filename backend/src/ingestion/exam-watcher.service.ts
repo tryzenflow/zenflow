@@ -1,7 +1,5 @@
 import { forwardRef, Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Cron, CronExpression } from "@nestjs/schedule";
-import { runCronJob } from "../observability/cron";
 import {
   ingestionLastSuccess,
   ingestionUpstreamItems,
@@ -17,26 +15,39 @@ import { MaterializerService } from "./materializer.service";
 import {
   eachIntegrationTarget,
   errorMessage,
+  FAILED_PASS,
   isIngestionEnabled,
   jobItemBody,
   statusCodeOf,
   type IntegrationTarget,
+  type PassOutcome,
 } from "./watcher-support";
 
 /**
- * Daily sweep of every connected student's exam schedule.
+ * Syncs one student's exam schedule.
  *
  * The cheapest of the three watchers: `GET /api/student/exam` returns a whole
- * term in one response, so a run costs exactly one request per student and
+ * term in one response, so a pass costs exactly one request per student and
  * there is nothing to paginate and no delay to insert between requests.
  *
- * At 04:00, an hour after the timetable cron, so the two daily sweeps do not
- * hit the portal at the same instant on behalf of the same students.
+ * **No cron of its own.** Since issue #56 `IngestionTickerService` claims this
+ * kind (`PORTAL_EXAM`) on a rolling schedule with target period
+ * `INGESTION_EXAM_PERIOD_MS`. It previously shared one `@Cron` expression with
+ * the timetable watcher, which quietly undid the deliberate stagger its own
+ * docstring described: both fired at the same instant on behalf of the same
+ * students. Under the rolling ticker they are separate kinds with separate
+ * `nextDueAt`s, so the stagger is a property of the data rather than of two
+ * cron strings staying in sync.
  *
- * A seasonal cadence — several times a week during the exam windows
- * (Oct–Dec / Mar–May / Jun–Jul) and backing off outside them — is deliberately
- * deferred; the pure parser and the job rows are already shaped so that becomes
- * a change to this one `@Cron` line rather than a rewrite.
+ * A seasonal cadence — more often during the exam windows (Oct–Dec / Mar–May /
+ * Jun–Jul), backing off outside them — is still deferred, but is now a change to
+ * one config value rather than to a decorator.
+ *
+ * ## No cache, no fan-out
+ *
+ * An exam view may differ between classmates (a large section's rooms can be
+ * split by student list), so every student fetches their own. Nothing here reads
+ * or writes the shared occurrence cache.
  */
 @Injectable()
 export class ExamWatcherService {
@@ -57,34 +68,36 @@ export class ExamWatcherService {
     this.dluTimezone = this.config.get<string>("DLU_TZ") ?? "Asia/Ho_Chi_Minh";
   }
 
-  @Cron(CronExpression.EVERY_WEEKEND)
-  async handleCron(): Promise<void> {
-    await runCronJob("exam-watcher", async () => {
-      const count = await this.run();
-      if (count > 0) {
-        this.logger.log(`Synced the exam schedule for ${count} student(s)`);
-      }
-    });
-  }
-
-  /** Sync every connected student's exam schedule (or just `userId`'s). */
+  /**
+   * Sync every connected student's exam schedule (or just `userId`'s).
+   *
+   * The manual `POST /integrations/PORTAL/sync` path since #56 — the background
+   * pass comes through {@link syncOne} instead. Same code either way.
+   */
   async run(now = new Date(), userId?: string): Promise<number> {
     if (!isIngestionEnabled(this.config)) return 0;
     return eachIntegrationTarget(this.prisma, "PORTAL", userId, (target) =>
-      this.syncUser(target, now),
+      this.syncOne(target, now),
     );
   }
 
-  private async syncUser(target: IntegrationTarget, now: Date): Promise<void> {
+  /** One student's exam pass. The unit the rolling ticker claims. */
+  async syncOne(target: IntegrationTarget, now: Date): Promise<PassOutcome> {
+    const term = resolveSemester(now, this.dluTimezone);
+
     const jobId = await this.jobs.startJob("PORTAL", target.integrationId);
 
     const token = await this.signIn(target, jobId);
-    if (!token) return;
+    if (!token) return FAILED_PASS;
 
     // Changes are announced once per item type at the end of the run.
     const digest = new SyncDigest(new Date());
 
-    const { academicYear, semester } = resolveSemester(now, this.dluTimezone);
+    // One request, so one failure is a total failure — there is no partial
+    // picture to salvage, unlike the week-by-week timetable walk.
+    let ok = true;
+
+    const { academicYear, semester } = term;
     const url = `${this.endpoint}/api/student/exam?namhoc=${academicYear}&hocky=${semester}`;
     const itemId = await this.jobs.beginItem("PORTAL", jobId, url);
 
@@ -156,10 +169,14 @@ export class ExamWatcherService {
       this.logger.warn(
         `Exam schedule failed for integration ${target.integrationId}: ${errorMessage(error)}`,
       );
+      ok = false;
     }
 
     await this.materializer.flushDigest(target.userId, digest, now);
+
     await this.jobs.finishJob("PORTAL", jobId, "COMPLETED");
+
+    return { ok, servedFromCache: false };
   }
 
   private async signIn(

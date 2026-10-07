@@ -1,12 +1,14 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
+import { Test, TestingModule } from "@nestjs/testing";
 import { PAIRWISE_SAMPLE_RATE } from "../scheduler/constants";
+import { PrismaService } from "../prisma/prisma.service";
 import { ExperimentService } from "./experiment.service";
 
 const HEURISTIC_RESULT = {
   scheduledStartTime: "2026-06-15T09:00:00.000Z",
 };
 
-function make(overrides: Record<string, unknown> = {}) {
+async function make(overrides: Record<string, unknown> = {}) {
   const create = jest.fn().mockResolvedValue({ id: "p1" });
   const count = jest.fn().mockResolvedValue(7);
   const prisma = {
@@ -14,16 +16,22 @@ function make(overrides: Record<string, unknown> = {}) {
     sessionEvent: { count },
     ...overrides,
   };
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      ExperimentService,
+      { provide: PrismaService, useValue: prisma },
+    ],
+  }).compile();
   return {
-    service: new ExperimentService(prisma as never),
+    service: module.get<ExperimentService>(ExperimentService),
     create,
     count,
   };
 }
 
 describe("ExperimentService.assignPolicy", () => {
-  it("splits 50/50 on the injected rng and logs a 32-hex-char seed", () => {
-    const { service } = make();
+  it("splits 50/50 on the injected rng and logs a 32-hex-char seed", async () => {
+    const { service } = await make();
     const a = service.assignPolicy(() => 0.4);
     const b = service.assignPolicy(() => 0.6);
     expect(a.primaryPolicy).toBe("LINUCB");
@@ -32,8 +40,8 @@ describe("ExperimentService.assignPolicy", () => {
     expect(a.randomizationSeed).not.toBe(b.randomizationSeed);
   });
 
-  it("rolls pairwiseShown independently against PAIRWISE_SAMPLE_RATE", () => {
-    const { service } = make();
+  it("rolls pairwiseShown independently against PAIRWISE_SAMPLE_RATE", async () => {
+    const { service } = await make();
     const shown = service.assignPolicy(() => PAIRWISE_SAMPLE_RATE - 1e-9);
     const notShown = service.assignPolicy(() => PAIRWISE_SAMPLE_RATE);
     expect(shown.pairwiseShown).toBe(true);
@@ -43,7 +51,7 @@ describe("ExperimentService.assignPolicy", () => {
 
 describe("ExperimentService.recordProposal", () => {
   it("writes a LinUCB proposal with the model fields populated and returns its id", async () => {
-    const { service, create } = make();
+    const { service, create } = await make();
     const start = new Date("2026-06-15T20:00:00.000Z");
 
     const id = await service.recordProposal({
@@ -78,7 +86,7 @@ describe("ExperimentService.recordProposal", () => {
   });
 
   it("writes a heuristic proposal with null model fields and no modelVersion", async () => {
-    const { service, create } = make();
+    const { service, create } = await make();
     await service.recordProposal({
       userId: "u1",
       sessionId: "s1",
@@ -101,7 +109,7 @@ describe("ExperimentService.recordProposal", () => {
   });
 
   it("writes the pairwise position when the event was pairwise-sampled", async () => {
-    const { service, create } = make();
+    const { service, create } = await make();
     await service.recordProposal({
       userId: "u1",
       sessionId: "s1",
@@ -124,7 +132,7 @@ describe("ExperimentService.recordProposal", () => {
 
   it("never throws when the insert fails, and resolves null", async () => {
     const create = jest.fn().mockRejectedValue(new Error("db down"));
-    const { service } = make({
+    const { service } = await make({
       slotProposal: { create },
       sessionEvent: { count: jest.fn().mockResolvedValue(0) },
     });

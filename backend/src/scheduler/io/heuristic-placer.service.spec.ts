@@ -1,3 +1,5 @@
+import { Test, TestingModule } from "@nestjs/testing";
+import { PrismaService } from "../../prisma/prisma.service";
 import { HeuristicPlacer } from "./heuristic-placer.service";
 
 /**
@@ -28,6 +30,17 @@ function makePrisma(
     },
     sessionSeries: { findMany: jest.fn().mockResolvedValue([]) },
   };
+}
+
+async function makeService(
+  prisma:
+    | ReturnType<typeof makePrisma>
+    | ReturnType<typeof makeRangeAwarePrisma>,
+): Promise<HeuristicPlacer> {
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [HeuristicPlacer, { provide: PrismaService, useValue: prisma }],
+  }).compile();
+  return module.get<HeuristicPlacer>(HeuristicPlacer);
 }
 
 /**
@@ -76,7 +89,7 @@ describe("HeuristicPlacer.scheduleTask", () => {
 
   it("scans many days with a single batched session query and series query", async () => {
     const prisma = makePrisma();
-    const svc = new HeuristicPlacer(prisma as never);
+    const svc = await makeService(prisma);
     await svc.placeTask(
       "u1",
       {
@@ -93,16 +106,16 @@ describe("HeuristicPlacer.scheduleTask", () => {
   });
 
   it("places an empty-calendar task at the earliest highest-preference slot", async () => {
-    const svc = new HeuristicPlacer(makePrisma() as never);
+    const svc = await makeService(makePrisma());
     const start = await svc.placeTask("u1", task, TZ, MATRIX, now);
     expect(start?.toISOString()).toBe("2026-06-15T08:00:00.000Z");
   });
 
   it("returns null when the only candidate day is fully occupied", async () => {
-    const svc = new HeuristicPlacer(
+    const svc = await makeService(
       makePrisma([
         { start: "2026-06-15T00:00:00.000Z", durationMinutes: 1440 },
-      ]) as never,
+      ]),
     );
     const sameDay = {
       id: "t1",
@@ -113,7 +126,7 @@ describe("HeuristicPlacer.scheduleTask", () => {
   });
 
   it("returns null when the duration cannot fit before the deadline", async () => {
-    const svc = new HeuristicPlacer(makePrisma() as never);
+    const svc = await makeService(makePrisma());
     const tight = {
       id: "t1",
       durationMinutes: 60,
@@ -123,10 +136,8 @@ describe("HeuristicPlacer.scheduleTask", () => {
   });
 
   it("schedules around an existing session without moving it", async () => {
-    const svc = new HeuristicPlacer(
-      makePrisma([
-        { start: "2026-06-15T08:00:00.000Z", durationMinutes: 60 },
-      ]) as never,
+    const svc = await makeService(
+      makePrisma([{ start: "2026-06-15T08:00:00.000Z", durationMinutes: 60 }]),
     );
     const start = await svc.placeTask("u1", task, TZ, MATRIX, now);
     // 08:00 is taken; 09:00 (still a preference-1 bucket) is the next best.
@@ -134,7 +145,7 @@ describe("HeuristicPlacer.scheduleTask", () => {
   });
 
   it("nudges the placed slot toward the session's last manually-set start when preference ties flat (stability wiring)", async () => {
-    const svc = new HeuristicPlacer(makePrisma() as never);
+    const svc = await makeService(makePrisma());
     const flatMatrix = new Array<number>(168).fill(0);
     const flatTask = {
       id: "t1",
@@ -152,10 +163,10 @@ describe("HeuristicPlacer.scheduleTask", () => {
   it("places a task straddling midnight when that is the only room before a small-hours deadline", async () => {
     // Monday is booked solid until 23:00; the deadline is 01:00 Tuesday, so the
     // only 90-minute slot anywhere is 23:00 Mon → 00:30 Tue.
-    const svc = new HeuristicPlacer(
+    const svc = await makeService(
       makeRangeAwarePrisma([
         { start: "2026-06-15T00:00:00.000Z", durationMinutes: 1380 }, // 00:00–23:00
-      ]) as never,
+      ]),
     );
     const straddler = {
       id: "t1",
@@ -169,11 +180,11 @@ describe("HeuristicPlacer.scheduleTask", () => {
   it("will not straddle midnight into a block already on the next morning", async () => {
     // Same Monday fill, but now 00:00–01:00 Tuesday is taken too — the 23:00
     // straddle would overlap it, and nothing else fits before the 01:00 deadline.
-    const svc = new HeuristicPlacer(
+    const svc = await makeService(
       makeRangeAwarePrisma([
         { start: "2026-06-15T00:00:00.000Z", durationMinutes: 1380 },
         { start: "2026-06-16T00:00:00.000Z", durationMinutes: 60 },
-      ]) as never,
+      ]),
     );
     const straddler = {
       id: "t1",

@@ -1,5 +1,9 @@
+import { Test, TestingModule } from "@nestjs/testing";
 import type { PlaceResponse } from "@zenflow/shared";
 import type { User } from "../../../generated/prisma";
+import { PrismaService } from "../../prisma/prisma.service";
+import { BanditArmStateRepository } from "../../bandit/bandit-arm-state.repository";
+import { PlacementClient } from "./placement-client.service";
 import { schedulerPlacementPythonDuration } from "../../observability/metrics";
 import { PlacementGateway } from "./placement-gateway.service";
 
@@ -28,7 +32,7 @@ const respond = (outcome: string): PlaceResponse =>
     },
   }) as unknown as PlaceResponse;
 
-function make(place: jest.Mock) {
+async function make(place: jest.Mock) {
   const prisma = {
     session: { findMany: jest.fn().mockResolvedValue([]) },
     sessionSeries: { findMany: jest.fn().mockResolvedValue([]) },
@@ -48,11 +52,15 @@ function make(place: jest.Mock) {
         ].map((a) => [a, { A: [], b: [], version: 0 }]),
       ),
     );
-  const gw = new PlacementGateway(
-    prisma as never,
-    { place, enabled: true } as never,
-    { loadAll } as never,
-  );
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      PlacementGateway,
+      { provide: PrismaService, useValue: prisma },
+      { provide: PlacementClient, useValue: { place, enabled: true } },
+      { provide: BanditArmStateRepository, useValue: { loadAll } },
+    ],
+  }).compile();
+  const gw = module.get<PlacementGateway>(PlacementGateway);
   return { gw, prisma, loadAll };
 }
 
@@ -79,7 +87,7 @@ describe("PlacementGateway.buildRequest", () => {
     ["wrong length", [1, 2, 3]],
     ["non-finite", new Array(168).fill(NaN)],
   ])("sends the 168-float default for a %s matrix", async (_n, matrix) => {
-    const { gw } = make(jest.fn());
+    const { gw } = await make(jest.fn());
     const req = await gw.buildRequest({
       ...base,
       user: { ...user, preferenceMatrix: matrix },
@@ -98,7 +106,7 @@ describe("PlacementGateway.buildRequest", () => {
   });
 
   it("passes a well-formed matrix through unchanged", async () => {
-    const { gw } = make(jest.fn());
+    const { gw } = await make(jest.fn());
     const own = Array.from({ length: 168 }, (_, i) => i / 168);
     const req = await gw.buildRequest({
       ...base,
@@ -109,7 +117,7 @@ describe("PlacementGateway.buildRequest", () => {
   });
 
   it("buckets days, sends the observation count, and omits bandit state for heuristic-only", async () => {
-    const { gw, loadAll } = make(jest.fn());
+    const { gw, loadAll } = await make(jest.fn());
     const req = await gw.buildRequest({ ...base, members: [member()] });
     expect(req.contractVersion).toBe(1);
     expect(req.days.map((d) => d.dayStr)).toEqual(["2026-06-08"]);
@@ -120,7 +128,7 @@ describe("PlacementGateway.buildRequest", () => {
   });
 
   it("attaches alpha/ridge and per-arm state when LINUCB may run", async () => {
-    const { gw, loadAll } = make(jest.fn());
+    const { gw, loadAll } = await make(jest.fn());
     const req = await gw.buildRequest({
       ...base,
       members: [member({ primaryPolicy: "LINUCB", computeBoth: true })],
@@ -140,7 +148,7 @@ describe("PlacementGateway.buildRequest", () => {
   });
 
   it("caps the scan at maxScanDays and yields no days once the deadline has passed", async () => {
-    const { gw } = make(jest.fn());
+    const { gw } = await make(jest.fn());
     const far = new Date("2026-12-31T00:00:00.000Z");
     const long = await gw.buildRequest({
       ...base,
@@ -169,7 +177,7 @@ describe("PlacementGateway.placeSingleTwoPhase", () => {
     const place = jest
       .fn()
       .mockResolvedValue({ ok: true, response: respond("PLACED") });
-    const { gw } = make(place);
+    const { gw } = await make(place);
     const res = await gw.placeSingleTwoPhase(req, user, task, undefined);
     expect(res.ok).toBe(true);
     expect(place).toHaveBeenCalledTimes(1);
@@ -183,7 +191,7 @@ describe("PlacementGateway.placeSingleTwoPhase", () => {
         response: respond("NEEDS_INFEASIBLE_CONTEXT"),
       })
       .mockResolvedValueOnce({ ok: true, response: respond("DISPLACED") });
-    const { gw } = make(place);
+    const { gw } = await make(place);
     const res = await gw.placeSingleTwoPhase(
       req,
       user,
@@ -203,7 +211,7 @@ describe("PlacementGateway.placeSingleTwoPhase", () => {
 
   it("a failed first call is returned as-is (no infeasible-context load)", async () => {
     const place = jest.fn().mockResolvedValue({ ok: false, reason: "timeout" });
-    const { gw, prisma } = make(place);
+    const { gw, prisma } = await make(place);
     const res = await gw.placeSingleTwoPhase(req, user, task, undefined);
     expect(res).toEqual({ ok: false, reason: "timeout" });
     expect(place).toHaveBeenCalledTimes(1);
@@ -231,7 +239,7 @@ describe("PlacementGateway per-policy latency histogram", () => {
     const place = jest
       .fn()
       .mockResolvedValue({ ok: true, response: respond("PLACED") });
-    const { gw } = make(place);
+    const { gw } = await make(place);
     await gw.placeSingleTwoPhase(req, user, task, undefined);
     expect(totalsRecorded(record)).toEqual([0.005]);
     expect(record).toHaveBeenCalledWith(
@@ -254,7 +262,7 @@ describe("PlacementGateway per-policy latency histogram", () => {
         response: respond("NEEDS_INFEASIBLE_CONTEXT"),
       })
       .mockResolvedValueOnce({ ok: true, response: respond("DISPLACED") });
-    const { gw } = make(place);
+    const { gw } = await make(place);
     await gw.placeSingleTwoPhase(req, user, task, "ACCEPT_LATE_DEADLINE");
     expect(place).toHaveBeenCalledTimes(2);
     // total = 5 ms (context request) + 5 ms (final answer), recorded once
@@ -264,7 +272,7 @@ describe("PlacementGateway per-policy latency histogram", () => {
   it("records nothing when Python is unavailable", async () => {
     const record = jest.spyOn(schedulerPlacementPythonDuration, "record");
     const place = jest.fn().mockResolvedValue({ ok: false, reason: "timeout" });
-    const { gw } = make(place);
+    const { gw } = await make(place);
     await gw.placeSingleTwoPhase(req, user, task, undefined);
     expect(record).not.toHaveBeenCalled();
   });
