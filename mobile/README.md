@@ -120,6 +120,13 @@ Backend: `backend/src/devices/`, `backend/src/notifications/`.
 - Backend notifications use the account language, so sync the preference before sending.
 - Vietnamese on Android uses an in-app date grid; iOS passes the locale to its native picker.
 
+## Accessibility conventions
+
+- Orange or amber **text and icons** use `text-primary-text` / `text-warning` (AA on light surfaces); the brand orange stays for fills. `NAV_THEME` mirrors them for non-className colours.
+- Type: `text-label` (11px) and `text-title` (22px) join the stock scale; nothing below 11. Dense chrome passes `maxFontSizeMultiplier={FONT_SCALE_CAP.chrome | grid}` ([`lib/constants.ts`](lib/constants.ts)).
+- Respect Reduce Motion with `useReducedMotion` from Reanimated; looping or sliding motion becomes static or instant.
+- Small text actions use [`TextLink`](components/ui/text-link.tsx) (44pt target, link role).
+
 ## Contributing
 
 Biome, 2-space indent, Conventional Commits: see [CONTRIBUTING.md](../CONTRIBUTING.md).
