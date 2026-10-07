@@ -8,11 +8,11 @@ export const agentsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url
 export const repoRoot = path.resolve(agentsDir, "..");
 
 export function parseFrontmatter(text) {
-  const m = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(text);
+  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text);
   if (!m) return { meta: {}, body: text };
   const meta = {};
   let list = null;
-  for (const line of m[1].split("\n")) {
+  for (const line of m[1].split(/\r?\n/)) {
     const item = /^\s+-\s+(.*)$/.exec(line);
     if (item && list) {
       list.push(item[1].trim());

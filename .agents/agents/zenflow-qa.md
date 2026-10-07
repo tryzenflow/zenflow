@@ -4,6 +4,7 @@ summary: "API e2e (supertest) and UI e2e (Playwright) in the test stack"
 description: "Zenflow end-to-end tests: backend supertest specs and frontend Playwright specs, run in the isolated Docker test stack. Use to write or run e2e for an endpoint or screen."
 owns:
   - backend/test/**
+  - backend/src/test/**
   - backend/e2e.sh
   - frontend/e2e/**
   - frontend/playwright.config.ts
