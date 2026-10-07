@@ -270,10 +270,19 @@ function NewSessionForm() {
 
       showDisplacedToast(toast, response.displacedSessions);
       const { message, variant } = placementToastMessage(response, user);
-      showSplitToast(toast, message, variant);
+      showSplitToast(
+        toast,
+        message,
+        variant,
+        response.scheduledStartTime ? "calendar-check" : "calendar-plus",
+      );
       if (shouldSurfaceRescheduleHint()) {
-        toast(t("Tip"), "tip", 6000, "top", false, undefined, {
+        toast({
+          title: t("Tip"),
           description: t(RESCHEDULE_HINT),
+          variant: "tip",
+          icon: "lightbulb",
+          duration: 6000,
         });
       }
       // Teleport the calendar to where it landed and pulse the new block.
@@ -303,7 +312,8 @@ function NewSessionForm() {
         showErrorToast(
           toast,
           error,
-          t("Something went wrong when creating the session"),
+          t("Couldn't create the session"),
+          "calendar-x",
         ),
     );
   }

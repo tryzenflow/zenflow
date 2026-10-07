@@ -1,7 +1,5 @@
 export default {
   "{provider} synced": "Đã đồng bộ {provider}",
-  "This part couldn't load. The rest of the form still works.":
-    "Không thể tải phần này. Các phần khác của biểu mẫu vẫn hoạt động.",
   "Search...": "Tìm kiếm…",
   "List of items": "Danh sách các mục",
   "Dismiss notification": "Đóng thông báo",
@@ -19,8 +17,10 @@ export default {
   Add: "Thêm",
   "{count} sitting has an alternative":
     "{count} buổi có thời gian khác để chọn",
-  "OTP Code is not found or may have been expired":
-    "Không tìm thấy mã xác thực hoặc mã đã hết hạn",
   "Location must be at most 200 characters.":
     "Địa điểm không được vượt quá 200 ký tự.",
+  "This part didn't load. Everything else still works.":
+    "Phần này chưa tải được. Các phần còn lại vẫn dùng bình thường.",
+  "OTP Code is not found or may have been expired":
+    "Mã không tồn tại hoặc đã hết hạn. Bạn gửi lại mã mới nhé.",
 };

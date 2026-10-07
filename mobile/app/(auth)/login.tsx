@@ -1,3 +1,4 @@
+import { ChevronLeft, CircleUserRound, Mail } from "@/components/Icons";
 import { getLanguage, t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -202,8 +203,8 @@ export default function LoginScreen() {
     setSubmitting(true);
     clearErrors("email");
     try {
-      await requestOtp(data.email);
-      toast(t("Email sent successfully"), "info");
+      await requestOtp(data.email, getLanguage());
+      toast(t("Check your inbox"), "info", { icon: Mail });
       requestLockout.clear();
       setStage("otp");
       form.setValue("otp", "");
@@ -216,8 +217,8 @@ export default function LoginScreen() {
         const message =
           isAxiosError(error) && error.response
             ? (error.response.data?.message ??
-              t("Failed to send OTP. Please try again."))
-            : t("Network error. Could not connect to the server.");
+              t("Couldn't send the code. Try again."))
+            : t("No connection. Check your internet and try again.");
         setError("email", { type: "manual", message });
       }
     } finally {
@@ -231,7 +232,7 @@ export default function LoginScreen() {
     clearErrors("otp");
     try {
       const result = await verifyOtp(getValues("email"), data.otp);
-      toast(t("Login successfully"), "success");
+      toast(t("Welcome back"), "success", { icon: CircleUserRound });
       let user: User = result.data;
       // The language shown on this screen (the top-right select, or the
       // Vietnamese default) overrides the account's stored preference.
@@ -252,8 +253,8 @@ export default function LoginScreen() {
         const message =
           isAxiosError(error) && error.response
             ? (error.response.data?.message ??
-              t("Failed to verify OTP. Please try again."))
-            : t("Network error. Could not connect to the server.");
+              t("Couldn't verify the code. Try again."))
+            : t("No connection. Check your internet and try again.");
         setError("otp", { type: "manual", message });
       }
     } finally {
@@ -281,9 +282,9 @@ export default function LoginScreen() {
             <Text className="text-[22px] font-bold tracking-[-0.02em]">
               {stage === "email" ? t("Login to Zenflow") : t("Enter your code")}
             </Text>
-            <Text className="text-[14px] text-muted-foreground">
+            <Text className="text-[14px] text-center text-muted-foreground">
               {stage === "email"
-                ? t("A focus-first planner that schedules for you.")
+                ? t("Tell Zenflow what needs doing. It finds the time.")
                 : t("Sent to {email}", { email: hideEmail(email) })}
             </Text>
           </View>
@@ -314,7 +315,7 @@ export default function LoginScreen() {
               />
               {requestLockout.active && (
                 <LockoutNotice>
-                  {t("Too many requests. Please wait before trying again.")}
+                  {t("Too many requests. Wait a moment, then try again.")}
                 </LockoutNotice>
               )}
             </View>
@@ -331,14 +332,17 @@ export default function LoginScreen() {
                   resendCooldown.clear();
                 }}
               >
-                <Text
+                <View
                   className={cn(
-                    "text-[13px] underline text-muted-foreground underline-offset-[3px]",
-                    otpLockout.active && "text-muted-foreground opacity-50",
+                    "flex-row items-center gap-1",
+                    otpLockout.active && "opacity-50",
                   )}
                 >
-                  {t("Change email")}
-                </Text>
+                  <ChevronLeft size={15} className="text-brand-orange" />
+                  <Text className="text-[13px] font-semibold text-brand-orange">
+                    {t("Change email")}
+                  </Text>
+                </View>
               </Pressable>
               <Controller
                 control={form.control}
@@ -459,11 +463,11 @@ export default function LoginScreen() {
 
         <Text className="mt-[22px] px-2.5 text-center text-[12px] leading-normal text-muted-foreground">
           {t("By continuing, you agree to our")}{" "}
-          <Text className="text-[12px] text-foreground underline underline-offset-2">
+          <Text className="text-[12px] font-medium text-brand-orange">
             {t("Terms of Service")}
           </Text>{" "}
           {t("and")}{" "}
-          <Text className="text-[12px] text-foreground underline underline-offset-2">
+          <Text className="text-[12px] font-medium text-brand-orange">
             {t("Privacy Policy")}
           </Text>
           .

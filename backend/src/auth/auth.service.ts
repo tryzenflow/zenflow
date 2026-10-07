@@ -9,6 +9,7 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
+import type { Lang } from "@zenflow/shared";
 import { generateOTP } from "./utils";
 import { UsersService } from "../users/users.service";
 import { MailService } from "../mail/mail.service";
@@ -23,11 +24,11 @@ export class AuthService {
     private mailService: MailService,
   ) {}
 
-  async requestOTPCode(email: string) {
+  async requestOTPCode(email: string, lang?: Lang) {
     try {
       const otpCode = generateOTP();
       await this.cacheManager.set(`otp:${email}`, otpCode);
-      await this.mailService.sendLoginEmail(email, otpCode);
+      await this.mailService.sendLoginEmail(email, otpCode, undefined, lang);
     } catch (error) {
       // Surface the real reason (SMTP auth failure, ECONNREFUSED, invalid
       // from address, template strict-mode error, …) instead of swallowing it.

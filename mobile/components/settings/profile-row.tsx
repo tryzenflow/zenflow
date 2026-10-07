@@ -1,7 +1,11 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { updateBasicInfo } from "@/api/users";
-import { ChevronRight, Lock } from "@/components/Icons";
+import {
+  ChevronRight,
+  CircleUserRound,
+  Lock,
+} from "@/components/Icons";
 import {
   BottomSheet,
   BottomSheetContent,
@@ -71,13 +75,13 @@ export function ProfileRow({
     try {
       const updated = await updateBasicInfo({ name: trimmed });
       onUpdated(updated);
-      toast(t("Profile updated"), "success");
+      toast(t("Profile updated"), "success", { icon: CircleUserRound });
       bottomSheet.close();
     } catch (error) {
       const message =
         (isAxiosError(error) && error.response?.data?.message) ||
-        t("Failed to update profile");
-      toast(message, "destructive");
+        t("Couldn't update profile");
+      toast(message, "destructive", { icon: CircleUserRound });
     } finally {
       setSaving(false);
     }
@@ -151,7 +155,7 @@ export function ProfileRow({
                 <Lock size={16} className="shrink-0 text-muted-foreground" />
               </View>
               <Text className="mt-[7px] text-[13px] leading-snug text-muted-foreground">
-                {t("Email is your sign-in identity and can't be changed here.")}
+                {t("Your email is how you sign in, so it can't be changed here.")}
               </Text>
             </View>
           </View>

@@ -209,9 +209,20 @@ export default function RootLayout() {
       !loading &&
       (routeSettled || splashTimedOut)
     ) {
-      SplashScreen.hideAsync().catch((err) => {
-        console.warn("[_layout] SplashScreen.hideAsync warning:", err);
-      });
+      // Two frames of grace so the redirected-to screen has actually painted
+      // under the splash before it lifts.
+      let cancelled = false;
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          if (cancelled) return;
+          SplashScreen.hideAsync().catch((err) => {
+            console.warn("[_layout] SplashScreen.hideAsync warning:", err);
+          });
+        }),
+      );
+      return () => {
+        cancelled = true;
+      };
     }
   }, [fontsLoaded, fontError, loading, routeSettled, splashTimedOut]);
 
@@ -244,9 +255,16 @@ export default function RootLayout() {
         <ThemeProvider value={isDarkColorScheme ? DARK_THEME : LIGHT_THEME}>
           <BottomSheetModalProvider>
             <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(auth)" />
-              <Stack.Screen name="(onboarding)" />
-              <Stack.Screen name="(app)" />
+              {/* No transition between the three groups: `AuthGate` swaps them
+                  with a redirect, and an animated replace shows the previous
+                  group (the week view, on a signed-out launch) sliding away as
+                  the splash lifts. */}
+              <Stack.Screen name="(auth)" options={{ animation: "none" }} />
+              <Stack.Screen
+                name="(onboarding)"
+                options={{ animation: "none" }}
+              />
+              <Stack.Screen name="(app)" options={{ animation: "none" }} />
               {/* Session create/edit — full screens, not bottom sheets (see
                   mobile/README.md); presented modally so they still read
                   as "on top of" the tabs instead of replacing them. */}

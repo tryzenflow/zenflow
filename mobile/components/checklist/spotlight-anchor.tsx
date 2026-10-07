@@ -15,6 +15,9 @@ import {
 const SETTLE_MS = 450;
 const RETRY_MS = 300;
 const MAX_TRIES = 10;
+/** After the first measure: this many unchanged re-measures, this far apart. */
+const SETTLE_CHECKS = 2;
+const SETTLE_CHECK_MS = 300;
 
 /** The anchor is a plain native view (no NativeWind wrapper) that only gets measured. */
 const RAW_VIEW = { cssInterop: false } as object;
@@ -66,6 +69,23 @@ function Anchor({ step, focused }: { step: ChecklistStep; focused: boolean }) {
     if (!active) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // A control inside a sliding sheet (or a list still scrolling into place)
+    // is "on screen" mid-motion; keep re-measuring until it holds still so the
+    // spotlight doesn't end up where the control used to be.
+    const settle = (prev: Rect, n: number) => {
+      if (n >= SETTLE_CHECKS) return;
+      timer = setTimeout(() => {
+        if (cancelled || !ref.current) return;
+        ref.current.measureInWindow((x, y, w, h) => {
+          if (cancelled || w <= 0 || h <= 0) return;
+          const next = { x, y, width: w, height: h };
+          const moved =
+            Math.abs(next.x - prev.x) > 1 || Math.abs(next.y - prev.y) > 1;
+          if (moved) setRect(next);
+          settle(next, moved ? 0 : n + 1);
+        });
+      }, SETTLE_CHECK_MS);
+    };
     const attempt = (tries: number) => {
       if (cancelled) return;
       const retry = () => {
@@ -78,6 +98,7 @@ function Anchor({ step, focused }: { step: ChecklistStep; focused: boolean }) {
         if (w > 0 && h > 0 && isOnScreen(r, size.current)) {
           setRect(r);
           useSpotlight.getState().markShown();
+          settle(r, 0);
         } else {
           retry();
         }
@@ -117,5 +138,41 @@ function Anchor({ step, focused }: { step: ChecklistStep; focused: boolean }) {
         />
       ) : null}
     </>
+  );
+}
+
+/**
+ * Drop inside the grid cell the "Move a task to another day" demo should land
+ * on. While that step is requested it publishes the cell's window rect
+ * (`useSpotlight.dragTarget`) for the demo finger; no overlay of its own.
+ */
+export function DragTargetProbe() {
+  const requested = useSpotlight((s) => s.step === "move-day");
+  const ref = useRef<ViewInstance>(null);
+  useEffect(() => {
+    if (!requested) return;
+    let cancelled = false;
+    const measure = () =>
+      ref.current?.measureInWindow((x, y, w, h) => {
+        if (!cancelled && w > 0 && h > 0) {
+          useSpotlight.getState().setDragTarget({ x, y, width: w, height: h });
+        }
+      });
+    // The day sheet slides up over the grid first; the cell itself never moves.
+    const timers = [400, 900].map((ms) => setTimeout(measure, ms));
+    return () => {
+      cancelled = true;
+      for (const timer of timers) clearTimeout(timer);
+      useSpotlight.getState().setDragTarget(null);
+    };
+  }, [requested]);
+  return (
+    <View
+      {...RAW_VIEW}
+      ref={ref}
+      collapsable={false}
+      pointerEvents="none"
+      style={StyleSheet.absoluteFill}
+    />
   );
 }

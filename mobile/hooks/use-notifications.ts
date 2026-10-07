@@ -9,6 +9,7 @@ import {
 import { getSessionDetails } from "@/api/tasks";
 import { useToast } from "@/components/ui/toast";
 import { useUserStore } from "@/hooks/use-user-store";
+import { notificationToastVisual } from "@/lib/notification-visual";
 import { claimNotification, LOCAL_NOTIFICATION_SOURCE } from "@/lib/push";
 import { notifySessionsMutated } from "@/lib/session-cache";
 import { notificationEventKind, type NotificationDto } from "@zenflow/shared";
@@ -199,7 +200,12 @@ export async function jumpToSession(
       router.push(`/task/${encodeURIComponent(sessionId)}/edit` as Href);
     }
   } catch {
-    toast(t("That item isn't on your calendar anymore."), "destructive");
+    toast({
+    title: t("Couldn't find that item"),
+    description: t("It's no longer on your calendar."),
+    variant: "destructive",
+    icon: "calendar-x",
+  });
   }
 }
 
@@ -223,7 +229,12 @@ export async function viewSessionOnCalendar(
       params: { date: targetDate, flash: session.id },
     } as Href);
   } catch {
-    toast(t("That item isn't on your calendar anymore."), "destructive");
+    toast({
+    title: t("Couldn't find that item"),
+    description: t("It's no longer on your calendar."),
+    variant: "destructive",
+    icon: "calendar-x",
+  });
   }
 }
 
@@ -296,13 +307,12 @@ export function useNotificationsSubscription(): void {
         // 1. In-app tap-to-act toast with clear title and "View on calendar" action
         const { router: currentRouter, toast: currentToast } =
           latestRef.current;
-        currentToast(
-          cleanTitle,
-          "default",
-          8000,
-          "top",
-          true,
-          n.sessionId
+        currentToast({
+          title: cleanTitle,
+          description: n.content,
+          ...notificationToastVisual(n.eventName),
+          duration: 8000,
+          action: n.sessionId
             ? {
                 label: t("View on calendar"),
                 onPress: () =>
@@ -314,8 +324,7 @@ export function useNotificationsSubscription(): void {
                   ),
               }
             : undefined,
-          { description: n.content },
-        );
+        });
 
         // 2. System notification in Android notification shade / lock screen
         if (Platform.OS !== "web") {

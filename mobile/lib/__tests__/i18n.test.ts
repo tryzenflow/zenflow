@@ -29,8 +29,10 @@ describe("mobile language", () => {
   it("capitalizes standalone Vietnamese date labels", () => {
     setLanguage("vi");
     const d = new Date(2026, 9, 6);
-    expect(format(d, "MMMM yyyy")).toBe("tháng 10 2026");
-    expect(formatTitle(d, "MMMM yyyy")).toBe("Tháng 10 2026");
+    expect(format(d, "MMMM yyyy")).toBe("tháng 10/2026");
+    expect(formatTitle(d, "MMMM yyyy")).toBe("Tháng 10/2026");
+    // Only a bare month header is rewritten; longer patterns keep their shape.
+    expect(format(d, "EEEE, d MMMM yyyy")).not.toContain("/");
     setLanguage("en");
     expect(formatTitle(d, "MMMM yyyy")).toBe("October 2026");
   });

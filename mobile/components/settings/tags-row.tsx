@@ -1,7 +1,11 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { createTagsBulk, listTags } from "@/api/tags";
-import { ChevronRight, List } from "@/components/Icons";
+import {
+  ChevronRight,
+  List,
+  Tag,
+} from "@/components/Icons";
 import { TagPicker } from "@/components/onboarding/tag-picker";
 import { SettingsSectionLabel } from "@/components/settings/settings-header";
 import {
@@ -48,7 +52,12 @@ export function TagsRow() {
       );
       sheet.close();
     } catch {
-      toast(t("Couldn't save tags. Try again."), "destructive");
+      toast({
+        title: t("Couldn't save tags"),
+        description: t("Try again in a moment."),
+        variant: "destructive",
+        icon: Tag,
+      });
     } finally {
       setSaving(false);
     }

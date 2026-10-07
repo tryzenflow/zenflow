@@ -18,9 +18,12 @@ import {
   Bold,
   BookOpen,
   Calendar,
+  CalendarCheck,
   CalendarClock,
   CalendarDays,
+  CalendarPlus,
   CalendarRange,
+  CalendarX,
   Check,
   CheckCircle,
   CheckSquare,
@@ -59,6 +62,9 @@ import {
   LayoutPanelLeft,
   LifeBuoy,
   Link2,
+  Maximize2,
+  Pencil,
+  Repeat,
   KeyRound,
   MoreHorizontal,
   Unlink,
@@ -225,6 +231,9 @@ interopIcon(CalendarClock);
 interopIcon(ClipboardList);
 interopIcon(GraduationCap);
 interopIcon(Notebook);
+interopIcon(Maximize2);
+interopIcon(Pencil);
+interopIcon(Repeat);
 
 export {
   Activity,
@@ -243,9 +252,12 @@ export {
   BarChart3,
   Bold,
   Calendar,
+  CalendarCheck,
   CalendarClock,
   CalendarDays,
+  CalendarPlus,
   CalendarRange,
+  CalendarX,
   Check,
   CheckCircle,
   LayoutGrid,
@@ -282,6 +294,9 @@ export {
   LayoutPanelLeft,
   LifeBuoy,
   Link2,
+  Maximize2,
+  Pencil,
+  Repeat,
   KeyRound,
   MoreHorizontal,
   Unlink,

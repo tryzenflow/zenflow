@@ -1,4 +1,9 @@
-import { ToastProvider, useToast } from "@/components/ui/toast";
+import {
+  type ToastFn,
+  ToastProvider,
+  normalizeToastArgs,
+  useToast,
+} from "@/components/ui/toast";
 import { type ReactNode, createContext, useContext, useMemo } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
@@ -40,23 +45,16 @@ export function useModalToast(): ToastApi {
   const root = useContext(RootToastContext) ?? local;
   return useMemo<ToastApi>(
     () => ({
-      toast: (message, variant, duration, position, progress, action, opts) => {
+      toast: ((...args: Parameters<ToastFn>) => {
+        const input = normalizeToastArgs(args);
         const target =
-          variant === "destructive" ||
-          action ||
-          opts?.actions?.length
+          input.variant === "destructive" ||
+          input.action ||
+          input.actions?.length
             ? local
             : root;
-        target.toast(
-          message,
-          variant,
-          duration,
-          position,
-          progress,
-          action,
-          opts,
-        );
-      },
+        target.toast(input);
+      }) as ToastFn,
       confirm: local.confirm,
       removeToast: local.removeToast,
     }),

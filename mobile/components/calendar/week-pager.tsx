@@ -1,5 +1,8 @@
+import { listSessions } from "@/api/tasks";
 import { useLanguage } from "@/hooks/use-language";
 import { NAV_THEME } from "@/lib/constants";
+import type { DayStatus } from "@/lib/day-status";
+import { fetchDaySessions, isDayCacheFresh } from "@/lib/session-cache";
 import type { PeekBlock } from "@/lib/peek";
 import { useColorScheme } from "@/lib/useColorScheme";
 import {
@@ -20,6 +23,7 @@ import {
   shouldSlideWeek,
 } from "@/lib/week-pager-math";
 import type { Session } from "@zenflow/shared";
+import { format } from "date-fns";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   type ForwardedRef,
@@ -41,6 +45,7 @@ import Animated, {
   useAnimatedReaction,
   useAnimatedStyle,
   useDerivedValue,
+  runOnUI,
   useSharedValue,
   withTiming,
   type SharedValue,
@@ -50,7 +55,7 @@ import type {
   PendingSessionUpdate,
   UpdateRecurringScope,
 } from "./update-recurring-sheet";
-import { type DragEdge, PagerPage } from "./week-pager-page";
+import { type DragEdge, PagerPage, type PagerWindow } from "./week-pager-page";
 import { PEEK_STRIP_W, PeekStrip } from "./week-peek-strip";
 
 /** `withTiming` config for every settle snap (and snap-back) after a swipe
@@ -75,6 +80,11 @@ const BRAND_ORANGE_DARK = "255, 122, 36";
 /** Stable empty peek list — a fresh `[]` each render would re-run the strip's
  * memo for nothing. */
 const EMPTY_PEEK: PeekBlock[] = [];
+
+/** A window of days as the UI thread's `windowSV` holds it. */
+function windowOf(days: Date[]): PagerWindow {
+  return { keys: days.map(dateKey), ts: days.map((d) => d.getTime()) };
+}
 
 interface WeekPagerProps {
   /** The day the screen/header currently shows; the pager keeps the focused
@@ -109,6 +119,8 @@ interface WeekPagerProps {
   /** Load state of the focused page only — the pre-mounted neighbours must not
    * drive the screen's FAB. */
   onActiveStateChange?: (state: TimelineState) => void;
+  /** Today's "next up" session from the focused page only. */
+  onStatusChange?: (status: DayStatus) => void;
   /** Fired when a still-finger long-press on a block asks to move it — the
    * screen opens the "Move to…" sheet with this session. Forwarded straight
    * through from the active `DayTimeline`. */
@@ -194,6 +206,7 @@ function WeekPagerImpl(
     onWeekSlideStart,
     onWeekSlideEnd,
     onActiveStateChange,
+    onStatusChange,
     onRequestReschedule,
     onRequestBlockMenu,
     onRequestScopedUpdate,
@@ -244,6 +257,19 @@ function WeekPagerImpl(
   // shared value).
   const daysRef = useRef(days);
   daysRef.current = days;
+  // The same window on the UI thread — what each page reads its slot from.
+  // Written together with `setDays` everywhere, and *ahead* of it at the end
+  // of a settle animation, where the new window and `progress = -width` must
+  // land in the same frame (see `recenterOnUI`).
+  const windowSV = useSharedValue<PagerWindow>(windowOf(days));
+  const applyWindow = useCallback(
+    (win: Date[]) => {
+      windowSV.value = windowOf(win);
+      daysRef.current = win;
+      setDays(win);
+    },
+    [windowSV],
+  );
 
   // Report the day the strip is centred on *as it moves* — once per whole-page
   // crossing — so `WeekScreen` can let the header title / range / chip track
@@ -253,17 +279,19 @@ function WeekPagerImpl(
   // header week drag the window is `[f−7, f, f+7]`, so the same math reports
   // the adjacent week with no special-casing. Settling walks the index back to
   // 1, reconciling the visible day to `focusedDate` for free.
+  // The day is read from `windowSV` on the UI thread, so the settle's
+  // re-centre (which swaps the window ahead of React) never reports the
+  // previous window's day for that slot.
   const emitVisibleDay = useCallback(
-    (index: number) => {
-      const day = daysRef.current[index];
-      if (day) onVisibleDateChange?.(day);
-    },
+    (ts: number) => onVisibleDateChange?.(new Date(ts)),
     [onVisibleDateChange],
   );
   useAnimatedReaction(
     () => Math.round(-progress.value / width),
     (index, prev) => {
-      if (prev != null && index !== prev) runOnJS(emitVisibleDay)(index);
+      if (prev == null || index === prev) return;
+      const ts = windowSV.value.ts[index];
+      if (ts != null) runOnJS(emitVisibleDay)(ts);
     },
     [width, emitVisibleDay],
   );
@@ -349,8 +377,34 @@ function WeekPagerImpl(
   useLayoutEffect(() => {
     if (!pendingSettleRef.current) return;
     pendingSettleRef.current = false;
+    // Roles and position change together, after React committed the new
+    // window: resetting roles earlier (in `settleRoles`) leaves a frame where
+    // the old page is visible at the centre.
     progress.value = -width;
-  }, [days, progress, width]);
+    fromSV.value = 1;
+    toSV.value = 1;
+  }, [days, progress, width, fromSV, toSV]);
+
+  // Warm the days just outside the 3-page window so a quick second swipe lands
+  // on cached data instead of a cold mount. `fetchDaySessions` de-dupes with
+  // the pages' own fetches; failures are ignored (the page retries on mount).
+  useEffect(() => {
+    const first = days[0];
+    const last = days[days.length - 1];
+    if (!first || !last) return;
+    for (const offset of [
+      { base: first, delta: -1 },
+      { base: last, delta: 1 },
+    ]) {
+      const d = new Date(offset.base);
+      d.setDate(d.getDate() + offset.delta);
+      const key = format(d, "yyyy-MM-dd");
+      if (isDayCacheFresh(key)) continue;
+      fetchDaySessions(key, () =>
+        listSessions("day", d).then((res) => res.sessions),
+      ).catch(() => {});
+    }
+  }, [days]);
 
   const commitRoles = useCallback(
     (index: number) => {
@@ -387,11 +441,25 @@ function WeekPagerImpl(
       // one-frame flash where the old days render with progress=-w
       // (old focused day lands at center: index 1 * w + (-w) = 0).
       pendingSettleRef.current = true;
-      setDays(centeredDays(landed));
+      applyWindow(centeredDays(landed));
       setFocusedIndex(1);
-      commitRoles(1);
     },
-    [centeredDays, commitRoles, days],
+    [applyWindow, days],
+  );
+
+  // The visual half of a re-centre, run on the UI thread as the last step of
+  // a settle animation: the new window and the rest position land in the same
+  // frame, so the page that just slid in never moves. `settleRoles` then
+  // catches React up (its own writes repeat these values — no-ops).
+  const recenterOnUI = useCallback(
+    (win: PagerWindow) => {
+      "worklet";
+      windowSV.value = win;
+      progress.value = -width;
+      fromSV.value = 1;
+      toSV.value = 1;
+    },
+    [windowSV, progress, width, fromSV, toSV],
   );
 
   // ── Week slide (header-driven, or a day-swipe that crosses a week edge) ────
@@ -410,7 +478,7 @@ function WeekPagerImpl(
     if (settling || dragActive || weekModeRef.current) return;
     weekModeRef.current = true;
     const f = days[focusedIndex];
-    setDays([shiftWeek(f, -1), f, shiftWeek(f, 1)]);
+    applyWindow([shiftWeek(f, -1), f, shiftWeek(f, 1)]);
     setFocusedIndex(1);
     commitRoles(1);
     // The header block moves 1:1 with the finger and the pages match it —
@@ -420,7 +488,15 @@ function WeekPagerImpl(
     draggingSV.value = 0;
     setWeekMode(true);
     setSettling(true);
-  }, [settling, dragActive, days, focusedIndex, commitRoles, draggingSV]);
+  }, [
+    settling,
+    dragActive,
+    days,
+    focusedIndex,
+    applyWindow,
+    commitRoles,
+    draggingSV,
+  ]);
 
   // Completion of a header week slide: clear week mode and re-center the
   // window on `days[idx]` — the same-weekday adjacent-week day (`1 + dir`) on
@@ -441,6 +517,8 @@ function WeekPagerImpl(
       // `beginHeaderWeekDrag` bailed (pager was mid-settle) → let the pager's
       // own `focusedDate` effect handle the committed week change instead.
       if (!weekModeRef.current) return;
+      const landed = daysRef.current[1 + dir];
+      const nextWin = landed ? windowOf(centeredDays(landed)) : null;
       toSV.value = 1 + dir;
       draggingSV.value = 0; // parallax eases back to 1x over the settle
       progress.value = withTiming(-width - dir * width, SETTLE, () => {
@@ -448,10 +526,11 @@ function WeekPagerImpl(
         // Re-center on the committed week whether or not the tween finished
         // clean — `focusedDate` already moved, an interrupt just skips the
         // last frames.
+        if (nextWin) recenterOnUI(nextWin);
         runOnJS(finishHeaderWeekRoles)(1 + dir);
       });
     },
-    [toSV, draggingSV, progress, width, finishHeaderWeekRoles],
+    [toSV, draggingSV, progress, width, finishHeaderWeekRoles, recenterOnUI],
   );
 
   // Header week-swipe released below threshold, or cancelled: collapse the
@@ -524,6 +603,8 @@ function WeekPagerImpl(
   // `m`).
   const animateRolesTo = useCallback(
     (target: number, onDone?: (index: number) => void) => {
+      const landed = days[target];
+      const nextWin = landed ? windowOf(centeredDays(landed)) : null;
       fromSV.value = focusedIndex;
       toSV.value = target;
       progress.value = withTiming(
@@ -534,11 +615,22 @@ function WeekPagerImpl(
             runOnJS(releaseSettle)();
             return;
           }
+          if (nextWin) recenterOnUI(nextWin);
           runOnJS(onDone ?? settleRoles)(target);
         },
       );
     },
-    [focusedIndex, fromSV, toSV, progress, settleRoles, width, releaseSettle],
+    [
+      days,
+      focusedIndex,
+      fromSV,
+      toSV,
+      progress,
+      settleRoles,
+      width,
+      releaseSettle,
+      recenterOnUI,
+    ],
   );
 
   // External focus change (WeekHeader chip tap): scroll to the day if it's in
@@ -578,7 +670,7 @@ function WeekPagerImpl(
     // sweep through an empty viewport — the pager paints only the outgoing/
     // incoming pair — so those snap straight to the target day.
     const fresh = centeredDays(focusedDate);
-    setDays(fresh);
+    applyWindow(fresh);
     setFocusedIndex(1);
     setSettling(false);
     commitRoles(1);
@@ -609,11 +701,12 @@ function WeekPagerImpl(
         dir === 1
           ? [days[0], current, nextFocused] // page 2 slides in from the right
           : [nextFocused, current, days[2]]; // page 0 slides in from the left
-      setDays(win);
+      applyWindow(win);
       setFocusedIndex(1);
       fromSV.value = 1;
       toSV.value = 1 + dir;
       draggingSV.value = 0;
+      const nextWin = windowOf(centeredDays(nextFocused));
 
       onFocusedDateChange(nextFocused); // focus commits now; effect guarded by `settling`
       onWeekSlideStart?.(); // header enters week-slide mode
@@ -622,12 +715,15 @@ function WeekPagerImpl(
       headerStripSV.value = withTiming(target, SETTLE); // header strip from REST
       progress.value = withTiming(target, SETTLE, () => {
         "worklet";
+        recenterOnUI(nextWin);
         runOnJS(finishSlideWeek)(dir);
       });
     },
     [
       days,
       focusedIndex,
+      applyWindow,
+      recenterOnUI,
       fromSV,
       toSV,
       draggingSV,
@@ -712,10 +808,15 @@ function WeekPagerImpl(
       daysRef.current = win;
       setDays(win);
       setFocusedIndex(1);
-      commitRoles(1);
       onFocusedDateChange(next);
-      navRebaseXSV.value = navTranslationXSV.value;
-      progress.value = -width;
+      // Window, roles, rebase and rest position in one UI-thread step, so
+      // the fresh day can't render a frame at the old slot.
+      const nextWin = windowOf(win);
+      runOnUI(() => {
+        "worklet";
+        navRebaseXSV.value = navTranslationXSV.value;
+        recenterOnUI(nextWin);
+      })();
       navArmTimerRef.current = setTimeout(
         () => navAdvanceRef.current(dir),
         NAV_HOLD_MS,
@@ -723,13 +824,10 @@ function WeekPagerImpl(
     },
     [
       focusedDate,
-      centeredDays,
-      commitRoles,
       onFocusedDateChange,
       navRebaseXSV,
       navTranslationXSV,
-      progress,
-      width,
+      recenterOnUI,
     ],
   );
   navAdvanceRef.current = navAdvance;
@@ -967,12 +1065,14 @@ function WeekPagerImpl(
     <View className="flex-1">
       <GestureDetector gesture={panGesture}>
         <View className="flex-1 overflow-hidden" onLayout={handleFirstLayout}>
-          {days.map((day, index) => {
-            const active = dateKey(day) === dateKey(focusedDate);
+          {days.map((day) => {
+            const key = dateKey(day);
+            const active = key === dateKey(focusedDate);
             return (
               <PagerPage
-                key={dateKey(day)}
-                index={index}
+                key={key}
+                dayKey={key}
+                windowSV={windowSV}
                 width={width}
                 progress={progress}
                 fromSV={fromSV}
@@ -998,6 +1098,7 @@ function WeekPagerImpl(
                   onPeekChange={handlePeekChange}
                   rightInset={PEEK_STRIP_W}
                   onStateChange={active ? onActiveStateChange : undefined}
+                  onStatusChange={active ? onStatusChange : undefined}
                   flashSessionId={active ? flashSessionId : null}
                 />
               </PagerPage>

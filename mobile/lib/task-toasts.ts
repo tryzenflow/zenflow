@@ -1,6 +1,6 @@
 import { t } from "./i18n";
 import { format } from "./i18n";
-import type { useToast } from "@/components/ui/toast";
+import type { ToastIconName, useToast } from "@/components/ui/toast";
 import { placementQualifier, zonedDate } from "@zenflow/core";
 import {
   type DisplacedSession,
@@ -48,11 +48,10 @@ export function showSplitToast(
   toast: ToastFn,
   raw: string,
   variant: "success" | "destructive" | "warning" = "destructive",
+  icon?: ToastIconName,
 ): void {
   const { title, description } = splitToastMessage(t(raw));
-  toast(title, variant, undefined, undefined, undefined, undefined, {
-    description,
-  });
+  toast({ title, description, variant, ...(icon && { icon }) });
 }
 
 /**
@@ -66,8 +65,16 @@ export function showErrorToast(
   toast: ToastFn,
   error: unknown,
   fallback: string,
+  icon?: ToastIconName,
 ): void {
-  showSplitToast(toast, describeSaveError(error, fallback), "destructive");
+  const message = describeSaveError(error, fallback);
+  // Only the generic fallback is known: add a next step so it isn't a dead end.
+  showSplitToast(
+    toast,
+    message === fallback ? `${fallback}\n${t("Try again in a moment.")}` : message,
+    "destructive",
+    icon,
+  );
 }
 
 /**
@@ -124,14 +131,15 @@ export function placementToastMessage(
   }
 
   const qualifier = placementQualifier(task, { timezone: user.timezone });
-  const suffix = qualifier === "pastDeadline" ? t(" — past its deadline") : "";
+  const suffix =
+    qualifier === "pastDeadline" ? `\n${t("It's past its deadline.")}` : "";
 
   const when = format(
     zonedDate(task.scheduledStartTime, user.timezone),
     "EEE MMM d, HH:mm",
   );
   return {
-    message: t("Scheduled for {when}{suffix}", { when, suffix }),
+    message: t("Scheduled for {when}", { when }) + suffix,
     variant: "success",
   };
 }
@@ -209,8 +217,15 @@ export async function withInfeasibleRetry<T>(
     if (!infeasible) return onError(error);
     // One toast offering every policy, not one toast per policy.
     const { title, description } = splitToastMessage(infeasible.message);
-    toast(title, "warning", 12000, "bottom", false, undefined, {
+    // A decision, not a notice: nothing was saved yet, so it must not time
+    // out from under the user.
+    toast({
+      title,
       description,
+      variant: "warning",
+      icon: "calendar-x",
+      persistent: true,
+      position: "bottom",
       actions: infeasible.options.map((policy) => ({
         label: t(POLICY_LABEL[policy]),
         color: POLICY_COLOR[policy],
@@ -235,16 +250,17 @@ export function showDisplacedToast(
 ): void {
   if (!displaced?.length) return;
   const n = displaced.length;
-  toast(
-    t("Moved {count} flexible tasks to make room", { count: n }),
-    "default",
-    4000,
-  );
+  toast({
+    title: t("Moved {count} flexible tasks", { count: n }),
+    description: t("To make room for the new session."),
+    icon: "calendar-clock",
+    duration: 4000,
+  });
 }
 
 /**
  * Toast shown after the user picks the alternative slot in a divergent
- * placement (issue #41). Matches the mockup: "Moved to [time]" + "Thanks — noted for next time".
+ * placement (issue #41). Title "Moved to new slot", description "{when}. Thanks, noted for next time."
  */
 export function showAlternativePickToast(
   toast: ToastFn,
@@ -252,8 +268,13 @@ export function showAlternativePickToast(
   tz: string,
 ): void {
   const when = format(zonedDate(alternativeSlot, tz), "h:mm a 'on' EEE MMM d");
-  toast(t("Moved to ") + when, "success", 4000, "bottom", false, undefined, {
-    description: t("Thanks — noted for next time"),
+  toast({
+    title: t("Moved to new slot"),
+    description: t("{when}. Thanks, noted for next time.", { when }),
+    variant: "success",
+    icon: "calendar-clock",
+    duration: 4000,
+    position: "bottom",
   });
 }
 
@@ -263,10 +284,10 @@ export function showAlternativePickToast(
  * the time this shows, so the copy has to say so — the prompt is an offer, not
  * a gate.
  *
- * Variant `"info"` is load-bearing: the toast provider only auto-dismisses
- * `success` toasts (`components/ui/toast.tsx`, `autoDismiss = !confirm &&
- * variant === "success"`), so an `info` prompt stays up until the user opens
- * it or closes it.
+ * `persistent` is load-bearing: every other toast fades once its time in
+ * front is up (`components/ui/toast.tsx`), and this offer must stay until the
+ * user opens it or closes it. It is otherwise a plain toast — same card, same
+ * button row — not a special A/B style.
  */
 export function showSeriesAlternativesPrompt(
   toast: ToastFn,
@@ -274,30 +295,26 @@ export function showSeriesAlternativesPrompt(
   total: number,
   onView: () => void,
 ): void {
-  toast(
-    t(
+  toast({
+    title: t(
       count === 1
         ? "{count} sitting has an alternative"
         : "{count} sittings have an alternative",
       { count },
     ),
-    "tip",
-    undefined,
-    "bottom",
-    false,
-    {
+    description: t("All {total} are already scheduled — swap any you like", {
+      total,
+    }),
+    variant: "tip",
+    icon: "sparkles",
+    persistent: true,
+    position: "bottom",
+    action: {
       label: t("View"),
       onPress: onView,
       color: { light: "#f97316", dark: "#fb923c" },
-      inline: true,
-      mockup: true,
     },
-    {
-      description: t("All {total} are already scheduled — swap any you like", {
-        total,
-      }),
-    },
-  );
+  });
 }
 
 /**
@@ -306,19 +323,13 @@ export function showSeriesAlternativesPrompt(
  * of the list usable, so the user must not think the pick landed.
  */
 export function showSlotTakenToast(toast: ToastFn): void {
-  toast(
-    t("That time was just taken"),
-    "destructive",
-    undefined,
-    "bottom",
-    false,
-    undefined,
-    {
-      description: t(
-        "It now overlaps another sitting of this task, so that one stayed put. Try another time, or keep it as scheduled.",
-      ),
-    },
-  );
+  toast({
+    title: t("That time was just taken"),
+    description: t("Nothing moved. Pick another time or keep this one."),
+    variant: "destructive",
+    icon: "calendar-x",
+    position: "bottom",
+  });
 }
 
 /**
@@ -338,8 +349,13 @@ export function showSeriesPickToast(
   const at = picked.session.scheduledStartTime;
   if (!at) return;
   const when = format(zonedDate(at, tz), "h:mm a 'on' EEE MMM d");
-  toast(t("Moved to ") + when, "success", 4000, "bottom", false, undefined, {
-    description: t("Thanks — noted for next time"),
+  toast({
+    title: t("Moved to new slot"),
+    description: t("{when}. Thanks, noted for next time.", { when }),
+    variant: "success",
+    icon: "calendar-clock",
+    duration: 4000,
+    position: "bottom",
   });
 }
 
@@ -354,25 +370,21 @@ export function showBulkPickToast(
   failed: number,
 ): void {
   if (failed === 0) {
-    toast(
-      t("Updated {count} sittings", { count: applied }),
-      "success",
-      4000,
-      "bottom",
-    );
+    toast({
+      title: t("Updated {count} sittings", { count: applied }),
+      variant: "success",
+      icon: "calendar-check",
+      duration: 4000,
+      position: "bottom",
+    });
     return;
   }
-  toast(
-    t("{applied} updated, {failed} couldn't be", { applied, failed }),
-    "warning",
-    6000,
-    "bottom",
-    false,
-    undefined,
-    {
-      description: t(
-        "The ones that clashed with another sitting stayed where they are.",
-      ),
-    },
-  );
+  toast({
+    title: t("Updated {applied}, skipped {failed}", { applied, failed }),
+    description: t("Skipped ones clashed with another sitting and stayed put."),
+    variant: "warning",
+    icon: "calendar-clock",
+    duration: 6000,
+    position: "bottom",
+  });
 }

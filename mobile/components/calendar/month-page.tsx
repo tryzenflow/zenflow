@@ -1,11 +1,12 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
-import { useMinSkeleton } from "@/hooks/use-min-skeleton";
+import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import { format } from "@/lib/i18n";
 import { listSessions, updateSession } from "@/api/tasks";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { completeStep } from "@/hooks/use-checklist";
+import { showMovedToast } from "@/lib/move-toast";
 import {
   dateKey,
   getMonthGridDays,
@@ -35,14 +36,14 @@ import type { Session } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 
 import * as Haptics from "expo-haptics";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, type ViewInstance } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
 } from "react-native-reanimated";
 import { CELL_HEIGHT } from "./month-cell";
-import { MonthGrid, MonthGridSkeleton } from "./month-grid";
+import { MonthGrid } from "./month-grid";
 import { sessionTypeIcon } from "./session-type-badge";
 
 interface DragState {
@@ -118,7 +119,7 @@ interface MonthPageProps {
  * there is no edge-drag cross-month advance. Each page mounted by the outer
  * `MonthPager`/`month-pager.tsx` fetches independently.
  */
-export function MonthPage({
+export const MonthPage = memo(function MonthPage({
   monthDate,
   tz,
   reloadToken,
@@ -137,7 +138,10 @@ export function MonthPage({
   const [sessions, setSessions] = useState<Session[] | null>(
     () => getCachedDaySessions(monthKey) ?? null,
   );
-  const showSkeleton = useMinSkeleton(sessions === null);
+  // Until the first result lands the real grid (day numbers, this month's row
+  // count) renders with placeholder pills, so the page never blanks or swaps
+  // to a different-shaped skeleton.
+  const showSkeleton = useDelayedLoading(sessions === null);
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   // A day key to pulse for a moment right after a drop lands on it.
@@ -207,6 +211,7 @@ export function MonthPage({
         toast(
           errorMessage(error, t("Couldn't load this month's tasks")),
           "destructive",
+          { icon: "calendar-x" },
         );
       }
     }
@@ -428,7 +433,12 @@ export function MonthPage({
         const updated = await updateSession(original.id, {
           scheduledStartTime: newStartISO,
         });
-        completeStep("move-day");
+        const firstMove = completeStep("move-day");
+        showMovedToast(toast, {
+          first: firstMove,
+          to: zonedDate(newStartISO, tz),
+          withTime: false,
+        });
         setSessions((cur) =>
           (cur ?? []).map((t) => (t.id === original.id ? updated : t)),
         );
@@ -437,6 +447,7 @@ export function MonthPage({
         toast(
           errorMessage(error, t("Couldn't reschedule task")),
           "destructive",
+          { icon: "calendar-x" },
         );
       }
     };
@@ -507,11 +518,9 @@ export function MonthPage({
 
   return (
     <View ref={pageRef} onLayout={measureGeometry} className="flex-1">
-      {sessions === null || showSkeleton ? (
-        <MonthGridSkeleton />
-      ) : (
-        <MonthGrid
+      <MonthGrid
           ref={gridRef}
+          loading={showSkeleton}
           monthDate={monthDate}
           days={days}
           today={today}
@@ -519,12 +528,12 @@ export function MonthPage({
           highlightedKey={highlightedKey}
           draggingSessionId={dragging?.task.id ?? null}
           onPressDay={handleOpenDay}
+          onOpenMoveDay={isActive ? handleOpenOverflow : undefined}
           onDoubleTapDay={onDoubleTapDay}
           onPressOverflow={handleOpenOverflow}
           onGridLayout={measureGeometry}
           justDroppedKey={justDroppedKey}
         />
-      )}
 
       {/* Drop-target highlight lives on `MonthCell` itself (`isDropTarget`);
           this floating pill is just the dragged copy following the finger —
@@ -568,4 +577,4 @@ export function MonthPage({
       )}
     </View>
   );
-}
+});

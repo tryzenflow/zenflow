@@ -1,13 +1,12 @@
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useLastCreated } from "@/hooks/use-last-created";
+import { useSpotlight } from "@/hooks/use-spotlight";
 import { dateKey, isOutsideMonth } from "@/lib/month-date-math";
-import { cn } from "@/lib/utils";
 import type { Session } from "@zenflow/shared";
 import { isSameDay } from "date-fns";
-import { forwardRef, memo, useMemo } from "react";
+import { forwardRef, memo, useEffect, useMemo, useRef } from "react";
 import { View, type ViewInstance } from "react-native";
 import { CELL_HEIGHT, MonthCell } from "./month-cell";
 
@@ -34,8 +33,13 @@ interface MonthGridProps {
   highlightedKey: string | null;
   /** Day key to briefly pulse right after a drag drop lands on it. */
   justDroppedKey: string | null;
+  /** Sessions are still loading — every cell shows placeholder pills. */
+  loading: boolean;
   draggingSessionId: string | null;
   onPressDay: (day: Date, tasks: Session[]) => void;
+  /** Checklist "Move a task to another day": open the day that has a task so
+   * its list (the only place a task can be dragged from) is on screen. */
+  onOpenMoveDay?: (day: Date, tasks: Session[]) => void;
   onDoubleTapDay: (day: Date) => void;
   onPressOverflow: (day: Date, tasks: Session[]) => void;
   onGridLayout: () => void;
@@ -66,19 +70,21 @@ export const MonthGrid = memo(
       tasksByDate,
       highlightedKey,
       justDroppedKey,
+      loading,
       draggingSessionId,
       onPressDay,
+      onOpenMoveDay,
       onDoubleTapDay,
       onPressOverflow,
       onGridLayout,
     },
     ref,
   ) {
-    // The cells the checklist's spotlights point at. "Open a day": today when
-    // it's in this month, else mid-month. "Move a task": the day holding the
-    // task the user just created, else the first day with one.
+    // The days the checklist points at. "Open a day": today when it's in this
+    // month, else mid-month (spotlighted cell). "Move a task": the day holding the
+    // task the user just created, else the first day with one (its list opens).
     const lastCreatedId = useLastCreated((s) => s.id);
-    const { openDayKey, moveDayKey } = useMemo(() => {
+    const { openDayKey, moveDayKey, targetKey } = useMemo(() => {
       const inMonth = days.filter((d) => !isOutsideMonth(d, monthDate));
       const openDay =
         inMonth.find((d) => isSameDay(d, today)) ??
@@ -95,11 +101,37 @@ export const MonthGrid = memo(
           break;
         }
       }
+      const moveKey = created ?? first ?? dateKey(openDay);
+      // Where the demo finger drops: the earliest *future* day (top rows
+      // first — the day sheet covers the lower grid), never the day being
+      // dragged from. Falls back to any other day of the month when nothing
+      // later is left (late in the month).
+      const todayKey = dateKey(today);
+      const target =
+        inMonth.find((d) => dateKey(d) > todayKey && dateKey(d) !== moveKey) ??
+        inMonth.find((d) => dateKey(d) !== moveKey);
       return {
         openDayKey: dateKey(openDay),
-        moveDayKey: created ?? first ?? dateKey(openDay),
+        moveDayKey: moveKey,
+        targetKey: target ? dateKey(target) : null,
       };
     }, [days, monthDate, today, tasksByDate, lastCreatedId]);
+    // Drag-to-another-day starts from a task row in the day's list, not from the
+    // grid pill, so "show me" opens that list (once per request).
+    const moveRequested = useSpotlight((s) => s.step === "move-day");
+    const openedRef = useRef(false);
+    useEffect(() => {
+      if (!moveRequested) {
+        openedRef.current = false;
+        return;
+      }
+      if (openedRef.current || !onOpenMoveDay) return;
+      const list = tasksByDate.get(moveDayKey);
+      const day = days.find((d) => dateKey(d) === moveDayKey);
+      if (!list?.length || !day) return;
+      openedRef.current = true;
+      onOpenMoveDay(day, list);
+    }, [moveRequested, moveDayKey, tasksByDate, days, onOpenMoveDay]);
     useLanguage();
     return (
       <View className="flex-1 px-3 pb-3.5 pt-2">
@@ -126,8 +158,7 @@ export const MonthGrid = memo(
               horizontal `FlatList` is a nested VirtualizedList, which RN warns
               about and which corrupts Android's view recycling when the screen
               is detached (switching tabs): "addViewAt: failed to insert view
-              […] the specified child already has a parent". Same structure the
-              skeleton below already used. */}
+              […] the specified child already has a parent". */}
           {chunkIntoWeeks(days).map((week) => (
             <View
               key={dateKey(week[0])}
@@ -144,9 +175,10 @@ export const MonthGrid = memo(
                     sessions={tasksByDate.get(key) ?? NO_TASKS}
                     isToday={isSameDay(day, today)}
                     openDayTip={key === openDayKey}
-                    moveDayTip={key === moveDayKey}
+                    moveTargetTip={!!onOpenMoveDay && key === targetKey}
                     isDropTarget={highlightedKey === key}
                     isJustDropped={justDroppedKey === key}
+                    loading={loading}
                     draggingSessionId={draggingSessionId}
                     onPressDay={onPressDay}
                     onDoubleTapDay={onDoubleTapDay}
@@ -161,83 +193,3 @@ export const MonthGrid = memo(
     );
   }),
 );
-
-const SKELETON_ROWS = 4;
-
-/** Per-cell placeholder-pill widths, cycled across the skeleton grid so the
- * shimmering rows read as varied task titles rather than one repeated bar —
- * the spread (44–80%) is lifted straight from `mockups/month-view.html`'s
- * Loading state. */
-const SKELETON_PILL_WIDTHS = [
-  "w-[62%]",
-  "w-[48%]",
-  "w-[70%]",
-  "w-[55%]",
-  "w-[78%]",
-  "w-[44%]",
-  "w-[66%]",
-  "w-[52%]",
-  "w-[74%]",
-  "w-[58%]",
-  "w-[80%]",
-  "w-[50%]",
-  "w-[68%]",
-  "w-[46%]",
-  "w-[72%]",
-  "w-[60%]",
-  "w-[76%]",
-  "w-[54%]",
-  "w-[64%]",
-  "w-[56%]",
-];
-
-/** Loading skeleton — same weekday header + `CELL_HEIGHT` (shrink-to-fit) row geometry
- * as the loaded grid (4 rows, matching the mockup's Loading state), so
- * swapping to real data never shifts layout (GitHub issue #21's checklist). */
-export function MonthGridSkeleton() {
-  useLanguage();
-  return (
-    <View className="flex-1 px-3 pb-3.5 pt-2">
-      <View className="flex-row">
-        {WEEKDAY_LABELS.map((label) => (
-          <Text
-            key={t(label)}
-            className="flex-1 py-2 text-center text-[10.5px] font-bold uppercase text-muted-foreground"
-          >
-            {t(label)}
-          </Text>
-        ))}
-      </View>
-      <View className="shrink overflow-hidden rounded-xl border-l border-t border-border">
-        {/* Static placeholder grid — never reordered/inserted/removed, so an
-            index key is safe despite the usual React caveat. */}
-        {Array.from({ length: SKELETON_ROWS }).map((_, row) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton row, never reordered
-          <View
-            key={`skeleton-row-${row}`}
-            style={{ height: CELL_HEIGHT }}
-            className="shrink flex-row"
-          >
-            {Array.from({ length: 7 }).map((_, col) => (
-              <View
-                // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton cell, never reordered
-                key={`skeleton-cell-${row}-${col}`}
-                className="flex-1 gap-[3px] overflow-hidden border-b border-r border-border p-[5px] pb-[3px]"
-              >
-                <Skeleton className="h-[14px] w-[18px] rounded" />
-                <Skeleton
-                  className={cn(
-                    "h-[11px] rounded-[4px]",
-                    SKELETON_PILL_WIDTHS[
-                      (row * 7 + col) % SKELETON_PILL_WIDTHS.length
-                    ],
-                  )}
-                />
-              </View>
-            ))}
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}

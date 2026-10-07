@@ -9,10 +9,16 @@ import {
 } from "@/components/ui/bottom-sheet";
 import { Text } from "@/components/ui/text";
 import { completeStep, useChecklist } from "@/hooks/use-checklist";
+import { useCalendarJump } from "@/hooks/use-calendar-jump";
 import { useSpotlight } from "@/hooks/use-spotlight";
-import { STEP_SCREEN } from "@/lib/checklist";
+import { useUserStore } from "@/hooks/use-user-store";
+import { STEP_NEEDS, STEP_SCREEN } from "@/lib/checklist";
+import { findNearestTaskDate } from "@/lib/nearest-task-date";
+import { dateKey } from "@/lib/week-date-math";
 import { FAB_GLOW_INNER, FAB_GLOW_OUTER } from "@/lib/fab-glow";
 import { cn } from "@/lib/utils";
+import { zonedNow } from "@zenflow/core";
+import { format } from "date-fns";
 import type { ChecklistStep } from "@zenflow/shared";
 import * as Haptics from "expo-haptics";
 import { type Href, useRouter } from "expo-router";
@@ -77,21 +83,50 @@ export function GettingStarted() {
 
   // Tap a step: close the sheet, go to its screen, then spotlight its control.
   // If nothing turns up to point at (no task yet), point at + instead.
-  const showMe = (tapped: ChecklistStep, blockedBy: ChecklistStep | null) => {
+  const showMe = async (
+    tapped: ChecklistStep,
+    blockedBy: ChecklistStep | null,
+  ) => {
     Haptics.selectionAsync().catch(() => {});
     sheet.close();
-    // A step that needs a task: point at the + button instead.
-    const step = blockedBy ?? tapped;
+    let step = blockedBy ?? tapped;
+    let jump: (() => void) | null = null;
+    // Steps that need a task: find the nearest day (week) / month that has one
+    // — starting from where the user is, so a day that already has a task
+    // stays put — and move there before pointing at it. Only when there is
+    // none at all, point at + instead. (A task made before the checklist, or
+    // by the planner, counts too.)
+    if (STEP_NEEDS[tapped]) {
+      const tz = useUserStore.getState().user?.timezone || "UTC";
+      const cal = useCalendarJump.getState();
+      const month = STEP_SCREEN[tapped] === "month";
+      const from =
+        (month ? cal.focusedMonth : cal.focusedWeekDay) ?? zonedNow(tz);
+      const day = await findNearestTaskDate(from, tz);
+      if (day) {
+        step = tapped;
+        if (month) {
+          if (format(day, "yyyy-MM") !== format(from, "yyyy-MM")) {
+            jump = () => useCalendarJump.getState().jumpMonth(day);
+          }
+        } else if (dateKey(day) !== dateKey(from)) {
+          jump = () => useCalendarJump.getState().jumpWeek(day);
+        }
+      } else {
+        step = "create-task";
+      }
+    }
     const screen = STEP_SCREEN[step];
     setTimeout(() => {
       if (screen) router.navigate((screen === "week" ? "/" : "/month") as Href);
+      jump?.();
       useSpotlight.getState().show(step);
       // Nothing to point at (the task was deleted, say): point at + instead.
       setTimeout(() => {
         const { step: current, shown, show } = useSpotlight.getState();
         if (current === step && !shown && step !== "create-task")
           show("create-task");
-      }, 5000);
+      }, 8000);
     }, 320);
   };
 
@@ -137,7 +172,7 @@ export function GettingStarted() {
               </Text>
               <Text className="mt-[3px] text-[13px] text-muted-foreground">
                 {t(
-                  "{done} of {total} done — they tick off as you try them. Tap a step to be shown.",
+                  "{done} of {total} done. Steps tick off as you try them — tap one for a quick guide.",
                   { done, total },
                 )}
               </Text>
@@ -151,7 +186,7 @@ export function GettingStarted() {
                 {group.items.map((item) => (
                   <Pressable
                     key={item.id}
-                    onPress={() => showMe(item.id, item.blockedBy)}
+                    onPress={() => void showMe(item.id, item.blockedBy)}
                     accessibilityRole="button"
                     accessibilityLabel={t("Show me: {title}", { title: item.title })}
                     className="flex-row items-start gap-3 rounded-xl px-1 py-2.5 active:opacity-70"

@@ -2,15 +2,9 @@ import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { dateFnsLocale, format, locale } from "@/lib/i18n";
 import {
-  AlertTriangle,
-  Bell,
   Check,
   ChevronLeft,
   ChevronRight,
-  ClipboardList,
-  GraduationCap,
-  type LucideIcon,
-  Notebook,
   RefreshCw,
   Trash2,
   X,
@@ -23,13 +17,9 @@ import {
   viewSessionOnCalendar,
 } from "@/hooks/use-notifications";
 import { useUserStore } from "@/hooks/use-user-store";
+import { notificationVisual } from "@/lib/notification-visual";
 import { cn } from "@/lib/utils";
-import {
-  notificationCategory,
-  notificationEventKind,
-  type NotificationCategory,
-  type NotificationDto,
-} from "@zenflow/shared";
+import { notificationCategory, type NotificationDto } from "@zenflow/shared";
 import { formatDistanceToNow } from "date-fns";
 import { zonedDate } from "@zenflow/core";
 import * as Haptics from "expo-haptics";
@@ -53,70 +43,6 @@ import Swipeable, {
   type SwipeableMethods,
 } from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-const CATEGORY_LABEL: Record<NotificationCategory, string> = {
-  get ASSIGNMENT() {
-    return t("LMS Assignment");
-  },
-  get EXAM() {
-    return t("Exam");
-  },
-  get LECTURE() {
-    return t("Timetable");
-  },
-  get REMINDER() {
-    return t("Reminder");
-  },
-};
-
-/** Visual configuration for a notification's eventName, matching mockups/detected-items.html */
-function notificationVisual(eventName: string): {
-  Icon: LucideIcon;
-  label: string;
-  tint: string;
-  iconColor: string;
-} {
-  const category = notificationCategory(eventName);
-  if (notificationEventKind(eventName) === "CONFLICT") {
-    return {
-      Icon: AlertTriangle,
-      label: t("{category} conflict", { category: CATEGORY_LABEL[category] }),
-      tint: "border-amber-500/40 bg-amber-500/15",
-      iconColor: "#d97706",
-    };
-  }
-  switch (category) {
-    case "ASSIGNMENT":
-      return {
-        Icon: ClipboardList,
-        label: CATEGORY_LABEL.ASSIGNMENT,
-        tint: "border-teal-500/40 bg-teal-500/15",
-        iconColor: "#0f766e",
-      };
-    case "EXAM":
-      return {
-        Icon: Notebook,
-        label: CATEGORY_LABEL.EXAM,
-        tint: "border-rose-500/40 bg-rose-500/15",
-        iconColor: "#e11d48",
-      };
-    case "LECTURE":
-      return {
-        Icon: GraduationCap,
-        label: CATEGORY_LABEL.LECTURE,
-        tint: "border-sky-500/40 bg-sky-500/15",
-        iconColor: "#0369a1",
-      };
-    case "REMINDER":
-    default:
-      return {
-        Icon: Bell,
-        label: CATEGORY_LABEL.REMINDER,
-        tint: "border-primary/40 bg-primary/15",
-        iconColor: "#f97316",
-      };
-  }
-}
 
 /** Spelled out "due" or "at" label off eventEndsAt */
 function eventTimeLabel(n: NotificationDto, tz: string): string | null {
@@ -194,15 +120,24 @@ export default function NotificationsScreen() {
         const res = await rescheduleConflicts(n.id);
         const ok = res.rescheduled.length;
         const failed = res.failedSessionIds.length;
-        toast(
-          failed
-            ? t("Rescheduled {ok}; {failed} still conflict", { ok, failed })
+        toast({
+          title: failed
+            ? t("Rescheduled {ok}, {failed} left", { ok, failed })
             : t("Rescheduled {count} tasks", { count: ok }),
-          failed ? "warning" : "success",
-        );
+          description: failed
+            ? t("The rest still overlap. Move them by hand.")
+            : undefined,
+          variant: failed ? "warning" : "success",
+          icon: failed ? "calendar-clock" : "calendar-check",
+        });
         void fetchNotifications("refresh");
       } catch {
-        toast(t("Couldn't reschedule the conflicting tasks."), "destructive");
+        toast({
+          title: t("Couldn't reschedule tasks"),
+          description: t("Try again in a moment."),
+          variant: "destructive",
+          icon: "calendar-x",
+        });
       } finally {
         setReschedulingId(null);
       }
@@ -216,7 +151,12 @@ export default function NotificationsScreen() {
       try {
         await dismiss(id);
       } catch {
-        toast(t("Couldn't dismiss that notification."), "destructive");
+        toast({
+          title: t("Couldn't dismiss notification"),
+          description: t("Try again in a moment."),
+          variant: "destructive",
+          icon: "bell",
+        });
       }
     },
     [dismiss, toast],
@@ -231,9 +171,16 @@ export default function NotificationsScreen() {
     setIsSelecting(false);
     try {
       await dismissMany(ids);
-      toast(t("Deleted {count} notifications", { count }), "default");
+      toast(t("Deleted {count} notifications", { count }), "default", {
+        icon: "trash",
+      });
     } catch {
-      toast(t("Couldn't delete selected notifications."), "destructive");
+      toast({
+        title: t("Couldn't delete notifications"),
+        description: t("Try again in a moment."),
+        variant: "destructive",
+        icon: "trash",
+      });
     }
   }, [selectedIds, dismissMany, toast]);
 
@@ -244,9 +191,14 @@ export default function NotificationsScreen() {
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     try {
       await clearAll();
-      toast(t("All notifications cleared"), "default");
+      toast(t("All notifications cleared"), "default", { icon: "bell" });
     } catch {
-      toast(t("Couldn't clear all notifications."), "destructive");
+      toast({
+        title: t("Couldn't clear notifications"),
+        description: t("Try again in a moment."),
+        variant: "destructive",
+        icon: "bell",
+      });
     }
   }, [clearAll, toast]);
 
@@ -382,7 +334,7 @@ export default function NotificationsScreen() {
                 {t("You're all caught up")}
               </Text>
               <Text className="mt-1.5 text-center text-[13px] leading-snug text-muted-foreground">
-                {t("No new notifications from your LMS or student portal.")}
+                {t("Nothing new from your LMS or student portal.")}
               </Text>
             </View>
           }
@@ -414,7 +366,7 @@ export default function NotificationsScreen() {
               </Text>
               <Text className="mt-2 text-sm leading-relaxed text-muted-foreground">
                 {t(
-                  "All notifications in your inbox will be permanently removed. This action cannot be undone.",
+                  "Every notification will be removed for good. This can't be undone.",
                 )}
               </Text>
 

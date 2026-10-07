@@ -1,7 +1,11 @@
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
 import { AlertTriangle } from "@/components/Icons";
-import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
+import {
+  DragTargetProbe,
+  SpotlightAnchor,
+} from "@/components/checklist/spotlight-anchor";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import {
   isContinuationEntry,
@@ -20,12 +24,30 @@ import { cn } from "@/lib/utils";
 import type { Session } from "@zenflow/shared";
 import { memo, useEffect, useMemo, useRef } from "react";
 import { Pressable, View } from "react-native";
+import Animated, { FadeIn } from "react-native-reanimated";
 import { sessionTypeIcon } from "./session-type-badge";
 
 /** A week row's *preferred* height. Rows shrink below it (equally) when the
  * month doesn't fit between the header and the tab bar — small screens,
  * 6-week months — so the last week is never hidden under the bar. */
 export const CELL_HEIGHT = 96;
+
+/** Placeholder-pill widths while the month loads, picked per day so the
+ * shimmer reads as varied task titles rather than one repeated bar (the
+ * 44–80% spread is `mockups/month-view.html`'s Loading state). */
+const SKELETON_PILL_WIDTHS = [
+  "w-[62%]",
+  "w-[48%]",
+  "w-[70%]",
+  "w-[55%]",
+  "w-[78%]",
+  "w-[44%]",
+  "w-[66%]",
+  "w-[52%]",
+  "w-[74%]",
+  "w-[58%]",
+  "w-[80%]",
+];
 
 interface MonthCellProps {
   day: Date;
@@ -34,12 +56,15 @@ interface MonthCellProps {
   isToday: boolean;
   /** Carry the checklist's "Open a day" spotlight anchor. */
   openDayTip: boolean;
-  /** Carry the checklist's "Move a task to another day" spotlight anchor. */
-  moveDayTip: boolean;
+  /** Carry the "Move a task to another day" demo's drop-target probe. */
+  moveTargetTip: boolean;
   /** True while this cell is the current drag drop target. */
   isDropTarget: boolean;
   /** True for a beat right after a drag drop landed here. */
   isJustDropped: boolean;
+  /** The month is still loading: the day number stays, the pills are
+   * shimmering placeholders. */
+  loading: boolean;
   /** The task id currently being dragged (any cell), so its origin pill can
    * hide in place while the ghost overlay stands in for it. */
   draggingSessionId: string | null;
@@ -81,9 +106,10 @@ export const MonthCell = memo(function MonthCell({
   sessions,
   isToday,
   openDayTip,
-  moveDayTip,
+  moveTargetTip,
   isDropTarget,
   isJustDropped,
+  loading,
   draggingSessionId,
   onPressDay,
   onDoubleTapDay,
@@ -136,6 +162,11 @@ export const MonthCell = memo(function MonthCell({
     [sessions],
   );
   const { visible, overflowCount } = splitCellSessions(bySeverity);
+  // Pills that replace placeholders fade in; pills present from the start
+  // (a cached month) just render.
+  const hadSkeletonRef = useRef(loading);
+  if (loading) hadSkeletonRef.current = true;
+  const seed = day.getDate() + day.getDay();
 
   return (
     <Pressable
@@ -150,7 +181,7 @@ export const MonthCell = memo(function MonthCell({
       )}
     >
       {openDayTip ? <SpotlightAnchor step="open-day" /> : null}
-      {moveDayTip ? <SpotlightAnchor step="move-day" /> : null}
+      {moveTargetTip ? <DragTargetProbe /> : null}
       <Text
         className={cn(
           "h-[23px] w-[23px] rounded-full text-center text-[12.5px] font-semibold leading-[23px]",
@@ -164,7 +195,28 @@ export const MonthCell = memo(function MonthCell({
         {day.getDate()}
       </Text>
 
-      <View className={cn("mt-1 gap-[3px]", outside && "opacity-60")}>
+      {loading ? (
+        <View className={cn("mt-1 gap-[3px]", outside && "opacity-60")}>
+          <Skeleton
+            className={cn(
+              "h-[15px] rounded-[5px]",
+              SKELETON_PILL_WIDTHS[seed % SKELETON_PILL_WIDTHS.length],
+            )}
+          />
+          {seed % 3 === 0 && (
+            <Skeleton
+              className={cn(
+                "h-[15px] rounded-[5px]",
+                SKELETON_PILL_WIDTHS[(seed + 4) % SKELETON_PILL_WIDTHS.length],
+              )}
+            />
+          )}
+        </View>
+      ) : (
+      <Animated.View
+        entering={hadSkeletonRef.current ? FadeIn.duration(200) : undefined}
+        className={cn("mt-1 gap-[3px]", outside && "opacity-60")}
+      >
         {visible.map((task) => (
           <MonthPill
             key={task.id}
@@ -183,7 +235,8 @@ export const MonthCell = memo(function MonthCell({
             </Text>
           </Pressable>
         )}
-      </View>
+      </Animated.View>
+      )}
     </Pressable>
   );
 });

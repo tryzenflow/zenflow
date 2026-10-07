@@ -10,12 +10,15 @@ import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { completeStep } from "@/hooks/use-checklist";
 import { useLastCreated } from "@/hooks/use-last-created";
-import { useMinSkeleton } from "@/hooks/use-min-skeleton";
+import { type DayStatus, deriveDayStatus } from "@/lib/day-status";
+import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import { useNow } from "@/hooks/use-now";
 import { useUserStore } from "@/hooks/use-user-store";
 import { isPastDeadlineDrop } from "@/lib/overdue";
 import { showErrorToast } from "@/lib/task-toasts";
 import { type PeekBlock, peekBlocksFromSegments } from "@/lib/peek";
+import { useSpotlight } from "@/hooks/use-spotlight";
+import { showMovedToast } from "@/lib/move-toast";
 import {
   fetchDaySessions,
   getCachedDaySessions,
@@ -63,6 +66,7 @@ import {
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
+  FadeIn,
   useAnimatedStyle,
   useSharedValue,
   clamp,
@@ -165,6 +169,9 @@ interface DayTimelineProps {
   onSessionPress?: (taskId: string) => void;
   refreshKey?: number;
   onStateChange?: (state: TimelineState) => void;
+  /** Reports today's "next up" session (else `none`) while this is the active
+   * page, so the Week screen can float it over the timeline. */
+  onStatusChange?: (status: DayStatus) => void;
   /** Hide the per-day header — the Week screen renders its own sticky
    * `WeekHeader` strip above the pager. Default `true` preserves the Day
    * screen. */
@@ -242,6 +249,7 @@ export function DayTimeline({
   onSessionPress,
   refreshKey,
   onStateChange,
+  onStatusChange,
   showHeader = true,
   contentBottomInset,
   onSubtitleChange,
@@ -388,9 +396,12 @@ export function DayTimeline({
   }, [loading, error, onStateChange]);
 
   // A cold day shows the skeleton straight away and keeps it up for a moment
-  // (`useMinSkeleton`), so the grid swaps in once instead of flickering from
-  // empty to filled. Warm days aren't `loading`, so they stay instant.
-  const showSkeleton = useMinSkeleton(loading);
+  // (`useDelayedLoading`), then fades the real grid in — never blank → data.
+  // Warm days aren't `loading`, so they stay instant (no fade either: a page
+  // swiped in must look like it was always there).
+  const showSkeleton = useDelayedLoading(loading);
+  const hadSkeletonRef = useRef(showSkeleton);
+  if (showSkeleton) hadSkeletonRef.current = true;
 
   const refetch = useCallback(async () => {
     try {
@@ -532,6 +543,42 @@ export function DayTimeline({
   useEffect(() => {
     positionScroll();
   }, [positionScroll]);
+
+  // Getting-started "Move a task" / "Hold a task": the spotlight can only point
+  // at a block that is on screen, and the timeline opens scrolled to "now" (or
+  // to the shared week position) — so bring the tip block into view first, or
+  // the checklist gives up and points at + instead. Declared after
+  // `positionScroll`'s effect so it runs later in the same commit and wins.
+  const tipStep = useSpotlight((s) =>
+    s.step === "move-task" || s.step === "block-actions" ? s.step : null,
+  );
+  const segmentsRef = useRef(segments);
+  segmentsRef.current = segments;
+  useEffect(() => {
+    if (!tipStep || !isActive || loading || error || !tipSegmentId) return;
+    const segment = segmentsRef.current.find(
+      (s) => s.segmentId === tipSegmentId,
+    );
+    if (!segment) return;
+    const start = toZonedTime(new Date(segment.start), tz);
+    const end = toZonedTime(new Date(segment.end), tz);
+    const startMin = start.getHours() * 60 + start.getMinutes();
+    const durationMin = Math.max(
+      15,
+      (end.getTime() - start.getTime()) / 60_000,
+    );
+    const top = (startMin / DAILY_HORIZON) * totalHeight;
+    const height = (durationMin / DAILY_HORIZON) * totalHeight;
+    const viewport = viewportHRef.current || 500;
+    const y =
+      height >= viewport - 48 ? top - 24 : top - (viewport - height) / 2;
+    // Next tick: let the ScrollView finish its own layout/positioning first.
+    const timer = setTimeout(
+      () => scrollRef.current?.scrollTo({ y: Math.max(0, y), animated: false }),
+      60,
+    );
+    return () => clearTimeout(timer);
+  }, [tipStep, isActive, loading, error, tipSegmentId, totalHeight, tz]);
 
   // Teleport to a session (`flashSessionId` — notification tap, create/edit,
   // cross-day move): once this day has it loaded and is the visible page,
@@ -682,6 +729,22 @@ export function DayTimeline({
     );
   }, [date, now, tz]);
 
+  const dayStatus = useMemo<DayStatus>(
+    () =>
+      isToday && !loading && !error
+        ? deriveDayStatus(segments, now.getTime())
+        : { kind: "none" },
+    [isToday, loading, error, segments, now],
+  );
+  const statusKey =
+    dayStatus.kind === "next"
+      ? `next:${dayStatus.taskId}:${dayStatus.startISO}`
+      : dayStatus.kind;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `statusKey` is the identity of `dayStatus`.
+  useEffect(() => {
+    if (isActive) onStatusChange?.(dayStatus);
+  }, [isActive, statusKey, onStatusChange]);
+
   // Tapping the empty-day zone opens the new-task form seeded at 8:00 (or the
   // next quarter hour when today is already past it) — it never creates a
   // session by itself.
@@ -718,7 +781,7 @@ export function DayTimeline({
             scope,
             skipConflicting,
           });
-          completeStep("move-task");
+          const firstMove = completeStep("move-task");
 
           // Handle divergent response — show picker for primary vs alternative slot
           if (
@@ -755,8 +818,18 @@ export function DayTimeline({
           setSessions((prev) =>
             prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)),
           );
+          showMovedToast(toast, {
+            first: firstMove,
+            to: zonedDate(updated.scheduledStartTime ?? startISO, tz),
+            withTime: true,
+          });
         } catch (error) {
-          showErrorToast(toast, error, t("Couldn't move this session"));
+          showErrorToast(
+            toast,
+            error,
+            t("Couldn't move this session"),
+            "calendar-x",
+          );
         } finally {
           await refetch();
           setSettleKey((k) => k + 1);
@@ -824,6 +897,7 @@ export function DayTimeline({
       tasks,
       onRequestScopedUpdate,
       onRequestSlotPick,
+      tz,
     ],
   );
 
@@ -1007,7 +1081,7 @@ export function DayTimeline({
             </Text>
             <Text className="mt-1.5 max-w-[280px] text-center text-[13.5px] leading-normal text-muted-foreground">
               {t(
-                "We couldn't reach the scheduler. Check your connection and try again.",
+                "Couldn't reach the scheduler. Check your connection and try again.",
               )}
             </Text>
             <Button
@@ -1054,7 +1128,13 @@ export function DayTimeline({
           </Animated.View>
         ) : (
           <GestureDetector gesture={zoomGesture}>
-            <Animated.View style={animatedContentStyle} className="relative">
+            <Animated.View
+              entering={
+                hadSkeletonRef.current ? FadeIn.duration(220) : undefined
+              }
+              style={animatedContentStyle}
+              className="relative"
+            >
               <TimeGutter hourHeight={hourHeight} />
 
               <View
@@ -1073,7 +1153,7 @@ export function DayTimeline({
                   />
                 ))}
 
-                {segments.length === 0 && (
+                {segments.length === 0 && !loading && (
                   <Pressable
                     onPress={openNewTaskForm}
                     accessibilityRole="button"

@@ -1,3 +1,5 @@
+import { NextUpPill } from "@/components/calendar/next-up-pill";
+import type { DayStatus } from "@/lib/day-status";
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { slotPick, updateSession } from "@/api/tasks";
@@ -39,6 +41,7 @@ import { NotificationBell } from "@/components/notification-bell";
 import { GettingStarted } from "@/components/checklist/getting-started";
 import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { completeStep } from "@/hooks/use-checklist";
+import { useCalendarJump } from "@/hooks/use-calendar-jump";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useWeekDayTypes } from "@/hooks/use-week-day-types";
 import {
@@ -122,6 +125,7 @@ export default function WeekScreen() {
   const [focusTick, setFocusTick] = useState(0);
   // Load state of the focused page, reported up by the pager — gates the FAB.
   const [timelineState, setTimelineState] = useState<TimelineState>("loading");
+  const [dayStatus, setDayStatus] = useState<DayStatus>({ kind: "none" });
   // Session id to pulse on the focused day — set by a create/edit teleport
   // (`?flash=` param) or a cross-day drag drop, cleared after the entrance.
   const [flashId, setFlashId] = useState<string | null>(null);
@@ -137,6 +141,18 @@ export default function WeekScreen() {
     },
     [],
   );
+
+  // Getting-started "show me" (see `use-calendar-jump.ts`): publish the day we
+  // are on, and move to a day it picked that has a task to point at.
+  const weekJump = useCalendarJump((s) => s.weekJump);
+  useEffect(() => {
+    useCalendarJump.getState().setFocusedWeekDay(focusedDate);
+  }, [focusedDate]);
+  useEffect(() => {
+    if (!weekJump) return;
+    commitFocusedDate(weekJump);
+    useCalendarJump.getState().clearWeekJump();
+  }, [weekJump, commitFocusedDate]);
 
   const tabBarOverlay = useTabBarOverlayHeight();
 
@@ -508,11 +524,17 @@ export default function WeekScreen() {
           onWeekSlideStart={handleWeekSlideStart}
           onWeekSlideEnd={handleWeekSlideEnd}
           onActiveStateChange={setTimelineState}
+          onStatusChange={setDayStatus}
           onRequestReschedule={handleRequestReschedule}
           onRequestBlockMenu={handleRequestBlockMenu}
           onRequestScopedUpdate={handleRequestScopedUpdate}
           onRequestSlotPick={handleRequestSlotPick}
           flashSessionId={flashId}
+        />
+        <NextUpPill
+          status={dayStatus}
+          tz={tz}
+          onOpenSession={handleSessionPress}
         />
       </View>
 

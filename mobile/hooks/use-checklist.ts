@@ -15,17 +15,20 @@ const NONE: ReadonlySet<TipId> = new Set();
  * Call it from the place the action happens; it's a no-op once done, signed
  * out, or when the same step is already being saved. Best-effort: offline, it
  * stays ticked for this session and is re-ticked the next time the user does it.
+ * Returns `true` only when this call newly ticked the step (so callers can
+ * celebrate the first time).
  */
-export function completeStep(id: TipId): void {
+export function completeStep(id: TipId): boolean {
   const { user, updateUser } = useUserStore.getState();
-  if (!user) return;
+  if (!user) return false;
   const session = useDoneThisSession.getState();
   const done = session.userId === user.id ? session.done : NONE;
-  if (done.has(id) || user.seenTips?.includes(id)) return;
+  if (done.has(id) || user.seenTips?.includes(id)) return false;
   useDoneThisSession.setState({ userId: user.id, done: new Set(done).add(id) });
   void updateBasicInfo({ seenTip: id })
     .then(updateUser)
     .catch(() => {});
+  return true;
 }
 
 /** The checklist's progress for the signed-in user. */

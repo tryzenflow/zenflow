@@ -16,6 +16,7 @@ import {
   type DeleteRecurringSheetHandle,
 } from "@/components/tasks/delete-recurring-sheet";
 import { SessionFormScreen } from "@/components/tasks/task-form-screen";
+import { SessionView } from "@/components/tasks/session-view";
 import { SessionSheetFields } from "@/components/tasks/task-sheet-fields";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
@@ -86,6 +87,8 @@ function EditSessionForm() {
   const { toast } = useModalToast();
   const [task, setSession] = useState<Session | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // Opens as a read-only page; the header switch flips into the edit form.
+  const [editing, setEditing] = useState(false);
   const deleteScopeSheet = useRef<DeleteRecurringSheetHandle>(null);
 
   const form = useSessionForm({ defaultValues: EMPTY_DEFAULTS });
@@ -130,7 +133,12 @@ function EditSessionForm() {
         }
       })
       .catch((error) => {
-        showErrorToast(toast, error, t("Couldn't open this session"));
+        showErrorToast(
+          toast,
+          error,
+          t("Couldn't open this session"),
+          "calendar-x",
+        );
         router.back();
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -213,16 +221,26 @@ function EditSessionForm() {
       }
 
       showDisplacedToast(toast, updated.displacedSessions);
-      toast(t("Session updated"), "success");
+      toast({
+        title: t("Session updated"),
+        variant: "success",
+        icon: "calendar-check",
+      });
       if (isSessionPastDeadline(updated)) {
-        toast(
-          t("This session is now scheduled after its deadline."),
-          "warning",
-          5000,
-        );
+        toast({
+          title: t("Scheduled after deadline"),
+          description: t("This session now ends past its due time."),
+          variant: "warning",
+          icon: "calendar-clock",
+          duration: 5000,
+        });
       } else if (shouldSurfaceRescheduleHint()) {
-        toast(t("Tip"), "tip", 6000, "top", false, undefined, {
+        toast({
+          title: t("Tip"),
           description: t(RESCHEDULE_HINT),
+          variant: "tip",
+          icon: "lightbulb",
+          duration: 6000,
         });
       }
       // Jump the calendar to the (possibly new) time and pulse the block.
@@ -244,7 +262,12 @@ function EditSessionForm() {
         ),
       handleUpdated,
       (error) =>
-        showErrorToast(toast, error, t("Failed to update the session")),
+        showErrorToast(
+          toast,
+          error,
+          t("Couldn't update session"),
+          "calendar-x",
+        ),
     );
   }
 
@@ -292,10 +315,11 @@ function EditSessionForm() {
               : t("This and later occurrences removed")
             : t("Session deleted"),
         "success",
+        { icon: "trash" },
       );
       router.back();
     } catch (error) {
-      showErrorToast(toast, error, t("Failed to delete the session"));
+      showErrorToast(toast, error, t("Couldn't delete session"), "trash");
     } finally {
       setDeleting(false);
     }
@@ -316,7 +340,10 @@ function EditSessionForm() {
 
   return (
     <SessionFormScreen
-      title={t("Edit session")}
+      title={editing ? t("Edit session") : t("Session")}
+      editSwitch={
+        task ? { value: editing, onValueChange: setEditing } : undefined
+      }
       subtitle={
         task
           ? t("Created {date}", {
@@ -338,20 +365,24 @@ function EditSessionForm() {
         </Pressable>
       }
       footer={
-        <Button
-          className="h-[52px] w-full"
-          disabled={loading}
-          onPress={form.handleSubmit(onSubmit, onInvalid)}
-        >
-          <Text className="text-base font-semibold text-foreground">
-            {loading ? t("Saving…") : t("Save changes")}
-          </Text>
-        </Button>
+        editing ? (
+          <Button
+            className="h-[52px] w-full"
+            disabled={loading}
+            onPress={form.handleSubmit(onSubmit, onInvalid)}
+          >
+            <Text className="text-base font-semibold text-foreground">
+              {loading ? t("Saving…") : t("Save changes")}
+            </Text>
+          </Button>
+        ) : undefined
       }
     >
-      {task ? (
+      {task && !editing ? (
+        <SessionView task={task} values={form.watch()} tz={tz} />
+      ) : task ? (
         <SessionSheetFields
-          initialValue={task.note || ""}
+          initialValue={form.getValues("note") ?? task.note ?? ""}
           form={form}
           tz={tz}
           disabled={loading}

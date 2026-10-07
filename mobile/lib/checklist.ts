@@ -28,7 +28,7 @@ export const STEP_COPY: Record<ChecklistStep, { title: string; hint: string }> =
     "block-actions": copy("Hold a task for more actions", "Hold it without moving. Move to… changes the day."),
     "open-month": copy("Open the Month view", "Tap Month in the tab bar."),
     "open-day": copy("Open a day", "Tap a day in the month to see its tasks."),
-    "move-day": copy("Move a task to another day", "Hold a task and drag it onto another day, or tap the calendar button."),
+    "move-day": copy("Move a task to another day", "Hold a task in the day's list, then drag it onto another day."),
   };
 
 /**
