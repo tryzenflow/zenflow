@@ -28,4 +28,13 @@ export default {
   Discard: "Bỏ",
   "Keep editing": "Tiếp tục chỉnh sửa",
   "Opens the time picker": "Mở bảng chọn giờ",
+  "Notification deleted": "Đã xóa thông báo",
+  Undo: "Hoàn tác",
+  "Couldn't delete notification": "Không xóa được thông báo",
+  "It's back in your inbox. Try again in a moment.":
+    "Thông báo đã trở lại hộp thư. Thử lại sau một lát.",
+  Unread: "Chưa đọc",
+  "{count} unread": "{count} chưa đọc",
+  "Select none": "Bỏ chọn tất cả",
+  "Select all": "Chọn tất cả",
 } as Record<string, string>;
