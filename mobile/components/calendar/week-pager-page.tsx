@@ -6,8 +6,18 @@ import { computePagePosition } from "@/lib/week-pager-math";
 /** Edges the WeekHeader peeks at, mapped to the adjacent-day advance. */
 export type DragEdge = "left" | "right";
 
+/** The pager's live window as the UI thread sees it: each page's `dateKey`
+ * by slot, and the matching day's timestamp. One shared value, so a settle's
+ * re-centre (new window + `progress` back to rest) lands in a single frame. */
+export interface PagerWindow {
+  keys: string[];
+  ts: number[];
+}
+
 export interface PagerPageProps {
-  index: number;
+  /** This page's `dateKey`; its slot is its position in `windowSV.keys`. */
+  dayKey: string;
+  windowSV: SharedValue<PagerWindow>;
   width: number;
   /** Strip offset in px (rest: `-width` — the focused page is always the
    * middle of the 3-page window). */
@@ -53,7 +63,8 @@ export interface PagerPageProps {
  *   drag).
  */
 export function PagerPage({
-  index,
+  dayKey,
+  windowSV,
   width,
   progress,
   fromSV,
@@ -67,6 +78,19 @@ export function PagerPage({
 }: PagerPageProps) {
   useLanguage();
   const animatedStyle = useAnimatedStyle(() => {
+    // Slot from the shared window, not a React prop: a prop only changes on
+    // the next commit, a frame or more after the settle reset `progress`,
+    // and in that gap the landed page jumped off-screen while the freshly
+    // mounted neighbour flashed in its place. A page that has left the
+    // window (about to unmount) is parked out of sight.
+    const index = windowSV.value.keys.indexOf(dayKey);
+    if (index < 0) {
+      return {
+        transform: [{ translateX: -10 * width }],
+        opacity: 0,
+        zIndex: 0,
+      };
+    }
     const pos = computePagePosition({
       index,
       width,
