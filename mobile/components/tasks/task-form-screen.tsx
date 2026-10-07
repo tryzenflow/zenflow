@@ -2,9 +2,11 @@ import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
 import { X } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
-import { useRouter } from "expo-router";
-import { type ReactNode, createContext, useContext, useRef } from "react";
+import { useModalToast } from "@/components/tasks/modal-toast-scope";
+import { useNavigation, useRouter } from "expo-router";
+import { type ReactNode, createContext, useContext, useEffect } from "react";
 import {
+  BackHandler,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -15,6 +17,10 @@ import {
   findNodeHandle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SessionFormFocusContext,
+  type SessionFormFocus,
+} from "./form/use-form-focus";
 
 /**
  * The form screen's single scroll owner, exposed so a field far down the
@@ -102,17 +108,51 @@ export function SessionFormScreen({
   headerRight,
   footer,
   children,
+  focus,
+  dirty = false,
 }: {
   title: string;
   subtitle?: string;
   headerRight?: ReactNode;
   footer: ReactNode;
   children: ReactNode;
+  /** Scroll + field registry, so a failed submit can scroll to the first invalid field. */
+  focus: SessionFormFocus;
+  /** Unsaved input: closing asks "Discard?" first (X, Android back, iOS swipe-down). */
+  dirty?: boolean;
 }) {
   useLanguage();
   const router = useRouter();
+  const navigation = useNavigation();
+  const { confirm } = useModalToast();
   const insets = useSafeAreaInsets();
-  const scrollViewRef = useRef<ScrollViewInstance | null>(null);
+  const scrollViewRef = focus.scrollRef;
+
+  const requestClose = () => {
+    if (!dirty) {
+      router.back();
+      return;
+    }
+    confirm(t("Discard your changes?"), {
+      description: t("What you entered won't be saved."),
+      confirmLabel: t("Discard"),
+      cancelLabel: t("Keep editing"),
+      variant: "warning",
+      onConfirm: () => router.back(),
+    });
+  };
+
+  // Hardware back and the iOS swipe-down both bypass the X, so guard them too.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: requestClose reads the latest `dirty`
+  useEffect(() => {
+    navigation.setOptions({ gestureEnabled: !dirty });
+    if (!dirty) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      requestClose();
+      return true;
+    });
+    return () => sub.remove();
+  }, [dirty, navigation]);
 
   return (
     <View
@@ -125,21 +165,29 @@ export function SessionFormScreen({
     >
       <View className="flex-row items-center justify-between gap-3 border-b border-border px-5 pb-3.5 pt-2">
         <View className="flex-1">
-          <Text className="text-[19px] font-bold tracking-tight">{title}</Text>
+          <Text
+            accessibilityRole="header"
+            className="text-[19px] font-bold tracking-tight"
+          >
+            {title}
+          </Text>
           {!!subtitle && (
             <Text className="mt-[3px] text-[13px] text-muted-foreground">
               {subtitle}
             </Text>
           )}
         </View>
-        <View className="flex-row items-center gap-3.5">
+        <View className="flex-row items-center gap-1">
           {headerRight}
           <Pressable
-            onPress={() => router.back()}
+            onPress={requestClose}
+            accessibilityRole="button"
             accessibilityLabel={t("Close")}
-            className="h-8 w-8 items-center justify-center rounded-full bg-muted"
+            className="size-11 items-center justify-center"
           >
-            <X size={16} className="text-muted-foreground" />
+            <View className="size-8 items-center justify-center rounded-full bg-muted">
+              <X size={16} className="text-muted-foreground" />
+            </View>
           </Pressable>
         </View>
       </View>
@@ -162,10 +210,14 @@ export function SessionFormScreen({
           className="flex-1 px-5 pt-4"
           contentContainerStyle={{ paddingBottom: 32 }}
           keyboardShouldPersistTaps="handled"
+          scrollEventThrottle={32}
+          onScroll={(e) => focus.onScroll(e.nativeEvent.contentOffset.y)}
         >
-          <SessionFormScrollContext.Provider value={scrollViewRef}>
-            {children}
-          </SessionFormScrollContext.Provider>
+          <SessionFormFocusContext.Provider value={focus}>
+            <SessionFormScrollContext.Provider value={scrollViewRef}>
+              {children}
+            </SessionFormScrollContext.Provider>
+          </SessionFormFocusContext.Provider>
         </ScrollView>
 
         <View className="border-t border-border bg-background px-5 py-3 shadow-lg shadow-primary/10">

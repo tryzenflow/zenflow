@@ -19,6 +19,9 @@ import { SessionFormScreen } from "@/components/tasks/task-form-screen";
 import { SessionSheetFields } from "@/components/tasks/task-sheet-fields";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
+import { useSessionFormFocus } from "@/components/tasks/form/use-form-focus";
+import { isFormDirty } from "@/lib/form-validation";
+import { haptic } from "@/lib/haptics";
 import {
   ModalToastScope,
   useModalToast,
@@ -89,7 +92,13 @@ function EditSessionForm() {
   const deleteScopeSheet = useRef<DeleteRecurringSheetHandle>(null);
 
   const form = useSessionForm({ defaultValues: EMPTY_DEFAULTS });
+  const focus = useSessionFormFocus();
   const loading = !task || form.formState.isSubmitting || deleting;
+  const dirty = isFormDirty(
+    form.formState.dirtyFields,
+    form.getValues(),
+    form.formState.defaultValues,
+  );
 
   useEffect(() => {
     getSessionDetails(id)
@@ -249,7 +258,11 @@ function EditSessionForm() {
     );
   }
 
+  // Every error is already inline; scroll to the first one and focus it.
+  // A toast only backs this up when no field on screen carries the error.
   function onInvalid(errors: Record<string, { message?: string } | undefined>) {
+    haptic.warning();
+    if (focus.focusFirstInvalid(errors)) return;
     const first = Object.values(errors)[0];
     if (first?.message) showSplitToast(toast, String(first.message));
   }
@@ -325,11 +338,14 @@ function EditSessionForm() {
             })
           : undefined
       }
+      focus={focus}
+      dirty={dirty && !loading}
       headerRight={
         <Pressable
           disabled={loading}
           onPress={onDelete}
-          className="flex-row items-center gap-1.5"
+          className="min-h-11 flex-row items-center gap-1.5 px-2"
+          accessibilityRole="button"
           accessibilityLabel={t("Delete session")}
         >
           <Trash2 size={15} className="text-destructive" />
@@ -341,10 +357,11 @@ function EditSessionForm() {
       footer={
         <Button
           className="h-[52px] w-full"
-          disabled={loading}
+          loading={!!task && (form.formState.isSubmitting || deleting)}
+          disabled={!task}
           onPress={form.handleSubmit(onSubmit, onInvalid)}
         >
-          <Text className="text-base font-semibold text-foreground">
+          <Text className="text-base font-semibold text-primary-foreground">
             {loading ? t("Saving…") : t("Save changes")}
           </Text>
         </Button>

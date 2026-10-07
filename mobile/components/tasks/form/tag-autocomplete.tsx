@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/bottom-sheet";
 import { Text } from "@/components/ui/text";
 import { matchTags } from "@/lib/tag-match";
+import { haptic } from "@/lib/haptics";
 import { cn } from "@/lib/utils";
 import {
   useCallback,
@@ -166,7 +167,9 @@ export function TagAutocomplete({
         return (
           <Pressable
             onPress={() => add(row.name)}
-            className="mb-2 flex-row items-center gap-2.5 rounded-xl border border-border bg-card px-4 py-3.5"
+            accessibilityRole="button"
+            accessibilityLabel={t('Create "{name}"', { name: row.name })}
+            className="mb-2 min-h-11 flex-row items-center gap-2.5 rounded-xl border border-border bg-card px-4 py-3.5"
           >
             <Plus size={16} className="shrink-0 text-muted-foreground" />
             <Text className="flex-1 text-[15px] font-semibold text-primary-text">
@@ -177,9 +180,15 @@ export function TagAutocomplete({
       }
       return (
         <Pressable
-          onPress={() => toggle(row.name, row.selected)}
+          onPress={() => {
+            haptic.select();
+            toggle(row.name, row.selected);
+          }}
+          accessibilityRole="checkbox"
+          accessibilityLabel={`#${row.name}`}
+          accessibilityState={{ checked: row.selected }}
           className={cn(
-            "mb-2 flex-row items-center gap-2.5 rounded-xl border px-4 py-3.5",
+            "mb-2 min-h-11 flex-row items-center gap-2.5 rounded-xl border px-4 py-3.5",
             row.selected
               ? "border-primary bg-primary/10"
               : "border-border bg-card",
@@ -232,7 +241,7 @@ export function TagAutocomplete({
                 <Text
                   className={cn(
                     "text-[13px] font-medium",
-                    isPending ? "text-primary-text" : "text-primary-text",
+                    "text-primary-text",
                   )}
                 >
                   #{tag}
@@ -240,12 +249,14 @@ export function TagAutocomplete({
                 <Pressable
                   disabled={disabled}
                   onPress={() => remove(tag)}
+                  accessibilityRole="button"
                   accessibilityLabel={t("Remove {name}", { name: tag })}
-                  className="h-4 w-4 items-center justify-center rounded-full"
+                  hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+                  className="size-5 items-center justify-center rounded-full"
                 >
                   <X
                     size={11}
-                    className={isPending ? "text-primary-text" : "text-primary-text"}
+                    className="text-primary-text"
                   />
                 </Pressable>
               </View>
@@ -257,6 +268,8 @@ export function TagAutocomplete({
       <BottomSheet>
         <BottomSheetOpenTrigger asChild disabled={disabled}>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("Add tags")}
             className={cn(
               "h-[46px] flex-row items-center gap-2 rounded-[13px] border border-input bg-card px-[13px]",
               disabled && "opacity-50",

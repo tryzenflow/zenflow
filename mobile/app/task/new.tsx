@@ -7,6 +7,9 @@ import { SessionFormScreen } from "@/components/tasks/task-form-screen";
 import { SessionSheetFields } from "@/components/tasks/task-sheet-fields";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
+import { useSessionFormFocus } from "@/components/tasks/form/use-form-focus";
+import { hasNewSessionInput } from "@/lib/form-validation";
+import { haptic } from "@/lib/haptics";
 import {
   ModalToastScope,
   useModalToast,
@@ -185,8 +188,21 @@ function NewSessionForm() {
   }, [start, deadline, sessions, title, tz, user?.defaultReminderMinutes]);
 
   const form = useSessionForm({ defaultValues: initialDefaults });
+  const focus = useSessionFormFocus();
   const loading = form.formState.isSubmitting;
   const type = form.watch("type");
+  const [titleW, noteW, locationW, tagsW] = form.watch([
+    "title",
+    "note",
+    "location",
+    "tags",
+  ]);
+  const dirty = hasNewSessionInput({
+    title: titleW,
+    note: noteW,
+    location: locationW,
+    tags: tagsW,
+  });
 
   function switchType(next: SessionFormType) {
     const common = {
@@ -308,7 +324,11 @@ function NewSessionForm() {
     );
   }
 
+  // Every error is already inline; scroll to the first one and focus it.
+  // A toast only backs this up when no field on screen carries the error.
   function onInvalid(errors: Record<string, { message?: string } | undefined>) {
+    haptic.warning();
+    if (focus.focusFirstInvalid(errors)) return;
     const first = Object.values(errors)[0];
     if (first?.message) showSplitToast(toast, String(first.message));
   }
@@ -328,13 +348,15 @@ function NewSessionForm() {
     <SessionFormScreen
       title={t("New session")}
       subtitle={subtitle}
+      focus={focus}
+      dirty={dirty && !loading}
       footer={
         <Button
           className="h-[52px] w-full"
-          disabled={loading}
+          loading={loading}
           onPress={form.handleSubmit(onSubmit, onInvalid)}
         >
-          <Text className="text-base font-semibold text-foreground">
+          <Text className="text-base font-semibold text-primary-foreground">
             {loading ? t("Adding…") : t("Add session")}
           </Text>
         </Button>
@@ -344,6 +366,7 @@ function NewSessionForm() {
         form={form}
         tz={tz}
         disabled={loading}
+        autoFocusTitle
         typeSelector={
           <SessionTypeTabs
             value={type}
