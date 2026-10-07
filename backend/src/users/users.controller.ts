@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Patch, UseGuards } from "@nestjs/common";
 import { UpdateUserDto } from "./dto/update-user.dto";
+import { toUserResponse } from "./user-response";
 import { UsersService } from "./users.service";
 import { CurrentUser } from "./decorators/current-user.decorator";
 import type { User } from "../../generated/prisma";
@@ -12,13 +13,13 @@ export class UsersController {
 
   @Get("me")
   me(@CurrentUser() user: User) {
-    return { success: true, data: user };
+    return { success: true, data: toUserResponse(user) };
   }
 
   @Patch("update/basic-info")
   async updateBasicInfo(@Body() dto: UpdateUserDto, @CurrentUser() user: User) {
     const updated = await this.usersService.update(user.id, dto);
-    return { success: true, data: updated };
+    return { success: true, data: toUserResponse(updated) };
   }
 
   @Get("me/preference-matrix")

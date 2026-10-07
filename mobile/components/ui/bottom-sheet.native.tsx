@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t } from "@/lib/i18n";
 import type {
   BottomSheetBackdropProps,
   BottomSheetFooterProps as GBottomSheetFooterProps,
@@ -139,6 +141,7 @@ const BottomSheetContent = React.forwardRef<
     const insets = useSafeAreaInsets();
     const { isDarkColorScheme } = useColorScheme();
     const { colors } = useTheme();
+    useLanguage();
     const { sheetRef } = useBottomSheetContext();
 
     const setRefs = React.useCallback(
@@ -149,6 +152,13 @@ const BottomSheetContent = React.forwardRef<
       },
       [ref, sheetRef],
     );
+
+    // Read through a ref so `renderBackdrop` keeps a stable identity even when
+    // a caller passes an inline `backdropProps` literal: a new
+    // `backdropComponent` makes gorhom remount the backdrop, which mid-open
+    // can leave it painting over the sheet.
+    const backdropPropsRef = React.useRef(backdropProps);
+    backdropPropsRef.current = backdropProps;
 
     const renderBackdrop = React.useCallback(
       (props: BottomSheetBackdropProps) => {
@@ -163,7 +173,7 @@ const BottomSheetContent = React.forwardRef<
           ...rest
         } = {
           ...props,
-          ...backdropProps,
+          ...backdropPropsRef.current,
         };
         return (
           <BottomSheetBackdrop
@@ -182,13 +192,15 @@ const BottomSheetContent = React.forwardRef<
           />
         );
       },
-      [backdropProps, colors],
+      [isDarkColorScheme],
     );
 
     return (
       <BottomSheetModal
         ref={setRefs}
-        containerComponent={Platform.OS === "ios" ? IosSheetContainer : undefined}
+        containerComponent={
+          Platform.OS === "ios" ? IosSheetContainer : undefined
+        }
         index={0}
         enablePanDownToClose={enablePanDownToClose}
         backdropComponent={renderBackdrop}
@@ -231,6 +243,7 @@ const BottomSheetOpenTrigger = React.forwardRef<
     asChild?: boolean;
   }
 >(({ onPress, asChild = false, ...props }, ref) => {
+  useLanguage();
   const { sheetRef } = useBottomSheetContext();
   function handleOnPress(ev: GestureResponderEvent) {
     sheetRef.current?.present();
@@ -249,6 +262,7 @@ const BottomSheetCloseTrigger = React.forwardRef<
   // Local per-instance `sheetRef` from this `<BottomSheet>`'s own context —
   // NOT `useBottomSheetModal()`'s ambient `dismiss()` (see `BottomSheetHeader`
   // below for why that's the wrong tool here).
+  useLanguage();
   const { sheetRef } = useBottomSheetContext();
   function handleOnPress(ev: GestureResponderEvent) {
     sheetRef.current?.dismiss();
@@ -360,6 +374,7 @@ const BottomSheetHeader = React.forwardRef<
   BottomSheetHeaderRef,
   BottomSheetHeaderProps
 >(({ className, children, ...props }, ref) => {
+  useLanguage();
   const { sheetRef } = useBottomSheetContext();
   function close() {
     if (Keyboard.isVisible()) {
@@ -384,7 +399,7 @@ const BottomSheetHeader = React.forwardRef<
       <Button
         onPress={close}
         variant="ghost"
-        accessibilityLabel="Close"
+        accessibilityLabel={t("Close")}
         className="h-8 w-8 aspect-square self-start rounded-full bg-muted p-0 flex items-center justify-center"
       >
         <X className="text-muted-foreground" size={16} />

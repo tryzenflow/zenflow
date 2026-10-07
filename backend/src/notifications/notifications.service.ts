@@ -16,6 +16,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { ListNotificationsDto } from "./dto/list-notifications.dto";
 import { NotificationEvent } from "./types";
 import { EventEmitter2 } from "@nestjs/event-emitter";
+import { localizeNotification } from "./localize-notification";
 
 /**
  * One of each inbox row style, cycled by {@link NotificationsService.raiseSamples}
@@ -157,6 +158,10 @@ export class NotificationsService {
     tx?: Prisma.TransactionClient,
   ): Promise<Notification> {
     const db = tx ?? this.prisma;
+    const recipient = await db.user?.findUnique({
+      where: { id: userId },
+      select: { lang: true },
+    });
     const { materializeSession, ...notificationFields } = dto;
     let sessionId = dto.sessionId;
     let eventEndsAt = dto.eventEndsAt;
@@ -227,7 +232,7 @@ export class NotificationsService {
       },
     });
 
-    return newNotification;
+    return localizeNotification(newNotification, recipient?.lang);
   }
 
   /**
@@ -321,7 +326,7 @@ export class NotificationsService {
    * {@link create} it never materializes a calendar session - it points at the
    * user's own conflicting tasks via `conflictSessionIds`. The caller emits.
    */
-  raiseConflict(
+  async raiseConflict(
     userId: string,
     dto: {
       /** Always `"sync_conflict.<category>"` — see {@link notificationEventKind}. */
@@ -331,7 +336,11 @@ export class NotificationsService {
       conflictSessionIds: string[];
     },
   ): Promise<Notification> {
-    return this.prisma.notification.create({
+    const recipient = await this.prisma.user?.findUnique({
+      where: { id: userId },
+      select: { lang: true },
+    });
+    const row = await this.prisma.notification.create({
       data: {
         userId,
         eventName: dto.eventName,
@@ -342,6 +351,7 @@ export class NotificationsService {
         eventEndsAt: null,
       },
     });
+    return localizeNotification(row, recipient?.lang);
   }
 
   /** The caller's own `sync_conflict.*` row, or 404. */
@@ -410,7 +420,12 @@ export class NotificationsService {
       }),
     ]);
 
-    return { notifications: rows.map(toNotificationDto), unreadCount };
+    return {
+      notifications: rows.map((row) =>
+        toNotificationDto(localizeNotification(row, user.lang)),
+      ),
+      unreadCount,
+    };
   }
 
   /** `PATCH /notifications/:id/read` — stamp `readAt`. Idempotent. */
@@ -449,7 +464,7 @@ export class NotificationsService {
         where: { id, userId: user.id, [column]: null },
         data: { [column]: new Date() },
       });
-      return toNotificationDto(row);
+      return toNotificationDto(localizeNotification(row, user.lang));
     } catch (error) {
       if (!this.isRecordNotFound(error)) throw error;
       // Either it is not this user's row, or it was already stamped. Tell the
@@ -460,7 +475,7 @@ export class NotificationsService {
       if (!existing) {
         throw new NotFoundException(`Cannot find notification with id ${id}`);
       }
-      return toNotificationDto(existing);
+      return toNotificationDto(localizeNotification(existing, user.lang));
     }
   }
 

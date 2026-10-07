@@ -254,9 +254,9 @@ def update_arm(request: UpdateRequest) -> UpdateResponse:
     """Fold one ``(context, reward)`` observation into an arm and return the new state.
 
     An empty ``state.A``/``state.b`` (first-ever observation for this arm)
-    is seeded at the ridge prior — ``A = ridge * I`` — by :func:`hydrate`
-    before the update, so the identity-seeded matrix is what comes back for
-    the backend to persist, not an empty one.
+    is seeded by :func:`hydrate` (the same warm-start prior ``/v1/place`` scores
+    from, ``LINUCB_PRIOR_N0``) before the update, so the seeded matrix -- prior
+    included -- is what comes back for the backend to persist.
     """
     require_422(
         math.isfinite(request.ridge) and request.ridge > 0.0, "ridge must be > 0"
@@ -271,7 +271,7 @@ def update_arm(request: UpdateRequest) -> UpdateResponse:
     started = time.perf_counter()
     d = len(request.x)
     x: np.ndarray = np.asarray(request.x, dtype=np.float64)
-    a, b = hydrate(request.state, d, request.ridge)
+    a, b = hydrate(request.state, d, request.ridge, request.arm)
     new_a, new_b = update(a, b, x, request.reward)
     update_duration.record(time.perf_counter() - started)
     return UpdateResponse(A=new_a.reshape(-1).tolist(), b=new_b.tolist())

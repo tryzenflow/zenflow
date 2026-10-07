@@ -15,7 +15,7 @@ export class IsEndDateAfterStartDateConstraint implements ValidatorConstraintInt
     return end >= start;
   }
 
-  defaultMessage(args: ValidationArguments) {
+  defaultMessage() {
     return `End date must be greater than or equal to start date`;
   }
 }

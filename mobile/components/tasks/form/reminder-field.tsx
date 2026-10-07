@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t, locale } from "@/lib/i18n";
 import { Bell, Plus, X } from "@/components/Icons";
 import {
   BottomSheet,
@@ -42,6 +44,7 @@ export function ReminderField({
   onChange: (value: number[]) => void;
   disabled?: boolean;
 }) {
+  useLanguage();
   const sheet = useBottomSheet();
   const [target, setTarget] = useState<Target>("add");
   const [custom, setCustom] = useState("");
@@ -81,18 +84,22 @@ export function ReminderField({
             <Pressable
               disabled={disabled}
               onPress={() => openFor(m)}
-              accessibilityLabel={`Edit reminder: ${reminderLabel(m)}`}
+              accessibilityLabel={t("Edit reminder: {reminder}", {
+                reminder: localizedReminderLabel(m),
+              })}
               className="flex-row items-center gap-1.5 py-1.5 pl-3 pr-1.5"
             >
               <Bell size={14} className="text-primary" />
               <Text className="text-[13px] font-medium text-primary">
-                {reminderLabel(m)}
+                {localizedReminderLabel(m)}
               </Text>
             </Pressable>
             <Pressable
               disabled={disabled}
               onPress={() => onChange(value.filter((x) => x !== m))}
-              accessibilityLabel={`Remove reminder: ${reminderLabel(m)}`}
+              accessibilityLabel={t("Remove reminder: {reminder}", {
+                reminder: localizedReminderLabel(m),
+              })}
               hitSlop={8}
               className="mr-1.5 size-4 items-center justify-center rounded-full bg-primary/20"
             >
@@ -111,15 +118,21 @@ export function ReminderField({
           >
             <Plus size={14} className="text-muted-foreground" />
             <Text className="text-[13px] font-medium text-muted-foreground">
-              Add reminder
+              {t("Add reminder")}
             </Text>
           </Pressable>
         )}
       </View>
       <Text className="text-[12.5px] leading-snug text-muted-foreground">
         {full
-          ? `${value.length} of ${MAX_REMINDERS_PER_SESSION} reminders set — tap one to change it.`
-          : `Defaults to 1 hour before it starts. Tap a reminder to change it. Up to ${MAX_REMINDERS_PER_SESSION} per task.`}
+          ? t("{count} of {max} reminders set — tap one to change it.", {
+              count: value.length,
+              max: MAX_REMINDERS_PER_SESSION,
+            })
+          : t(
+              "New tasks use your default reminder from Settings. Tap a reminder to change it. Up to {max} per task.",
+              { max: MAX_REMINDERS_PER_SESSION },
+            )}
       </Text>
 
       <BottomSheet>
@@ -129,10 +142,12 @@ export function ReminderField({
           <BottomSheetView hadHeader={false} className="px-5">
             <View>
               <Text className="text-[19px] font-bold tracking-tight">
-                {current === undefined ? "Add reminder" : "Change reminder"}
+                {current === undefined
+                  ? t("Add reminder")
+                  : t("Change reminder")}
               </Text>
               <Text className="mt-0.5 text-[13px] text-muted-foreground">
-                How long before it starts?
+                {t("How long before it starts?")}
               </Text>
             </View>
 
@@ -156,7 +171,7 @@ export function ReminderField({
                         m === current && "text-primary",
                       )}
                     >
-                      {reminderLeadLabel(m)}
+                      {localizedReminderLeadLabel(m)}
                     </Text>
                   </Pressable>
                 );
@@ -166,7 +181,7 @@ export function ReminderField({
             <View className="mt-4 flex-row items-center gap-2">
               <View className="h-px flex-1 bg-border" />
               <Text className="text-[11px] text-muted-foreground">
-                or custom
+                {t("or custom")}
               </Text>
               <View className="h-px flex-1 bg-border" />
             </View>
@@ -176,14 +191,14 @@ export function ReminderField({
                 value={custom}
                 onChangeText={setCustom}
                 keyboardType="number-pad"
-                placeholder="e.g. 2"
-                accessibilityLabel="Custom reminder amount"
-                className="w-20 h-12"
+                placeholder={t("e.g. 2")}
+                accessibilityLabel={t("Custom reminder amount")}
+                className="h-12 w-28 px-3 text-[13px]"
               />
               <View className="flex-1 flex-row h-full gap-1">
                 {REMINDER_UNITS.map((u) => (
                   <Pressable
-                    key={u.id}
+                    key={t(u.id)}
                     onPress={() => setUnit(u.id)}
                     className={cn(
                       "flex-1 items-center justify-center rounded-lg border border-border bg-muted",
@@ -196,7 +211,7 @@ export function ReminderField({
                         u.id === unit && "text-primary",
                       )}
                     >
-                      {u.id}
+                      {t(u.id)}
                     </Text>
                   </Pressable>
                 ))}
@@ -204,7 +219,7 @@ export function ReminderField({
             </View>
             {!!customError && (
               <Text className="mt-1.5 text-[12px] font-medium text-destructive">
-                {customError}
+                {t(customError)}
               </Text>
             )}
 
@@ -215,7 +230,7 @@ export function ReminderField({
                 onPress={() => pick(customMinutes)}
               >
                 <Text className="font-semibold text-primary-foreground">
-                  {current === undefined ? "Add custom reminder" : "Save"}
+                  {current === undefined ? t("Add custom reminder") : t("Save")}
                 </Text>
               </Button>
             </View>
@@ -224,4 +239,36 @@ export function ReminderField({
       </BottomSheet>
     </View>
   );
+}
+
+function localizedReminderLeadLabel(minutes: number): string {
+  if (locale() !== "vi-VN") return reminderLeadLabel(minutes);
+  if (minutes === 0) return t("At start");
+  const unit =
+    minutes % 10080 === 0
+      ? 10080
+      : minutes % 1440 === 0
+        ? 1440
+        : minutes % 60 === 0
+          ? 60
+          : 1;
+  return (
+    minutes / unit +
+    " " +
+    t(
+      unit === 10080
+        ? "week"
+        : unit === 1440
+          ? "day"
+          : unit === 60
+            ? "hour"
+            : "min",
+    )
+  );
+}
+function localizedReminderLabel(minutes: number): string {
+  if (locale() !== "vi-VN") return reminderLabel(minutes);
+  return minutes === 0
+    ? t("At start time")
+    : "Trước " + localizedReminderLeadLabel(minutes);
 }

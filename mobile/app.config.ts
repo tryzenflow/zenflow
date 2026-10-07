@@ -91,6 +91,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     "expo-font",
     "expo-secure-store",
     [
+      "expo-image-picker",
+      {
+        photosPermission: "Allow Zenflow to attach photos to your tasks",
+        // Camera/microphone are never used (library picker only).
+        cameraPermission: false,
+        microphonePermission: false,
+      },
+    ],
+    [
       "expo-splash-screen",
       {
         image: "./assets/images/splash.png",

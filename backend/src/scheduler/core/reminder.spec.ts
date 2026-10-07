@@ -1,5 +1,4 @@
 import {
-  buildReminderText,
   formatLeadTime,
   normalizeReminderMinutes,
   pickReminderStart,

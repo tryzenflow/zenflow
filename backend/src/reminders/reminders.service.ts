@@ -78,13 +78,18 @@ export class RemindersService implements OnApplicationBootstrap {
 
   // ---- validation / persistence -------------------------------------------
 
-  /** Requested minutes -> the list to store (default applied, normalized). */
+  /**
+   * Requested minutes -> the list to store (default applied, normalized).
+   * When `requested` is omitted, `defaultMinutes` (the user's
+   * `defaultReminderMinutes`; 0 = none) yields a single reminder, never for DND.
+   */
   resolveForCreate(
     type: SessionType,
     requested: number[] | undefined,
+    defaultMinutes: number = DEFAULT_REMINDER_MINUTES,
   ): number[] {
     if (requested === undefined) {
-      return type === "DND" ? [] : [DEFAULT_REMINDER_MINUTES];
+      return type === "DND" || defaultMinutes === 0 ? [] : [defaultMinutes];
     }
     this.assertValid(type, requested);
     return normalizeReminderMinutes(requested);

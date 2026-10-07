@@ -16,6 +16,7 @@ import type {
 import { format } from "date-fns";
 import { api } from "./base";
 import { notifySessionsMutated } from "@/lib/session-cache";
+import { SAVE_TIMEOUT_MS } from "@/lib/save-error";
 
 /**
  * No `status` param — the backend doesn't filter by status (rejected as an
@@ -45,7 +46,9 @@ export async function listSessionSuggestions(
 export async function createSession(
   input: CreateSessionInput,
 ): Promise<CreateSessionResponse> {
-  const { data } = await api.post("/sessions", input);
+  const { data } = await api.post("/sessions", input, {
+    timeout: SAVE_TIMEOUT_MS,
+  });
   notifySessionsMutated();
   return data.data;
 }
@@ -77,6 +80,7 @@ export async function updateSession(
   const { data } = await api.patch(
     `/sessions/${encodeURIComponent(id)}`,
     input,
+    { timeout: SAVE_TIMEOUT_MS },
   );
   notifySessionsMutated();
   return data.data;

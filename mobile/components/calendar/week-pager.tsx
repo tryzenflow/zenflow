@@ -1,3 +1,4 @@
+import { useLanguage } from "@/hooks/use-language";
 import { NAV_THEME } from "@/lib/constants";
 import type { PeekBlock } from "@/lib/peek";
 import { useColorScheme } from "@/lib/useColorScheme";
@@ -133,7 +134,7 @@ interface WeekPagerProps {
     primarySlot: string,
     alternativeSlot: string,
     slotProposalId: string,
-    onPick: (chose: "primary" | "alternative") => void,
+    onPick: (chose: "primary" | "alternative") => Promise<void>,
   ) => void;
   /** Session id to pulse on the focused day — a teleport target. Forwarded to
    * the active `DayTimeline` only. */
@@ -201,6 +202,7 @@ function WeekPagerImpl(
   }: WeekPagerProps,
   ref: ForwardedRef<WeekPagerHandle>,
 ) {
+  useLanguage();
   const { width } = useWindowDimensions();
   const { isDarkColorScheme } = useColorScheme();
   const borderColor = isDarkColorScheme

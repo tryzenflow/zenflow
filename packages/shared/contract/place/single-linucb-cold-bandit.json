@@ -343,7 +343,7 @@
   "response": {
     "contractVersion": 1,
     "requestId": "00000000-0000-4000-8000-000000000002",
-    "paramsVersion": "py-5f9d5c31203c",
+    "paramsVersion": "py-1ce2e99ca66e",
     "results": [
       {
         "id": "t1",
@@ -352,7 +352,7 @@
         "heuristic": null,
         "linucb": {
           "startMs": 1789977600000,
-          "score": 0.3136578549948973,
+          "score": 0.7000370191208295,
           "selectedArm": "MORNING",
           "featureVector": [
             -0.9,
@@ -375,12 +375,12 @@
       }
     ],
     "timingsMs": {
-      "decode": 4.948,
-      "context": 0.097,
-      "predict": 0.548,
-      "scan": 1.118,
+      "decode": 3.857,
+      "context": 0.049,
+      "predict": 0.391,
+      "scan": 1.246,
       "displace": 0.0,
-      "total": 7.226
+      "total": 10.588
     }
   }
 }

@@ -1,3 +1,6 @@
+// Preloaded via `node --require` before main.ts: expand *_FILE secrets first so
+// OTEL_* settings supplied as files are visible below.
+import "./common/config/file-secrets";
 import { diag, DiagConsoleLogger, DiagLogLevel } from "@opentelemetry/api";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
@@ -31,7 +34,8 @@ function startTelemetry(): void {
 
   const pkgVersion = (() => {
     try {
-      return require("../package.json").version as string;
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- sync read of package.json at startup; a static import would pull it outside tsconfig rootDir
+      return (require("../package.json") as { version: string }).version;
     } catch {
       return process.env.SERVICE_VERSION ?? "0.0.0";
     }

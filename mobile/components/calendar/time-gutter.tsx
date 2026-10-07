@@ -1,3 +1,5 @@
+import { getLanguage } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
 import { Text } from "@/components/ui/text";
 import { minutesToTime } from "@zenflow/core";
 import { View } from "react-native";
@@ -15,6 +17,7 @@ export function TimeGutter({
   toHour = 24,
   showZeroLabel = false,
 }: TimeGutterProps) {
+  useLanguage();
   const hours: number[] = [];
   for (let h = fromHour; h < toHour; h++) hours.push(h);
 
@@ -31,7 +34,9 @@ export function TimeGutter({
         >
           {(hour !== 0 || showZeroLabel) && (
             <Text className="text-[10px] font-bold text-muted-foreground">
-              {minutesToTime(hour * 60)}
+              {getLanguage() === "vi"
+                ? `${String(hour).padStart(2, "0")}:00`
+                : minutesToTime(hour * 60)}
             </Text>
           )}
         </View>

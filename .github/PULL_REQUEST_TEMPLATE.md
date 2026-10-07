@@ -17,9 +17,11 @@ Closes #
 <!-- Tick what this PR changes. -->
 
 - [ ] `frontend/` (React PWA)
+- [ ] `mobile/` (Expo app)
 - [ ] `backend/` (NestJS API + EDF scheduler)
 - [ ] `packages/shared/` (`@zenflow/shared` — the FE/BE API contract)
 - [ ] `services/bandit/` (ML)
+- [ ] Infra / observability (`compose.*`, `loadtest/`)
 - [ ] Docs / tooling / CI
 
 ## How to test

@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t, locale } from "@/lib/i18n";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { formatMinutes } from "@zenflow/core";
@@ -22,6 +24,7 @@ export function DurationStepper({
   onChange: (value: number) => void;
   disabled?: boolean;
 }) {
+  useLanguage();
   function step(delta: number) {
     const next = Math.min(DAILY_HORIZON, Math.max(SLOT_MINUTES, value + delta));
     if (next === value) return;
@@ -37,7 +40,7 @@ export function DurationStepper({
       <Pressable
         disabled={!canDecrement}
         onPress={() => step(-SLOT_MINUTES)}
-        accessibilityLabel="Decrease duration by 15 minutes"
+        accessibilityLabel={t("Decrease duration by 15 minutes")}
         className={cn(
           "h-11 w-11 items-center justify-center rounded-xl border border-input bg-card",
           !canDecrement && "opacity-40",
@@ -47,13 +50,15 @@ export function DurationStepper({
       </Pressable>
       <View className="flex-1 items-center">
         <Text className="text-[17px] font-semibold tabular-nums text-foreground">
-          {formatMinutes(value)}
+          {locale() === "vi-VN"
+            ? `${Math.floor(value / 60) ? `${Math.floor(value / 60)} giờ` : ""}${value % 60 ? ` ${value % 60} phút` : ""}`.trim()
+            : formatMinutes(value)}
         </Text>
       </View>
       <Pressable
         disabled={!canIncrement}
         onPress={() => step(SLOT_MINUTES)}
-        accessibilityLabel="Increase duration by 15 minutes"
+        accessibilityLabel={t("Increase duration by 15 minutes")}
         className={cn(
           "h-11 w-11 items-center justify-center rounded-xl border border-input bg-card",
           !canIncrement && "opacity-40",

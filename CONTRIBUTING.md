@@ -6,14 +6,14 @@ convention. For the product overview and architecture, start with [README.md](RE
 
 ## Prerequisites & setup
 
-- **Node 20+**, **pnpm 10.32.1**, and **Docker** (for the backend stack).
+- **Node 20+**, **pnpm 10.32.1**, **Docker** (backend stack), and the authenticated [**`gh` CLI**](https://cli.github.com) (issues and PRs).
 
 ```bash
 pnpm install            # install all workspaces
 pnpm shared:build       # build @zenflow/shared — required before FE/BE typecheck
 ```
 
-See the [root README quick start](README.md#quick-start) to bring up the API + frontend.
+See the [root README quick start](README.md#quick-start) to bring up the API + frontend. Env files (`.env*`) are git-ignored; copy from each app's `.env.example`.
 
 ## Monorepo commands (from the repo root)
 
@@ -48,9 +48,7 @@ pnpm shared:build && pnpm -r typecheck
 # run the relevant tests (see Testing below)
 ```
 
-> If you use Claude Code in this repo, the configured hooks (`.claude/settings.json`) format
-> on edit and run `eslint --fix` + a workspace typecheck when a turn ends — but you should
-> still run the checks above yourself before opening a PR.
+Agent hooks only format on edit; run these checks yourself (`pnpm check` = shared build + typecheck).
 
 ## Commit convention — Conventional Commits 1.0.0
 
@@ -102,29 +100,15 @@ BREAKING CHANGE: `start` is now `requestedStartTime` in the reschedule body.
 
 ### Opening a PR
 
-Opening a PR loads [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) —
-fill in every section rather than deleting the template. A good PR:
+Fill in every section of [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) (`gh pr create` loads it).
 
-1. **Has a Conventional Commit title** — the PR title becomes the squash-merge commit, so it
-   must follow `type(scope): summary` just like a commit (see above).
-2. **Explains what & why** — lead with the motivation; the diff already shows the _what_.
-3. **Links its issue** — `Closes #123` (or `Refs #123`) so the issue auto-closes on merge.
-4. **Marks the area(s) touched** — frontend / backend / shared / ML / docs, so the right
-   reviewer picks it up.
-5. **Tells the reviewer how to test it** — concrete steps to reproduce the behavior locally.
-6. **Is green before review** — lint, `pnpm shared:build && pnpm -r typecheck`, and the
-   relevant tests all pass; CI runs the same checks.
-7. **Stays focused and reasonably small** — one logical change. Split unrelated work into
-   separate PRs to keep review fast.
-8. **Calls out breaking changes** — if the change is breaking, say so in the PR body, add the
-   `BREAKING CHANGE:` footer to the commit, and describe the migration path.
-9. **Respects the [AGENTS.md](AGENTS.md) invariants** — pure scheduler, `@zenflow/shared` as
-   the single API contract, the 15-minute slot grid, the response envelope, and the frontend
-   timezone wall-clock rule.
-
-Mark a PR as a **draft** while it's still in progress. Address review feedback with follow-up
-commits (don't force-push over a reviewer's in-progress read); the branch is squash-merged, so
-intermediate commits are collapsed on merge.
+- Title is a Conventional Commit; it becomes the squash commit.
+- Lead with the why; link the issue (`Closes #123`).
+- Tick the areas touched and give steps to test.
+- Lint, `pnpm check` and relevant tests are green before review (CI runs the same).
+- One logical change per PR; call out breaking changes with the `BREAKING CHANGE:` footer and a migration path.
+- Respect the [AGENTS.md](AGENTS.md) invariants.
+- Use a draft while in progress; address review with follow-up commits, not force-pushes.
 
 ## Testing
 
@@ -138,8 +122,16 @@ intermediate commits are collapsed on merge.
 New behavior needs a test; a bug fix needs a regression test. Scheduler changes must update
 the matching `*.spec.ts` in the same commit.
 
-## Optional: the Claude Code feature pipeline
+## Issues & labels
 
-This repo ships a phased pipeline (`.claude/`) — `/feature` runs requirements → design →
-architecture → implementation → review → QA, each phase backed by a subagent. See the
-"Feature workflow" tables in [README.md](README.md) and [AGENTS.md](AGENTS.md).
+Open issues from the [templates](.github/ISSUE_TEMPLATE/) (bug, feature, chore) or `gh issue create`. Every issue has a Scope, Acceptance criteria and a Priority.
+
+| Kind | Labels |
+| --- | --- |
+| Type | `feature`, `hotfix` (bug), `documentation`, `migration` |
+| Area | `frontend`, `backend`, `mobile`, `ml`, `infra`, `devops`, `security`, `l10n`, `notifications`, `testing`, `dx` |
+| Priority | `P0-blocker`, `P1-high`, `P2-medium`, `P3-low` |
+
+## Coding agents
+
+Claude Code and Codex share one setup in [`.agents/`](.agents/README.md): domain subagents, small skills and hooks. Edit `.agents/`, then run `pnpm sync:agents`; CI fails if the generated `.claude/` and `.codex/` drift. Conventions: [AGENTS.md](AGENTS.md).

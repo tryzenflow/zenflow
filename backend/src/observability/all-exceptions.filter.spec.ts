@@ -51,3 +51,33 @@ describe("AllExceptionsFilter machine-readable codes", () => {
     expect(body).toEqual({ success: false, message: "nope" });
   });
 });
+
+describe("AllExceptionsFilter body-parser errors", () => {
+  it("maps entity.too.large to 413 with a clear message", async () => {
+    const err = Object.assign(new Error("request entity too large"), {
+      status: 413,
+      statusCode: 413,
+      type: "entity.too.large",
+    });
+    const { status, body } = await run(err);
+    expect(status).toBe(413);
+    expect(body).toEqual({
+      success: false,
+      message: "That content is too large to save.",
+    });
+  });
+
+  it("maps malformed JSON to 400", async () => {
+    const err = Object.assign(new SyntaxError("bad"), {
+      status: 400,
+      type: "entity.parse.failed",
+    });
+    const { status, body } = await run(err);
+    expect(status).toBe(400);
+    expect(body.message).toBe("Malformed request body.");
+  });
+
+  it("still maps unknown errors to 500", async () => {
+    expect((await run(new Error("boom"))).status).toBe(500);
+  });
+});

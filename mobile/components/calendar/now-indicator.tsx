@@ -1,3 +1,4 @@
+import { useLanguage } from "@/hooks/use-language";
 import { DAILY_HORIZON } from "@zenflow/core";
 import { toZonedTime } from "date-fns-tz";
 import { View } from "react-native";
@@ -9,6 +10,7 @@ interface NowIndicatorProps {
 }
 
 export function NowIndicator({ now, tz, totalHeight }: NowIndicatorProps) {
+  useLanguage();
   const zoned = toZonedTime(now, tz);
   const mins = zoned.getHours() * 60 + zoned.getMinutes();
   const top = (mins / DAILY_HORIZON) * totalHeight;

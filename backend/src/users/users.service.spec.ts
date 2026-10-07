@@ -14,7 +14,18 @@ async function makeService(update: jest.Mock) {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       UsersService,
-      { provide: PrismaService, useValue: { user: { update } } },
+      {
+        provide: PrismaService,
+        useValue: {
+          user: {
+            update,
+            findUnique: jest.fn(() => ({ timezone: "Asia/Ho_Chi_Minh" })),
+          },
+          session: { findMany: jest.fn(() => []) },
+          sessionSeries: { update: jest.fn() },
+          $transaction: (ops: unknown[]) => Promise.all(ops),
+        },
+      },
     ],
   }).compile();
   return module.get<UsersService>(UsersService);
@@ -38,6 +49,29 @@ describe("UsersService.update", () => {
     });
   });
 
+  it("maps lang to the DB enum and persists timezone + default reminder", async () => {
+    const update = jest.fn((args: UpdateArgs) => ({
+      id: user.id,
+      ...args.data,
+    }));
+    const service = await makeService(update);
+
+    await service.update(user.id, {
+      timezone: "Asia/Tokyo",
+      lang: "en",
+      defaultReminderMinutes: 0,
+    });
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: user.id },
+      data: {
+        timezone: "Asia/Tokyo",
+        lang: "EN_US",
+        defaultReminderMinutes: 0,
+      },
+    });
+  });
+
   it("throws NotFoundException when the user doesn't exist", async () => {
     const update = jest.fn(() => {
       throw new Prisma.PrismaClientKnownRequestError("Record not found", {
@@ -50,5 +84,61 @@ describe("UsersService.update", () => {
     await expect(
       service.update("missing", { name: "New Name" }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe("UsersService.update onboarding", () => {
+  it("stamps onboardedAt only when still null, and never writes the flag as a column", async () => {
+    const update = jest.fn((args: UpdateArgs) => ({
+      id: user.id,
+      ...args.data,
+    }));
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const module = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        { provide: PrismaService, useValue: { user: { update, updateMany } } },
+      ],
+    }).compile();
+    const service = module.get(UsersService);
+
+    await service.update(user.id, { onboarded: true });
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: user.id, onboardedAt: null },
+      data: { onboardedAt: expect.any(Date) as Date },
+    });
+    expect(update).toHaveBeenCalledWith({
+      where: { id: user.id },
+      data: {},
+    });
+  });
+});
+
+describe("UsersService.update seenTip", () => {
+  it("appends the tip only when absent, and never writes seenTip as a column", async () => {
+    const update = jest.fn((args: UpdateArgs) => ({
+      id: user.id,
+      ...args.data,
+    }));
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const module = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        { provide: PrismaService, useValue: { user: { update, updateMany } } },
+      ],
+    }).compile();
+    const service = module.get(UsersService);
+
+    await service.update(user.id, { seenTip: "move-task" });
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: user.id, NOT: { seenTips: { has: "move-task" } } },
+      data: { seenTips: { push: "move-task" } },
+    });
+    expect(update).toHaveBeenCalledWith({
+      where: { id: user.id },
+      data: {},
+    });
   });
 });

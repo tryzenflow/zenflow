@@ -79,6 +79,7 @@ function makePrismaDouble() {
   const notifications: NotificationRow[] = [];
   const reminders: { sessionId: string; remindBeforeMinutes: number }[] = [];
   const events: Record<string, unknown>[] = [];
+  const prefs = { defaultReminderMinutes: 60 };
   const tags: { id: string; userId: string; name: string }[] = [];
 
   const client = {
@@ -242,6 +243,9 @@ function makePrismaDouble() {
           ) ?? null,
         ),
     },
+    user: {
+      findUnique: () => Promise.resolve({ ...prefs }),
+    },
     sessionReminder: {
       create: (args: {
         data: { sessionId: string; remindBeforeMinutes: number };
@@ -254,7 +258,7 @@ function makePrismaDouble() {
       fn(client),
   };
 
-  return { client, sessions, notifications, events, tags, reminders };
+  return { client, sessions, notifications, events, tags, reminders, prefs };
 }
 
 // ── fixtures (deliberately fictional — never real DLU data) ────────────────
@@ -571,6 +575,24 @@ describe("MaterializerService", () => {
       expect(db.reminders.every((r) => r.remindBeforeMinutes === 60)).toBe(
         true,
       );
+    });
+  });
+
+  describe("user default reminder", () => {
+    it("uses the user's default and skips it when set to none", async () => {
+      const { db, service } = await makeService();
+      db.prefs.defaultReminderMinutes = 15;
+      await service.materialize(USER, [block()], "LMS");
+      expect(db.reminders.map((r) => r.remindBeforeMinutes)).toEqual([15]);
+
+      db.reminders.length = 0;
+      db.prefs.defaultReminderMinutes = 0;
+      await service.materialize(
+        USER,
+        [block({ externalKey: "portal:exam:2", type: "EXAM" })],
+        "LMS",
+      );
+      expect(db.reminders).toHaveLength(0);
     });
   });
 

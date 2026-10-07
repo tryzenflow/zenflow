@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t } from "@/lib/i18n";
 import { X } from "@/components/Icons";
 import * as DialogPrimitive from "@/components/primitives/dialog";
 import * as Slot from "@/components/primitives/slot";
@@ -90,6 +92,12 @@ type BottomSheetContentProps = Omit<
   /** Accepted for API parity with `bottom-sheet.native.tsx`, and ignored —
    * this reimplementation has no mounted-but-closed state to preserve. */
   enableDismissOnClose?: boolean;
+  snapPoints?: Array<string | number>;
+  enableDynamicSizing?: boolean;
+  /** Accepted for API parity with `bottom-sheet.native.tsx`, and ignored — the
+   * web sheet sizes itself with CSS. Destructured out so it can't leak onto
+   * the DOM node. */
+  maxDynamicContentSize?: number;
 };
 
 const BottomSheetContent = React.forwardRef<
@@ -103,11 +111,15 @@ const BottomSheetContent = React.forwardRef<
       onDismiss,
       backdropProps: _backdropProps,
       enableDismissOnClose: _enableDismissOnClose,
+      snapPoints: _snapPoints,
+      enableDynamicSizing: _enableDynamicSizing,
+      maxDynamicContentSize: _maxDynamicContentSize,
       ...props
     },
     ref,
   ) => {
     const [open, setOpen] = React.useState(false);
+    useLanguage();
     const { sheetRef } = useBottomSheetContext();
 
     const handle = React.useMemo<WebSheetHandle>(
@@ -177,6 +189,7 @@ const BottomSheetOpenTrigger = React.forwardRef<
     asChild?: boolean;
   }
 >(({ onPress, asChild = false, ...props }, ref) => {
+  useLanguage();
   const { sheetRef } = useBottomSheetContext();
   function handleOnPress(ev: GestureResponderEvent) {
     sheetRef.current?.present();
@@ -192,6 +205,7 @@ const BottomSheetCloseTrigger = React.forwardRef<
     asChild?: boolean;
   }
 >(({ onPress, asChild = false, ...props }, ref) => {
+  useLanguage();
   const { sheetRef } = useBottomSheetContext();
   function handleOnPress(ev: GestureResponderEvent) {
     sheetRef.current?.dismiss();
@@ -320,6 +334,7 @@ const BottomSheetHeader = React.forwardRef<
   BottomSheetHeaderRef,
   BottomSheetHeaderProps
 >(({ className, children, ...props }, ref) => {
+  useLanguage();
   const { sheetRef } = useBottomSheetContext();
   function close() {
     sheetRef.current?.dismiss();
@@ -341,7 +356,7 @@ const BottomSheetHeader = React.forwardRef<
       <Button
         onPress={close}
         variant="ghost"
-        accessibilityLabel="Close"
+        accessibilityLabel={t("Close")}
         className="h-8 w-8 self-start rounded-full bg-muted p-0"
       >
         <X className="text-muted-foreground" size={16} />

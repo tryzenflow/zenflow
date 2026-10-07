@@ -15,8 +15,11 @@ interface DeviceRow {
   userId: string;
 }
 
-function makePrismaDouble(devices: DeviceRow[]) {
+function makePrismaDouble(devices: DeviceRow[], allowNotifications = true) {
   const client = {
+    user: {
+      findUnique: jest.fn(() => Promise.resolve({ allowNotifications })),
+    },
     userDevice: {
       findMany: jest.fn((args: { where: { userId: string } }) =>
         Promise.resolve(devices.filter((d) => d.userId === args.where.userId)),
@@ -61,8 +64,9 @@ async function make(opts: {
   fcm?: ReturnType<typeof fakeSender>;
   apns?: ReturnType<typeof fakeSender>;
   emitter?: EventEmitter2;
+  allowNotifications?: boolean;
 }) {
-  const db = makePrismaDouble(opts.devices ?? []);
+  const db = makePrismaDouble(opts.devices ?? [], opts.allowNotifications);
   const notifications = {
     notificationEmitter: opts.emitter ?? new EventEmitter2(),
   } as unknown as NotificationsService;
@@ -90,6 +94,19 @@ describe("PushService", () => {
         devices: [{ platform: "ANDROID", pushToken: "a1", userId: "u1" }],
         fcm: fakeSender(false),
         apns: fakeSender(false),
+      });
+
+      await service.sendToUser("u1", ROW);
+
+      expect(db.client.userDevice.findMany).not.toHaveBeenCalled();
+      expect(fcm.send).not.toHaveBeenCalled();
+      expect(apns.send).not.toHaveBeenCalled();
+    });
+
+    it("skips native push when the user has allowNotifications=false", async () => {
+      const { service, db, fcm, apns } = await make({
+        devices: [{ platform: "ANDROID", pushToken: "a1", userId: "u1" }],
+        allowNotifications: false,
       });
 
       await service.sendToUser("u1", ROW);
@@ -149,7 +166,7 @@ describe("PushService", () => {
           data: expect.objectContaining({
             sessionId: "",
             url: "/notifications",
-          }),
+          }) as unknown,
         }),
       );
     });

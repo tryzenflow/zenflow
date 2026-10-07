@@ -1,0 +1,113 @@
+name: Deploy
+
+# Reusable + manual. Used by:
+#   images.yml   -> staging, automatically after the images are pushed
+#   release.yml  -> production, on a published release (GitHub Environment
+#                   "production" holds the required-reviewers approval gate)
+#   manual run   -> any environment, any SHA. THIS IS THE ROLLBACK PATH:
+#                   run it with the previous good SHA (docs/ops/ci-cd.md).
+on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      image_tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [staging, production]
+        required: true
+      image_tag:
+        description: Full git SHA whose images to deploy (must already be in the registry)
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.image_tag }} -> ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Environment-level protection rules (required reviewers for production)
+    # are evaluated here, before any step runs or secret is exposed.
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: read
+    env:
+      DEPLOY_ENABLED: ${{ vars.DEPLOY_ENABLED }}
+    steps:
+      - name: Skip when the target is not configured
+        if: env.DEPLOY_ENABLED != 'true'
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          echo "::warning::DEPLOY_ENABLED is not 'true' for environment '$ENVIRONMENT'; deploy skipped. See docs/ops/ci-cd.md to configure a target."
+      # Config (compose files, proxy) comes from the SHA being deployed, so a
+      # rollback restores the config that shipped with that release too.
+      - uses: actions/checkout@v4
+        if: env.DEPLOY_ENABLED == 'true'
+        with:
+          ref: ${{ inputs.image_tag }}
+      - name: Verify images exist for this SHA
+        if: env.DEPLOY_ENABLED == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          registry="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker manifest inspect "$registry/zenflow-api:$IMAGE_TAG" >/dev/null
+          docker manifest inspect "$registry/zenflow-bandit:$IMAGE_TAG" >/dev/null
+      - name: Refuse Vault outside production
+        if: env.DEPLOY_ENABLED == 'true' && vars.SECRETS_PROVIDER == 'vault' && inputs.environment != 'production'
+        run: |
+          echo "::error::SECRETS_PROVIDER=vault is valid only for the production Environment (Vault runs only in compose.prod.yml). Use host, sops or command for '${{ inputs.environment }}'."
+          exit 1
+      - name: Install sops
+        if: env.DEPLOY_ENABLED == 'true' && vars.SECRETS_PROVIDER == 'sops'
+        run: |
+          curl -sSfL -o sops https://github.com/getsops/sops/releases/download/v3.10.2/sops-v3.10.2.linux.amd64
+          sudo install -m 0755 sops /usr/local/bin/sops
+      - name: Configure SSH
+        if: env.DEPLOY_ENABLED == 'true'
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf 'Host *\n  IdentityFile ~/.ssh/id_deploy\n' > ~/.ssh/config
+      # ---- DEPLOY STEP: parameterized, see scripts/deploy/deploy.sh ----------
+      - name: Deploy
+        if: env.DEPLOY_ENABLED == 'true'
+        env:
+          DEPLOY_ENV: ${{ inputs.environment == 'production' && 'prod' || inputs.environment }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
+          SECRETS_PROVIDER: ${{ vars.SECRETS_PROVIDER }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+          SECRETS_COMMAND: ${{ secrets.SECRETS_COMMAND }}
+          VAULT_ADDR: ${{ vars.VAULT_ADDR }}
+          VAULT_ROLE_ID_FILE: ${{ vars.VAULT_ROLE_ID_FILE }}
+          VAULT_SECRET_ID_FILE: ${{ vars.VAULT_SECRET_ID_FILE }}
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          export REGISTRY="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"
+          scripts/deploy/deploy.sh

@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
 import {
   connectIntegration,
   disconnectIntegration,
@@ -38,7 +40,9 @@ const PROVIDERS: IntegrationProvider[] = ["LMS", "PORTAL"];
 
 const PROVIDER_LABEL: Record<IntegrationProvider, string> = {
   LMS: "LMS",
-  PORTAL: "Student portal",
+  get PORTAL() {
+    return t("Student portal");
+  },
 };
 
 /** Connect/update give up after this long — DLU is often slow or down. */
@@ -53,6 +57,7 @@ function ProviderIcon({
   provider: IntegrationProvider;
   connected: boolean;
 }) {
+  useLanguage();
   const Icon = provider === "LMS" ? GraduationCap : CreditCard;
   return (
     <View
@@ -78,11 +83,11 @@ function shortAgo(iso: string): string {
     0,
     Math.floor((Date.now() - Date.parse(iso)) / 60000),
   );
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return t("just now");
+  if (minutes < 60) return t("{count} min ago", { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  if (hours < 24) return t("{count} hours ago", { count: hours });
+  return t("{count} days ago", { count: Math.floor(hours / 24) });
 }
 
 /** One short subtitle per row — the last sync is the only thing worth showing. */
@@ -90,31 +95,39 @@ function rowSubtitle(
   status: IntegrationStatus | undefined,
   syncing: boolean,
 ): { text: string; tone: "muted" | "ok" | "error" } {
-  if (!status?.connected) return { text: "Not connected", tone: "muted" };
+  if (!status?.connected) return { text: t("Not connected"), tone: "muted" };
   if (syncing || status.lastSyncStatus === "PROCESSING")
-    return { text: "Syncing…", tone: "muted" };
+    return { text: t("Syncing…"), tone: "muted" };
   if (status.lastSyncStatus === "FAILED")
-    return { text: "Last sync failed", tone: "error" };
+    return { text: t("Last sync failed"), tone: "error" };
   if (status.lastSyncedAt)
-    return { text: `Synced ${shortAgo(status.lastSyncedAt)}`, tone: "ok" };
-  return { text: "Connected", tone: "ok" };
+    return {
+      text: t("Synced {time}", { time: shortAgo(status.lastSyncedAt) }),
+      tone: "ok",
+    };
+  return { text: t("Connected"), tone: "ok" };
 }
 
 function errorMessageFor(error: unknown): string {
   if (isAxiosError(error)) {
     if (error.code === "ERR_CANCELED")
-      return "Connection timed out. DLU may be unavailable — try again.";
+      return t("Connection timed out. DLU may be unavailable — try again.");
     if (error.response?.status === 503)
-      return "Couldn't reach DLU right now — try again in a bit.";
+      return t("Couldn't reach DLU right now — try again in a bit.");
   }
-  return "That didn't work. Double-check your student ID and password and try again.";
+  return t(
+    "That didn't work. Double-check your student ID and password and try again.",
+  );
 }
 
 /**
  * Settings section for LMS / student-portal accounts: connect, update
  * credentials, sync and disconnect inline.
  */
-export function DluAccountsSection() {
+export function DluAccountsSection({
+  hideLabel = false,
+}: { hideLabel?: boolean } = {}) {
+  useLanguage();
   const { toast } = useToast();
   const { integrations, updateIntegration, loading } = useIntegrationStore();
   const [selectedProvider, setSelectedProvider] =
@@ -189,7 +202,7 @@ export function DluAccountsSection() {
             );
       updateIntegration(selectedProvider, status);
       toast(
-        mode === "connect" ? "Connected" : "Credentials updated",
+        mode === "connect" ? t("Connected") : t("Credentials updated"),
         "success",
       );
       closeSignInSheet();
@@ -206,12 +219,15 @@ export function DluAccountsSection() {
     try {
       const status = await syncIntegration(provider);
       updateIntegration(provider, status);
-      toast(`${PROVIDER_LABEL[provider]} synced`, "success");
+      toast(
+        t("{provider} synced", { provider: PROVIDER_LABEL[provider] }),
+        "success",
+      );
     } catch (err) {
       toast(
         isAxiosError(err) && err.response?.status === 503
-          ? "Couldn't reach DLU right now."
-          : "Sync failed",
+          ? t("Couldn't reach DLU right now.")
+          : t("Sync failed"),
         "destructive",
       );
     } finally {
@@ -225,10 +241,10 @@ export function DluAccountsSection() {
     try {
       const status = await disconnectIntegration(selectedProvider);
       updateIntegration(selectedProvider, status);
-      toast("Disconnected", "success");
+      toast(t("Disconnected"), "success");
       confirmSheet.close();
     } catch {
-      toast("Failed to disconnect", "destructive");
+      toast(t("Failed to disconnect"), "destructive");
     } finally {
       setIsSubmitting(false);
     }
@@ -245,7 +261,9 @@ export function DluAccountsSection() {
 
   return (
     <>
-      <SettingsSectionLabel>DLU accounts</SettingsSectionLabel>
+      {!hideLabel && (
+        <SettingsSectionLabel>{t("DLU accounts")}</SettingsSectionLabel>
+      )}
       <View className="overflow-hidden rounded-2xl border border-border bg-card">
         {PROVIDERS.map((provider, index) => {
           if (loading) {
@@ -298,7 +316,9 @@ export function DluAccountsSection() {
                   <Pressable
                     onPress={() => openManageSheet(provider)}
                     hitSlop={8}
-                    accessibilityLabel={`Manage ${PROVIDER_LABEL[provider]}`}
+                    accessibilityLabel={t("Manage {provider}", {
+                      provider: PROVIDER_LABEL[provider],
+                    })}
                     className="size-9 items-center justify-center rounded-lg active:bg-muted"
                   >
                     <MoreHorizontal
@@ -314,7 +334,7 @@ export function DluAccountsSection() {
                     onPress={() => openSignInSheet(provider, "connect")}
                   >
                     <Text className="text-[13px] font-semibold text-primary-foreground">
-                      Connect
+                      {t("Connect")}
                     </Text>
                   </Button>
                 )}
@@ -328,11 +348,13 @@ export function DluAccountsSection() {
                     className="flex-row items-center gap-1.5 rounded-lg"
                     disabled={syncing !== null}
                     onPress={() => handleSync(provider)}
-                    accessibilityLabel={`Sync ${PROVIDER_LABEL[provider]} now`}
+                    accessibilityLabel={t("Sync {provider} now", {
+                      provider: PROVIDER_LABEL[provider],
+                    })}
                   >
                     <RefreshCw size={14} className="text-primary-foreground" />
                     <Text className="text-[13px] font-semibold text-primary-foreground">
-                      {syncing === provider ? "Syncing…" : "Sync now"}
+                      {syncing === provider ? t("Syncing…") : t("Sync now")}
                     </Text>
                   </Button>
                 </View>
@@ -360,7 +382,7 @@ export function DluAccountsSection() {
             >
               <KeyRound size={18} className="text-foreground" />
               <Text className="flex-1 text-[14px] font-medium">
-                Update login
+                {t("Update login")}
               </Text>
             </Pressable>
             <Pressable
@@ -369,7 +391,7 @@ export function DluAccountsSection() {
             >
               <Unlink size={18} className="text-destructive" />
               <Text className="flex-1 text-[14px] font-medium text-destructive">
-                Disconnect
+                {t("Disconnect")}
               </Text>
             </Pressable>
           </BottomSheetView>
@@ -381,8 +403,10 @@ export function DluAccountsSection() {
             <View className="pb-3 pt-1">
               <Text className="text-xl font-bold tracking-tight">
                 {mode === "connect"
-                  ? `Sign in to your ${selectedLabel}`
-                  : `Update your ${selectedLabel} login`}
+                  ? t("Sign in to your {provider}", { provider: selectedLabel })
+                  : t("Update your {provider} login", {
+                      provider: selectedLabel,
+                    })}
               </Text>
             </View>
             {error ? (
@@ -401,19 +425,21 @@ export function DluAccountsSection() {
             ) : (
               <Text className="mb-4 text-[13.5px] leading-relaxed text-muted-foreground">
                 {mode === "connect"
-                  ? "Your DLU student ID and password — only used to check DLU for you."
-                  : "Leave a field blank to keep what's saved."}
+                  ? t(
+                      "Your DLU student ID and password — only used to check DLU for you.",
+                    )
+                  : t("Leave a field blank to keep what's saved.")}
               </Text>
             )}
             <View className="mb-3">
               <Text className="mb-1.5 text-[12.5px] font-semibold text-muted-foreground">
-                Student ID
+                {t("Student ID")}
               </Text>
               <BottomSheetInput
                 value={studentId}
                 onChangeText={setStudentId}
                 placeholder={
-                  mode === "connect" ? "2112345" : "Leave blank to keep"
+                  mode === "connect" ? "2112345" : t("Leave blank to keep")
                 }
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -422,13 +448,13 @@ export function DluAccountsSection() {
             </View>
             <View className="mb-5">
               <Text className="mb-1.5 text-[12.5px] font-semibold text-muted-foreground">
-                Password
+                {t("Password")}
               </Text>
               <BottomSheetInput
                 value={password}
                 onChangeText={setPassword}
                 placeholder={
-                  mode === "connect" ? "••••••••" : "Leave blank to keep"
+                  mode === "connect" ? "••••••••" : t("Leave blank to keep")
                 }
                 secureTextEntry={!showPassword}
                 editable={!isSubmitting}
@@ -466,13 +492,13 @@ export function DluAccountsSection() {
               <Text className="font-semibold text-primary-foreground">
                 {isSubmitting
                   ? mode === "connect"
-                    ? "Connecting…"
-                    : "Saving…"
+                    ? t("Connecting…")
+                    : t("Saving…")
                   : error
-                    ? "Try again"
+                    ? t("Try again")
                     : mode === "connect"
-                      ? "Connect"
-                      : "Update login"}
+                      ? t("Connect")
+                      : t("Update login")}
               </Text>
             </Button>
           </BottomSheetView>
@@ -483,12 +509,14 @@ export function DluAccountsSection() {
           <BottomSheetView style={{ paddingBottom: 30 }}>
             <View className="pb-3 pt-1">
               <Text className="text-xl font-bold tracking-tight">
-                Disconnect the {selectedLabel}?
+                {t("Disconnect the")}
+                {selectedLabel}?
               </Text>
             </View>
             <Text className="mb-5 mt-1.5 text-[13px] leading-snug text-muted-foreground">
-              Zenflow will stop checking it for new assignments. You can
-              reconnect any time.
+              {t(
+                "Zenflow will stop checking it for new assignments. You can reconnect any time.",
+              )}
             </Text>
             <View className="flex-row gap-2.5">
               <Button
@@ -497,7 +525,9 @@ export function DluAccountsSection() {
                 onPress={() => confirmSheet.close()}
                 disabled={isSubmitting}
               >
-                <Text className="font-semibold text-foreground">Keep it</Text>
+                <Text className="font-semibold text-foreground">
+                  {t("Keep it")}
+                </Text>
               </Button>
               <Button
                 variant="destructive"
@@ -505,7 +535,9 @@ export function DluAccountsSection() {
                 onPress={handleDisconnect}
                 disabled={isSubmitting}
               >
-                <Text className="font-semibold text-white">Disconnect</Text>
+                <Text className="font-semibold text-white">
+                  {t("Disconnect")}
+                </Text>
               </Button>
             </View>
           </BottomSheetView>

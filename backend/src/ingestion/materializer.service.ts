@@ -237,7 +237,7 @@ export class MaterializerService {
 
     // `unchanged` / total ≈ how much of the run was redundant re-work (the
     // thing a cache on this path would save). `source` is portal|lms.
-    for (const [label, n] of Object.entries(outcome)) {
+    for (const [label, n] of Object.entries(outcome) as [string, number][]) {
       if (n > 0) ingestionBlocks.add(n, { source, outcome: label });
     }
 
@@ -443,13 +443,18 @@ export class MaterializerService {
         });
         newId = row.id;
 
-        // Same default reminder as an in-app task.
-        await tx.sessionReminder.create({
-          data: {
-            sessionId: row.id,
-            remindBeforeMinutes: DEFAULT_REMINDER_MINUTES,
-          },
+        // Same default reminder as an in-app task (0 = none).
+        const owner = await tx.user.findUnique({
+          where: { id: userId },
+          select: { defaultReminderMinutes: true },
         });
+        const reminderMinutes =
+          owner?.defaultReminderMinutes ?? DEFAULT_REMINDER_MINUTES;
+        if (reminderMinutes > 0) {
+          await tx.sessionReminder.create({
+            data: { sessionId: row.id, remindBeforeMinutes: reminderMinutes },
+          });
+        }
       });
       return newId;
     } catch (error) {

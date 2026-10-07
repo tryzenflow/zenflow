@@ -1,3 +1,6 @@
+// Must stay first: expands *_FILE secrets into process.env before AppModule
+// (and its ConfigModule) is evaluated.
+import "./common/config/file-secrets";
 import { NestFactory } from "@nestjs/core";
 import { NestExpressApplication } from "@nestjs/platform-express";
 import { Logger } from "nestjs-pino";
@@ -98,4 +101,4 @@ async function bootstrap() {
   app.use(passport.session());
   await app.listen(process.env.PORT ?? 5000);
 }
-bootstrap();
+void bootstrap();

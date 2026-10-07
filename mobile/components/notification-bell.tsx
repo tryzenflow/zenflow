@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
 import { Bell } from "@/components/Icons";
 import { useNotificationsStore } from "@/hooks/use-notifications";
 import { type Href, useRouter } from "expo-router";
@@ -11,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
  * Web counterpart: `frontend/src/components/notifications/notification-bell.tsx`.
  */
 export function NotificationBell() {
+  useLanguage();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const unread = useNotificationsStore((s) => s.unreadCount);
@@ -19,7 +22,7 @@ export function NotificationBell() {
     <Pressable
       onPress={() => router.push("/notifications" as Href)}
       accessibilityLabel={
-        unread > 0 ? `Notifications, ${unread} unread` : "Notifications"
+        unread > 0 ? `Notifications, ${unread} unread` : t(t("Notifications"))
       }
       hitSlop={10}
       style={{ top: insets.top + 8 }}
@@ -32,4 +35,3 @@ export function NotificationBell() {
     </Pressable>
   );
 }
-

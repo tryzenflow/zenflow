@@ -1,8 +1,6 @@
 # Observability stack (traces · metrics · logs)
 
-The Grafana half of issue #53. The **app-side** instrumentation is in
-`../src/observability/`, `../src/tracing.ts` and `services/bandit/src/otel.py`; this
-folder is everything that receives, stores and visualises what they emit.
+Receives, stores and visualises telemetry (issue #53). App-side instrumentation: `../src/observability/`, `../src/tracing.ts`, `services/bandit/src/otel.py`.
 
 ```
               OTLP/HTTP :4318                         scrape :8889
@@ -16,23 +14,19 @@ folder is everything that receives, stores and visualises what they emit.
 
 ## Run it
 
-### Standalone (local) — `compose.observability.yml`
+### Staging / local — `compose.staging.yml`
 
-```powershell
-docker compose -f ../compose.observability.yml up -d
-
-# API with the SDK on, pointed at the collector on the host:
-$env:OTEL_SDK_DISABLED = "false"
-$env:OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318"
-pnpm --filter backend build
-node --require ./backend/dist/tracing.js backend/dist/main
+```bash
+docker compose --env-file .env.staging -f compose.staging.yml up -d --build
 ```
 
-Grafana → <http://localhost:3000> (anonymous Admin, no login). Dashboards are under
-the **Zenflow** folder; **Explore** has Tempo / Loki / Prometheus pre-wired.
+Same images and configs as production, plus:
+- `postgres-exporter` (connections, locks, `pg_stat_*`), scraped via `prometheus/scrape.d/postgres-exporter.yml` (staging only).
+- A fake DLU upstream for the load test ([loadtest/staging/README.md](../../loadtest/staging/README.md)).
 
-Podman / rootless: point Alloy at the real socket —
-`$env:OBS_RUNTIME_SOCK = "/run/user/1000/podman/podman.sock"` before `up`.
+`.env.staging` must set `GRAFANA_ADMIN_PASSWORD`. Grafana (<http://localhost:3000>) and Mailpit bind to `127.0.0.1`. Dashboards are in the **Zenflow** folder; **Explore** has Tempo, Loki and Prometheus wired.
+
+cAdvisor sees only the aggregate `/docker` cgroup when the image store is containerd's (Colima, recent Docker Engine); see the `cadvisor` service comment.
 
 ### Production — `compose.prod.yml`
 

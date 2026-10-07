@@ -240,7 +240,7 @@ def last_resort_pin(
     duration_minutes: int,
     now_ms: int,
     deadline_ms: int,
-    avoid: Intervals = (),
+    avoid: Sequence[tuple[int, int]] = (),
 ) -> int:
     """Terminal fallback: the latest on-grid start that still ends by the
     deadline, or the next slot when that is already past. Pushed later past

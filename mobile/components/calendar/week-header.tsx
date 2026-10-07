@@ -1,3 +1,7 @@
+import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
+import { format, formatTitle } from "@/lib/i18n";
 import { Text } from "@/components/ui/text";
 import { useNow } from "@/hooks/use-now";
 import { SESSION_TYPE_META, SESSION_TYPE_ORDER } from "@zenflow/core";
@@ -10,7 +14,7 @@ import {
 } from "@/lib/week-date-math";
 import { SETTLE_MS } from "@/lib/week-pager-math";
 import type { SessionType } from "@zenflow/shared";
-import { format } from "date-fns";
+
 import { toZonedTime } from "date-fns-tz";
 import {
   type ForwardedRef,
@@ -121,6 +125,7 @@ function WeekHeaderImpl(
   }: WeekHeaderProps,
   ref: ForwardedRef<WeekHeaderHandle>,
 ) {
+  useLanguage();
   const now = useNow();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -300,15 +305,15 @@ function WeekHeaderImpl(
           isFocused ? "bg-muted" : ""
         }`}
         accessibilityLabel={`${format(day, "EEEE, MMMM d")}${
-          isToday ? ", today" : ""
+          isToday ? t(", today") : ""
         }${
           types.length > 0
-            ? `, ${types.map((t) => SESSION_TYPE_META[t].label).join(", ")}`
+            ? `, ${types.map((type) => t(SESSION_TYPE_META[type].label)).join(", ")}`
             : ""
         }`}
       >
         <Text className="text-[10.5px] font-semibold text-muted-foreground">
-          {format(day, "EEE")}
+          {formatTitle(day, "EEE")}
         </Text>
         <View
           className={`h-[30px] w-[30px] items-center justify-center rounded-full text-base ${
@@ -345,7 +350,7 @@ function WeekHeaderImpl(
       >
         <View className="px-4 pb-2">
           <Text className="text-xl font-bold tracking-tight">
-            {format(shownDate, "MMMM yyyy")}
+            {formatTitle(shownDate, "MMMM yyyy")}
           </Text>
           <Text className="mt-px text-[11.5px] font-medium text-muted-foreground">
             {format(titleDays[0], "MMM d")} – {format(titleDays[6], "MMM d")}
@@ -355,9 +360,11 @@ function WeekHeaderImpl(
         <Animated.View
           style={[{ flexDirection: "row", width: width * 3 }, stripStyle]}
         >
-          {blocks.map((weekDates) => (
+          {blocks.map((weekDates, i) => (
             <View key={dateKey(weekDates[0])} style={{ width }}>
               <View className="flex-row gap-1.5 px-4 pt-1 pb-0.5">
+                {/* The middle block is the week on screen. */}
+                {i === 1 ? <SpotlightAnchor step="switch-day" /> : null}
                 {weekDates.map((day) => renderChip(day))}
               </View>
             </View>

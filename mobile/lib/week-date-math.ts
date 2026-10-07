@@ -1,4 +1,5 @@
-import { addDays, format, startOfWeek } from "date-fns";
+import { format } from "./i18n";
+import { addDays, startOfWeek } from "date-fns";
 
 /**
  * Pure date-math helpers for the mobile Week View (`app/(app)/index.tsx`,

@@ -40,3 +40,7 @@ MAX_DISPLACED_TASKS = 6
 SCAN_CAP_DAYS = 30
 MAX_SERIES_PER_DAY = 1
 INFEASIBLE_HORIZON_DAYS = 30
+
+# LinUCB warm-start prior (issue #60): total pseudo-observations each cold arm is
+# seeded with from the default preference matrix. 0 = the old (ridge * I, 0) start.
+LINUCB_PRIOR_N0 = 5.0

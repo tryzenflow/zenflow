@@ -650,6 +650,17 @@ describe("SeriesService.resizeSessionCount", () => {
       ],
       deadline,
       now,
+      // Existing sittings hold their slot and their day for the new ones.
+      fixedOccupied: [
+        {
+          start: Date.parse("2026-06-01T08:00:00.000Z"),
+          end: Date.parse("2026-06-01T09:00:00.000Z"),
+        },
+        {
+          start: Date.parse("2026-06-03T08:00:00.000Z"),
+          end: Date.parse("2026-06-03T09:00:00.000Z"),
+        },
+      ],
     });
 
     expect(result.map((s) => s.id)).toEqual([
@@ -662,6 +673,56 @@ describe("SeriesService.resizeSessionCount", () => {
     expect(result.find((s) => s.id === "s-new-1")?.scheduledStartTime).toBe(
       "2026-06-05T08:00:00.000Z",
     );
+  });
+
+  it("rejects growing when a new sitting has no free day (last-resort pick) instead of stacking it on a sibling's day", async () => {
+    const sessionCreate = jest.fn(() =>
+      Promise.resolve(
+        session({ id: "s-new-1", seriesId, deadline, durationMinutes: 60 }),
+      ),
+    );
+    const tx = {
+      session: {
+        updateMany: jest.fn().mockResolvedValue({ count: 2 }),
+        create: sessionCreate,
+        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      sessionEvent: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      sessionSeries: { findFirst: jest.fn().mockResolvedValue(seriesRow()) },
+      session: {
+        findMany: jest.fn().mockResolvedValue(twoMembers()),
+        updateMany: jest.fn().mockResolvedValue({ count: 2 }),
+        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      sessionEvent: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      $transaction: makeTransaction(tx),
+    };
+    const placement = {
+      canPlaceSeries: jest.fn().mockResolvedValue(true),
+      placeSeriesOnCreate: jest.fn().mockResolvedValue([
+        {
+          id: "s-new-1",
+          scheduledStartTime: new Date("2026-06-01T10:00:00.000Z"),
+          lastResort: true,
+        },
+      ]),
+    };
+    const service = await makeSeriesService(
+      prisma,
+      { resolveTagIds: jest.fn() },
+      placement,
+    );
+
+    await expect(
+      service.resizeSessionCount(
+        seriesId,
+        3,
+        user,
+        new Date("2026-05-30T00:00:00.000Z"),
+      ),
+    ).rejects.toThrow(NO_FEASIBLE_SLOT_MESSAGE);
   });
 
   it("rejects growing with NO_FEASIBLE_SLOT_MESSAGE and writes nothing when the added sittings don't fit", async () => {

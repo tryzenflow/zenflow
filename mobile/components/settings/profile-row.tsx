@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
 import { updateBasicInfo } from "@/api/users";
 import { ChevronRight, Lock } from "@/components/Icons";
 import {
@@ -52,6 +54,7 @@ export function ProfileRow({
   user: User;
   onUpdated: (user: User) => void;
 }) {
+  useLanguage();
   const { toast } = useToast();
   const { isDarkColorScheme } = useColorScheme();
   const bottomSheet = useBottomSheet();
@@ -68,12 +71,12 @@ export function ProfileRow({
     try {
       const updated = await updateBasicInfo({ name: trimmed });
       onUpdated(updated);
-      toast("Profile updated", "success");
+      toast(t("Profile updated"), "success");
       bottomSheet.close();
     } catch (error) {
       const message =
         (isAxiosError(error) && error.response?.data?.message) ||
-        "Failed to update profile";
+        t("Failed to update profile");
       toast(message, "destructive");
     } finally {
       setSaving(false);
@@ -120,15 +123,17 @@ export function ProfileRow({
         <BottomSheetView className="px-0" hadHeader={false}>
           <View className="px-5">
             <Text className="text-[19px] font-bold tracking-tight">
-              Edit profile
+              {t("Edit profile")}
             </Text>
             <Text className="mt-[3px] text-[13px] text-muted-foreground">
-              Update how your name appears in Zenflow.
+              {t("Update how your name appears in Zenflow.")}
             </Text>
           </View>
           <View className="mt-4 gap-[18px] px-5">
             <View>
-              <Text className="mb-2 text-[14px] font-semibold">Name</Text>
+              <Text className="mb-2 text-[14px] font-semibold">
+                {t("Name")}
+              </Text>
               <BottomSheetInput
                 value={name}
                 onChangeText={setName}
@@ -136,7 +141,9 @@ export function ProfileRow({
               />
             </View>
             <View>
-              <Text className="mb-2 text-[14px] font-semibold">Email</Text>
+              <Text className="mb-2 text-[14px] font-semibold">
+                {t("Email")}
+              </Text>
               <View className="h-[50px] w-full flex-row items-center justify-between rounded-xl border border-input bg-muted/50 px-4">
                 <Text className="text-base text-muted-foreground">
                   {user.email}
@@ -144,14 +151,14 @@ export function ProfileRow({
                 <Lock size={16} className="shrink-0 text-muted-foreground" />
               </View>
               <Text className="mt-[7px] text-[13px] leading-snug text-muted-foreground">
-                Email is your sign-in identity and can't be changed here.
+                {t("Email is your sign-in identity and can't be changed here.")}
               </Text>
             </View>
           </View>
           <View className="px-5 pt-3.5">
             <Button className="w-full" disabled={saving} onPress={save}>
               <Text className="font-semibold text-primary-foreground">
-                {saving ? "Saving…" : "Save changes"}
+                {saving ? t("Saving…") : t("Save changes")}
               </Text>
             </Button>
           </View>

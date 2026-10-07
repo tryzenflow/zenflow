@@ -27,3 +27,6 @@ assets
 **/*.env*
 **/uploads
 **/*.log
+# Encrypted (SOPS) deploy secrets are applied by the deploy script, not the image
+**/secrets
+.sops.yaml

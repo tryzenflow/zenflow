@@ -8,7 +8,7 @@ services:
     volumes:
       - postgres_data:/data/postgres
     env_file:
-      - docker.dev.env
+      - .env.dev
     networks:
       - db
 
@@ -28,15 +28,6 @@ services:
     networks:
       - cache
 
-  mail:
-    image: axllent/mailpit
-    ports:
-      - "1025:1025" # SMTP port (same as MailHog)
-      - "8025:8025" # Web UI port (same as MailHog)
-
-    networks:
-      - mail
-
   bandit:
     container_name: zenflow-bandit
     build: ../services/bandit
@@ -45,8 +36,43 @@ services:
     networks:
       - bandit
 
+  storage:
+    container_name: zenflow-storage-dev
+    image: alphatran/minio:latest
+    # The bucket is created before the server starts (a top-level directory in
+    # the data dir is a bucket), so it exists the moment the API can connect —
+    # no init job and no create-if-missing logic in the app.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mkdir -p "/data/$$S3_BUCKET" &&
+        MINIO_ROOT_USER="$$S3_ACCESS_KEY_ID"
+        MINIO_ROOT_PASSWORD="$$S3_SECRET_ACCESS_KEY"
+        exec minio server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - storage_data:/data
+    env_file:
+      - .env.dev
+    networks:
+      - storage
+    
+  
+  mail:
+    container_name: zenflow-mail-dev
+    image: axllent/mailpit:v1.31.4
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - mail
+
 networks:
   db:
+    driver: bridge
+  storage:
     driver: bridge
   cache:
     driver: bridge
@@ -57,3 +83,4 @@ networks:
 
 volumes:
   postgres_data:
+  storage_data:

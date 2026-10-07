@@ -1,13 +1,22 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
+import { format } from "@/lib/i18n";
 import { createSession } from "@/api/tasks";
 import { SessionTypeTabs } from "@/components/tasks/form/session-type-tabs";
 import { SessionFormScreen } from "@/components/tasks/task-form-screen";
 import { SessionSheetFields } from "@/components/tasks/task-sheet-fields";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
-import { useToast } from "@/components/ui/toast";
+import {
+  ModalToastScope,
+  useModalToast,
+} from "@/components/tasks/modal-toast-scope";
+import { completeStep } from "@/hooks/use-checklist";
+import { useLastCreated } from "@/hooks/use-last-created";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
 import { setPendingSlotPick } from "@/lib/pending-slot-pick";
+import { divergentSittings } from "@/lib/series-alternatives";
 import {
   RESCHEDULE_HINT,
   placementToastMessage,
@@ -30,7 +39,7 @@ import {
   type CreateSessionInput,
   DEFAULT_REMINDER_MINUTES,
 } from "@zenflow/shared";
-import { format } from "date-fns";
+
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo } from "react";
 
@@ -113,18 +122,30 @@ function toCreateInput(
  * `initialStart` / `initialDefaults` below).
  */
 export default function NewSessionScreen() {
-  const { start, deadline, sessions } = useLocalSearchParams<{
+  useLanguage();
+  return (
+    <ModalToastScope>
+      <NewSessionForm />
+    </ModalToastScope>
+  );
+}
+
+function NewSessionForm() {
+  useLanguage();
+  const { start, deadline, sessions, title } = useLocalSearchParams<{
     start?: string;
     /** UTC ISO instant — pre-selects the deadline (used by the Day/Week
      * block long-press "Add study session before this"). */
     deadline?: string;
     /** Pre-fills the session count when > 1 (same source). */
     sessions?: string;
+    /** Pre-fills the title (same source: "Prepare for <session>"). */
+    title?: string;
   }>();
   const router = useRouter();
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
-  const { toast } = useToast();
+  const { toast } = useModalToast();
 
   // `start` is a real UTC instant — both producers (`create-task-fab.tsx`'s
   // `createSessionAtNowHref` and `day-timeline.tsx`'s grid long-press) emit
@@ -143,8 +164,15 @@ export default function NewSessionScreen() {
   // (it's always engine-placed — `CreateSessionInput` has no
   // `scheduledStartTime`), but carrying them costs nothing.
   const initialDefaults = useMemo<SessionFormValues>(() => {
-    const base: SessionFormValues = { ...EMPTY_DEFAULTS };
+    // Pre-fill the user's Settings → Default reminder (0 = none).
+    const reminderMinutes =
+      user?.defaultReminderMinutes ?? DEFAULT_REMINDER_MINUTES;
+    const base: SessionFormValues = {
+      ...EMPTY_DEFAULTS,
+      reminders: reminderMinutes > 0 ? [reminderMinutes] : [],
+    };
     if (deadline) base.deadline = deadline;
+    if (title) base.title = title;
     const n = sessions ? Number.parseInt(sessions, 10) : Number.NaN;
     if (Number.isFinite(n) && n > 1) base.sessionCount = n;
     if (start) {
@@ -154,7 +182,7 @@ export default function NewSessionScreen() {
       base.endTime = shiftHhmm(startTime, DEFAULT_DURATION);
     }
     return base;
-  }, [start, deadline, sessions, tz]);
+  }, [start, deadline, sessions, title, tz, user?.defaultReminderMinutes]);
 
   const form = useSessionForm({ defaultValues: initialDefaults });
   const loading = form.formState.isSubmitting;
@@ -194,8 +222,10 @@ export default function NewSessionScreen() {
     const handleCreated = (
       response: Awaited<ReturnType<typeof createSession>>,
     ) => {
+      completeStep("create-task");
+      useLastCreated.getState().set(response.id);
       // Handle divergent response — present a primary-vs-alternative pick.
-      // The week view owns the SlotPickSheet, so hand the payload off and
+      // The week view owns the slot-pick sheet, so hand the payload off and
       // land there first; `useFocusEffect` (app/(app)/index.tsx) opens the
       // sheet over the week view and the new block is already behind it.
       if (
@@ -205,6 +235,7 @@ export default function NewSessionScreen() {
         response.alternativeSlot
       ) {
         setPendingSlotPick({
+          kind: "single",
           session: response,
           primarySlot: response.primarySlot,
           alternativeSlot: response.alternativeSlot,
@@ -218,12 +249,31 @@ export default function NewSessionScreen() {
         return;
       }
 
+      // A `sessionCount > 1` series (#59): the divergence rides on `sessions[]`,
+      // while the top-level fields are hard-set to `NO_SLOT_PROPOSAL` server
+      // side, so the single-session guard above can never match one. Filter to
+      // the sittings that actually diverge and hand those off.
+      const series = divergentSittings(response.sessions);
+      if (series.length > 0) {
+        setPendingSlotPick({
+          kind: "series",
+          title: response.title,
+          sittings: series,
+          tz,
+        });
+        router.replace({
+          pathname: "/",
+          params: { date: series[0].primarySlot, flash: series[0].session.id },
+        } as Href);
+        return;
+      }
+
       showDisplacedToast(toast, response.displacedSessions);
       const { message, variant } = placementToastMessage(response, user);
       showSplitToast(toast, message, variant);
       if (shouldSurfaceRescheduleHint()) {
-        toast("Tip", "tip", 6000, "top", false, undefined, {
-          description: RESCHEDULE_HINT,
+        toast(t("Tip"), "tip", 6000, "top", false, undefined, {
+          description: t(RESCHEDULE_HINT),
         });
       }
       // Teleport the calendar to where it landed and pulse the new block.
@@ -253,7 +303,7 @@ export default function NewSessionScreen() {
         showErrorToast(
           toast,
           error,
-          "Something went wrong when creating the session",
+          t("Something went wrong when creating the session"),
         ),
     );
   }
@@ -266,17 +316,17 @@ export default function NewSessionScreen() {
   // A TASK is engine-placed, so a "· starts H:mm" here would be a lie — show
   // just the pressed date. A fixed type keeps the time (it honours the seed).
   const subtitle = !initialStart
-    ? "New session"
+    ? t("New session")
     : type === "TASK"
-      ? `From ${format(initialStart, "EEEE, MMM d")}`
-      : `From ${format(initialStart, "EEEE, MMM d")} · starts ${format(
-          initialStart,
-          "h:mm a",
-        )}`;
+      ? t("From {date}", { date: format(initialStart, "EEEE, MMM d") })
+      : t("From {date} · starts {time}", {
+          date: format(initialStart, "EEEE, MMM d"),
+          time: format(initialStart, "h:mm a"),
+        });
 
   return (
     <SessionFormScreen
-      title="New session"
+      title={t("New session")}
       subtitle={subtitle}
       footer={
         <Button
@@ -285,7 +335,7 @@ export default function NewSessionScreen() {
           onPress={form.handleSubmit(onSubmit, onInvalid)}
         >
           <Text className="text-base font-semibold text-foreground">
-            {loading ? "Adding…" : "Add session"}
+            {loading ? t("Adding…") : t("Add session")}
           </Text>
         </Button>
       }

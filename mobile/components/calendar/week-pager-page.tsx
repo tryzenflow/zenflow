@@ -1,3 +1,4 @@
+import { useLanguage } from "@/hooks/use-language";
 import Animated from "react-native-reanimated";
 import { useAnimatedStyle, type SharedValue } from "react-native-reanimated";
 import { computePagePosition } from "@/lib/week-pager-math";
@@ -64,6 +65,7 @@ export function PagerPage({
   borderColor,
   children,
 }: PagerPageProps) {
+  useLanguage();
   const animatedStyle = useAnimatedStyle(() => {
     const pos = computePagePosition({
       index,

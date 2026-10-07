@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
 import {
   AlertCircle,
   CheckSquare,
@@ -51,6 +53,7 @@ export function SessionTypeBadge({
   iconOnly = false,
   className,
 }: SessionTypeBadgeProps) {
+  useLanguage();
   const meta = SESSION_TYPE_META[type];
   const Icon = TYPE_ICON[type];
   const showLabel = size === "md" && !iconOnly;
@@ -73,7 +76,7 @@ export function SessionTypeBadge({
             meta.textClass,
           )}
         >
-          {meta.label}
+          {t(meta.label)}
         </Text>
       )}
     </View>
@@ -94,6 +97,7 @@ export function OverdueBadge({
   iconOnly?: boolean;
   className?: string;
 }) {
+  useLanguage();
   // Explicit colour, not `dark:text-*` classes: the `dark:` variant didn't
   // reach the label, which rendered near-black on the dark red card.
   const { isDarkColorScheme } = useColorScheme();
@@ -112,7 +116,7 @@ export function OverdueBadge({
           className="text-[10px] font-semibold leading-[13px]"
           style={{ color: red }}
         >
-          Overdue
+          {t("Overdue")}
         </Text>
       )}
     </View>

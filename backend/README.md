@@ -49,7 +49,7 @@ backend/
 │   ├── integrations/             # encrypted DLU credential storage + live login probe
 │   ├── notifications/           # the ingestion inbox
 │   ├── devices/                  # native push — POST/DELETE /devices + FCM/APNs fan-out
-│   ├── files/                    # multipart upload/download to local disk
+│   ├── files/                    # multipart upload/download, bytes in S3-compatible storage
 │   ├── mail/                     # login email + Handlebars templates
 │   ├── prisma/                   # PrismaService + Postgres error-code map
 │   └── common/                    # constants, utils, validators, dto, types
@@ -154,11 +154,13 @@ Global prefix `**/api/v1**`. All routes except `POST /auth/otp/*` require
 | Method | Path                          | Purpose                                                                                |
 | ------ | ----------------------------- | -------------------------------------------------------------------------------------- |
 | GET    | `/users/me`                   | profile                                                                                |
-| PATCH  | `/users/update/basic-info`    | update name/email                                                                      |
+| PATCH  | `/users/update/basic-info`    | update name, timezone, lang, defaultReminderMinutes                                    |
 | GET    | `/users/me/preference-matrix` | the 168-float preference matrix for the Insights heatmap                              |
 
-No onboarding or preferences-update endpoint — `timezone` is captured once at OTP signup and
-never edited after. A new signup also seeds 4 daily-recurring `DND` blocks (breakfast/lunch/
+No onboarding endpoint. `timezone` is captured at OTP signup (`x-timezone` header) and can be
+changed later, with `lang` and `defaultReminderMinutes` (0 = none, default 10; existing users
+were migrated to 60), through `PATCH /users/update/basic-info`. Changing `timezone` re-keys each
+recurring series' `exdates` so individually deleted occurrences stay deleted. A new signup also seeds 4 daily-recurring `DND` blocks (breakfast/lunch/
 evening/sleep) best-effort, so the scheduler avoids them from day one.
 
 ### Sessions (`/sessions`)
@@ -189,12 +191,17 @@ displacement repacks flexible tasks on the deadline day first (EDF, `SYSTEM_MOVE
 
 **Reminders**: `POST`/`PATCH` accept `reminders?: number[]` (minutes before start, max 2,
 not for `DND`); every response carries `reminders: number[]`. Omitted on create → one
-default at 60 min (non-`DND`); omitted on `PATCH` → unchanged.
+reminder at the user's `defaultReminderMinutes` (non-`DND`; none if 0); omitted on `PATCH` → unchanged.
 
 ### Tags, Files
 
 `GET /tags` — the current user's tags for the combobox. `POST /files/upload` (multipart,
-≤100 MB × 5), `POST /files/remove`, `GET /files/metadata/:id`, `GET /files/:id`.
+≤100 MB × 5), `POST /files/remove`, `GET /files/metadata/:id`, `GET /files/:id`. Bytes live in an S3-compatible bucket (`S3_*` env;
+`File.path` is the object key, `<userId>/<uuid>`); uploads are buffered to `UPLOAD_TMP_DIR`,
+streamed to S3, then removed, and the API proxies downloads so stored `/files/<id>` URLs are
+unchanged. The compose `storage` service creates the bucket. Move pre-S3 files with
+`docker compose exec api node dist/files/migrate-to-s3.cli.js [--dry-run]`
+(`pnpm migrate:files-to-s3` locally).
 
 ### Integrations (`/integrations`)
 
@@ -225,6 +232,12 @@ helpers.
 | POST   | `/notifications/:id/reschedule-conflicts` | `*_CONFLICT` rows only — re-place every listed clashing task (EDF).  |
 | GET    | `/notifications/stream`                   | `@Sse` live feed for the current user (web bell, mobile foreground). |
 
+Notification copy follows the recipient's `User.lang` (`VI_VN` or `EN_US`) for inbox, SSE and
+native push; rows keep canonical English copy and known generated framing is translated on
+delivery and read. Reminder dates and lead times use Vietnamese wording for `VI_VN`; user and
+upstream titles and locations stay intact. OTP emails follow the saved language too (new
+addresses get English). Templates: [`localize-notification.ts`](src/notifications/localize-notification.ts).
+
 `notificationEmitter` is an in-process `EventEmitter2` — a separate Node process won't reach
 SSE clients here. Exercise the inbox/stream/push without a real sync:
 `pnpm --filter backend exec ts-node scripts/send-test-notification.ts <userId> [count]`.
@@ -244,7 +257,7 @@ Node 20+ with pnpm `10.32.1`.
 # 1. Install workspace deps + build @zenflow/shared (repo root, once)
 pnpm install && pnpm shared:build
 
-# 2. Bootstrap Postgres/Redis (x2)/MailHog in the background (from backend/)
+# 2. Bootstrap Postgres/Redis (x2)/Mailpit in the background (from backend/)
 docker compose -f compose.dev.yml up -d
 
 # 3. Apply the Prisma schema to the dev DB
@@ -284,6 +297,11 @@ validated at boot (`@hapi/joi`) with defaults, except where noted:
 | `PLACE_TIMEOUT_MS` | 2500 | |
 | `FCM_SERVICE_ACCOUNT` | — | optional; enables Android push when set (base64 service-account JSON) |
 | `APNS_KEY` / `APNS_KEY_ID` / `APNS_TEAM_ID` / `APNS_BUNDLE_ID` | — | optional; all four enable iOS push |
+
+Deployed environments inject secrets from a managed store, and any variable can be given as
+`FOO_FILE=/path` (contents become `FOO`; explicit `FOO` wins; see
+`src/common/config/file-secrets.ts`). Inventory, rotation and the Vault container (prod only):
+[docs/ops/secrets.md](../docs/ops/secrets.md); CI/CD and rollback: [docs/ops/ci-cd.md](../docs/ops/ci-cd.md).
 
 The remaining issue-#56 ingestion knobs (per-kind periods, tick batch/budget,
 fanout cap) are optional with sane defaults — see `.env.example` and "DLU ingestion" above.
@@ -437,13 +455,12 @@ Traces, metrics and logs (issue #53). App-side instrumentation lives in
 | **Metrics** | OTel Meter instruments in `observability/metrics.ts`                                                                  | OTLP → Collector → **Prometheus**                                |
 | **Logs**    | `nestjs-pino` JSON                                                                                                     | container stdout → **Alloy** → **Loki**                          |
 
-The Grafana stack is defined in `compose.prod.yml` and, for local use,
-`compose.observability.yml`. Config + dashboards live in
+The Grafana stack is defined in `compose.prod.yml` and `compose.staging.yml`. Config + dashboards live in
 [`observability/`](observability/README.md) — start there.
 
 ```bash
-docker compose -f compose.observability.yml up -d          # Grafana → :3000
-OTEL_SDK_DISABLED=false OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 pnpm start:prod
+# Needs GRAFANA_ADMIN_PASSWORD in .env.staging:
+docker compose --env-file .env.staging -f compose.staging.yml up -d --build   # Grafana → 127.0.0.1:3000
 ```
 
 ## Running staging
@@ -452,7 +469,7 @@ OTEL_SDK_DISABLED=false OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 pnpm s
 container.
 
 `compose.staging.yml` is the fully containerized stack: `api`, `postgres`, `redis`
-(sessions/OTP), `redis-ratelimit`, `mail` (MailHog), and a `caddy` reverse proxy on `:80`.
+(sessions/OTP), `redis-ratelimit`, `mail` (Mailpit), and a `caddy` reverse proxy on `:80`.
 `compose.prod.yml` follows the same shape minus `mail`.
 
 ```bash

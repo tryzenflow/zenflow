@@ -18,6 +18,7 @@ import {
 import type { ExperimentTrigger } from "../../experiments/experiment.types";
 import {
   schedulerAppliedPolicy,
+  schedulerPlacementDuration,
   schedulerPlacementSource,
 } from "../../observability/metrics";
 import { recordPhase } from "../../observability/phase-timings";
@@ -187,6 +188,7 @@ export class PythonPlacer {
     allowLastResort = true,
   ): Promise<PlacementResult> {
     const assignment = this.experiment.assignPolicy();
+    const tStart = Date.now();
     const member = this.memberOf(
       task,
       assignment.primaryPolicy,
@@ -204,7 +206,7 @@ export class PythonPlacer {
     });
     const res = await this.gateway.placeSingleTwoPhase(req, user, task, policy);
     if (!res.ok) {
-      return this.placeSingleDegraded(
+      const degraded = await this.placeSingleDegraded(
         user,
         task,
         trigger,
@@ -214,6 +216,12 @@ export class PythonPlacer {
         policy,
         allowLastResort,
       );
+      schedulerPlacementDuration.record((Date.now() - tStart) / 1000, {
+        assigned: assignment.primaryPolicy,
+        applied: degraded.appliedPolicy,
+        source: "fallback",
+      });
+      return degraded;
     }
     this.noteSource("python");
 
@@ -306,6 +314,11 @@ export class PythonPlacer {
         } moves=${r.moves.length} paramsVersion=${res.response.paramsVersion}`,
     );
 
+    schedulerPlacementDuration.record((Date.now() - tStart) / 1000, {
+      assigned: assignment.primaryPolicy,
+      applied: appliedPolicy,
+      source: "python",
+    });
     return {
       scheduledStartTime: start !== null ? new Date(start) : null,
       appliedPolicy: appliedPolicy === "NONE" ? "NONE" : appliedPolicy,

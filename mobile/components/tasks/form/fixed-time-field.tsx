@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t } from "@/lib/i18n";
 import { Text } from "@/components/ui/text";
 import { TimePickerInline } from "@/components/ui/time-picker";
 import { hhmmToMinutes } from "@zenflow/core";
@@ -34,6 +36,7 @@ export function FixedTimeField({
   tz: string;
   disabled?: boolean;
 }) {
+  useLanguage();
   const dateValue = date ? new Date(`${date}T00:00:00`) : undefined;
   const startMin = startTime ? hhmmToMinutes(startTime) : 9 * 60;
   const endMin = endTime ? hhmmToMinutes(endTime) : 10 * 60;
@@ -50,7 +53,7 @@ export function FixedTimeField({
       <View className="flex-row gap-3">
         <View className="flex-1">
           <Text className="mb-1.5 text-[12px] font-medium text-muted-foreground">
-            Starts
+            {t("Starts")}
           </Text>
           <TimePickerInline
             value={startMin}
@@ -60,7 +63,7 @@ export function FixedTimeField({
         </View>
         <View className="flex-1">
           <Text className="mb-1.5 text-[12px] font-medium text-muted-foreground">
-            Ends
+            {t("Ends")}
           </Text>
           <TimePickerInline
             value={endMin}

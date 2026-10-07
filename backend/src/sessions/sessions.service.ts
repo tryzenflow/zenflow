@@ -43,15 +43,19 @@ export class SessionsService {
   ) {}
 
   /**
-   * Reminders are persisted right after the row(s) exist (default: one at 60
-   * min for non-DND; explicit list/[] honoured) and the response is stamped
+   * Reminders are persisted right after the row(s) exist (default: one at the user's
+   * `defaultReminderMinutes` for non-DND, none if 0; explicit list/[] honoured) and the response is stamped
    * with them. Validation runs first so a bad request inserts nothing.
    */
   async create(
     dto: CreateSessionDto,
     user: User,
   ): Promise<CreateSessionResponse> {
-    const minutes = this.reminders.resolveForCreate(dto.type, dto.reminders);
+    const minutes = this.reminders.resolveForCreate(
+      dto.type,
+      dto.reminders,
+      user.defaultReminderMinutes,
+    );
     const res = await this.crud.create(dto, user);
     const ids = res.sessions?.length ? res.sessions.map((s) => s.id) : [res.id];
     await this.reminders.replace(ids, minutes);

@@ -1,3 +1,5 @@
+import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
+import { useLanguage } from "@/hooks/use-language";
 import { Text } from "@/components/ui/text";
 import { NAV_THEME } from "@/lib/constants";
 import {
@@ -22,6 +24,7 @@ export function AppTabBar({
   emitter,
   navigateToTab,
 }: BottomTabBarProps) {
+  useLanguage();
   const { isDarkColorScheme } = useColorScheme();
   const theme = isDarkColorScheme ? NAV_THEME.dark : NAV_THEME.light;
   const insets = useSafeAreaInsets();
@@ -80,6 +83,9 @@ export function AppTabBar({
         accessibilityLabel={options.tabBarAccessibilityLabel ?? label}
         className="flex-1 items-center justify-center gap-1"
       >
+        {route.name === "month" ? (
+          <SpotlightAnchor step="open-month" ignoreFocus />
+        ) : null}
         {options.tabBarIcon?.({ focused, color, size: 22 })}
         <Text
           style={{ color }}

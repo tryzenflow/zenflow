@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t } from "@/lib/i18n";
 import { X } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
 import { useRouter } from "expo-router";
@@ -107,6 +109,7 @@ export function SessionFormScreen({
   footer: ReactNode;
   children: ReactNode;
 }) {
+  useLanguage();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const scrollViewRef = useRef<ScrollViewInstance | null>(null);
@@ -133,7 +136,7 @@ export function SessionFormScreen({
           {headerRight}
           <Pressable
             onPress={() => router.back()}
-            accessibilityLabel="Close"
+            accessibilityLabel={t("Close")}
             className="h-8 w-8 items-center justify-center rounded-full bg-muted"
           >
             <X size={16} className="text-muted-foreground" />

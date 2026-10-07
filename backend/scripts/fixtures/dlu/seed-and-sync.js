@@ -1,6 +1,6 @@
 /**
  * Seeds every student in students.json as a real Zenflow account (OTP login
- * via MailHog, no password), connects both DLU integrations against the fake
+ * via Mailpit, no password), connects both DLU integrations against the fake
  * DLU server, then reports fake-dlu-server.ts request-count stats — the
  * "how many repetitions" baseline for issue #56 (per-section caching),
  * measured BEFORE that caching exists.
@@ -14,7 +14,7 @@
  *    ceiling lifted) — no code edits; the watchers no longer carry a @Cron
  *
  * Run: node seed-and-sync.js [--limit N]
- * Env: ZENFLOW_API, MAILHOG_URL, FAKE_DLU_URL override the localhost defaults.
+ * Env: ZENFLOW_API, MAIL_URL, FAKE_DLU_URL override the localhost defaults.
  */
 "use strict";
 const fs = require("fs");
@@ -23,7 +23,7 @@ const path = require("path");
 // Overridable because :5000 is not always free — macOS's AirPlay receiver
 // holds it by default.
 const API = process.env.ZENFLOW_API ?? "http://localhost:5000/api/v1";
-const MAILHOG = process.env.MAILHOG_URL ?? "http://localhost:8025";
+const MAIL = process.env.MAIL_URL ?? "http://localhost:8025"; // Mailpit UI/API from compose.dev.yml
 const FAKE_DLU = process.env.FAKE_DLU_URL ?? "http://localhost:4100";
 const CONCURRENCY = 8;
 
@@ -40,14 +40,16 @@ async function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** Poll Mailpit (compose.dev.yml's mail service) for the OTP email and extract the 6-digit code. */
+/** Poll Mailpit for the OTP email and extract the 6-digit code. */
 async function fetchOtp(email, { retries = 20, delayMs = 500 } = {}) {
   for (let i = 0; i < retries; i++) {
-    const res = await fetch(`${MAILHOG}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`);
-    const json = await res.json();
-    if (json.messages_count > 0 || json.messages?.length > 0) {
-      const msg = await (await fetch(`${MAILHOG}/api/v1/message/${json.messages[0].ID}`)).json();
-      const match = `${msg.Text ?? ""} ${msg.HTML ?? ""}`.match(/\b\d{6}\b/);
+    const res = await fetch(`${MAIL}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}&limit=1`);
+    const { messages } = await res.json();
+    if (messages?.length > 0) {
+      // Plain-text part only: the one 6-digit number in it is the code (the
+      // HTML part has colour codes like #333333).
+      const msg = await (await fetch(`${MAIL}/api/v1/message/${messages[0].ID}`)).json();
+      const match = (msg.Text ?? "").match(/\b\d{6}\b/);
       if (match) return match[0];
     }
     await sleep(delayMs);

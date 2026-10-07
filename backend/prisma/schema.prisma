@@ -22,6 +22,18 @@ model User {
   timezone String   @default("Asia/Saigon") @db.VarChar(50)
   lang     Language @default(VI_VN)
 
+  /// Reminder lead time (minutes) applied to new sessions that omit `reminders`; 0 = none.
+  defaultReminderMinutes Int @default(10)
+
+  /// When the user finished (or skipped through) first-run onboarding; null = not yet. Set once, server-side.
+  onboardedAt DateTime?
+
+  /// User intent for native push (Settings toggle / OS-permission denial, set by mobile). Gates push fan-out only; in-app/SSE unaffected.
+  allowNotifications Boolean @default(true)
+
+  /// Getting-started checklist steps done, plus `checklist-hidden` (`TIP_IDS` in @zenflow/shared); append-only.
+  seenTips String[] @default([])
+
   preferenceMatrix          Float[]   @default([])
   preferenceMatrixDecayedAt DateTime?
 

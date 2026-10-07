@@ -1,3 +1,7 @@
+import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
+import { locale, localizedDeadlineShort } from "@/lib/i18n";
 import {
   AlertCircle,
   AlertTriangle,
@@ -91,7 +95,7 @@ function minutesOfDayLocal(iso: string, tz: string) {
 }
 
 function fmt(iso: string, tz: string) {
-  return toZonedTime(new Date(iso), tz).toLocaleTimeString([], {
+  return toZonedTime(new Date(iso), tz).toLocaleTimeString(locale(), {
     hour: "numeric",
     minute: "2-digit",
   });
@@ -100,7 +104,7 @@ function fmt(iso: string, tz: string) {
 function fmtMin(min: number, tz: string, refISO: string) {
   const d = toZonedTime(new Date(refISO), tz);
   d.setHours(Math.floor(min / 60), min % 60, 0, 0);
-  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return d.toLocaleTimeString(locale(), { hour: "numeric", minute: "2-digit" });
 }
 
 /** "9:00 AM" + "10:30 AM" → "9:00–10:30 AM" — drop the repeated meridiem so the
@@ -120,6 +124,7 @@ function joinRange(start: string, end: string) {
  * amber "late" pill (`AlertTriangle`) once the block starts past its deadline —
  * the latter is also the annotation for a confirmed past-deadline drag. */
 function DueChip({ late, label }: { late: boolean; label: string }) {
+  useLanguage();
   return (
     <View
       className={cn(
@@ -141,7 +146,8 @@ function DueChip({ late, label }: { late: boolean; label: string }) {
           late ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground",
         )}
       >
-        Due {label}
+        {t("Due")}
+        {label}
       </Text>
     </View>
   );
@@ -152,6 +158,7 @@ function DueChip({ late, label }: { late: boolean; label: string }) {
  * range (and any due chip) whenever the session carries a location. A meeting
  * link reads "Online" with a globe instead of the raw URL. */
 function LocationChip({ location }: { location: string }) {
+  useLanguage();
   const online = isOnlineLocation(location);
   const Icon = online ? Globe : MapPin;
   return (
@@ -162,7 +169,7 @@ function LocationChip({ location }: { location: string }) {
         numberOfLines={1}
         ellipsizeMode="tail"
       >
-        {online ? "Online" : location}
+        {online ? t("Online") : location}
       </Text>
     </View>
   );
@@ -224,6 +231,9 @@ interface SessionBlockProps {
    * scale up + a brief amber ring) — set right after this session was created,
    * rescheduled, or the calendar teleported to it. */
   flash?: boolean;
+  /** Carry the checklist's "Move a task" / "Hold a task" spotlight anchors (the
+   * timeline sets it on one block per page). */
+  tip?: boolean;
   /** Bumped by the parent when a drop didn't move the session (save failed,
    * scope sheet cancelled) — releases the drop pin so the card snaps back. */
   settleKey?: number;
@@ -251,8 +261,10 @@ function SessionBlockImpl({
   onDragVerticalEdge,
   bottomInset = 0,
   flash = false,
+  tip = false,
   settleKey = 0,
 }: SessionBlockProps) {
+  useLanguage();
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const { isDarkColorScheme } = useColorScheme();
   const startMin = minutesOfDayLocal(segment.start, tz);
@@ -304,7 +316,7 @@ function SessionBlockImpl({
     if (!deadline) return null;
     const startMs = new Date(segment.taskStart).getTime();
     if (startMs > new Date(deadline).getTime())
-      return { late: true, label: "late" };
+      return { late: true, label: t("late") };
     const daysOut = differenceInCalendarDays(
       zonedDate(deadline, tz),
       zonedDate(segment.taskStart, tz),
@@ -312,7 +324,7 @@ function SessionBlockImpl({
     if (daysOut > 1) return null;
     return {
       late: false,
-      label: formatDeadlineShort(deadline, tz, new Date(segment.taskStart)),
+      label: localizedDeadlineShort(deadline, tz, new Date(segment.taskStart)),
     };
   })();
   // Overdue = the server flagged it late (placed past its deadline) or it now
@@ -766,6 +778,12 @@ function SessionBlockImpl({
           className="absolute inset-0 rounded-[10px] border-[1.5px] border-dashed border-muted-foreground/40 bg-muted/40"
         />
       )}
+      {tip && !segment.continued ? (
+        <>
+          <SpotlightAnchor step="move-task" />
+          <SpotlightAnchor step="block-actions" />
+        </>
+      ) : null}
       {flashing && (
         <Animated.View
           pointerEvents="none"
@@ -791,7 +809,7 @@ function SessionBlockImpl({
           accessibilityLabel={`${segment.title}, ${fmt(
             segment.taskStart,
             tz,
-          )} to ${fmt(segment.taskEnd, tz)}`}
+          )} ${t("to")} ${fmt(segment.taskEnd, tz)}`}
         >
           {state === "dnd" && (
             <View pointerEvents="none" className="absolute inset-0">
@@ -848,7 +866,7 @@ function SessionBlockImpl({
                 style={COMPACT_TEXT_STYLE}
               >
                 {segment.continued
-                  ? `ends ${fmt(segment.taskEnd, tz)}`
+                  ? t("ends {time}", { time: fmt(segment.taskEnd, tz) })
                   : fmt(segment.taskStart, tz)}
               </Text>
             </View>
@@ -877,9 +895,11 @@ function SessionBlockImpl({
               <View className="flex-row flex-wrap items-center gap-1">
                 <Text className="text-[10px] leading-[12px] text-muted-foreground">
                   {segment.continued
-                    ? `cont. → ${fmt(segment.taskEnd, tz)}`
+                    ? t("cont. → {time}", { time: fmt(segment.taskEnd, tz) })
                     : segment.continues && !drawsThrough
-                      ? `${fmt(segment.taskStart, tz)} → next day`
+                      ? t("{time} → next day", {
+                          time: fmt(segment.taskStart, tz),
+                        })
                       : joinRange(
                           fmt(segment.taskStart, tz),
                           fmt(segment.taskEnd, tz),

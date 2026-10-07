@@ -1,3 +1,6 @@
+import { useLanguage } from "@/hooks/use-language";
+import { loadPreferences } from "@/lib/preferences";
+import { setLanguage } from "@/lib/i18n";
 import { me } from "@/api/auth";
 import { PortalHost } from "@/components/primitives/portal";
 import { ToastProvider } from "@/components/ui/toast";
@@ -7,6 +10,7 @@ import { useUserStore } from "@/hooks/use-user-store";
 import { setAndroidNavigationBar } from "@/lib/android-navigation-bar";
 import { restoreSessionCookie } from "@/lib/api-client";
 import { NAV_THEME } from "@/lib/constants";
+import { routeForSession } from "@/lib/onboarding";
 import {
   cacheSessionUser,
   clearCachedSessionUser,
@@ -60,6 +64,7 @@ SplashScreen.preventAutoHideAsync();
  * so its `useRouter()` sits under the mounted navigator.
  */
 function PushRegistrar() {
+  useLanguage();
   usePushRegistration();
   return null;
 }
@@ -69,6 +74,7 @@ function PushRegistrar() {
  * presents foreground tap-to-act toast, and triggers AppState catch-up fetch.
  */
 function NotificationsSubscriber() {
+  useLanguage();
   useNotificationsSubscription();
   return null;
 }
@@ -83,6 +89,7 @@ function NotificationsSubscriber() {
  * only ever add a <Redirect/> alongside the Stack, not replace it.
  */
 function AuthGate() {
+  useLanguage();
   const segments = useSegments();
   const user = useUserStore((s) => s.user);
   const loading = useUserStore((s) => s.loading);
@@ -90,27 +97,19 @@ function AuthGate() {
   if (loading) return null;
 
   const group = segments[0] as string;
-  const inAuthGroup = group === "(auth)";
 
-  if (!user) {
-    return inAuthGroup ? null : <Redirect href={"/(auth)/login" as Href} />;
-  }
-  if (inAuthGroup) {
-    // Group-qualified, not bare "/": `(app)/index` and `(auth)/index` (if it
-    // existed) both compile to the URL "/" (parenthesized segments are
-    // stripped from the path), so a bare "/" redirect fired while the
-    // focused navigator is still the `(auth)` stack could resolve back into
-    // auth's own index instead of escaping to `(app)`. Naming the group
-    // disambiguates it. There is no onboarding step: a fresh signup lands
-    // straight in `(app)` (timezone is captured at OTP signup via the
-    // `x-timezone` header — see `api/auth.ts` — with no separate
-    // onboarding-complete gate).
-    return <Redirect href={"/(app)" as Href} />;
-  }
+  // Signed out -> login; signed in with `onboardedAt === null` -> onboarding
+  // (server-side flag, so it follows the user across devices); otherwise out
+  // of the auth/onboarding groups. Group-qualified hrefs, not bare "/":
+  // `(app)/index` and `(auth)/index` both compile to "/", so a bare redirect
+  // could resolve back into the focused group.
+  const target = routeForSession(user, group);
+  if (target) return <Redirect href={target as Href} />;
   return null;
 }
 
 export default function RootLayout() {
+  useLanguage();
   const [fontsLoaded, fontError] = useFonts({
     Geist: require("../assets/fonts/Geist-Regular.ttf"),
     "Geist-Bold": require("../assets/fonts/Geist-Bold.ttf"),
@@ -147,6 +146,8 @@ export default function RootLayout() {
       setLoading(true);
       let cached: Awaited<ReturnType<typeof readCachedSessionUser>> = null;
       try {
+        const cachedPrefs = await loadPreferences();
+        setLanguage(cachedPrefs.language);
         await restoreSessionCookie();
         cached = await readCachedSessionUser();
       } catch (err) {
@@ -176,6 +177,23 @@ export default function RootLayout() {
     })();
   }, []);
 
+  // The session is resolved but `AuthGate` may still have to redirect (e.g. a
+  // signed-out launch lands on the "/" calendar first). Keep the splash up
+  // until the focused group is the one the gate wants, so the wrong screen
+  // never flashes before the redirect.
+  const segments = useSegments();
+  const sessionUser = useUserStore((s) => s.user);
+  const routeSettled =
+    !loading && routeForSession(sessionUser, segments[0] as string) === null;
+  // Safety net only for a redirect that never settles; it starts once the
+  // session has resolved, so a slow `/auth/me` can't trip it early.
+  const [splashTimedOut, setSplashTimedOut] = React.useState(false);
+  React.useEffect(() => {
+    if (loading) return;
+    const t = setTimeout(() => setSplashTimedOut(true), 1500);
+    return () => clearTimeout(t);
+  }, [loading]);
+
   // Keep the splash screen up until BOTH fonts and the local session are resolved
   React.useEffect(() => {
     console.log(
@@ -186,12 +204,16 @@ export default function RootLayout() {
       "loading:",
       loading,
     );
-    if ((fontsLoaded || fontError) && !loading) {
+    if (
+      (fontsLoaded || fontError) &&
+      !loading &&
+      (routeSettled || splashTimedOut)
+    ) {
       SplashScreen.hideAsync().catch((err) => {
         console.warn("[_layout] SplashScreen.hideAsync warning:", err);
       });
     }
-  }, [fontsLoaded, fontError, loading]);
+  }, [fontsLoaded, fontError, loading, routeSettled, splashTimedOut]);
 
   if (!fontsLoaded && !fontError) {
     return null;
@@ -223,6 +245,7 @@ export default function RootLayout() {
           <BottomSheetModalProvider>
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(onboarding)" />
               <Stack.Screen name="(app)" />
               {/* Session create/edit — full screens, not bottom sheets (see
                   mobile/README.md); presented modally so they still read

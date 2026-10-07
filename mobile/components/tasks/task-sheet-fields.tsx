@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t } from "@/lib/i18n";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
@@ -63,6 +65,7 @@ export function SessionSheetFields({
     durationMinutes: number;
   };
 }) {
+  useLanguage();
   const type = form.watch("type");
   const isTask = type === "TASK";
   // Every fixed type can recur — a weekly lecture, a nightly DND block, a
@@ -78,12 +81,12 @@ export function SessionSheetFields({
           const charCount = (field.value ?? "").length;
           const overLimit = charCount > MAX_TITLE_LENGTH;
           return (
-            <Field label="Title" error={fieldState.error?.message}>
+            <Field label={t("Title")} error={fieldState.error?.message}>
               <Input
                 editable={!disabled}
                 value={field.value}
                 onChangeText={field.onChange}
-                placeholder="What needs doing?"
+                placeholder={t("What needs doing?")}
                 className="h-[50px] rounded-xl border border-input bg-card px-4 text-base text-foreground"
               />
               <Text
@@ -92,7 +95,7 @@ export function SessionSheetFields({
                   overLimit && "text-destructive",
                 )}
               >
-                {charCount}/{MAX_TITLE_LENGTH} characters
+                {charCount}/{MAX_TITLE_LENGTH} {t("characters")}
               </Text>
             </Field>
           );
@@ -105,8 +108,12 @@ export function SessionSheetFields({
         control={form.control}
         name="note"
         render={({ field }) => (
-          <Field label="Description">
-            <ErrorBoundary fallbackMessage="The description editor couldn't load. Everything else on this form still works.">
+          <Field label={t("Description")}>
+            <ErrorBoundary
+              fallbackMessage={t(
+                "The description editor couldn't load. Everything else on this form still works.",
+              )}
+            >
               <DescriptionField
                 initialValue={initialValue}
                 onChange={field.onChange}
@@ -121,12 +128,16 @@ export function SessionSheetFields({
         control={form.control}
         name="location"
         render={({ field, fieldState }) => (
-          <Field label="Location" error={fieldState.error?.message}>
+          <Field label={t("Location")} error={fieldState.error?.message}>
             <Input
               editable={!disabled}
               value={field.value ?? ""}
               onChangeText={field.onChange}
-              placeholder="Room, building, or link (optional)"
+              placeholder={t("Room, building, or link (optional)")}
+              multiline={false}
+              numberOfLines={1}
+              autoCapitalize="none"
+              autoCorrect={false}
               className="h-[50px] rounded-xl border border-input bg-card px-4 text-base text-foreground"
             />
           </Field>
@@ -140,7 +151,7 @@ export function SessionSheetFields({
               control={form.control}
               name="duration"
               render={({ field, fieldState }) => (
-                <Field label="Duration" error={fieldState.error?.message}>
+                <Field label={t("Duration")} error={fieldState.error?.message}>
                   <DurationStepper
                     value={field.value ?? 60}
                     onChange={field.onChange}
@@ -155,7 +166,7 @@ export function SessionSheetFields({
             control={form.control}
             name="sessionCount"
             render={({ field }) => (
-              <Field label="Sessions">
+              <Field label={t("Sessions")}>
                 <SessionCountField
                   value={field.value ?? 1}
                   onChange={field.onChange}
@@ -176,7 +187,7 @@ export function SessionSheetFields({
             control={form.control}
             name="deadline"
             render={({ field, fieldState }) => (
-              <Field label="Deadline" error={fieldState.error?.message}>
+              <Field label={t("Deadline")} error={fieldState.error?.message}>
                 <DeadlineChipRow
                   value={field.value ?? ""}
                   onChange={field.onChange}
@@ -190,7 +201,7 @@ export function SessionSheetFields({
         </>
       ) : (
         <Field
-          label="When"
+          label={t("When")}
           error={
             form.formState.errors.date?.message ??
             form.formState.errors.startTime?.message ??
@@ -217,7 +228,7 @@ export function SessionSheetFields({
       )}
 
       {canRepeat && (
-        <Field label="Repeat">
+        <Field label={t("Repeat")}>
           <Controller
             control={form.control}
             name="rrule"
@@ -239,7 +250,7 @@ export function SessionSheetFields({
           control={form.control}
           name="reminders"
           render={({ field }) => (
-            <Field label="Reminder">
+            <Field label={t("Reminder")}>
               <ReminderField
                 value={field.value ?? []}
                 onChange={field.onChange}
@@ -254,7 +265,7 @@ export function SessionSheetFields({
         control={form.control}
         name="tags"
         render={({ field }) => (
-          <Field label="Tags">
+          <Field label={t("Tags")}>
             <TagAutocomplete
               value={field.value ?? []}
               onChange={field.onChange}
@@ -283,15 +294,16 @@ function Field({
   error?: string;
   children: ReactNode;
 }) {
+  useLanguage();
   return (
     <View>
       <Text className="mb-2 text-[13.5px] font-semibold text-foreground">
-        {label}
+        {t(label)}
       </Text>
       {children}
       {!!error && (
         <Text className="mt-1.5 text-[12px] font-medium text-destructive">
-          {inlineError(error)}
+          {inlineError(t(error))}
         </Text>
       )}
     </View>

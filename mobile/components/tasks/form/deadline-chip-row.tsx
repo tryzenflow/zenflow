@@ -1,10 +1,12 @@
+import { useLanguage } from "@/hooks/use-language";
+import { format, t } from "@/lib/i18n";
 import { getDeadlineOptions } from "@/api/tasks";
 import { Text } from "@/components/ui/text";
 import { TimePickerInline } from "@/components/ui/time-picker";
 import { cn } from "@/lib/utils";
 import { zonedDate, zonedNow, zonedWallClockToUtc } from "@zenflow/core";
 import type { DeadlineOptionsResponse } from "@zenflow/shared";
-import { addDays, format, isSameDay } from "date-fns";
+import { addDays, isSameDay } from "date-fns";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import { InlineDateField } from "./inline-date-field";
@@ -67,6 +69,7 @@ export function DeadlineChipRow({
   editing?: boolean;
   tz: string;
 }) {
+  useLanguage();
   const [options, setOptions] = useState<DeadlineOptionsResponse | null>(null);
   const [chip, setChip] = useState<ChipId | null>(null);
   const [todayTomorrowMinutes, setTodayTomorrowMinutes] = useState(17 * 60);
@@ -178,7 +181,7 @@ export function DeadlineChipRow({
   }, [editing, options, value, emit]);
 
   const preview = value
-    ? format(zonedDate(value, tz), "EEE MMM d, h:mm a")
+    ? format(zonedDate(value, tz), "EEE, MMM d, h:mm a")
     : null;
 
   // Hard cap on how far out a Custom deadline can be set (max 60 days).
@@ -211,7 +214,7 @@ export function DeadlineChipRow({
                   chip === c.id ? "text-primary" : "text-muted-foreground",
                 )}
               >
-                {c.label}
+                {t(c.label)}
               </Text>
             </Pressable>
           );
@@ -223,7 +226,7 @@ export function DeadlineChipRow({
           value={todayTomorrowMinutes}
           onChange={handleTodayTomorrowTime}
           disabled={disabled}
-          label={chip === "today" ? "Due today at" : "Due tomorrow at"}
+          label={chip === "today" ? t("Due today at") : t("Due tomorrow at")}
         />
       )}
 
@@ -243,14 +246,16 @@ export function DeadlineChipRow({
               value={customMinutes}
               onChange={handleCustomTime}
               disabled={disabled}
-              label="Due at"
+              label={t("Due at")}
             />
           </View>
         </View>
       )}
 
       {preview && (
-        <Text className="text-[11px] text-muted-foreground">Due {preview}</Text>
+        <Text className="text-[11px] text-muted-foreground">
+          {t("Due {date}", { date: preview })}
+        </Text>
       )}
     </View>
   );

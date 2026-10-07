@@ -69,7 +69,10 @@ export class PlacementClient {
     this.token = config.get<string>("BANDIT_SERVICE_TOKEN") || undefined;
     this.timeoutMs = Number(config.get("PLACE_TIMEOUT_MS")) || PLACE_TIMEOUT_MS;
     this.deps = {
-      fetch: deps?.fetch ?? ((input, init) => fetch(input, init)),
+      fetch:
+        deps?.fetch ??
+        ((input: string | URL | Request, init?: RequestInit) =>
+          fetch(input, init)),
       now: deps?.now ?? (() => Date.now()),
       sleep:
         deps?.sleep ??

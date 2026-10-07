@@ -1,3 +1,11 @@
+/** Supported UI languages (wire form of the DB `Language` enum). */
+export const LANGS = ["vi", "en"] as const;
+export type Lang = (typeof LANGS)[number];
+
+/** Allowed values of `defaultReminderMinutes` (0 = none). */
+export const DEFAULT_REMINDER_CHOICES = [0, 5, 10, 15, 30, 60] as const;
+export type DefaultReminderChoice = (typeof DEFAULT_REMINDER_CHOICES)[number];
+
 /**
  * A user's scheduling preferences. Used to carry just `timezone` — the
  * working-window fields (workStart/workEnd/workDays) were dropped from
@@ -8,7 +16,38 @@
 export interface UserPreferences {
   /** IANA timezone, e.g. "Asia/Ho_Chi_Minh". */
   timezone: string;
+  /** UI language. Maps to the DB enum VI_VN / EN_US. */
+  lang: Lang;
+  /**
+   * Lead time (minutes) of the reminder given to a new session when the
+   * request omits `reminders`. One of {@link DEFAULT_REMINDER_CHOICES};
+   * 0 = no default reminder. DND sessions never get one.
+   */
+  defaultReminderMinutes: DefaultReminderChoice;
 }
+
+/**
+ * The mobile "Getting started" checklist, in display order. Each step is ticked
+ * off when the user does the thing (see `mobile/lib/checklist.ts`).
+ */
+export const CHECKLIST_STEPS = [
+  "switch-day",
+  "create-task",
+  "move-task",
+  "block-actions",
+  "open-month",
+  "open-day",
+  "move-day",
+] as const;
+export type ChecklistStep = (typeof CHECKLIST_STEPS)[number];
+
+/**
+ * Everything stored in `User.seenTips`: the checklist steps the user has done,
+ * plus `checklist-hidden` once they dismiss the checklist. Append-only, so it
+ * follows the user across devices.
+ */
+export const TIP_IDS = [...CHECKLIST_STEPS, "checklist-hidden"] as const;
+export type TipId = (typeof TIP_IDS)[number];
 
 export interface User extends UserPreferences {
   id: string;
@@ -16,9 +55,28 @@ export interface User extends UserPreferences {
   email: string;
   createdAt: string;
   updatedAt: string;
+  /** ISO time first-run onboarding was completed; null = show onboarding. */
+  onboardedAt: string | null;
+  /** User intent for native push notifications; in-app notifications are unaffected. */
+  allowNotifications: boolean;
+  /** Getting-started checklist steps done (and `checklist-hidden`); on any device. */
+  seenTips: TipId[];
 }
 
-/** Partial update to a user's basic (non-scheduling) identity fields. */
+/** Partial update to a user's name and preferences. */
 export interface UpdateUserInput {
   name?: string;
+  /** Valid IANA zone. Affects only future scheduling/rendering. */
+  timezone?: string;
+  lang?: Lang;
+  defaultReminderMinutes?: DefaultReminderChoice;
+  /**
+   * `true` marks onboarding complete (sets `onboardedAt` to now if still
+   * null; idempotent — never moves an existing timestamp). Can't be unset.
+   */
+  onboarded?: true;
+  /** Native push preference: false when the user turns it off or denies the OS prompt. */
+  allowNotifications?: boolean;
+  /** Marks one checklist step done / the checklist hidden (appended once; idempotent, can't be unset). */
+  seenTip?: TipId;
 }

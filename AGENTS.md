@@ -6,20 +6,26 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for system/component diagrams.
 
 ## Repository map & ownership
 
-| Area                          | Path                          | Owner subagent      | Reference                                                                                      |
-| ----------------------------- | ----------------------------- | ------------------- | ---------------------------------------------------------------------------------------------- |
-| Frontend (React PWA)          | `frontend/`                   | `frontend-engineer` | [frontend/README.md](frontend/README.md)                                                       |
-| Backend (NestJS API + scheduler) | `backend/`                 | `backend-engineer`  | [backend/README.md](backend/README.md)                                                         |
-| Shared types (FE/BE contract) | `packages/shared/`            | `backend-engineer`  | —                                                                                              |
-| ML scheduling (heuristic + LinUCB) | `services/bandit/`, telemetry | `ml-engineer`  | [services/bandit/README.md](services/bandit/README.md), [ADR-0001](docs/adr/0001-linucb-model-design.md) |
+Agents own domains, not tech layers. Exact globs live in `.agents/agents/*.md` (`owns`); `node .agents/scripts/owner.mjs <path>` says who owns a file.
 
-Delegate area work to the matching subagent in `.claude/agents/`.
+| Agent | Domain | Read first |
+| --- | --- | --- |
+| `scheduler` | Placement, sessions, series, TS fallback, Python contract | [ADR-0003](docs/adr/0003-python-authoritative-placement.md), [backend/README.md](backend/README.md) |
+| `bandit` | `services/bandit`, LinUCB, telemetry, A/B | [services/bandit/README.md](services/bandit/README.md), [ADR-0001](docs/adr/0001-linucb-model-design.md) |
+| `campus-sync` | DLU/LMS ingestion, integrations | [backend/README.md](backend/README.md) |
+| `calendar-web` | `frontend/`, `packages/core` | [frontend/README.md](frontend/README.md) |
+| `calendar-mobile` | `mobile/`, `mockups/` | [mobile/README.md](mobile/README.md) |
+| `accounts-api` | Auth, users, files, notifications, Prisma, `packages/shared` | [ADR-0004](docs/adr/0004-s3-file-storage.md) |
+| `platform` | Compose, CI/CD, observability, secrets, load tests | [docs/ops/](docs/ops/) |
+| `zenflow-qa` | API and UI e2e in the test stack | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| `zenflow-reviewer` | Read-only review against the invariants below | |
+
+Delegate work in a domain to its agent; cross-domain changes go to each owner in turn.
 
 ## Toolchain
 
 - **Package manager: pnpm `10.32.1`** (a workspace). Never use `npm` or `yarn`.
-- **Node 20+.** Host dev shell here is **Windows PowerShell** — prefer PowerShell syntax
-  in commands you ask the user to run.
+- **Node 20+**, **Docker**, and the authenticated **`gh` CLI** (issues and PRs).
 
 ```bash
 pnpm install            # install all workspaces
@@ -107,7 +113,7 @@ frontend `dev | build | typecheck | lint | test:e2e`.
 
 - Backend unit tests are `*.spec.ts` (Jest) next to the code — pure functions like the
   scheduler are the priority to cover. E2e is `backend/test/jest-e2e.json` (needs the test
-  DB). Frontend e2e is Playwright in `frontend/e2e/` (needs the backend stack + MailHog).
+  DB). Frontend e2e is Playwright in `frontend/e2e/` (needs the backend stack + Mailpit).
 - Run `pnpm --filter <app> typecheck` and `lint` before finishing. After editing shared
   types, `pnpm shared:build` first.
 - **Formatting:** ESLint (+ Prettier on the backend), 2-space indentation (`.editorconfig`);
@@ -123,7 +129,7 @@ frontend `dev | build | typecheck | lint | test:e2e`.
   `EXPO_PUBLIC_API_URL` points at the API; native iOS/Android isn't
   origin-based). Backend `CORS_ORIGIN` (`.env.dev`) is a comma-separated list
   (split in `main.ts`) and must contain both dev web origins.
-- OTP login emails are caught by MailHog in the local Docker stack.
+- OTP login emails are caught by Mailpit (UI/API on `:8025`) in the local Docker stack.
 - Native push (`backend/src/devices/`, `POST`/`DELETE /devices`): Android via
   `FCM_SERVICE_ACCOUNT`, iOS via `APNS_KEY` + `APNS_KEY_ID` + `APNS_TEAM_ID` +
   `APNS_BUNDLE_ID` (+ `APNS_PRODUCTION`). All optional — each provider
@@ -131,28 +137,36 @@ frontend `dev | build | typecheck | lint | test:e2e`.
   `.env.test`. `PushService` fans every notification out over the same emitter
   the SSE stream uses.
 
-## Keeping docs in sync
+## Docs
 
-When a change affects schema, endpoints, the scheduler, screens, conventions, or the ML
-roadmap, update the matching README (and `services/bandit/README.md` / ADR-0001 for scheduling/ML).
+Update the matching README/ADR when a change touches schema, endpoints, the scheduler, screens, conventions or the ML roadmap.
 
-## Feature workflow (skills & subagents)
+- Two audiences: user-facing (root `README.md`) and dev-facing (everything else). Say who it is for.
+- Lead with what the reader does. Bullets, tables and code blocks over paragraphs; no history, no justification essays.
+- Link to the source of truth instead of restating it. Keep every real fact: commands, env vars, invariants, limits.
+- Don't over-correct: shorten wording, not information.
+- ADRs follow [docs/adr/TEMPLATE.md](docs/adr/TEMPLATE.md): Status, Date, Context, Decision, Consequences.
 
-This repo ships a phased feature pipeline under `.claude/`. Run the whole thing with
-**`/feature "<request>"`**, or any single phase on its own:
+The `docs` skill applies these rules.
 
-| Phase          | Skill             | Spawns                                                                         | Output                                  |
-| -------------- | ----------------- | ------------------------------------------------------------------------------ | --------------------------------------- |
-| Requirements   | `/req-analysis`   | `product-manager` (GitHub MCP)                                                 | a GitHub issue                          |
-| Design         | `/ui-ux`          | `ui-ux-designer` (Figma MCP)                                                   | Figma frames + component spec           |
-| Architecture   | `/arch`           | `solution-architect`                                                           | committed ADR + diagrams in `docs/adr/` |
-| Implementation | `/implement`      | `backend-engineer` + `frontend-engineer` (+ `ml-engineer` if needed), parallel | code + tests + commits                  |
-| Review         | `/verify-changes` | `code-reviewer` (opus, Playwright MCP)                                         | live-verified Markdown report           |
-| QA             | `/qa`             | `backend-qa-engineer` + `frontend-qa-engineer`, parallel                       | HTTP/e2e tests in a Docker test env     |
+## Agents, skills, hooks
 
-MCP servers (`github`, `figma`, `playwright`) are declared in `.mcp.json` and need their
-tokens (`GITHUB_PERSONAL_ACCESS_TOKEN`, `FIGMA_API_KEY`) set. Hooks (`.claude/settings.json`
-→ `.claude/hooks/*.mjs`, Node.js): per-edit = format only (prettier for backend) +
-`prisma generate`; the Stop hook runs once per turn **after all edits** — `eslint --fix`
-(including rewriting deep relative imports to the `@/…` alias on the frontend) then
-`pnpm -r typecheck`.
+Source of truth is `.agents/` (tool-neutral). After editing it run `pnpm sync:agents`; it generates `.claude/`, `.mcp.json` and `.codex/`. See [.agents/README.md](.agents/README.md).
+
+Skills are small and independent; use any in any order:
+
+| Skill | Does |
+| --- | --- |
+| `issue` | File or refine a GitHub issue (`gh`) from the templates |
+| `adr` | Write an ADR |
+| `diagram` | Update a diagram in `docs/architecture` |
+| `mockup` | Design a mobile screen as HTML in `mockups/` |
+| `review` | Review a diff, branch or PR |
+| `e2e` | Write and run e2e tests |
+| `commit` | Split changes into focused commits |
+| `pr` | Open a PR from the template |
+| `docs` | Write or tighten docs |
+
+Hooks (`.agents/hooks/`): `enforce-owner` keeps subagents inside their domain (and nudges the main thread), `format-on-edit` runs prettier and `prisma generate`, `guard-git-staging` blocks `git add -A` and `commit -a`. Type-check yourself with `pnpm check`.
+
+MCP: only Playwright (`.agents/mcp.json`). GitHub work uses `gh`.

@@ -104,6 +104,18 @@ class _Ledger:
     count_by_day: dict[str, int] = field(default_factory=dict)
 
 
+def _seed_ledger(fixed_occupied: list[IntervalMs], tz: str) -> _Ledger:
+    """Ledger for a fresh plan. `fixed_occupied` are sittings of the same
+    series already on the calendar (past sittings on a redistribute, existing
+    members on a grow): they block their slot AND count toward the per-day cap,
+    so a new sibling never lands on the same local day."""
+    ledger = _Ledger(siblings=_ivals(fixed_occupied))
+    for b, _ in ledger.siblings:
+        day = local_date_str(b, tz)
+        ledger.count_by_day[day] = ledger.count_by_day.get(day, 0) + 1
+    return ledger
+
+
 @dataclass
 class _ScoreBatch:
     """One request's worth of precomputed LinUCB context/arm-score tensors.
@@ -558,7 +570,7 @@ class _Placer:
         finds no slot (:meth:`PolicySelector.resolve`), and a member neither
         policy can seat gets this plan's own last resort (invariant 7).
         """
-        ledger = _Ledger(siblings=_ivals(self.req.fixed_occupied))
+        ledger = _seed_ledger(self.req.fixed_occupied, self.tz)
         results: list[PlacedMember] = []
         for i, (m, (first, last)) in enumerate(
             zip(self.req.members, windows_days, strict=True)
@@ -591,7 +603,7 @@ class _Placer:
         else:
             if self.next15 >= req.deadline_ms:
                 return self._past_deadline_series(
-                    _Ledger(siblings=_ivals(req.fixed_occupied))
+                    _seed_ledger(req.fixed_occupied, self.tz)
                 )
             span = min(
                 math.floor((req.deadline_ms - self.next15) / consts.DAY_MS),
@@ -611,7 +623,7 @@ class _Placer:
         # `ledger.siblings`/`count_by_day` forward; no vectors/arm-scores are
         # rebuilt per iteration or per plan.
         batch = self._build_batch(
-            members, windows_days, _Ledger(siblings=_ivals(req.fixed_occupied))
+            members, windows_days, _seed_ledger(req.fixed_occupied, self.tz)
         )
 
         primary = self._dual_plan_policy(batch)

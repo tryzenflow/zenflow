@@ -1,18 +1,20 @@
+import { t } from "@/lib/i18n";
 import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
 import { AppState } from "react-native";
 import { getSessionDetails } from "@/api/tasks";
 import { useToast } from "@/components/ui/toast";
+import { usePushStatusStore } from "@/hooks/use-push-status-store";
 import { useUserStore } from "@/hooks/use-user-store";
 import {
   claimNotification,
   configureForegroundHandler,
+  ensureAndroidChannel,
   hrefFromPushData,
   isLocalNotification,
   notificationIdOf,
   pushOwner,
-  syncPushRegistration,
 } from "@/lib/push";
 import type { Href } from "expo-router";
 
@@ -30,26 +32,35 @@ export function usePushRegistration(): void {
   const router = useRouter();
   const { toast } = useToast();
   const userId = useUserStore((s) => s.user?.id ?? null);
+  const language = useUserStore((s) => s.user?.lang);
+  const onboarded = useUserStore((s) => s.user?.onboardedAt != null);
   const lastHandledResponseId = useRef<string | null>(null);
 
-  // Register on login, and re-sync each time the app returns to the foreground
-  // (a token can rotate, or permission can be granted from Settings.app).
+  useEffect(() => {
+    if (userId) void ensureAndroidChannel().catch(() => {});
+  }, [userId, language]);
+
+  // Apply the push rule (`decidePushAction`) on login / onboarding completion
+  // (`onboarded`) and each time the app returns to the foreground (a token can
+  // rotate, or permission can change in system settings).
   useEffect(() => {
     if (!userId) return;
 
-    void syncPushRegistration();
+    void usePushStatusStore.getState().sync();
 
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") void syncPushRegistration();
+      if (state === "active") void usePushStatusStore.getState().sync();
     });
     return () => sub.remove();
-  }, [userId]);
+  }, [userId, onboarded]);
 
   // Deep-link on tap — both the cold-start case (app launched by the tap) and
   // the warm case (already running). De-duped by notification id so the
   // cold-start response isn't re-handled when the warm listener also sees it.
   useEffect(() => {
-    const route = async (response: Notifications.NotificationResponse | null) => {
+    const route = async (
+      response: Notifications.NotificationResponse | null,
+    ) => {
       if (!response) return;
       const id = response.notification.request.identifier;
       if (id === lastHandledResponseId.current) return;
@@ -68,7 +79,7 @@ export function usePushRegistration(): void {
           } as Href);
           return;
         } catch {
-          toast("That item isn't on your calendar anymore.", "destructive");
+          toast(t("That item isn't on your calendar anymore."), "destructive");
           return;
         }
       }
@@ -98,8 +109,9 @@ export function usePushRegistration(): void {
           | undefined;
         const sessionId = data?.sessionId;
         const rawTitle =
-          notification.request.content.title || "New notification";
-        const title = rawTitle.replace(/^\[.*?\]\s*/, "").trim() || "New notification";
+          notification.request.content.title || t("New notification");
+        const title =
+          rawTitle.replace(/^\[.*?\]\s*/, "").trim() || t("New notification");
         const body = notification.request.content.body || undefined;
 
         toast(
@@ -110,7 +122,7 @@ export function usePushRegistration(): void {
           true,
           sessionId
             ? {
-                label: "View on calendar",
+                label: t("View on calendar"),
                 onPress: async () => {
                   try {
                     const session = await getSessionDetails(sessionId);
@@ -122,7 +134,7 @@ export function usePushRegistration(): void {
                     } as Href);
                   } catch {
                     toast(
-                      "That item isn't on your calendar anymore.",
+                      t("That item isn't on your calendar anymore."),
                       "destructive",
                     );
                   }
@@ -140,4 +152,3 @@ export function usePushRegistration(): void {
     };
   }, [router, toast]);
 }
-

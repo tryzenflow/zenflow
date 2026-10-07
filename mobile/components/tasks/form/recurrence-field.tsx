@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t, locale } from "@/lib/i18n";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import {
@@ -38,6 +40,7 @@ export function RecurrenceField({
   tz: string;
   disabled?: boolean;
 }) {
+  useLanguage();
   const state = useMemo(() => fromRrule(value), [value]);
 
   const set = (next: Partial<RecurrenceState>) =>
@@ -67,7 +70,11 @@ export function RecurrenceField({
                   active ? "text-primary" : "text-muted-foreground",
                 )}
               >
-                {f === "NONE" ? "Once" : f === "DAILY" ? "Daily" : "Weekly"}
+                {f === "NONE"
+                  ? t("Once")
+                  : f === "DAILY"
+                    ? t("Daily")
+                    : t("Weekly")}
               </Text>
             </Pressable>
           );
@@ -103,7 +110,9 @@ export function RecurrenceField({
                     active ? "text-primary" : "text-muted-foreground",
                   )}
                 >
-                  {d.label}
+                  {locale() === "vi-VN"
+                    ? ["T2", "T3", "T4", "T5", "T6", "T7", "CN"][i]
+                    : d.label}
                 </Text>
               </Pressable>
             );
@@ -114,7 +123,7 @@ export function RecurrenceField({
       {state.freq !== "NONE" && (
         <View>
           <Text className="mb-1.5 text-[12px] font-medium text-muted-foreground">
-            Ends on (optional)
+            {t("Ends on (optional)")}
           </Text>
           <View className="flex-row items-center gap-2">
             <View className="flex-1">
@@ -131,20 +140,22 @@ export function RecurrenceField({
               <Pressable
                 disabled={disabled}
                 onPress={() => set({ until: undefined })}
-                accessibilityLabel="Clear end date"
+                accessibilityLabel={t("Clear end date")}
                 className={cn(
                   "h-[46px] items-center justify-center rounded-xl border border-input bg-card px-3",
                   disabled && "opacity-50",
                 )}
               >
                 <Text className="text-[13px] font-medium text-muted-foreground">
-                  Clear
+                  {t("Clear")}
                 </Text>
               </Pressable>
             )}
           </View>
           <Text className="mt-1.5 text-[11px] text-muted-foreground">
-            {state.until ? "Repeats until this date." : "Repeats indefinitely."}
+            {state.until
+              ? t("Repeats until this date.")
+              : t("Repeats indefinitely.")}
           </Text>
         </View>
       )}

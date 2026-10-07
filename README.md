@@ -1,143 +1,51 @@
 # Zenflow
 
-> A deadline-driven calendar that schedules your work for you — then learns how you
-> actually work and personalizes itself over time.
+A deadline-driven calendar that schedules your work for you, then learns how you work.
 
-You tell Zenflow **what** needs doing (a study `TASK` with a duration and a deadline, or a
-fixed `LECTURE` / `EXAM` / `ASSIGNMENT` / `DND` block) and Zenflow decides **when**: the
-scheduler places each new `TASK` into its single best free 15-minute slot before the
-deadline, scored by a per-user time-of-day preference. Fixed sessions stay where you put
-them. When you drag or resize a placed task, that edit is recorded as a `SessionEvent`
-(move-or-keep) — the fuel for the personalization roadmap: a preference heuristic today,
-a per-student contextual bandit (LinUCB) running as a live A/B experiment, collaborative
-cold-start later. See [`services/bandit/README.md`](services/bandit/README.md) and
-[`docs/adr/`](docs/adr/).
+Tell Zenflow **what** needs doing (a study task with a duration and deadline, or a fixed lecture, exam, assignment or do-not-disturb block). It decides **when**: each task goes into the best free 15-minute slot before its deadline. Drag or resize a placed task and Zenflow learns from it.
 
-Students can also connect their university's **Moodle LMS** and **student portal** so
-assignment deadlines, the class timetable and exam schedule land on the calendar
-automatically, with an in-app notification inbox.
-
-**Status:** the preference heuristic (Policy A) and the LinUCB A/B path (Policy B) are both
-shipped; the personalization writers past that are planned.
-
----
-
-## Repository layout
-
-This is a **pnpm workspace monorepo** (pnpm `10.32.1`).
-
-| Path                                   | What it is                                                              | Docs                                                    |
-| -------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------ |
-| [`frontend/`](frontend/)               | React 19 + Vite PWA — the desktop calendar client                     | [frontend/README.md](frontend/README.md)               |
-| [`mobile/`](mobile/)                   | Expo + React Native app (iOS / Android / web)                         | [mobile/README.md](mobile/README.md)                   |
-| [`backend/`](backend/)                 | NestJS API — auth, sessions, files, DLU ingestion, the scheduler      | [backend/README.md](backend/README.md)                 |
-| [`packages/shared/`](packages/shared/) | `@zenflow/shared` — the TS types shared by FE + mobile + BE (contract) | —                                                      |
-| [`packages/core/`](packages/core/)     | `@zenflow/core` — calendar-block / overlap / form-schema logic shared by both clients | —                                     |
-| [`services/bandit/`](services/bandit/) | FastAPI service hosting the Disjoint LinUCB model                     | [services/bandit/README.md](services/bandit/README.md) |
-| [`docs/`](docs/)                       | ADRs + the scheduling/ML design docs                                 | [docs/adr/](docs/adr/), [docs/scheduler/](docs/scheduler/) |
-| [`AGENTS.md`](AGENTS.md)               | Operating guide + conventions for Claude Code and contributors        | [AGENTS.md](AGENTS.md)                                 |
-
-## Tech stack at a glance
-
-| Layer    | Choices                                                                                                                                               |
-| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Frontend | React 19, Vite 6, Tailwind v4 (OKLch tokens), Radix UI, Zustand, React Router 7, React Hook Form + Zod, dnd-kit, TipTap, date-fns-tz, rrule, Playwright |
-| Mobile   | Expo SDK 52, React Native 0.76, Expo Router, NativeWind, `@gorhom/bottom-sheet`, Reanimated, tentap editor                                              |
-| Backend  | NestJS 11, Prisma 6 + PostgreSQL, Redis (sessions + cache), Passport (OTP), rrule + luxon + date-fns, class-validator, Swagger, Jest                    |
-| Shared   | `@zenflow/shared` (contract types) + `@zenflow/core` (client logic), built to CommonJS                                                                 |
-| ML       | Python + FastAPI hosting Disjoint LinUCB; called over internal HTTP (`BANDIT_SERVICE_URL`), heuristic fallback when absent                              |
-| Infra    | Docker Compose (api, postgres, redis ×2, mail, bandit, Caddy)                                                                                          |
+## Features
+- Automatic placement of tasks before their deadlines; fixed sessions stay where you put them.
+- Task series and recurring sessions, with "this one / this and following" edits.
+- Personalised scheduling: a time-of-day preference heuristic and a per-student LinUCB bandit, run as a live A/B experiment.
+- Moodle LMS and university portal sync: deadlines, timetable and exams land on the calendar.
+- Notes with file attachments, reminders, and an in-app and push notification inbox.
+- Web (PWA) and mobile (iOS, Android) clients.
 
 ## Quick start
 
-Prerequisites: **Node 20+**, **pnpm 10.32.1**, and **Docker** (for the backend stack).
+Prerequisites: Node 20+, pnpm 10.32.1, Docker, and the [`gh` CLI](https://cli.github.com) (authenticated) for issue and PR work.
 
 ```bash
-# 1. Install all workspace deps from the repo root
-pnpm install
+pnpm install && pnpm shared:build
 
-# 2. Build the shared types first — FE and BE both import @zenflow/shared
-pnpm shared:build
-
-# 3. Start the backend stack (API + Postgres + Redis + mail) via Docker
 cd backend
-sh build_images.sh                 # build the api/scheduler images
-#   create .env.prod and docker.env (see backend/README.md)
-docker compose up -d               # uses compose.local.yml
-#   API      → http://localhost:5000
-#   Swagger  → http://localhost:5000/api
-#   MailHog  → catches the OTP login emails (see compose file for the port)
+docker compose -f compose.dev.yml up -d   # Postgres, Redis, mail catcher
+pnpm prisma:dev:migrate
+pnpm start:dev                            # API http://localhost:5000, Swagger /api
 
-# 4. Start the frontend dev server
-cd ../frontend
-pnpm dev                           # → http://localhost:5173
+cd ../frontend && pnpm dev                # http://localhost:5173
 ```
 
-For backend-only iteration without Docker, see [backend/README.md](backend/README.md)
-(Prisma migrate/studio, env files, `pnpm --filter backend start:dev`).
+Env: see each app's `.env.example`. Details: [backend/README.md](backend/README.md).
 
-## Workspace commands (run from repo root)
+## Repository
 
-```bash
-pnpm install            # install everything
-pnpm shared:build       # build @zenflow/shared (run before typechecking FE/BE)
-pnpm -r build           # build every package
-pnpm -r typecheck       # typecheck every package
-pnpm -r test            # run every package's tests
-```
+| Path | What | Docs |
+| --- | --- | --- |
+| `frontend/` | React 19 + Vite PWA | [README](frontend/README.md) |
+| `mobile/` | Expo + React Native app | [README](mobile/README.md) |
+| `backend/` | NestJS API, scheduler, ingestion | [README](backend/README.md) |
+| `services/bandit/` | FastAPI placement and LinUCB service | [README](services/bandit/README.md) |
+| `packages/shared/` | `@zenflow/shared` API contract types | |
+| `packages/core/` | `@zenflow/core` logic shared by both clients | |
+| `mockups/` | Static HTML mobile screens | [index](mockups/index.html) |
+| `loadtest/` | k6 load tests | [README](loadtest/README.md) |
+| `docs/` | ADRs, scheduler design, ops, benchmarks | [adr](docs/adr/), [ops](docs/ops/) |
 
-Per-app scripts live in each app's `package.json` — see the app READMEs.
+Architecture: [ARCHITECTURE.md](ARCHITECTURE.md). Decisions: [docs/adr/](docs/adr/).
 
-## Scheduling: heuristic vs. LinUCB
-
-Two policies run a live 50/50 A/B, both shipped:
-
-| Policy | Mechanism                                                                       | Lives in                    |
-| ------ | -------------------------------------------------------------------------------- | ---------------------------- |
-| A — heuristic | Score each free slot against a per-user 7×24 time-of-day preference matrix, decayed nightly | `backend/src/scheduler`     |
-| B — LinUCB    | Per-student Disjoint LinUCB contextual bandit, falls back to A on error/timeout   | `services/bandit`, `scheduler/io` |
-
-Planned next: a move-or-keep learning writer for the preference matrix, and collaborative
-cold-start (archetype-seeded weights for new users).
-
-Design docs: [`services/bandit/README.md`](services/bandit/README.md),
-[`docs/adr/0001-linucb-model-design.md`](docs/adr/0001-linucb-model-design.md),
-[`docs/adr/0002-scheduling-simplification.md`](docs/adr/0002-scheduling-simplification.md).
-
-## Working in this repo with Claude Code
-
-This repo ships a Claude Code **feature pipeline** under [`.claude/`](.claude/). Run the whole
-thing with `/feature "<request>"`, or any phase on its own:
-
-| Phase          | Skill             | Subagent(s)                                                          | Output                                  |
-| -------------- | ----------------- | -------------------------------------------------------------------- | --------------------------------------- |
-| Requirements   | `/req-analysis`   | `product-manager` (GitHub MCP)                                       | a GitHub issue                          |
-| Design         | `/ui-ux`          | `ui-ux-designer` (Figma MCP)                                         | Figma frames + component spec           |
-| Architecture   | `/arch`           | `solution-architect`                                                 | committed ADR + diagrams in `docs/adr/` |
-| Implementation | `/implement`      | `backend-engineer` + `frontend-engineer` (+ `ml-engineer`), parallel | code + tests + commits                  |
-| Review         | `/verify-changes` | `code-reviewer` (opus, Playwright MCP)                               | live-verified Markdown report           |
-| QA             | `/qa`             | `backend-qa-engineer` + `frontend-qa-engineer`, parallel             | HTTP/e2e tests in a Docker test env     |
-
-- **Subagents** (`.claude/agents/`) — the engineers above plus the pipeline roles.
-- **Skills** (`.claude/skills/`) — `feature` (orchestrator) + the six phase skills.
-- **Hooks** (`.claude/settings.json` → `.claude/hooks/*.mjs`, Node.js) — per-edit format
-  (+ `prisma generate`); on stop (after all edits) `eslint --fix` (incl. relative→`@/` alias
-  rewriting) then `pnpm -r typecheck`.
-- **MCP** (`.mcp.json`) — `github`, `figma`, `playwright` servers; set
-  `GITHUB_PERSONAL_ACCESS_TOKEN` and `FIGMA_API_KEY` before using the requirements/design phases.
-
-See [AGENTS.md](AGENTS.md) for conventions and the critical invariants.
-
-## Contributing
-
-- **Formatter / linter:** ESLint (the backend also runs Prettier through it), **2-space
-  indentation** enforced by [`.editorconfig`](.editorconfig). Frontend imports use the `@/…`
-  alias (autofixed). Run `pnpm --filter <app> lint` and `pnpm -r typecheck` before pushing.
-- **Commits:** follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
-  — `type(scope): summary` (e.g. `feat(calendar): …`, `fix(frontend): …`, `docs: …`).
-- **Pull requests:** branch off `master` (`type/short-description`), give the PR a Conventional
-  Commit title, and fill in every section of the
-  [PR template](.github/PULL_REQUEST_TEMPLATE.md) — what & why, linked issue, area(s) touched,
-  and how to test. Make sure lint, typecheck, and the relevant tests are green first.
-
-Full setup, style, commit, branching, and PR guidelines: **[CONTRIBUTING.md](CONTRIBUTING.md)**.
+## Working here
+- Conventions, invariants and the agent setup: [AGENTS.md](AGENTS.md).
+- Commits, branches, PRs, labels: [CONTRIBUTING.md](CONTRIBUTING.md).
+- Bugs and features: [issue templates](https://github.com/tryzenflow/zenflow/issues/new/choose).

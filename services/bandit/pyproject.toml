@@ -5,10 +5,10 @@ description = "Contextual bandit (LinUCB) service for Zenflow's scheduler"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.141.1",
-    "numpy>=2.5.2",
+    "fastapi>=0.142.2",
+    "numpy>=2.5.3",
     "opentelemetry-distro>=0.65b0",
-    "opentelemetry-exporter-otlp-proto-http>=1.44.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.45.0",
     "opentelemetry-instrumentation-fastapi>=0.65b0",
     "uvicorn>=0.52.3",
 ]
@@ -18,7 +18,7 @@ dev = [
     "httpx>=0.28",
     "mypy>=1.13",
     "pytest>=8.3",
-    "ruff>=0.8",
+    "ruff>=0.16.9",
 ]
 
 [tool.pytest.ini_options]

@@ -1,6 +1,11 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
+import { useMinSkeleton } from "@/hooks/use-min-skeleton";
+import { format } from "@/lib/i18n";
 import { listSessions, updateSession } from "@/api/tasks";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
+import { completeStep } from "@/hooks/use-checklist";
 import {
   dateKey,
   getMonthGridDays,
@@ -28,7 +33,7 @@ import {
 } from "@zenflow/core";
 import type { Session } from "@zenflow/shared";
 import { isAxiosError } from "axios";
-import { format } from "date-fns";
+
 import * as Haptics from "expo-haptics";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, type ViewInstance } from "react-native";
@@ -123,6 +128,7 @@ export function MonthPage({
   onOpenOverflow,
   onDoubleTapDay,
 }: MonthPageProps) {
+  useLanguage();
   const { toast, confirm } = useToast();
   // Months share the day cache under a `month:` key, so a page remounted by
   // the pager (swiping back to a month that left its 3-page window) paints the
@@ -131,6 +137,7 @@ export function MonthPage({
   const [sessions, setSessions] = useState<Session[] | null>(
     () => getCachedDaySessions(monthKey) ?? null,
   );
+  const showSkeleton = useMinSkeleton(sessions === null);
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   // A day key to pulse for a moment right after a drop lands on it.
@@ -198,7 +205,7 @@ export function MonthPage({
       setSessions((cur) => cur ?? []);
       if (isActiveRef.current) {
         toast(
-          errorMessage(error, "Couldn't load this month's tasks"),
+          errorMessage(error, t("Couldn't load this month's tasks")),
           "destructive",
         );
       }
@@ -421,12 +428,16 @@ export function MonthPage({
         const updated = await updateSession(original.id, {
           scheduledStartTime: newStartISO,
         });
+        completeStep("move-day");
         setSessions((cur) =>
           (cur ?? []).map((t) => (t.id === original.id ? updated : t)),
         );
       } catch (error) {
         setSessions(prevSessions ?? []); // rollback the optimistic move
-        toast(errorMessage(error, "Couldn't reschedule task"), "destructive");
+        toast(
+          errorMessage(error, t("Couldn't reschedule task")),
+          "destructive",
+        );
       }
     };
 
@@ -434,10 +445,10 @@ export function MonthPage({
     // before the API call. `resetDragState` already ran, so a cancel just
     // leaves the pill where it was.
     if (isPastDeadlineDrop(newStartISO, original.deadline)) {
-      confirm("Schedule after the deadline?", {
-        description: "This session will start past its due time.",
-        confirmLabel: "Schedule anyway",
-        cancelLabel: "Cancel",
+      confirm(t("Schedule after the deadline?"), {
+        description: t("This session will start past its due time."),
+        confirmLabel: t("Schedule anyway"),
+        cancelLabel: t("Cancel"),
         onConfirm: () => {
           void applyMove();
         },
@@ -496,7 +507,7 @@ export function MonthPage({
 
   return (
     <View ref={pageRef} onLayout={measureGeometry} className="flex-1">
-      {sessions === null ? (
+      {sessions === null || showSkeleton ? (
         <MonthGridSkeleton />
       ) : (
         <MonthGrid

@@ -1,8 +1,11 @@
-import { fetchFileDataUri, getFileMetadata, uploadFiles } from "@/api/files";
+import { useLanguage } from "@/hooks/use-language";
+import { t } from "@/lib/i18n";
+import { downloadFileToCache, getFileMetadata, uploadFiles } from "@/api/files";
 import {
   Bold,
   Check,
   Highlighter,
+  ImagePlus,
   Italic,
   Link2,
   List,
@@ -18,10 +21,13 @@ import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
+import { getBaseURL } from "@/lib/api-client";
+import { escapeHtml, parseFileIdFromHref } from "@/lib/file-link";
 import { loadGeistWebviewFontDataUri } from "@/lib/geist-webview-font";
+import { toImageUploadPart } from "@/lib/picked-file";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
-import type { FileMetadata } from "@/types/files";
+import type { FileMetadata } from "@zenflow/shared";
 import {
   BlockquoteBridge,
   BoldBridge,
@@ -40,6 +46,7 @@ import {
   useEditorBridge,
 } from "@10play/tentap-editor";
 import * as DocumentPicker from "expo-document-picker";
+import * as ImagePicker from "expo-image-picker";
 import { useEffect, useRef, useState } from "react";
 import {
   Linking,
@@ -54,8 +61,8 @@ import { AudioBridge, VideoBridge } from "./media-bridges";
 const HIGHLIGHT_COLOR = "#fde68a";
 
 // `ImageBridge` is the library's own (wraps `@tiptap/extension-image`,
-// pre-configured `allowBase64: true` — needed since uploaded files are
-// embedded as `data:` URIs, see `fileEmbedMarkup` below). `VideoBridge`/
+// pre-configured `allowBase64: true`, which also keeps notes written
+// before signed URLs — with `data:` images — rendering). `VideoBridge`/
 // `AudioBridge` are this app's own (see `./media-bridges`'s doc comment) —
 // the library ships no equivalent for those tags. Without all three, the
 // WebView's ProseMirror schema has no node type for `<img>`/`<video>`/
@@ -81,6 +88,7 @@ export function DescriptionField(props: {
   onChange: (value: string) => void;
   disabled?: boolean;
 }) {
+  useLanguage();
   return <DescriptionFieldEditor {...props} />;
 }
 
@@ -93,6 +101,7 @@ function DescriptionFieldEditor({
   onChange: (value: string) => void;
   disabled?: boolean;
 }) {
+  useLanguage();
   const { isDarkColorScheme } = useColorScheme();
   const { toast } = useToast();
   // The content the editor currently owns: `initialValue` at first mount,
@@ -210,7 +219,7 @@ function DescriptionFieldEditor({
       // keeps any embedded image/video to a sane thumbnail-ish size, same
       // idea as the web editor's `prose-img:max-h-64` (`frontend/src/
       // index.css`).
-      `${fontFace} body { background-color: ${bg}; } .ProseMirror { background-color: ${bg}; color: ${fg}; font-family: ${fontFamily}; font-size: 15px; padding: 4px 12px; line-height: 1.15; overflow-y: auto; } .ProseMirror a { color: ${linkColor}; text-decoration: underline; } .ProseMirror img, .ProseMirror video { max-height: 200px; width: auto; object-fit: contain; border-radius: 8px; }`,
+      `${fontFace} html, body { margin: 0; padding: 0; background-color: ${bg}; } .ProseMirror { box-sizing: border-box; background-color: ${bg}; color: ${fg}; font-family: ${fontFamily}; font-size: 15px; padding: 12px; line-height: 1.4; overflow-y: auto; } .ProseMirror > :first-child { margin-top: 0; } .ProseMirror > :last-child { margin-bottom: 0; } .ProseMirror a { color: ${linkColor}; text-decoration: underline; } .ProseMirror img, .ProseMirror video { max-height: 200px; width: auto; object-fit: contain; border-radius: 8px; }`,
       "description-field-theme",
     );
   }
@@ -253,6 +262,18 @@ function DescriptionFieldEditor({
     `);
   }
 
+  // Our own `/files/:id` links are cookie-auth protected; the system browser
+  // has no session, so download via the authenticated `api` client and hand
+  // the cached copy to the OS viewer / share sheet instead.
+  async function openNoteFile(id: string) {
+    try {
+      const { file, mimeType, name } = await downloadFileToCache(id);
+      await file.preview({ mimeType, title: name });
+    } catch {
+      toast(t("Couldn't open that file."), "destructive");
+    }
+  }
+
   function handleWebviewMessage(event: WebViewMessageEvent) {
     let data: unknown;
     try {
@@ -267,8 +288,13 @@ function DescriptionFieldEditor({
     ) {
       const href = (data as { href?: unknown }).href;
       if (typeof href === "string") {
+        const fileId = parseFileIdFromHref(href, getBaseURL());
+        if (fileId) {
+          void openNoteFile(fileId);
+          return;
+        }
         Linking.openURL(href).catch(() => {
-          toast("Couldn't open that link.", "destructive");
+          toast(t("Couldn't open that link."), "destructive");
         });
       }
     }
@@ -315,111 +341,163 @@ function DescriptionFieldEditor({
     setLinkOpen(false);
   }
 
-  // Files are embedded as `data:` URIs (fetched via the authenticated `api`
-  // client, see `api/files.ts`'s `fetchFileDataUri`) rather than a bare
-  // backend URL — the WebView rendering this editor has its own cookie jar,
-  // disconnected from `lib/api-client.ts`'s replayed session `Cookie`
-  // header, so a plain `<img src>` pointed at the `CookieAuthGuard`-protected
-  // `/files/:id` endpoint 401s silently with nothing rendered.
-  async function fileEmbedMarkup(fileMetadata: FileMetadata): Promise<string> {
-    const dataUri = await fetchFileDataUri(
-      fileMetadata.id,
-      fileMetadata.mimetype,
-    );
+  // Files are embedded by URL: the backend returns a signed, session-less
+  // `url` (`/api/v1/files/:id?sig=…`, relative to the API origin) that the
+  // editor WebView — which has no session cookie — can load directly. This
+  // keeps the saved note tiny instead of inlining the bytes as `data:` URIs.
+  function fileEmbedMarkup(fileMetadata: FileMetadata): string {
+    const baseURL = getBaseURL();
+    if (!baseURL) throw new Error("API base URL is not configured");
+    // Backends without signed-URL support omit `url`; fail the upload loudly
+    // rather than saving a broken `…/undefined` embed into the note.
+    if (!fileMetadata.url) throw new Error("File response has no url");
+    const src = escapeHtml(new URL(fileMetadata.url, baseURL).toString());
+    const name = escapeHtml(fileMetadata.originalName);
     if (fileMetadata.mimetype.startsWith("image/")) {
-      return `<img src="${dataUri}" alt="${fileMetadata.originalName}" style="max-width: 100%;"/>`;
+      return `<img src="${src}" alt="${name}" style="max-width: 100%;"/>`;
     }
     if (fileMetadata.mimetype.startsWith("audio/")) {
-      return `<audio controls src="${dataUri}" style="max-width: 100%;"></audio>`;
+      return `<audio controls src="${src}" style="max-width: 100%;"></audio>`;
     }
     if (fileMetadata.mimetype.startsWith("video/")) {
-      return `<video controls src="${dataUri}" style="max-width: 100%;"></video>`;
+      return `<video controls src="${src}" style="max-width: 100%;"></video>`;
     }
-    return `<a href="${dataUri}" download="${fileMetadata.originalName}">${fileMetadata.originalName}</a>`;
+    return `<p><a href="${src}">${name}</a></p>`;
   }
 
-  async function handleUploadFile() {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: "*/*",
-      multiple: true,
-      copyToCacheDirectory: true,
-    });
-    if (result.canceled) return;
-
+  async function embedUploaded(
+    parts: { uri: string; name: string; mimeType: string }[],
+    failureMessage: string,
+  ) {
     try {
-      const uploaded = await uploadFiles(
-        result.assets.map((asset) => ({
-          uri: asset.uri,
-          name: asset.name,
-          mimeType: asset.mimeType ?? "application/octet-stream",
-        })),
-      );
+      const uploaded = await uploadFiles(parts);
 
       let html = await editor.getHTML();
       for (const file of uploaded) {
         const fileMetadata = await getFileMetadata(file.id);
-        html += await fileEmbedMarkup(fileMetadata);
+        html += fileEmbedMarkup(fileMetadata);
       }
       valueRef.current = html;
       editor.setContent(html);
       onChange(html);
     } catch {
-      toast("Couldn't upload the file. Try again.", "destructive");
+      toast(failureMessage, "destructive");
     }
+  }
+
+  async function handleUploadFile() {
+    let result: DocumentPicker.DocumentPickerResult;
+    try {
+      result = await DocumentPicker.getDocumentAsync({
+        type: "*/*",
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+    } catch {
+      toast(t("Couldn't open the file picker."), "destructive");
+      return;
+    }
+    if (result.canceled) return;
+
+    await embedUploaded(
+      result.assets.map((asset) => ({
+        uri: asset.uri,
+        name: asset.name,
+        mimeType: asset.mimeType ?? "application/octet-stream",
+      })),
+      t("Couldn't upload the file. Try again."),
+    );
+  }
+
+  // Native photo library picker (PHPicker on iOS, Photo Picker on Android) --
+  // runs out-of-process and needs no runtime permission, so there is no
+  // permission-denied path; picker errors are toasted. Name/mime fall back to
+  // values derived from the uri, see `lib/picked-file.ts`.
+  async function handleInsertImage() {
+    let result: ImagePicker.ImagePickerResult;
+    try {
+      result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsMultipleSelection: true,
+        quality: 0.8,
+      });
+    } catch {
+      toast(t("Couldn't open the photo library."), "destructive");
+      return;
+    }
+    if (result.canceled) return;
+
+    await embedUploaded(
+      result.assets.map((asset) =>
+        toImageUploadPart({
+          uri: asset.uri,
+          name: asset.fileName,
+          mimeType: asset.mimeType,
+        }),
+      ),
+      t("Couldn't upload the image. Try again."),
+    );
   }
 
   return (
     <View ref={containerRef}>
-      <View className="min-h-[300px] max-h-[400px] w-full overflow-hidden rounded-t-[13px] border border-b-0 border-input bg-card">
-        <RichText
-          editor={editor}
-          onLoad={() => {
-            injectContentStyles();
-            injectLinkTapHandler();
-            // Fires on every WebView (re)load. If the current content has
-            // drifted from what tentap booted with, this is a *reload* that
-            // just snapped the document back — restore the real content.
-            // On the very first load the two are equal, so this is a no-op.
-            if (valueRef.current !== bootContentRef.current) {
-              editor.setContent(valueRef.current);
-            }
-          }}
-          onMessage={handleWebviewMessage}
-          exclusivelyUseCustomOnMessage={false}
-        />
+      {/* Outer: 13px radius + 1px border, no clipping of its own (RN's
+          overflow clipping differs between iOS/Android w.r.t. the border
+          box). Inner wrapper: radius = outer - border width (12px) so the
+          WebView's square corners are clipped concentrically inside the
+          border. Its bg matches the WebView/document bg. */}
+      <View className="min-h-[300px] max-h-[400px] w-full rounded-t-[13px] border border-b-0 border-input bg-card">
+        <View className="flex-1 overflow-hidden rounded-t-[12px] bg-card">
+          <RichText
+            editor={editor}
+            onLoad={() => {
+              injectContentStyles();
+              injectLinkTapHandler();
+              // Fires on every WebView (re)load. If the current content has
+              // drifted from what tentap booted with, this is a *reload* that
+              // just snapped the document back — restore the real content.
+              // On the very first load the two are equal, so this is a no-op.
+              if (valueRef.current !== bootContentRef.current) {
+                editor.setContent(valueRef.current);
+              }
+            }}
+            onMessage={handleWebviewMessage}
+            exclusivelyUseCustomOnMessage={false}
+          />
+        </View>
       </View>
       <View className="flex-row flex-wrap items-center gap-0.5 rounded-b-[13px] border border-input bg-background p-1">
         <ToolbarButton
           icon={Bold}
-          label="Bold"
+          label={t("Bold")}
           active={!!state.isBoldActive}
           disabled={disabled}
           onPress={() => editor.toggleBold()}
         />
         <ToolbarButton
           icon={Italic}
-          label="Italic"
+          label={t("Italic")}
           active={!!state.isItalicActive}
           disabled={disabled}
           onPress={() => editor.toggleItalic()}
         />
         <ToolbarButton
           icon={UnderlineIcon}
-          label="Underline"
+          label={t("Underline")}
           active={!!state.isUnderlineActive}
           disabled={disabled}
           onPress={() => editor.toggleUnderline()}
         />
         <ToolbarButton
           icon={Highlighter}
-          label="Highlight"
+          label={t("Highlight")}
           active={!!state.activeHighlight}
           disabled={disabled}
           onPress={() => editor.toggleHighlight(HIGHLIGHT_COLOR)}
         />
         <ToolbarButton
           icon={Quote}
-          label="Blockquote"
+          label={t("Blockquote")}
           active={!!state.isBlockquoteActive}
           disabled={disabled}
           onPress={() => editor.toggleBlockquote()}
@@ -427,28 +505,34 @@ function DescriptionFieldEditor({
         <View className="mx-1 h-4 w-px bg-black/10" />
         <ToolbarButton
           icon={Link2}
-          label="Link"
+          label={t("Link")}
           active={linkOpen}
           disabled={disabled}
           onPress={openLink}
         />
         <ToolbarButton
+          icon={ImagePlus}
+          label={t("Insert image")}
+          disabled={disabled}
+          onPress={() => void handleInsertImage()}
+        />
+        <ToolbarButton
           icon={Upload}
-          label="Upload file"
+          label={t("Upload file")}
           disabled={disabled}
           onPress={() => void handleUploadFile()}
         />
         <View className="mx-1 h-4 w-px bg-black/10" />
         <ToolbarButton
           icon={List}
-          label="Bulleted list"
+          label={t("Bulleted list")}
           active={!!state.isBulletListActive}
           disabled={disabled}
           onPress={() => editor.toggleBulletList()}
         />
         <ToolbarButton
           icon={ListOrdered}
-          label="Numbered list"
+          label={t("Numbered list")}
           active={!!state.isOrderedListActive}
           disabled={disabled}
           onPress={() => editor.toggleOrderedList()}
@@ -462,7 +546,7 @@ function DescriptionFieldEditor({
             editable={!disabled}
             value={linkTitle}
             onChangeText={setLinkTitle}
-            placeholder="Title (optional)"
+            placeholder={t("Title (optional)")}
             returnKeyType="next"
             className="h-10 rounded-full border border-input bg-card px-3.5 text-[13px] text-foreground"
           />
@@ -471,7 +555,7 @@ function DescriptionFieldEditor({
               editable={!disabled}
               value={linkUrl}
               onChangeText={setLinkUrl}
-              placeholder="Link URL"
+              placeholder={t("Link URL")}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="url"
@@ -481,14 +565,14 @@ function DescriptionFieldEditor({
             />
             <Pressable
               onPress={() => void confirmLink()}
-              accessibilityLabel="Confirm link"
+              accessibilityLabel={t("Confirm link")}
               className="h-10 w-10 items-center justify-center rounded-full bg-primary"
             >
               <Check size={16} className="text-primary-foreground" />
             </Pressable>
             <Pressable
               onPress={() => setLinkOpen(false)}
-              accessibilityLabel="Cancel link"
+              accessibilityLabel={t("Cancel link")}
               className="h-10 w-10 items-center justify-center rounded-full bg-muted"
             >
               <X size={16} className="text-muted-foreground" />
@@ -513,6 +597,7 @@ function ToolbarButton({
   active?: boolean;
   disabled?: boolean;
 }) {
+  useLanguage();
   return (
     <Pressable
       onPress={onPress}

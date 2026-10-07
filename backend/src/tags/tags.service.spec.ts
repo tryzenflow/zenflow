@@ -42,3 +42,46 @@ describe("TagsService.list", () => {
     expect(res).toEqual({ tags: [] });
   });
 });
+
+describe("TagsService.bulkCreate", () => {
+  it("trims, dedupes, skips duplicates and returns the tags", async () => {
+    const createMany = jest.fn().mockResolvedValue({ count: 2 });
+    const findMany = jest.fn().mockResolvedValue([{ id: "t1", name: "Exam" }]);
+    const module = await Test.createTestingModule({
+      providers: [
+        TagsService,
+        { provide: PrismaService, useValue: { tag: { createMany, findMany } } },
+      ],
+    }).compile();
+    const service = module.get(TagsService);
+
+    const res = await service.bulkCreate(user, [" Exam ", "Exam", "", "Lab"]);
+
+    expect(createMany).toHaveBeenCalledWith({
+      data: [
+        { userId: "user-1", name: "Exam" },
+        { userId: "user-1", name: "Lab" },
+      ],
+      skipDuplicates: true,
+    });
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: "user-1", name: { in: ["Exam", "Lab"] } },
+      }),
+    );
+    expect(res.tags).toHaveLength(1);
+  });
+
+  it("does nothing for blank-only input", async () => {
+    const createMany = jest.fn();
+    const module = await Test.createTestingModule({
+      providers: [
+        TagsService,
+        { provide: PrismaService, useValue: { tag: { createMany } } },
+      ],
+    }).compile();
+    const res = await module.get(TagsService).bulkCreate(user, ["  "]);
+    expect(res).toEqual({ tags: [] });
+    expect(createMany).not.toHaveBeenCalled();
+  });
+});

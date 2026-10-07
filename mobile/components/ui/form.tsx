@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t } from "@/lib/i18n";
 // This project uses code from shadcn/ui.
 // The code is licensed under the MIT License.
 // https://github.com/shadcn-ui/ui
@@ -146,7 +148,8 @@ const FormMessage = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof Animated.Text>
 >(({ className, children, style, ...props }, ref) => {
   const { error, formMessageNativeID } = useFormField();
-  const body = error ? String(error?.message) : children;
+  useLanguage();
+  const body = error ? t(String(error?.message)) : children;
 
   if (!body) {
     return null;
@@ -209,16 +212,12 @@ const FormInput = React.forwardRef<
     formMessageNativeID,
   } = useFormField();
 
-  React.useImperativeHandle(
-    ref,
-    () => {
-      if (!inputRef.current) {
-        return {} as React.ComponentRef<typeof Input>;
-      }
-      return inputRef.current;
-    },
-    [inputRef.current],
-  );
+  React.useImperativeHandle(ref, () => {
+    if (!inputRef.current) {
+      return {} as React.ComponentRef<typeof Input>;
+    }
+    return inputRef.current;
+  }, [inputRef.current]);
 
   function handleOnLabelPress() {
     if (!inputRef.current) {
@@ -275,16 +274,12 @@ const FormTextarea = React.forwardRef<
     formMessageNativeID,
   } = useFormField();
 
-  React.useImperativeHandle(
-    ref,
-    () => {
-      if (!textareaRef.current) {
-        return {} as React.ComponentRef<typeof Textarea>;
-      }
-      return textareaRef.current;
-    },
-    [textareaRef.current],
-  );
+  React.useImperativeHandle(ref, () => {
+    if (!textareaRef.current) {
+      return {} as React.ComponentRef<typeof Textarea>;
+    }
+    return textareaRef.current;
+  }, [textareaRef.current]);
 
   function handleOnLabelPress() {
     if (!textareaRef.current) {
@@ -329,6 +324,7 @@ const FormCheckbox = React.forwardRef<
   React.ElementRef<typeof Checkbox>,
   Omit<FormItemProps<typeof Checkbox, boolean>, "checked" | "onCheckedChange">
 >(({ label, description, value, onChange, ...props }, ref) => {
+  useLanguage();
   const {
     error,
     formItemNativeID,
@@ -430,7 +426,7 @@ const FormCombobox = React.forwardRef<
       {!!label && <FormLabel nativeID={formItemNativeID}>{label}</FormLabel>}
       <Combobox
         ref={ref}
-        placeholder="Select framework"
+        placeholder={t("Select framework")}
         aria-labelledby={formItemNativeID}
         aria-describedby={
           !error
@@ -521,16 +517,12 @@ const FormSwitch = React.forwardRef<
     formMessageNativeID,
   } = useFormField();
 
-  React.useImperativeHandle(
-    ref,
-    () => {
-      if (!switchRef.current) {
-        return {} as React.ComponentRef<typeof Switch>;
-      }
-      return switchRef.current;
-    },
-    [switchRef.current],
-  );
+  React.useImperativeHandle(ref, () => {
+    if (!switchRef.current) {
+      return {} as React.ComponentRef<typeof Switch>;
+    }
+    return switchRef.current;
+  }, [switchRef.current]);
 
   function handleOnLabelPress() {
     onChange?.(!value);

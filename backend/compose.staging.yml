@@ -1,3 +1,6 @@
+# Staging / load-test stack.
+#   docker compose --env-file .env.staging -f compose.staging.yml up -d --build
+# (--env-file feeds the ${...} interpolation used by postgres-exporter.)
 name: zenflow-staging
 services:
   api:
@@ -5,7 +8,7 @@ services:
     build:
       context: ..
       dockerfile: backend/Dockerfile
-    image: zenflow-api:2.1.0
+    image: ${ZENFLOW_API_IMAGE:-zenflow-api:2.1.0}
     expose:
       - "5000"
     networks:
@@ -15,9 +18,15 @@ services:
       - ratelimit
       - bandit
       - mail
+      - storage
+      - o11y
+      - upstream
     volumes:
+      # Legacy local uploads; kept mounted only until scripts/migrate-files-to-s3.ts has run.
       - uploads:/app/uploads
     depends_on:
+      storage:
+        condition: service_started
       postgres:
         condition: service_healthy
       redis:
@@ -28,25 +37,61 @@ services:
         condition: service_started
       migrations:
         condition: service_completed_successfully
+      otel-collector:
+        condition: service_started
     env_file:
       - .env.staging
+    environment:
+      OTEL_SDK_DISABLED: "false"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      # Pinned here, not left to .env.staging: a missing value would fall back to the REAL DLU hosts, and the load
+      # test drives hundreds of synthetic accounts. These must only ever point at fake-dlu.
+      LMS_URL: http://fake-dlu:4100
+      PORTAL_API_URL: http://fake-dlu:4100
+      PORTAL_API_KEY: fake-portal-key
+      # Load test knob: 0 = each placement runs exactly one algorithm (see scheduler/constants.ts). Prod leaves it unset (=1).
+      PAIRWISE_SAMPLE_RATE: ${PAIRWISE_SAMPLE_RATE:-1}
+    # Caps keep the load test fair: no service can starve the others on a big host.
+    cpus: 4
+    mem_limit: 4g
+
+  # Stand-in for lms.dlu.edu.vn / portal-api.dlu.edu.vn so ingestion can be load
+  # tested without touching the real university. Any credentials work except the
+  # password "wrongpass". Stats: GET /_/stats, reset: POST /_/reset.
+  fake-dlu:
+    container_name: zenflow-fake-dlu-staging
+    image: node:24-alpine
+    # Node 24 strips TypeScript types natively; the script has no dependencies.
+    command: ["node", "/app/fake-dlu-server.ts"]
+    environment:
+      FAKE_DLU_PORT: "4100"
+    volumes:
+      - ./scripts/fake-dlu-server.ts:/app/fake-dlu-server.ts:ro
+    expose:
+      - "4100"
+    networks:
+      - upstream
 
   bandit:
     container_name: zenflow-bandit-staging
     build: ../services/bandit
+    image: ${ZENFLOW_BANDIT_IMAGE:-zenflow-bandit:latest}
     expose:
       - "8000"
     environment:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     networks:
       - bandit
+      - o11y
+    cpus: 2
+    mem_limit: 2g
 
   migrations:
     container_name: zenflow-db-migration-staging
     build:
       context: ..
       dockerfile: backend/Dockerfile
-    image: zenflow-api:2.1.0
+    image: ${ZENFLOW_API_IMAGE:-zenflow-api:2.1.0}
     networks:
       - db
       - egress
@@ -60,14 +105,23 @@ services:
   postgres:
     container_name: zenflow-db-staging
     image: postgres:18.4-alpine
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
     expose:
       - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql
+      - ./observability/postgres/init-pg-stat-statements.sql:/docker-entrypoint-initdb.d/10-pg-stat-statements.sql:ro
     env_file:
-      - docker.staging.env
+      - .env.staging
     networks:
       - db
+    cpus: 4
+    mem_limit: 8g
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -92,13 +146,198 @@ services:
 
   mail:
     container_name: zenflow-mail-staging
-    image: mailhog/mailhog:v1.0.1
+    image: axllent/mailpit:v1.31.4
     expose:
       - "1025"
     ports:
-      - 8025:8025
+      - "127.0.0.1:8025:8025"
     networks:
       - mail
+
+  # --- Observability stack (see observability/README.md) --------------------
+  # Receives OTLP/HTTP from the API (src/tracing.ts) and the bandit service on
+  # :4318, fans traces -> Tempo, metrics -> Prometheus (scrape :8889),
+  # logs -> Loki. .env.prod must set
+  # OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318 (set on the api service below).
+  otel-collector:
+    container_name: zenflow-otel-collector-staging
+    image: otel/opentelemetry-collector-contrib:0.135.0
+    restart: unless-stopped
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./observability/otel-collector-config.yaml:/etc/otel/config.yaml:ro
+    expose:
+      - "4317"
+      - "4318"
+      - "8889"
+    networks:
+      - o11y
+    depends_on:
+      - tempo
+      - loki
+
+  # Traces. Metrics-generator remote-writes span metrics + the service graph
+  # into Prometheus.
+  tempo:
+    container_name: zenflow-tempo-staging
+    image: grafana/tempo:2.7.1
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./observability/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    expose:
+      - "3200"
+    networks:
+      - o11y
+
+  # Logs. Fed by Alloy (container stdout) and by the collector (app OTLP logs).
+  loki:
+    container_name: zenflow-loki-staging
+    image: grafana/loki:3.3.2
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/loki-config.yaml"]
+    volumes:
+      - ./observability/loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki_data:/loki
+    expose:
+      - "3100"
+    networks:
+      - o11y
+
+  # Ships every container's stdout/stderr to Loki, tagged by compose service.
+  alloy:
+    container_name: zenflow-alloy-staging
+    image: grafana/alloy:v1.5.1
+    restart: unless-stopped
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy_data:/var/lib/alloy/data
+    expose:
+      - "12345"
+    networks:
+      - o11y
+    depends_on:
+      - loki
+
+  # Metrics. Scrapes the collector (app), node-exporter (host), cAdvisor
+  # (per-container), and accepts remote-write from Tempo.
+  prometheus:
+    container_name: zenflow-prometheus-staging
+    image: prom/prometheus:v3.1.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-remote-write-receiver
+      - --enable-feature=exemplar-storage,native-histograms
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/scrape.d/postgres-exporter.yml:/etc/prometheus/scrape.d/postgres-exporter.yml:ro
+      - prometheus_data:/prometheus
+    expose:
+      - "9090"
+    networks:
+      - o11y
+
+  node-exporter:
+    container_name: zenflow-node-exporter-staging
+    image: prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+    volumes:
+      - /:/host:ro,rslave
+    expose:
+      - "9100"
+    networks:
+      - o11y
+
+  # `cgroup: host`: on a cgroup v2 host cAdvisor otherwise runs in a private cgroup namespace and sees only its
+  # own cgroup, so every container_* series for sibling containers comes back empty. It also needs the host's Docker
+  # on the classic overlay2 graphdriver, not the containerd image store (`docker info` -> Driver Type
+  # io.containerd.snapshotter.v1): there it cannot resolve a container's read-write layer and container_* series
+  # carry no name/image label (Colima does this; the load test samples `docker stats` instead). Fix: set
+  # {"features": {"containerd-snapshotter": false}} in /etc/docker/daemon.json and restart dockerd.
+  cadvisor:
+    container_name: zenflow-cadvisor-staging
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    restart: unless-stopped
+    privileged: true
+    cgroup: host
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    expose:
+      - "8080"
+    networks:
+      - o11y
+
+  # Dashboards + Explore. Bound to loopback only — reach it with an SSH tunnel
+  # or put it behind Caddy with auth. Anonymous access is OFF.
+  grafana:
+    container_name: zenflow-grafana-staging
+    image: grafana/grafana:11.4.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
+      GF_FEATURE_TOGGLES_ENABLE: traceqlEditor traceToMetrics
+      GF_LOG_LEVEL: warn
+      # Server-side PNG rendering (panel/report exports, alert images).
+      GF_RENDERING_SERVER_URL: http://grafana-renderer:8081/render
+      GF_RENDERING_CALLBACK_URL: http://grafana:3000/
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      - o11y
+    depends_on:
+      - prometheus
+      - tempo
+      - loki
+
+  grafana-renderer:
+    container_name: zenflow-grafana-renderer-staging
+    image: grafana/grafana-image-renderer:3.11.6
+    restart: unless-stopped
+    environment:
+      RENDERING_MODE: default
+    expose:
+      - "8081"
+    networks:
+      - o11y
+
+  # Postgres connections / locks / pg_stat_* for the load test (Prometheus job
+  # `postgres-exporter`). The API's Prisma pool exposes no metrics of its own.
+  postgres-exporter:
+    container_name: zenflow-postgres-exporter-staging
+    image: prometheuscommunity/postgres-exporter:v0.17.1
+    restart: unless-stopped
+    # Interpolated by compose: run with `docker compose --env-file .env.staging ...`.
+    environment:
+      DATA_SOURCE_NAME: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+    expose:
+      - "9187"
+    networks:
+      - db
+      - o11y
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   caddy:
     image: caddy:2.11.4
@@ -112,6 +351,28 @@ services:
       - api
     networks:
       - edge
+
+  storage:
+    container_name: zenflow-storage-staging
+    image: alphatran/minio:latest
+    # The bucket is created before the server starts (a top-level directory in
+    # the data dir is a bucket), so it exists the moment the API can connect —
+    # no init job and no create-if-missing logic in the app.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mkdir -p "/data/$$S3_BUCKET" &&
+        MINIO_ROOT_USER="$$S3_ACCESS_KEY_ID"
+        MINIO_ROOT_PASSWORD="$$S3_SECRET_ACCESS_KEY"
+        exec minio server /data
+    expose:
+      - "9000"
+    volumes:
+      - storage_data:/data
+    env_file:
+      - .env.staging
+    networks:
+      - storage
 
 networks:
   edge:
@@ -131,9 +392,23 @@ networks:
     driver: bridge
   mail:
     driver: bridge
+  storage:
+    driver: bridge
+    internal: true
+  o11y:
+    driver: bridge
+  upstream:
+    driver: bridge
+    internal: true
 
 volumes:
+  storage_data:
   caddy_data:
   caddy_config:
   postgres_data:
   uploads:
+  tempo_data:
+  loki_data:
+  alloy_data:
+  prometheus_data:
+  grafana_data:

@@ -1,7 +1,24 @@
+import { useLanguage } from "@/hooks/use-language";
 import { AlertTriangle } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
 import * as React from "react";
 import { View } from "react-native";
+import { t } from "@/lib/i18n";
+
+function ErrorFallback({ message }: { message?: string }) {
+  useLanguage();
+  return (
+    <View className="flex-row items-center gap-2 rounded-xl border border-dashed border-destructive/40 bg-destructive/5 px-3.5 py-3">
+      <AlertTriangle size={16} className="text-destructive" />
+      <Text className="flex-1 text-[12.5px] text-muted-foreground">
+        {t(
+          message ??
+            "This part couldn't load. The rest of the form still works.",
+        )}
+      </Text>
+    </View>
+  );
+}
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -57,15 +74,7 @@ export class ErrorBoundary extends React.Component<
 
   render() {
     if (this.state.error) {
-      return (
-        <View className="flex-row items-center gap-2 rounded-xl border border-dashed border-destructive/40 bg-destructive/5 px-3.5 py-3">
-          <AlertTriangle size={16} className="text-destructive" />
-          <Text className="flex-1 text-[12.5px] text-muted-foreground">
-            {this.props.fallbackMessage ??
-              "This part couldn't load. The rest of the form still works."}
-          </Text>
-        </View>
-      );
+      return <ErrorFallback message={this.props.fallbackMessage} />;
     }
     return this.props.children;
   }

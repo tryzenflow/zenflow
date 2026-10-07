@@ -1,4 +1,7 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t } from "@/lib/i18n";
 import { AlertTriangle } from "@/components/Icons";
+import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
 import { Text } from "@/components/ui/text";
 import {
   isContinuationEntry,
@@ -29,6 +32,10 @@ interface MonthCellProps {
   monthDate: Date;
   sessions: Session[];
   isToday: boolean;
+  /** Carry the checklist's "Open a day" spotlight anchor. */
+  openDayTip: boolean;
+  /** Carry the checklist's "Move a task to another day" spotlight anchor. */
+  moveDayTip: boolean;
   /** True while this cell is the current drag drop target. */
   isDropTarget: boolean;
   /** True for a beat right after a drag drop landed here. */
@@ -73,6 +80,8 @@ export const MonthCell = memo(function MonthCell({
   monthDate,
   sessions,
   isToday,
+  openDayTip,
+  moveDayTip,
   isDropTarget,
   isJustDropped,
   draggingSessionId,
@@ -80,6 +89,7 @@ export const MonthCell = memo(function MonthCell({
   onDoubleTapDay,
   onPressOverflow,
 }: MonthCellProps) {
+  useLanguage();
   const outside = isOutsideMonth(day, monthDate);
 
   // Single vs. double tap: a single tap opens the day sheet (deferred by
@@ -139,6 +149,8 @@ export const MonthCell = memo(function MonthCell({
         (isDropTarget || isJustDropped) && "bg-primary/[0.14]",
       )}
     >
+      {openDayTip ? <SpotlightAnchor step="open-day" /> : null}
+      {moveDayTip ? <SpotlightAnchor step="move-day" /> : null}
       <Text
         className={cn(
           "h-[23px] w-[23px] rounded-full text-center text-[12.5px] font-semibold leading-[23px]",
@@ -167,7 +179,7 @@ export const MonthCell = memo(function MonthCell({
             className="rounded-[5px] px-1 py-0.5"
           >
             <Text className="text-[9.5px] font-bold leading-tight text-muted-foreground">
-              +{overflowCount} more
+              +{overflowCount} {t("more")}
             </Text>
           </Pressable>
         )}
@@ -184,6 +196,7 @@ interface MonthPillProps {
 }
 
 const MonthPill = memo(function MonthPill({ session, hidden }: MonthPillProps) {
+  useLanguage();
   const state = deriveState(session);
   const late = isSessionPastDeadline(session);
   const Icon = sessionTypeIcon(session.type);

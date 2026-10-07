@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
 import { updateSession } from "@/api/tasks";
 import { ChevronLeft, ChevronRight } from "@/components/Icons";
 import {
@@ -21,8 +23,10 @@ import {
   type UpdateRecurringSheetHandle,
 } from "@/components/calendar/update-recurring-sheet";
 import { TodayButton } from "@/components/calendar/today-button";
+import { GettingStarted } from "@/components/checklist/getting-started";
 import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { Text } from "@/components/ui/text";
+import { completeStep } from "@/hooks/use-checklist";
 import { useUserStore } from "@/hooks/use-user-store";
 import { addMonths, monthLabel } from "@/lib/month-date-math";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
@@ -43,6 +47,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
  * `docs/react-native-migration.md` Phase 4.
  */
 export default function MonthScreen() {
+  useLanguage();
   const router = useRouter();
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
@@ -76,6 +81,7 @@ export default function MonthScreen() {
   useFocusEffect(
     useCallback(() => {
       setReloadToken((n) => n + 1);
+      completeStep("open-month");
     }, []),
   );
 
@@ -87,6 +93,7 @@ export default function MonthScreen() {
   // actually on screen — so long-press-dragging a row out of the sheet routes
   // straight back into that page's drag machinery.
   function openDay(day: Date, tasks: Session[], drag: MonthDragHandle) {
+    completeStep("open-day");
     taskListSheetRef.current?.open(day, tasks, drag);
   }
 
@@ -131,6 +138,7 @@ export default function MonthScreen() {
         scope,
         skipConflicting,
       });
+      completeStep("move-day");
       setReloadToken((n) => n + 1);
       taskListSheetRef.current?.close();
     },
@@ -158,6 +166,7 @@ export default function MonthScreen() {
   return (
     <View className="flex-1 bg-background">
       <NotificationBell />
+      <GettingStarted />
       <View
         className="flex-row justify-between items-center gap-3 border-b border-border bg-background px-4 pb-4"
         style={{ paddingTop: insets.top + 16 }}
@@ -167,7 +176,7 @@ export default function MonthScreen() {
             <Pressable
               onPress={() => goToMonth(addMonths(monthDate, -1))}
               hitSlop={8}
-              accessibilityLabel="Previous month"
+              accessibilityLabel={t("Previous month")}
             >
               <ChevronLeft size={18} className="text-muted-foreground" />
             </Pressable>
@@ -180,7 +189,7 @@ export default function MonthScreen() {
             <Pressable
               onPress={() => goToMonth(addMonths(monthDate, 1))}
               hitSlop={8}
-              accessibilityLabel="Next month"
+              accessibilityLabel={t("Next month")}
             >
               <ChevronRight size={18} className="text-muted-foreground" />
             </Pressable>
@@ -211,9 +220,7 @@ export default function MonthScreen() {
               // not `Date.now()` — but the gating here is still correct on
               // its own terms: a stale/off-screen page's error isn't user-
               // relevant.)
-              isActive={
-                monthLabel(pageMonthDate) === monthLabel(visibleMonth)
-              }
+              isActive={monthLabel(pageMonthDate) === monthLabel(visibleMonth)}
               onDragActiveChange={setDragActive}
               onOpenDay={openDay}
               onOpenOverflow={openDay}

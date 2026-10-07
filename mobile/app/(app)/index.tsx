@@ -1,11 +1,21 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
 import { slotPick, updateSession } from "@/api/tasks";
-import { showAlternativePickToast } from "@/lib/task-toasts";
+import {
+  showAlternativePickToast,
+  showBulkPickToast,
+  showSeriesAlternativesPrompt,
+  showSeriesPickToast,
+} from "@/lib/task-toasts";
 import type { TimelineState } from "@/components/calendar/day-timeline";
 import {
   RescheduleSheet,
   type RescheduleSheetHandle,
 } from "@/components/calendar/reschedule-sheet";
-import { SlotPickSheet, type SlotPickSheetHandle } from "@/components/calendar/slot-pick-sheet";
+import {
+  SeriesSlotPickSheet,
+  type SeriesSlotPickSheetHandle,
+} from "@/components/calendar/series-slot-pick-sheet";
 import {
   type PendingSessionUpdate,
   type UpdateRecurringScope,
@@ -26,17 +36,25 @@ import {
   type WeekPagerHandle,
 } from "@/components/calendar/week-pager";
 import { NotificationBell } from "@/components/notification-bell";
+import { GettingStarted } from "@/components/checklist/getting-started";
 import { CreateSessionFab } from "@/components/tasks/create-task-fab";
+import { completeStep } from "@/hooks/use-checklist";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useWeekDayTypes } from "@/hooks/use-week-day-types";
 import {
   type PendingSlotPick,
   takePendingSlotPick,
 } from "@/lib/pending-slot-pick";
+import {
+  type DivergentSitting,
+  type SlotPickChoice,
+  type SlotPickResult,
+  singleSitting,
+} from "@/lib/series-alternatives";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { dateKey } from "@/lib/week-date-math";
 import { zonedDate, zonedNow } from "@zenflow/core";
-import type { Session, UpdateScope } from "@zenflow/shared";
+import type { Session, SlotPickResponse, UpdateScope } from "@zenflow/shared";
 import { differenceInCalendarDays } from "date-fns";
 import {
   type Href,
@@ -60,6 +78,7 @@ import { useToast } from "@/components/ui/toast";
  * back through this one state.
  */
 export default function WeekScreen() {
+  useLanguage();
   const router = useRouter();
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
@@ -85,6 +104,15 @@ export default function WeekScreen() {
     setFocusedDate(day);
     setVisibleDate(day);
   }, []);
+  // The user picked a day (chip tap or swipe) — unlike `commitFocusedDate`
+  // alone, which a deep link / post-create teleport also calls.
+  const handleUserSwitchDay = useCallback(
+    (day: Date) => {
+      completeStep("switch-day");
+      commitFocusedDate(day);
+    },
+    [commitFocusedDate],
+  );
   const handleVisibleDateChange = useCallback((day: Date) => {
     setVisibleDate((cur) => (dateKey(cur) === dateKey(day) ? cur : day));
   }, []);
@@ -127,7 +155,7 @@ export default function WeekScreen() {
   const rescheduleSheetRef = useRef<RescheduleSheetHandle>(null);
   const updateScopeSheetRef = useRef<UpdateRecurringSheetHandle>(null);
   const blockActionsSheetRef = useRef<BlockActionsSheetHandle>(null);
-  const slotPickSheetRef = useRef<SlotPickSheetHandle>(null);
+  const seriesSlotPickSheetRef = useRef<SeriesSlotPickSheetHandle>(null);
 
   // Shared tail of a divergent pick (reschedule or create/edit hand-off):
   // re-seed onto the chosen slot's day, force every mounted day to revalidate
@@ -141,7 +169,8 @@ export default function WeekScreen() {
       alternativeSlot: string,
       chose: "primary" | "alternative",
     ) => {
-      const chosenSlot = chose === "alternative" ? alternativeSlot : primarySlot;
+      const chosenSlot =
+        chose === "alternative" ? alternativeSlot : primarySlot;
       commitFocusedDate(zonedDate(chosenSlot, tz));
       setFocusTick((t) => t + 1);
       armFlash(session.id);
@@ -152,6 +181,71 @@ export default function WeekScreen() {
     [tz, commitFocusedDate, armFlash, toast],
   );
 
+  // One sheet for every divergent pick — a plain task is a one-sitting list.
+  // **Confirm** / "Use all alternatives" send the whole batch at once: each
+  // `slotPick` in turn (a sitting whose alternative clashes with a sibling is
+  // refused with a 409 and reported in `failed`, the rest still land), one
+  // summary toast, one refetch. `onApplied` runs for the sittings that landed.
+  const openSlotPickSheet = useCallback(
+    ({
+      title,
+      sittings,
+      tz: pickTz,
+      onApplied,
+    }: {
+      title: string;
+      sittings: DivergentSitting[];
+      tz: string;
+      onApplied?: (applied: SlotPickChoice[]) => void | Promise<void>;
+    }) => {
+      const byId = new Map(sittings.map((s) => [s.session.id, s]));
+      const series = (sittings[0]?.total ?? 1) > 1;
+      seriesSlotPickSheetRef.current?.open({
+        title,
+        sittings,
+        tz: pickTz,
+        onConfirm: async (choices) => {
+          const appliedIds: string[] = [];
+          const failed: SlotPickResult["failed"] = [];
+          const responses = new Map<string, SlotPickResponse>();
+          for (const choice of choices) {
+            try {
+              const sitting = byId.get(choice.sittingId);
+              if (!sitting) throw new Error(t("Unknown sitting"));
+              responses.set(
+                choice.sittingId,
+                await slotPick(choice.sittingId, {
+                  slotProposalId: sitting.slotProposalId,
+                  chose: choice.chose,
+                }),
+              );
+              appliedIds.push(choice.sittingId);
+            } catch (error) {
+              failed.push({ id: choice.sittingId, error });
+            }
+          }
+          const applied = choices.filter((c) => appliedIds.includes(c.sittingId));
+          if (series) {
+            if (choices.length > 1) {
+              showBulkPickToast(toast, applied.length, failed.length);
+            } else {
+              const res = responses.get(choices[0].sittingId);
+              if (res) showSeriesPickToast(toast, res, pickTz);
+            }
+          }
+          if (applied.length > 0) await onApplied?.(applied);
+          // Deliberately not `commitFocusedDate`/`armFlash` for a series: there
+          // the jump would yank the view from under the cards still to review.
+          // `notifySessionsMutated()` inside `slotPick` already revalidates
+          // every mounted day, so one refetch tick is enough.
+          setFocusTick((t) => t + 1);
+          return { appliedIds, failed };
+        },
+      });
+    },
+    [toast],
+  );
+
   // Handle divergent slot pick from drag reschedule — show picker for primary vs alternative
   const handleRequestSlotPick = useCallback(
     (
@@ -159,61 +253,67 @@ export default function WeekScreen() {
       primarySlot: string,
       alternativeSlot: string,
       slotProposalId: string,
-      onPick: (chose: "primary" | "alternative") => void,
+      onPick: (chose: "primary" | "alternative") => Promise<void>,
     ) => {
-      slotPickSheetRef.current?.open(
-        session,
-        primarySlot,
-        alternativeSlot,
-        slotProposalId,
+      openSlotPickSheet({
+        title: session.title,
+        sittings: [
+          singleSitting(session, { slotProposalId, primarySlot, alternativeSlot }),
+        ],
         tz,
-        async (chose) => {
-          try {
-            await slotPick(session.id, { slotProposalId, chose });
-          } catch (error) {
-            // Non-blocking — parent handles toast
-            console.warn("slotPick failed:", error);
-          }
-          onPick(chose);
+        onApplied: async ([{ chose }]) => {
+          await onPick(chose);
           applySlotPickChoice(session, primarySlot, alternativeSlot, chose);
         },
-        () => {},
-      );
+      });
     },
-    [applySlotPickChoice],
+    [applySlotPickChoice, openSlotPickSheet, tz],
   );
 
   // A divergent create/edit landed on the week view (`?date=`/`?flash=` params
   // already focused it and pulsed the block) — present the same sheet over it.
   const handlePendingSlotPick = useCallback(
-    (pending: PendingSlotPick) => {
-      slotPickSheetRef.current?.open(
-        pending.session,
-        pending.primarySlot,
-        pending.alternativeSlot,
-        pending.slotProposalId,
-        pending.tz,
-        async (chose) => {
-          try {
-            await slotPick(pending.session.id, {
-              slotProposalId: pending.slotProposalId,
-              chose,
-            });
-          } catch (error) {
-            // Non-blocking — keep the placement, surface via the toast path
-            console.warn("slotPick failed:", error);
-          }
+    (pending: Extract<PendingSlotPick, { kind: "single" }>) => {
+      openSlotPickSheet({
+        title: pending.session.title,
+        sittings: [
+          singleSitting(pending.session, {
+            slotProposalId: pending.slotProposalId,
+            primarySlot: pending.primarySlot,
+            alternativeSlot: pending.alternativeSlot,
+          }),
+        ],
+        tz: pending.tz,
+        onApplied: ([{ chose }]) =>
           applySlotPickChoice(
             pending.session,
             pending.primarySlot,
             pending.alternativeSlot,
             chose,
-          );
-        },
-        () => {},
+          ),
+      });
+    },
+    [applySlotPickChoice, openSlotPickSheet],
+  );
+
+  // A `sessionCount > 1` create / redistribute landed on the week view with
+  // divergent sittings (#59). Show the dismissible prompt; opening it presents
+  // ONLY those sittings, each with its already-applied primary pre-selected.
+  const handlePendingSeriesSlotPick = useCallback(
+    (pending: Extract<PendingSlotPick, { kind: "series" }>) => {
+      showSeriesAlternativesPrompt(
+        toast,
+        pending.sittings.length,
+        pending.sittings[0]?.total ?? pending.sittings.length,
+        () =>
+          openSlotPickSheet({
+            title: pending.title,
+            sittings: pending.sittings,
+            tz: pending.tz,
+          }),
       );
     },
-    [applySlotPickChoice],
+    [openSlotPickSheet, toast],
   );
 
   const handleWeekDragBegin = useCallback(() => {
@@ -245,8 +345,11 @@ export default function WeekScreen() {
       // (`setPendingSlotPick` in task/new|edit) — consume it here so the
       // sheet is presented over the week view, never the modal form.
       const pending = takePendingSlotPick();
-      if (pending) handlePendingSlotPick(pending);
-    }, [handlePendingSlotPick]),
+      // A `sessionCount > 1` series (#59) carries its per-sitting divergence on
+      // `sessions[]` and arrives here too, as a different shape.
+      if (pending?.kind === "single") handlePendingSlotPick(pending);
+      else if (pending?.kind === "series") handlePendingSeriesSlotPick(pending);
+    }, [handlePendingSlotPick, handlePendingSeriesSlotPick]),
   );
 
   // A fresh deep-link (`date` param changed) re-seeds the focus.
@@ -287,6 +390,7 @@ export default function WeekScreen() {
   // Long-press a block → open its action menu (Move to… / Add study session
   // before this).
   const handleRequestBlockMenu = useCallback((session: Session) => {
+    completeStep("block-actions");
     blockActionsSheetRef.current?.open(session);
   }, []);
 
@@ -307,7 +411,11 @@ export default function WeekScreen() {
       const sessions = Math.max(1, Math.floor(daysUntil / 2));
       router.push({
         pathname: "/task/new",
-        params: { deadline: start, sessions: String(sessions) },
+        params: {
+          deadline: start,
+          sessions: String(sessions),
+          title: t("Prepare for {title}", { title: session.title }),
+        },
       } as Href);
     },
     [tz, router],
@@ -372,12 +480,13 @@ export default function WeekScreen() {
   return (
     <View className="flex-1 bg-background">
       <NotificationBell />
+      <GettingStarted />
       <WeekHeader
         ref={headerRef}
         focusedDate={focusedDate}
         displayDate={visibleDate}
         tz={tz}
-        onSelectDay={commitFocusedDate}
+        onSelectDay={handleUserSwitchDay}
         progressSV={progressSV}
         headerStripSV={headerStripSV}
         onWeekDragBegin={handleWeekDragBegin}
@@ -390,7 +499,7 @@ export default function WeekScreen() {
         <WeekPager
           ref={pagerRef}
           focusedDate={focusedDate}
-          onFocusedDateChange={commitFocusedDate}
+          onFocusedDateChange={handleUserSwitchDay}
           onVisibleDateChange={handleVisibleDateChange}
           focusTick={focusTick}
           onSessionPress={handleSessionPress}
@@ -427,7 +536,7 @@ export default function WeekScreen() {
         onRequestScopedUpdate={handleRequestScopedUpdate}
       />
       <UpdateRecurringSheet ref={updateScopeSheetRef} />
-      <SlotPickSheet ref={slotPickSheetRef} tz={tz} />
+      <SeriesSlotPickSheet ref={seriesSlotPickSheetRef} tz={tz} />
     </View>
   );
 }
