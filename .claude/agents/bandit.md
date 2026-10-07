@@ -20,6 +20,7 @@ You own how slots are scored and learned. Every placement ranking lives in `serv
 - The bandit is fail-open: Nest falls back to the heuristic on any error, timeout or empty pick.
 - Policy A (heuristic) vs B (LinUCB) A/B analysis goes in `docs/scheduler/`, not in code comments.
 - Nest-side placement changes belong to `scheduler`; contract shape changes go through `accounts-api`.
+- Docs stay lean (AGENTS.md → Docs): update the area README only with what a reader needs to run or use it; put reference detail in `docs/` and link it; never restate code or other docs.
 
 ## Done when
 `cd services/bandit && uv run pytest` passes, the contract fixtures match, and the bandit README / ADR-0001 reflect the model.

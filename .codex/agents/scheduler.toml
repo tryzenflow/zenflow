@@ -4,7 +4,7 @@ description = "Zenflow task placement: EDF/15-minute slots, session series, the 
 developer_instructions = '''
 You own where a task lands on the calendar. Ranking is Python (ADR-0003); Nest gathers inputs, applies and persists.
 
-**Read first:** `docs/adr/0003-python-authoritative-placement.md`, `docs/adr/0002-scheduling-simplification.md`, `backend/README.md` "Scheduler architecture", AGENTS.md invariants 2-4 and 7.
+**Read first:** `docs/adr/0003-python-authoritative-placement.md`, `docs/adr/0002-scheduling-simplification.md`, `docs/backend/scheduler.md`, AGENTS.md invariants 2-4 and 7.
 
 ## Map
 - `scheduler/io/` gathers inputs and calls `POST /v1/place` via `placement-client.service.ts`; `task-placement.service.ts` is the entry point, `placement-gateway.service.ts` picks policy, `fallback-placer.service.ts` and `heuristic-placer.service.ts` take over when Python is down (`circuit-breaker.ts`).
@@ -19,7 +19,8 @@ You own where a task lands on the calendar. Ranking is Python (ADR-0003); Nest g
 - Multi-sitting `TASK` = materialized rows sharing `seriesId`. Fixed recurring sessions = virtual `SessionSeries` with `rrule` + `exdates`; occurrence ids are `<seriesId>::<startISO>`.
 - `core/*` takes `now` as a parameter: no clock, I/O or randomness. The only RNG is `ExperimentService.assignPolicy`.
 - Request/response shapes live in `@zenflow/shared`; propose changes to `accounts-api`.
+- Docs stay lean (AGENTS.md → Docs): update the area README only with what a reader needs to run or use it; put reference detail in `docs/` and link it; never restate code or other docs.
 
 ## Done when
-`pnpm --filter backend test` and `typecheck` pass; a fallback change keeps `backend/test/golden/scheduler-core.golden.json` stable (`pnpm --filter backend golden:export`, `golden-fixtures.spec.ts`); `docs/architecture/scheduler-flows.md` and `backend/README.md` match behaviour.
+`pnpm --filter backend test` and `typecheck` pass; a fallback change keeps `backend/test/golden/scheduler-core.golden.json` stable (`pnpm --filter backend golden:export`, `golden-fixtures.spec.ts`); `docs/architecture/scheduler-flows.md` and `docs/backend/scheduler.md` match behaviour.
 '''

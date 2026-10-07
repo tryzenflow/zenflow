@@ -16,7 +16,7 @@ The decision, plus the issue or diff that prompted it.
 5. If a diagram changes, use the `diagram` skill.
 
 ## Rules
-Decision and consequences, not history or tutorials. One page.
+Decision and consequences, not history or tutorials. One page. Link detail docs instead of restating them; keep READMEs lean (AGENTS.md → Docs).
 
 ## Output
 The ADR path and the list of deltas for whoever implements it.

@@ -16,5 +16,8 @@ The structural change (new service, module, flow or dependency).
 4. Open the SVG in a browser to check nothing overlaps; confirm Mermaid renders on GitHub syntax.
 5. Reference the diagram from `ARCHITECTURE.md` if it is new.
 
+## Rules
+Diagrams live in `docs/architecture/`; READMEs link them, never embed or redraw them (AGENTS.md → Docs).
+
 ## Output
 Changed files and one line on what moved.
