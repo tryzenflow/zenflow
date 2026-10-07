@@ -1,5 +1,6 @@
 import { MailerService } from "@nestjs-modules/mailer";
 import { Injectable } from "@nestjs/common";
+import type { Lang } from "@zenflow/shared";
 import { join } from "path";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -15,12 +16,16 @@ export class MailService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async sendLoginEmail(to: string, otp: string, from?: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: to },
-      select: { lang: true },
-    });
-    const vi = user?.lang === "VI_VN";
+  async sendLoginEmail(to: string, otp: string, from?: string, lang?: Lang) {
+    // The language picked on the login screen wins; the stored account
+    // preference only applies when the client didn't send one.
+    const stored = lang
+      ? undefined
+      : await this.prisma.user.findUnique({
+          where: { email: to },
+          select: { lang: true },
+        });
+    const vi = lang ? lang === "vi" : stored?.lang === "VI_VN";
     const copy = vi
       ? {
           language: "vi",

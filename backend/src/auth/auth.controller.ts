@@ -29,8 +29,8 @@ export class AuthController {
   @RateLimit({ rules: otpRequestRateLimitRules })
   @Post("otp/request")
   @HttpCode(HttpStatus.OK)
-  async requestOTP(@Body() { email }: RequestOTPDto) {
-    await this.authService.requestOTPCode(email);
+  async requestOTP(@Body() { email, lang }: RequestOTPDto) {
+    await this.authService.requestOTPCode(email, lang);
     return {
       success: true,
       message: `OTP code sent to email ${hideEmail(email)} successfully`,

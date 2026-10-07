@@ -1,8 +1,8 @@
-import type { User } from "@zenflow/shared";
+import type { Lang, User } from "@zenflow/shared";
 import { api } from "./base";
 
-export async function requestOtp(email: string) {
-  const { data } = await api.post("/auth/otp/request", { email });
+export async function requestOtp(email: string, lang: Lang) {
+  const { data } = await api.post("/auth/otp/request", { email, lang });
   return data;
 }
 

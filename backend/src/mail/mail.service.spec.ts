@@ -16,6 +16,7 @@ describe("MailService", () => {
 
   beforeEach(async () => {
     sendMail.mockClear();
+    findUnique.mockClear();
     findUnique.mockResolvedValue({ lang: "EN_US" });
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -46,6 +47,19 @@ describe("MailService", () => {
       expect(sendMail.mock.calls[0][0]).toMatchObject({
         subject: "Xác nhận địa chỉ email của bạn",
         context: { language: "vi", greeting: "Xin chào,", otp: "123456" },
+      });
+    });
+    it("prefers the explicit language over the stored one, without a lookup", async () => {
+      await service.sendLoginEmail(
+        "new@example.com",
+        "123456",
+        undefined,
+        "vi",
+      );
+      expect(findUnique).not.toHaveBeenCalled();
+      expect(sendMail.mock.calls[0][0]).toMatchObject({
+        subject: "Xác nhận địa chỉ email của bạn",
+        context: { language: "vi" },
       });
     });
     it("sends the confirm-email template with the otp context", async () => {

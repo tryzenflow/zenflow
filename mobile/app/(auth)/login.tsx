@@ -233,7 +233,7 @@ export default function LoginScreen() {
     setOffline(false);
     clearErrors("email");
     try {
-      await requestOtp(data.email);
+      await requestOtp(data.email, getLanguage());
       toast(t("Check your inbox"), "info");
       requestLockout.clear();
       setStage("otp");

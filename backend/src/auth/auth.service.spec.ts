@@ -60,6 +60,18 @@ describe("AuthService", () => {
       expect(mailService.sendLoginEmail).toHaveBeenCalledWith(
         "new@example.com",
         cachedOtp,
+        undefined,
+        undefined,
+      );
+    });
+
+    it("forwards the selected language to the mail", async () => {
+      await service.requestOTPCode("new@example.com", "vi");
+      expect(mailService.sendLoginEmail).toHaveBeenCalledWith(
+        "new@example.com",
+        expect.any(String),
+        undefined,
+        "vi",
       );
     });
 
