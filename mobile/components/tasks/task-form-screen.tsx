@@ -1,6 +1,7 @@
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
-import { X } from "@/components/Icons";
+import { Pencil, X } from "@/components/Icons";
+import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
 import { useRouter } from "expo-router";
 import { type ReactNode, createContext, useContext, useRef } from "react";
@@ -100,13 +101,17 @@ export function SessionFormScreen({
   title,
   subtitle,
   headerRight,
+  editSwitch,
   footer,
   children,
 }: {
   title: string;
   subtitle?: string;
   headerRight?: ReactNode;
-  footer: ReactNode;
+  /** Edit-mode toggle rendered beside the close button (view/edit screens). */
+  editSwitch?: { value: boolean; onValueChange: (value: boolean) => void };
+  /** Omit to render no pinned footer (e.g. read-only view mode). */
+  footer?: ReactNode;
   children: ReactNode;
 }) {
   useLanguage();
@@ -134,6 +139,16 @@ export function SessionFormScreen({
         </View>
         <View className="flex-row items-center gap-3.5">
           {headerRight}
+          {editSwitch && (
+            <View className="flex-row items-center gap-1.5">
+              <Pencil size={14} className="text-muted-foreground" />
+              <Switch
+                checked={editSwitch.value}
+                onCheckedChange={editSwitch.onValueChange}
+                accessibilityLabel={t("Edit")}
+              />
+            </View>
+          )}
           <Pressable
             onPress={() => router.back()}
             accessibilityLabel={t("Close")}
@@ -168,9 +183,11 @@ export function SessionFormScreen({
           </SessionFormScrollContext.Provider>
         </ScrollView>
 
-        <View className="border-t border-border bg-background px-5 py-3 shadow-lg shadow-primary/10">
-          {footer}
-        </View>
+        {footer != null && (
+          <View className="border-t border-border bg-background px-5 py-3 shadow-lg shadow-primary/10">
+            {footer}
+          </View>
+        )}
       </KeyboardAvoidingView>
     </View>
   );

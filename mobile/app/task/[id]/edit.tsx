@@ -16,6 +16,7 @@ import {
   type DeleteRecurringSheetHandle,
 } from "@/components/tasks/delete-recurring-sheet";
 import { SessionFormScreen } from "@/components/tasks/task-form-screen";
+import { SessionView } from "@/components/tasks/session-view";
 import { SessionSheetFields } from "@/components/tasks/task-sheet-fields";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
@@ -86,6 +87,8 @@ function EditSessionForm() {
   const { toast } = useModalToast();
   const [task, setSession] = useState<Session | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // Opens as a read-only page; the header switch flips into the edit form.
+  const [editing, setEditing] = useState(false);
   const deleteScopeSheet = useRef<DeleteRecurringSheetHandle>(null);
 
   const form = useSessionForm({ defaultValues: EMPTY_DEFAULTS });
@@ -337,7 +340,10 @@ function EditSessionForm() {
 
   return (
     <SessionFormScreen
-      title={t("Edit session")}
+      title={editing ? t("Edit session") : t("Session")}
+      editSwitch={
+        task ? { value: editing, onValueChange: setEditing } : undefined
+      }
       subtitle={
         task
           ? t("Created {date}", {
@@ -359,20 +365,24 @@ function EditSessionForm() {
         </Pressable>
       }
       footer={
-        <Button
-          className="h-[52px] w-full"
-          disabled={loading}
-          onPress={form.handleSubmit(onSubmit, onInvalid)}
-        >
-          <Text className="text-base font-semibold text-foreground">
-            {loading ? t("Saving…") : t("Save changes")}
-          </Text>
-        </Button>
+        editing ? (
+          <Button
+            className="h-[52px] w-full"
+            disabled={loading}
+            onPress={form.handleSubmit(onSubmit, onInvalid)}
+          >
+            <Text className="text-base font-semibold text-foreground">
+              {loading ? t("Saving…") : t("Save changes")}
+            </Text>
+          </Button>
+        ) : undefined
       }
     >
-      {task ? (
+      {task && !editing ? (
+        <SessionView task={task} values={form.watch()} tz={tz} />
+      ) : task ? (
         <SessionSheetFields
-          initialValue={task.note || ""}
+          initialValue={form.getValues("note") ?? task.note ?? ""}
           form={form}
           tz={tz}
           disabled={loading}

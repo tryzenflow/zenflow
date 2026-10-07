@@ -266,7 +266,7 @@ function localizedReminderLeadLabel(minutes: number): string {
     )
   );
 }
-function localizedReminderLabel(minutes: number): string {
+export function localizedReminderLabel(minutes: number): string {
   if (locale() !== "vi-VN") return reminderLabel(minutes);
   return minutes === 0
     ? t("At start time")
