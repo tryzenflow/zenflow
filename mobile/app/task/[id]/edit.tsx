@@ -318,6 +318,7 @@ function EditSessionForm() {
       }
       headerRight={
         <Pressable
+          testID="tasks.form.deleteButton"
           disabled={loading}
           onPress={onDelete}
           className="flex-row items-center gap-1.5"
@@ -331,6 +332,7 @@ function EditSessionForm() {
       }
       footer={
         <Button
+          testID="tasks.form.saveButton"
           className="h-[52px] w-full"
           disabled={loading}
           onPress={form.handleSubmit(onSubmit, onInvalid)}

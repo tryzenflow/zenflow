@@ -34,6 +34,7 @@ export function TodayButton({
       }}
     >
       <Pressable
+        testID="calendar.todayButton"
         onPress={() => {
           Haptics.selectionAsync().catch(() => {});
           onPress();

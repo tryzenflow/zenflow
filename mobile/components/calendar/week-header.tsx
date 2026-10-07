@@ -340,6 +340,7 @@ function WeekHeaderImpl(
   return (
     <GestureDetector gesture={weekSwipe}>
       <View
+        testID="calendar.week.header"
         className="overflow-hidden border-b border-border bg-background pb-2"
         style={{ paddingTop: insets.top + 10 }}
       >

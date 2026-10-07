@@ -89,7 +89,7 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
 
   return (
-    <View className="flex-1 bg-background">
+    <View testID="settings.screen" className="flex-1 bg-background">
       <View
         className="border-b border-border bg-background px-6 pb-4"
         style={{ paddingTop: insets.top + 16 }}
@@ -150,13 +150,17 @@ export default function SettingsScreen() {
 
         <TagsRow />
 
-        <View onLayout={(e) => { dluY.current = e.nativeEvent.layout.y; }}>
+        <View
+          testID="settings.dluAccounts.section"
+          onLayout={(e) => { dluY.current = e.nativeEvent.layout.y; }}
+        >
           <DluAccountsSection />
         </View>
 
         <SettingsSectionLabel>Account</SettingsSectionLabel>
         <View className="mb-[18px] overflow-hidden rounded-2xl border border-border bg-card">
           <Pressable
+            testID="settings.logoutButton"
             onPress={handleSignOut}
             disabled={loggingOut}
             className="flex-row items-center gap-[13px] bg-card px-4 py-3.5"

@@ -17,6 +17,7 @@ export function NotificationBell() {
 
   return (
     <Pressable
+      testID="notifications.bell"
       onPress={() => router.push("/notifications" as Href)}
       accessibilityLabel={
         unread > 0 ? `Notifications, ${unread} unread` : "Notifications"

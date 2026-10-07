@@ -156,7 +156,7 @@ export default function MonthScreen() {
   );
 
   return (
-    <View className="flex-1 bg-background">
+    <View testID="calendar.month.screen" className="flex-1 bg-background">
       <NotificationBell />
       <View
         className="flex-row justify-between items-center gap-3 border-b border-border bg-background px-4 pb-4"
@@ -165,6 +165,7 @@ export default function MonthScreen() {
         <View className="min-w-0 shrink gap-1">
           <View className="flex-row items-center gap-2">
             <Pressable
+              testID="calendar.month.prevButton"
               onPress={() => goToMonth(addMonths(monthDate, -1))}
               hitSlop={8}
               accessibilityLabel="Previous month"
@@ -172,12 +173,14 @@ export default function MonthScreen() {
               <ChevronLeft size={18} className="text-muted-foreground" />
             </Pressable>
             <Text
+              testID="calendar.month.header"
               numberOfLines={1}
               className="shrink text-xl font-bold tracking-tight"
             >
               {monthLabel(visibleMonth)}
             </Text>
             <Pressable
+              testID="calendar.month.nextButton"
               onPress={() => goToMonth(addMonths(monthDate, 1))}
               hitSlop={8}
               accessibilityLabel="Next month"
@@ -190,7 +193,11 @@ export default function MonthScreen() {
 
       {/* Pad by exactly the bar's height: the grid's rows shrink to fit what's
           left (see `CELL_HEIGHT`), so every week stays above the bar. */}
-      <View className="flex-1" style={{ paddingBottom: tabBarOverlay }}>
+      <View
+        testID="calendar.month.grid"
+        className="flex-1"
+        style={{ paddingBottom: tabBarOverlay }}
+      >
         <MonthPager
           monthDate={monthDate}
           onMonthChange={goToMonth}

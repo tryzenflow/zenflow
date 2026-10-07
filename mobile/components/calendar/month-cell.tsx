@@ -1,6 +1,7 @@
 import { AlertTriangle } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
 import {
+  dateKey,
   isContinuationEntry,
   isOutsideMonth,
   MONTH_CELL_VISIBILITY_WEIGHTS,
@@ -8,6 +9,7 @@ import {
 } from "@/lib/month-date-math";
 import { isSessionPastDeadline } from "@/lib/overdue";
 import { SESSION_TYPE_META } from "@zenflow/core";
+import { taskCardTestID } from "@/lib/test-ids";
 import {
   MONTH_PILL_CLASSES,
   MONTH_PILL_TEXT_CLASSES,
@@ -129,6 +131,7 @@ export const MonthCell = memo(function MonthCell({
 
   return (
     <Pressable
+      testID={`calendar.month.day.${dateKey(day)}`}
       onPress={handlePress}
       style={{ width: `${100 / 7}%` }}
       className={cn(
@@ -191,6 +194,7 @@ const MonthPill = memo(function MonthPill({ session, hidden }: MonthPillProps) {
 
   return (
     <View
+      testID={taskCardTestID(session.title)}
       style={hidden ? { opacity: 0 } : undefined}
       className={cn(
         "flex-row items-center gap-1 rounded-[5px] border-l-2 px-1.5 py-0.5",

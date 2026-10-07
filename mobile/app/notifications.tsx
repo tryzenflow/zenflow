@@ -256,6 +256,7 @@ export default function NotificationsScreen() {
 
   return (
     <View
+      testID="notifications.screen"
       className="flex-1 bg-background"
       style={{
         // iOS presents this as a page sheet already below the status bar; 14 is breathing room.
@@ -307,6 +308,7 @@ export default function NotificationsScreen() {
         ) : (
           <>
             <Pressable
+              testID="notifications.backButton"
               onPress={() => router.back()}
               accessibilityLabel="Back"
               hitSlop={8}
@@ -348,6 +350,7 @@ export default function NotificationsScreen() {
         </View>
       ) : (
         <FlatList
+          testID="notifications.inbox"
           data={items}
           keyExtractor={(n) => n.id}
           refreshControl={

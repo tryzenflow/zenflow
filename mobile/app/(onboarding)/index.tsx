@@ -586,6 +586,7 @@ export default function OnboardingScreen() {
       content = (
         <View>
           <Pressable
+            testID="onboarding.timezone.detectedOption"
             onPress={() => void savePref({ timezone: DEVICE_TIMEZONE })}
             accessibilityRole="radio"
             accessibilityState={{ checked: prefs.timezoneMode === "device" }}
@@ -612,6 +613,7 @@ export default function OnboardingScreen() {
           </Pressable>
           <View className="mt-4">
             <Input
+              testID="onboarding.timezone.searchInput"
               value={tzQuery}
               onChangeText={setTzQuery}
               placeholder={COPY.timezone.search}
@@ -673,6 +675,7 @@ export default function OnboardingScreen() {
               return (
                 <Row
                   key={r.value}
+                  testID={`onboarding.reminder.option.${r.value}`}
                   selected={on}
                   onPress={() => void savePref({ defaultReminder: r.value })}
                   className="justify-between"
@@ -706,7 +709,11 @@ export default function OnboardingScreen() {
       ({ title, body } = COPY.tags);
       content = tagsLoaded ? (
         <View>
-          <TagPicker selected={tags} onChange={setTags} />
+          <TagPicker
+            selected={tags}
+            onChange={setTags}
+            testIDPrefix="onboarding.tags"
+          />
           <Text className="mt-3 px-1 text-[12.5px] text-muted-foreground">
             {COPY.tags.footer(tagsForBulk(tags).length)}
           </Text>
@@ -797,6 +804,7 @@ export default function OnboardingScreen() {
 
   return (
     <KeyboardAvoidingView
+      testID="onboarding.screen"
       className="flex-1 bg-background"
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >

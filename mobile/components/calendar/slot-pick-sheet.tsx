@@ -154,7 +154,11 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
     return (
       <BottomSheet>
         <BottomSheetContent ref={sheet.ref} onDismiss={handleDismiss}>
-          <BottomSheetView hadHeader={false} className="gap-2 pt-2 px-5">
+          <BottomSheetView
+            testID="tasks.scheduler.sheet"
+            hadHeader={false}
+            className="gap-2 pt-2 px-5"
+          >
             <View className="flex-row items-start justify-between gap-3">
               <View className="min-w-0 flex-1">
                 <Text className="text-[18.5px] font-bold tracking-[-0.01em] leading-tight">
@@ -178,6 +182,7 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
               {options.map((option) => (
                 <Pressable
                   key={option.kind}
+                  testID={`tasks.scheduler.slot.${option.kind}`}
                   disabled={busy}
                   onPress={() => {
                     const chose = option.kind;
@@ -234,6 +239,7 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
 
             <View className="flex-none pt-4 flex flex-col gap-2 mb-8">
               <Button
+                testID="tasks.scheduler.pickPrimaryButton"
                 size="lg"
                 disabled={busy}
                 className="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl h-[52px] px-5 text-base font-semibold shrink-0"
@@ -242,6 +248,7 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
                 <Text className="font-bold">{primaryLabel}</Text>
               </Button>
               <Button
+                testID="tasks.scheduler.pickAlternativeButton"
                 variant="ghost"
                 disabled={busy}
                 className="inline-flex w-full items-center justify-center rounded-xl h-[42px] px-5 text-[13.5px] font-semibold text-muted-foreground"

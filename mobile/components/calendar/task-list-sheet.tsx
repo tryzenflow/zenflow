@@ -14,6 +14,7 @@ import { Text } from "@/components/ui/text";
 import { isContinuationEntry } from "@/lib/month-date-math";
 import { isSessionPastDeadline } from "@/lib/overdue";
 import { deriveState } from "@/lib/task-card";
+import { taskCardTestID } from "@/lib/test-ids";
 import { cn } from "@/lib/utils";
 import { SESSION_TYPE_META, zonedDate } from "@zenflow/core";
 import type { Session, SessionCardState } from "@zenflow/shared";
@@ -131,7 +132,7 @@ export const SessionListSheet = forwardRef<
         // over the sheet instead of under it.
       >
         <BottomSheetHeader>
-          <View className="min-w-0 flex-1">
+          <View testID="calendar.month.dateDetail" className="min-w-0 flex-1">
             <Text className="text-[19px] font-bold">
               {day ? format(day, "EEE, MMM d") : ""}
             </Text>
@@ -314,6 +315,7 @@ function SessionListRow({
   return (
     <GestureDetector gesture={pan}>
       <Pressable
+        testID={taskCardTestID(task.title)}
         onPress={onPress}
         className="flex-row items-center gap-[13px] px-4 py-3.5"
       >

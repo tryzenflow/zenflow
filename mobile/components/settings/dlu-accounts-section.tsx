@@ -248,7 +248,10 @@ export function DluAccountsSection({
   return (
     <>
       {!hideLabel && <SettingsSectionLabel>DLU accounts</SettingsSectionLabel>}
-      <View className="overflow-hidden rounded-2xl border border-border bg-card">
+      <View
+        testID="settings.dluAccounts.list"
+        className="overflow-hidden rounded-2xl border border-border bg-card"
+      >
         {PROVIDERS.map((provider, index) => {
           if (loading) {
             return (
@@ -273,6 +276,7 @@ export function DluAccountsSection({
           return (
             <View
               key={provider}
+              testID={`settings.dluAccounts.${provider}.row`}
               className={cn(
                 "px-4 py-3.5",
                 index > 0 && "border-t border-border",
@@ -285,6 +289,7 @@ export function DluAccountsSection({
                     {PROVIDER_LABEL[provider]}
                   </Text>
                   <Text
+                    testID={`settings.dluAccounts.${provider}.statusText`}
                     numberOfLines={1}
                     className={cn(
                       "mt-0.5 text-[13px]",
@@ -298,6 +303,7 @@ export function DluAccountsSection({
                 </View>
                 {connected ? (
                   <Pressable
+                    testID={`settings.dluAccounts.${provider}.manageButton`}
                     onPress={() => openManageSheet(provider)}
                     hitSlop={8}
                     accessibilityLabel={`Manage ${PROVIDER_LABEL[provider]}`}
@@ -310,6 +316,7 @@ export function DluAccountsSection({
                   </Pressable>
                 ) : (
                   <Button
+                    testID={`settings.dluAccounts.${provider}.connectButton`}
                     size="sm"
                     className="rounded-lg"
                     disabled={isSubmitting}
@@ -326,6 +333,7 @@ export function DluAccountsSection({
               {connected && (
                 <View className="mt-2.5 flex-row pl-[51px]">
                   <Button
+                    testID={`settings.dluAccounts.${provider}.syncButton`}
                     size="sm"
                     className="flex-row items-center gap-1.5 rounded-lg"
                     disabled={syncing !== null}
@@ -352,6 +360,7 @@ export function DluAccountsSection({
               {selectedLabel}
             </Text>
             <Pressable
+              testID="settings.dluAccounts.manageSheet.updateLoginButton"
               onPress={() =>
                 afterManageSheet(() => {
                   if (selectedProvider)
@@ -366,6 +375,7 @@ export function DluAccountsSection({
               </Text>
             </Pressable>
             <Pressable
+              testID="settings.dluAccounts.manageSheet.disconnectButton"
               onPress={() => afterManageSheet(() => confirmSheet.open())}
               className="flex-row items-center gap-3 rounded-xl px-3 py-3.5 active:opacity-70"
             >
@@ -412,6 +422,7 @@ export function DluAccountsSection({
                 Student ID
               </Text>
               <BottomSheetInput
+                testID="settings.dluAccounts.signInSheet.usernameInput"
                 value={studentId}
                 onChangeText={setStudentId}
                 placeholder={
@@ -427,6 +438,7 @@ export function DluAccountsSection({
                 Password
               </Text>
               <BottomSheetInput
+                testID="settings.dluAccounts.signInSheet.passwordInput"
                 value={password}
                 onChangeText={setPassword}
                 placeholder={
@@ -461,6 +473,7 @@ export function DluAccountsSection({
               />
             </View>
             <Button
+              testID="settings.dluAccounts.signInSheet.submitButton"
               className="w-full"
               disabled={!canSubmit}
               onPress={handleSubmit}
@@ -494,6 +507,7 @@ export function DluAccountsSection({
             </Text>
             <View className="flex-row gap-2.5">
               <Button
+                testID="settings.dluAccounts.disconnectSheet.keepButton"
                 variant="outline"
                 className="flex-1"
                 onPress={() => confirmSheet.close()}
@@ -502,6 +516,7 @@ export function DluAccountsSection({
                 <Text className="font-semibold text-foreground">Keep it</Text>
               </Button>
               <Button
+                testID="settings.dluAccounts.disconnectSheet.disconnectButton"
                 variant="destructive"
                 className="flex-1"
                 onPress={handleDisconnect}

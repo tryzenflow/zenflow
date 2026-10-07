@@ -7,6 +7,7 @@ import {
 } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
 import { NAV_THEME } from "@/lib/constants";
+import { taskCardTestID } from "@/lib/test-ids";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
 import { differenceInCalendarDays } from "date-fns";
@@ -775,6 +776,7 @@ function SessionBlockImpl({
       )}
       <GestureDetector gesture={composedGesture}>
         <Animated.View
+          testID={taskCardTestID(segment.title)}
           style={[moveStyle, { height }]}
           className={cn(
             "flex overflow-hidden rounded-[10px] border border-l-4",

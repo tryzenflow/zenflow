@@ -12,11 +12,14 @@ export function TagPicker({
   selected,
   onChange,
   InputComponent = Input,
+  testIDPrefix,
 }: {
   selected: string[];
   onChange: (next: string[]) => void;
   /** Sheets pass `BottomSheetInput` so the keyboard lifts the sheet. */
   InputComponent?: React.ComponentType<React.ComponentProps<typeof Input>>;
+  /** When set (onboarding), exposes stable `testID`s for Maestro E2E. */
+  testIDPrefix?: string;
 }) {
   const [draft, setDraft] = useState("");
 
@@ -25,6 +28,11 @@ export function TagPicker({
     onChange(addCustomTag(selected, draft));
     setDraft("");
   }
+
+  const suggestionID = (name: string) =>
+    testIDPrefix
+      ? `${testIDPrefix}.suggestion.${name.toLowerCase().replace(/\s+/g, "-")}`
+      : undefined;
 
   return (
     <View>
@@ -36,6 +44,7 @@ export function TagPicker({
           return (
             <Pressable
               key={name}
+              testID={suggestionID(name)}
               onPress={() => onChange(toggleTag(selected, name))}
               accessibilityRole="checkbox"
               accessibilityState={{ checked: on }}
@@ -59,6 +68,7 @@ export function TagPicker({
       </View>
       <View className="mt-5 flex-row items-center gap-2">
         <InputComponent
+          testID={testIDPrefix ? `${testIDPrefix}.input` : undefined}
           className="flex-1"
           value={draft}
           onChangeText={setDraft}
@@ -68,6 +78,7 @@ export function TagPicker({
           onSubmitEditing={add}
         />
         <Pressable
+          testID={testIDPrefix ? `${testIDPrefix}.addButton` : undefined}
           onPress={add}
           disabled={!draft.trim()}
           className={cn(

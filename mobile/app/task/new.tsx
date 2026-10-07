@@ -318,6 +318,7 @@ function NewSessionForm() {
       subtitle={subtitle}
       footer={
         <Button
+          testID="tasks.form.saveButton"
           className="h-[52px] w-full"
           disabled={loading}
           onPress={form.handleSubmit(onSubmit, onInvalid)}
