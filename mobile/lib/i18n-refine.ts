@@ -44,4 +44,29 @@ export default {
   "{count} more sessions, open the day": "Còn {count} lịch nữa, mở ngày",
   "Open day": "Mở ngày",
   "Shows this day in the Week view": "Xem ngày này trong màn hình tuần",
+  "Disconnect {provider}?": "Ngắt kết nối {provider}?",
+  "LMS brings in your assignments and deadlines.":
+    "LMS đưa bài tập và hạn nộp vào lịch của bạn.",
+  "The student portal brings in your timetable and exams.":
+    "Cổng sinh viên đưa thời khóa biểu và lịch thi vào lịch của bạn.",
+  "Connected LMS and student portal": "Đã kết nối LMS và cổng sinh viên",
+  "{provider} connected": "Đã kết nối {provider}",
+  "{provider} didn't accept this login. Connect it on its own.":
+    "{provider} không nhận thông tin đăng nhập này. Hãy kết nối riêng.",
+  "Connect {provider}": "Kết nối {provider}",
+  "Show password": "Hiện mật khẩu",
+  "Hide password": "Ẩn mật khẩu",
+  "Use the same login for LMS and the student portal":
+    "Dùng chung đăng nhập cho LMS và cổng sinh viên",
+  "Do it later": "Để sau",
+  "Your timezone": "Múi giờ của bạn",
+  Change: "Đổi",
+  "Use my device's timezone": "Dùng múi giờ của máy",
+  "Hide list": "Ẩn danh sách",
+  "Shows every timezone": "Hiện tất cả múi giờ",
+  "Anything not set up yet is waiting for you in Settings.":
+    "Phần nào chưa thiết lập vẫn đang chờ bạn trong Cài đặt.",
+  "Not set up yet": "Chưa thiết lập",
+  "{count} tags": "{count} nhãn",
+  "Step {index} of {total}": "Bước {index} trên {total}",
 } as Record<string, string>;

@@ -49,7 +49,6 @@ export default {
   "Detected from device": "Nhận diện từ thiết bị",
   "Device settings": "Cài đặt thiết bị",
   Disconnect: "Ngắt kết nối",
-  "Disconnect the": "Ngắt kết nối",
   Dismiss: "Xóa",
   "Dismiss — keeps the current time": "Đóng — giữ nguyên thời gian hiện tại",
   "Display name": "Tên hiển thị",
@@ -151,8 +150,6 @@ export default {
   "Signing out…": "Đang đăng xuất…",
   "Skip for now": "Bỏ qua lúc này",
   "Skip ones that would conflict": "Bỏ qua các buổi bị trùng lịch",
-  "Skipped steps are waiting for you in Settings.":
-    "Bạn có thể hoàn tất các bước đã bỏ qua trong Cài đặt.",
   "Start time": "Giờ bắt đầu",
   "Stay ahead of deadlines": "Chủ động trước hạn chót",
   "Student ID": "Mã sinh viên",
