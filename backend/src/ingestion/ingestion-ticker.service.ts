@@ -1,6 +1,9 @@
 import { Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Cron, CronExpression } from "@nestjs/schedule";
+import { UpstreamUnavailableError } from "../common/outbound-breaker";
+import { LMSService } from "../lms/lms.service";
+import { PortalAPIService } from "../portal/portal-api.service";
 import { runCronJob } from "../observability/cron";
 import { EnrollmentDiscoveryService } from "./enrollment-discovery.service";
 import { ExamWatcherService } from "./exam-watcher.service";
@@ -31,6 +34,10 @@ export interface TickSummary {
   failed: number;
   servedFromCache: number;
   byKind: Partial<Record<SyncKindName, number>>;
+  /** Claims handed back unrun because their upstream's breaker was open. */
+  released: number;
+  /** Providers whose work was cut short this tick by an open breaker. */
+  pausedProviders: ("LMS" | "PORTAL")[];
 }
 
 const EMPTY_TICK: TickSummary = {
@@ -39,6 +46,8 @@ const EMPTY_TICK: TickSummary = {
   failed: 0,
   servedFromCache: 0,
   byKind: {},
+  released: 0,
+  pausedProviders: [],
 };
 
 /**
@@ -101,6 +110,8 @@ export class IngestionTickerService implements OnModuleInit {
     private readonly exam: ExamWatcherService,
     private readonly lms: LmsWatcherService,
     private readonly discovery: EnrollmentDiscoveryService,
+    private readonly lmsClient: LMSService,
+    private readonly portalClient: PortalAPIService,
   ) {
     this.dluTimezone = this.config.get<string>("DLU_TZ") ?? "Asia/Ho_Chi_Minh";
     this.maxBatch = this.positiveConfig("INGESTION_TICK_MAX_BATCH", 20);
@@ -177,7 +188,12 @@ export class IngestionTickerService implements OnModuleInit {
       failed: 0,
       servedFromCache: 0,
       byKind: {},
+      released: 0,
+      pausedProviders: [],
     };
+    // Providers whose breaker is open (or tripped mid-tick). Checked before any
+    // claim so a down upstream is never claimed for, and other providers carry on.
+    const paused = new Set<"LMS" | "PORTAL">();
 
     try {
       // Self-healing: covers an integration that predates this feature, or one
@@ -193,6 +209,7 @@ export class IngestionTickerService implements OnModuleInit {
           );
           break;
         }
+        if (this.upstreamOpen(plan.provider, paused)) continue;
         // A new term makes every student's discovery due, whatever its period.
         if (plan.kind === "PORTAL_DISCOVERY") {
           await this.schedule.pullForwardStaleDiscovery(
@@ -235,8 +252,19 @@ export class IngestionTickerService implements OnModuleInit {
         // Sequentially, always. Sequential outbound requests are the entirety
         // of the politeness policy (see `watcher-support.ts`), and fanning out
         // here is exactly what would turn a tick back into a burst.
-        for (const target of targets) {
+        for (let i = 0; i < targets.length; i++) {
+          const target = targets[i];
+          if (paused.has(plan.provider)) {
+            // The breaker opened mid-batch: hand the rest back, still due.
+            await this.release(plan, target, summary);
+            continue;
+          }
           const outcome = await this.runOne(plan, target, now);
+          if (outcome.upstreamDown) {
+            paused.add(plan.provider);
+            await this.release(plan, target, summary);
+            continue;
+          }
           summary.claimed += 1;
           if (outcome.ok) summary.ok += 1;
           else summary.failed += 1;
@@ -247,6 +275,7 @@ export class IngestionTickerService implements OnModuleInit {
       this.running = false;
     }
 
+    summary.pausedProviders = [...paused];
     return summary;
   }
 
@@ -266,11 +295,22 @@ export class IngestionTickerService implements OnModuleInit {
     try {
       outcome = await this.dispatch(plan.kind, target, now);
     } catch (error) {
+      if (error instanceof UpstreamUnavailableError) {
+        // Not this student's failure: skip the bookkeeping (no
+        // `consecutiveFailures` bump) and let the caller release the claim.
+        this.logger.debug(
+          `${plan.kind} deferred for integration ${target.integrationId}: ${error.message}`,
+        );
+        return { ok: false, servedFromCache: false, upstreamDown: error };
+      }
       this.logger.warn(
         `${plan.kind} pass failed for integration ${target.integrationId}: ` +
           errorMessage(error),
       );
     }
+    // A partial walk cut short by an open breaker: keep its writes, but it is
+    // neither a success nor a student failure.
+    if (outcome.upstreamDown) return outcome;
     try {
       await this.schedule.recordOutcome(target.scheduleId, {
         ...outcome,
@@ -285,6 +325,42 @@ export class IngestionTickerService implements OnModuleInit {
       );
     }
     return outcome;
+  }
+
+  /** True (and remembered in `paused`) when `provider`'s breaker is open. */
+  private upstreamOpen(
+    provider: "LMS" | "PORTAL",
+    paused: Set<"LMS" | "PORTAL">,
+  ): boolean {
+    if (paused.has(provider)) return true;
+    const wait =
+      provider === "LMS"
+        ? this.lmsClient.unavailableFor()
+        : this.portalClient.unavailableFor();
+    if (wait === null) return false;
+    paused.add(provider);
+    this.logger.debug(
+      `${provider} upstream breaker is open (~${Math.ceil(wait / 1000)}s); ` +
+        `not claiming ${provider} work this tick`,
+    );
+    return true;
+  }
+
+  private async release(
+    plan: SyncKindPlan,
+    target: ClaimedTarget,
+    summary: TickSummary,
+  ): Promise<void> {
+    summary.released += 1;
+    try {
+      await this.schedule.releaseClaim(target);
+    } catch (error) {
+      // Worst case the row waits out one period, as it would have pre-breaker.
+      this.logger.warn(
+        `Could not release the ${plan.kind} claim for schedule ` +
+          `${target.scheduleId}: ${errorMessage(error)}`,
+      );
+    }
   }
 
   /** Map a kind onto the service that performs it. */

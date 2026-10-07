@@ -1,5 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import type { IntegrationProvider } from "@zenflow/shared";
+import { LMSService } from "../lms/lms.service";
+import { PortalAPIService } from "../portal/portal-api.service";
 import { ExamWatcherService } from "./exam-watcher.service";
 import { LmsWatcherService } from "./lms-watcher.service";
 import { TimetableWatcherService } from "./timetable-watcher.service";
@@ -25,7 +27,19 @@ export class IngestionSyncService {
     private readonly lmsWatcher: LmsWatcherService,
     private readonly timetableWatcher: TimetableWatcherService,
     private readonly examWatcher: ExamWatcherService,
+    private readonly lmsClient: LMSService,
+    private readonly portalClient: PortalAPIService,
   ) {}
+
+  /**
+   * Ms until `provider`'s upstream circuit breaker may admit a call, or `null`
+   * when it can. A non-consuming peek, used to refuse a manual sync up front.
+   */
+  upstreamUnavailableFor(provider: IntegrationProvider): number | null {
+    return provider === "LMS"
+      ? this.lmsClient.unavailableFor()
+      : this.portalClient.unavailableFor();
+  }
 
   /**
    * Run one student's watchers for `provider` and resolve once they are done,

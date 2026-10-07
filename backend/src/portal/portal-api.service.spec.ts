@@ -1,5 +1,10 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { ConfigService } from "@nestjs/config";
+import {
+  OUTBOUND_CLOCK,
+  OutboundBreakers,
+  UpstreamUnavailableError,
+} from "../common/outbound-breaker";
 import { PortalAPIService } from "./portal-api.service";
 
 const BASE = "https://portal-api.dlu.edu.vn";
@@ -32,11 +37,14 @@ type FetchCall = [string, RequestInit & { headers: Record<string, string> }];
 describe("PortalAPIService", () => {
   let service: PortalAPIService;
   let fetchMock: jest.Mock;
+  let clock = 1_000_000;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PortalAPIService,
+        OutboundBreakers,
+        { provide: OUTBOUND_CLOCK, useValue: () => clock },
         { provide: ConfigService, useValue: config },
       ],
     }).compile();
@@ -46,6 +54,63 @@ describe("PortalAPIService", () => {
   });
 
   afterEach(() => jest.restoreAllMocks());
+
+  describe("circuit breaker", () => {
+    const timeout = () =>
+      Object.assign(new Error("timed out"), { name: "TimeoutError" });
+
+    beforeEach(() => {
+      clock = 1_000_000;
+    });
+
+    it("opens after 5 timeouts and then short-circuits without calling fetch", async () => {
+      fetchMock.mockRejectedValue(timeout());
+      for (let i = 0; i < 5; i++) {
+        await expect(service.authenticate("sv", "pw")).rejects.toThrow(
+          /unreachable/,
+        );
+      }
+
+      const err = await service
+        .fetchExams("t", "2026-2027", "1")
+        .catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(UpstreamUnavailableError);
+      expect((err as UpstreamUnavailableError).upstream).toBe("dlu-portal");
+      expect(fetchMock).toHaveBeenCalledTimes(5);
+      expect(service.unavailableFor()).toBeGreaterThan(0);
+    });
+
+    it("does not count rejected credentials (400/401/403) or a 404", async () => {
+      for (let i = 0; i < 10; i++) {
+        fetchMock.mockResolvedValueOnce(reply({ status: 401 }));
+        await expect(service.authenticate("sv", "bad")).resolves.toEqual({
+          ok: false,
+          reason: "INVALID_CREDENTIALS",
+        });
+      }
+      for (let i = 0; i < 10; i++) {
+        fetchMock.mockResolvedValueOnce(reply({ status: 404 }));
+        await expect(service.fetchExams("t", "y", "1")).rejects.toThrow();
+      }
+      expect(service.unavailableFor()).toBeNull();
+    });
+
+    it("DKHP shares the portal breaker; a successful probe closes it", async () => {
+      fetchMock.mockRejectedValue(timeout());
+      for (let i = 0; i < 5; i++) {
+        await service.authenticateDkhp("sv", "pw").catch(() => undefined);
+      }
+      expect(service.unavailableFor()).not.toBeNull();
+
+      clock += 60_001;
+      fetchMock.mockReset();
+      fetchMock.mockResolvedValueOnce(reply({ json: [] }));
+      await expect(service.fetchExams("t", "y", "1")).resolves.toEqual([]);
+
+      expect(service.unavailableFor()).toBeNull();
+    });
+  });
 
   describe("fetchRegistHistory (issue #56 discovery)", () => {
     it("POSTs the term to DKHP with the dtl client id and the DKHP key", async () => {

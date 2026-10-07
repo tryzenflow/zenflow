@@ -1,3 +1,4 @@
+import { UpstreamUnavailableError } from "../common/outbound-breaker";
 import { forwardRef, Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
@@ -164,6 +165,9 @@ export class TimetableWatcherService {
     // that week was cancelled".
     const seenKeys = new Set<string>();
     let allFetchesOk = true;
+    // Items fetched OK so far, and the breaker error that cut the walk short.
+    let okItems = 0;
+    let upstreamDown: UpstreamUnavailableError | undefined;
     // Per-week occurrence rows, recorded after the walk so a failed week can
     // suppress the cancellation pass for every week at once.
     const weekResults: {
@@ -225,8 +229,18 @@ export class TimetableWatcherService {
           operation: "portal_timetable",
           status: "COMPLETED",
         });
+        okItems += 1;
       } catch (error) {
         allFetchesOk = false;
+        if (error instanceof UpstreamUnavailableError) {
+          if (okItems === 0) {
+            // Nothing came back at all: drop the run, no student failure.
+            await this.jobs.discardJob("PORTAL", jobId);
+            throw error;
+          }
+          // Keep what was fetched; stop walking, the rest would be refused.
+          upstreamDown = error;
+        }
         await this.jobs.completeItem("PORTAL", itemId, {
           status: "FAILED",
           statusCode: statusCodeOf(error),
@@ -240,6 +254,7 @@ export class TimetableWatcherService {
           `Timetable week ${week} failed for integration ` +
             `${target.integrationId}: ${errorMessage(error)}`,
         );
+        if (upstreamDown) break;
       }
     }
 
@@ -284,7 +299,7 @@ export class TimetableWatcherService {
 
     // `ok` is `allFetchesOk`, not "the job row completed": a pass survives one
     // failed week, but it must not then be treated as a complete picture.
-    return { ok: allFetchesOk, servedFromCache: false };
+    return { ok: allFetchesOk, servedFromCache: false, upstreamDown };
   }
 
   /**
@@ -583,6 +598,10 @@ export class TimetableWatcherService {
       }
       return result.token;
     } catch (error) {
+      if (error instanceof UpstreamUnavailableError) {
+        await this.jobs.discardJob("PORTAL", jobId);
+        throw error;
+      }
       await this.jobs.finishJob("PORTAL", jobId, "FAILED");
       this.logger.warn(
         `Portal sign-in failed for integration ${target.integrationId}: ${errorMessage(error)}`,

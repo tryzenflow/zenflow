@@ -98,6 +98,10 @@ export interface ClaimedTarget extends IntegrationTarget {
   scheduleId: string;
   /** Consecutive cache-served passes so far — drives the periodic full-walk audit. */
   cacheHitStreak: number;
+  /** The row's `nextDueAt` before this claim, for {@link IngestionScheduleService.releaseClaim}. */
+  dueAt: Date;
+  /** When this claim was made; {@link IngestionScheduleService.releaseClaim}'s CAS token. */
+  claimedAt: Date;
 }
 
 /** What one pass did, as far as the schedule is concerned. */
@@ -290,9 +294,28 @@ export class IngestionScheduleService {
         integrationId: row.integrationId,
         userId: row.integration.userId,
         cacheHitStreak: row.cacheHitStreak,
+        dueAt: row.nextDueAt,
+        claimedAt: now,
       });
     }
     return claimed;
+  }
+
+  /**
+   * Hand a claim back unrun because the upstream's breaker is open.
+   *
+   * Restores the pre-claim `nextDueAt` (already in the past), so the row is
+   * still due and still ordered by how overdue it is; the ticker simply does not
+   * claim for that upstream while the breaker is open. `consecutiveFailures`,
+   * `lastRunAt` and the cache streak are untouched: this is not a student
+   * failure. The `lastClaimedAt` match keeps it from undoing a later write (a
+   * manual sync's deferral, or another tick's claim).
+   */
+  async releaseClaim(target: ClaimedTarget): Promise<void> {
+    await this.prisma.ingestionSchedule.updateMany({
+      where: { id: target.scheduleId, lastClaimedAt: target.claimedAt },
+      data: { nextDueAt: target.dueAt },
+    });
   }
 
   /**

@@ -186,6 +186,22 @@ export const schedulerPlacementShadowMismatch = meter.createCounter(
   },
 );
 
+// --- Outbound circuit breakers (common/outbound-breaker.ts) -----------------
+export const outboundBreakerState = meter.createGauge(
+  "outbound.breaker_state",
+  {
+    description:
+      "Outbound circuit breaker by upstream name: 0 closed, 1 half-open, 2 open",
+  },
+);
+export const outboundBreakerShortCircuited = meter.createCounter(
+  "outbound.breaker_short_circuited",
+  {
+    description:
+      "Outbound calls refused without a request because the breaker was open, by upstream",
+  },
+);
+
 // --- Rate limiting ----------------------------------------------------------
 export const rateLimitStoreFailOpen = meter.createCounter(
   "rate_limit.store.fail_open",

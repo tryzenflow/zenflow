@@ -1,3 +1,4 @@
+import { UpstreamUnavailableHttpException } from "../common/upstream-unavailable.exception";
 import { Test, TestingModule } from "@nestjs/testing";
 import {
   BadRequestException,
@@ -197,6 +198,7 @@ describe("IntegrationsService", () => {
   let crypto: CryptoService;
   let verifyCredentials: jest.Mock;
   let syncNow: jest.Mock;
+  let upstreamUnavailableFor: jest.Mock;
   // Issue #56's rolling schedule: connecting seeds a student's schedule rows,
   // and a manual sync pushes them out so the ticker does not re-walk at once.
   let ensureRows: jest.Mock;
@@ -208,6 +210,7 @@ describe("IntegrationsService", () => {
     db = makePrismaDouble();
     verifyCredentials = jest.fn().mockResolvedValue(true);
     syncNow = jest.fn().mockResolvedValue(undefined);
+    upstreamUnavailableFor = jest.fn().mockReturnValue(null);
     ensureRows = jest.fn().mockResolvedValue(3);
     deferAfterManualSync = jest.fn().mockResolvedValue(undefined);
     inflightRun = jest.fn(
@@ -222,7 +225,10 @@ describe("IntegrationsService", () => {
         { provide: PrismaService, useValue: db.prisma },
         { provide: ConfigService, useValue: { get: (n: string) => ENV[n] } },
         { provide: IntegrationAuthService, useValue: { verifyCredentials } },
-        { provide: IngestionSyncService, useValue: { syncNow } },
+        {
+          provide: IngestionSyncService,
+          useValue: { syncNow, upstreamUnavailableFor },
+        },
         {
           provide: IngestionScheduleService,
           useValue: { ensureRows, deferAfterManualSync },
@@ -528,6 +534,21 @@ describe("IntegrationsService", () => {
       expect(syncNow).not.toHaveBeenCalled();
     });
 
+    it("503s with a retry hint while the upstream breaker is open, and runs nothing", async () => {
+      await service.connect(USER, creds);
+      upstreamUnavailableFor.mockReturnValue(42_500);
+
+      const err = await service.sync(USER, "LMS").catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(UpstreamUnavailableHttpException);
+      expect((err as UpstreamUnavailableHttpException).getStatus()).toBe(503);
+      expect((err as UpstreamUnavailableHttpException).retryAfterSeconds).toBe(
+        43,
+      );
+      expect(upstreamUnavailableFor).toHaveBeenCalledWith("LMS");
+      expect(inflightRun).not.toHaveBeenCalled();
+      expect(syncNow).not.toHaveBeenCalled();
+    });
 
     it("404s when the provider is not connected, and runs nothing", async () => {
       await expect(service.sync(USER, "PORTAL")).rejects.toBeInstanceOf(

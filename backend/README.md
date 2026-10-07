@@ -126,6 +126,22 @@ diagram; this section is the rules that diagram doesn't show.
 - **Upstream wins.** A change upstream always applies, a removal always soft-deletes,
   regardless of whether the student moved the item by hand — except a student's own
   deletion, which the materializer's `[userId, externalKey]` lookup respects.
+- **Upstream circuit breaker.** LMS and the portal (DKHP shares the portal's) each have a
+  named breaker from the shared `common/outbound-breaker.ts` registry, wrapped around the
+  clients' single request seam. Five consecutive timeouts, connection errors, 5xx or 429
+  (login included) open it; 4xx such as a wrong password, and parse errors, never count.
+  Open means no request is made (`UpstreamUnavailableError`); after the open time one probe
+  goes out, success closes, failure re-opens with the time doubled up to the max. A
+  `Retry-After` on 429/503 holds it shut at least that long. Students are not penalised:
+  the ticker stops claiming for that upstream for the rest of the tick (the other keeps
+  going), hands back claims it cannot run so rows stay due in their original order, never
+  bumps `consecutiveFailures`, and a run that never made a request leaves no job row.
+  `POST /integrations/:provider/sync` answers 503 `UPSTREAM_UNAVAILABLE` with `Retry-After`
+  while open; the per-user rate-limit slot is already spent by then (the limiter is a
+  separate guard, deliberately not coupled). The failures that trip the breaker still count
+  against the students who hit them. Metrics: `outbound.breaker_state`,
+  `outbound.breaker_short_circuited` (by `upstream`). Tuning: `INGESTION_BREAKER_FAILURES`
+  (5), `INGESTION_BREAKER_OPEN_MS` (60000), `INGESTION_BREAKER_MAX_OPEN_MS` (600000).
 - **Write-back** always goes through the materializer, the one path that touches a
   `Session` row, so ingested and user-pinned sessions never drift apart.
 
@@ -149,22 +165,6 @@ Global prefix `**/api/v1**`. All routes except `POST /auth/otp/*` require
 | GET    | `/auth/me`          | current user                                                                                    |
 | POST   | `/auth/logout`      | destroy session                                                                                 |
 
-### Users (`/users`)
-
-| Method | Path                          | Purpose                                                                                |
-| ------ | ----------------------------- | -------------------------------------------------------------------------------------- |
-| GET    | `/users/me`                   | profile                                                                                |
-| PATCH  | `/users/update/basic-info`    | update name, timezone, lang, defaultReminderMinutes                                    |
-| GET    | `/users/me/preference-matrix` | the 168-float preference matrix for the Insights heatmap                              |
-
-No onboarding endpoint. `timezone` is captured at OTP signup (`x-timezone` header) and can be
-changed later, with `lang` and `defaultReminderMinutes` (0 = none, default 10; existing users
-were migrated to 60), through `PATCH /users/update/basic-info`. Changing `timezone` re-keys each
-recurring series' `exdates` so individually deleted occurrences stay deleted. A new signup also seeds 4 daily-recurring `DND` blocks (breakfast/lunch/
-evening/sleep) best-effort, so the scheduler avoids them from day one.
-
-### Sessions (`/sessions`)
-
 Rate limits on `otp/request` (sliding windows, env-tunable in `app.module.ts`): per IP
 `OTP_REQUEST_IP_*` (default 5/min), per IP hourly `OTP_REQUEST_IP_HOURLY_*` (20/h, loose for campus
 NAT), per email `OTP_REQUEST_EMAIL_*` (3/15 min). The email key is normalized (trim, lower-case,
@@ -187,6 +187,22 @@ counts toward a `CircuitBreaker` (`common/circuit-breaker.ts`, shared with `Plac
 throttled to one per 30 s; the `rate_limit.store.fail_open` counter has a `reason` label. The
 `RATE_LIMIT_REDIS_CLIENT` uses `commandTimeout`, `maxRetriesPerRequest: 1` and no offline queue (the
 sessions client is unchanged). Tests use the in-memory store, which is not wrapped.
+
+### Users (`/users`)
+
+| Method | Path                          | Purpose                                                                                |
+| ------ | ----------------------------- | -------------------------------------------------------------------------------------- |
+| GET    | `/users/me`                   | profile                                                                                |
+| PATCH  | `/users/update/basic-info`    | update name, timezone, lang, defaultReminderMinutes                                    |
+| GET    | `/users/me/preference-matrix` | the 168-float preference matrix for the Insights heatmap                              |
+
+No onboarding endpoint. `timezone` is captured at OTP signup (`x-timezone` header) and can be
+changed later, with `lang` and `defaultReminderMinutes` (0 = none, default 10; existing users
+were migrated to 60), through `PATCH /users/update/basic-info`. Changing `timezone` re-keys each
+recurring series' `exdates` so individually deleted occurrences stay deleted. A new signup also seeds 4 daily-recurring `DND` blocks (breakfast/lunch/
+evening/sleep) best-effort, so the scheduler avoids them from day one.
+
+### Sessions (`/sessions`)
 
 `@Controller("sessions")` — drag, resize and reschedule are all one `PATCH /sessions/:id`
 (a `MOVE` signal). No status/completion, `/reschedule`, `/resize`, `/optimize` or `/undo`.
@@ -314,6 +330,7 @@ validated at boot (`@hapi/joi`) with defaults, except where noted:
 | `DLU_TZ` | `Asia/Ho_Chi_Minh` | upstream wall-clock strings' zone, not the user's |
 | `INGESTION_ENABLED` | `true` | kill switch; `false` in `.env.test` |
 | `INGESTION_REQUEST_DELAY_MS` | 750 | pause between one watcher's outbound requests |
+| `INGESTION_BREAKER_FAILURES` / `_OPEN_MS` / `_MAX_OPEN_MS` | 5 / 60000 / 600000 | outbound circuit breakers (all upstreams); see "DLU ingestion" |
 | `INGESTION_OCCURRENCE_CACHE_ENABLED` | `false` | rollout gate for cache-served timetable/Moodle walks and fan-out; discovery is always on — see "DLU ingestion" |
 | `BANDIT_SERVICE_URL` | dev: `http://localhost:8100` | Python placement service; unset ⇒ every placement uses the frozen `FallbackPlacer`. **Required when `NODE_ENV=production`.** |
 | `BANDIT_SERVICE_TOKEN` | — | optional bearer secret for `POST /v1/place` |

@@ -5,6 +5,10 @@ import type {
   PortalTimetableRow,
 } from "../ingestion/core/parse-portal";
 import type { PortalRegistHistoryRow } from "../ingestion/core/parse-regist-history";
+import {
+  classifyHttpResult,
+  OutboundBreakers,
+} from "../common/outbound-breaker";
 import { portalClientDuration } from "../observability/metrics";
 
 /** Low-cardinality operation label for the portal RED histogram. */
@@ -75,7 +79,13 @@ export class PortalAPIService {
   private readonly portalUpstream: Upstream;
   private readonly dkhpUpstream: Upstream;
 
-  constructor(private configService: ConfigService) {
+  /** Breaker name, shared by the portal and DKHP hosts (one "PORTAL" upstream). */
+  static readonly BREAKER = "dlu-portal";
+
+  constructor(
+    private configService: ConfigService,
+    private readonly breakers: OutboundBreakers,
+  ) {
     this.endpoint = this.configService.getOrThrow("PORTAL_API_URL");
     // Optional at boot (see app.module.ts); DKHP calls throw if unset.
     this.dkhpEndpoint = this.configService.get<string>("DKHP_API_URL") ?? "";
@@ -91,6 +101,11 @@ export class PortalAPIService {
     };
     this.requestTimeout =
       +this.configService.getOrThrow("PORTAL_API_TIMEOUT_MS") || 10000;
+  }
+
+  /** Ms until the portal breaker may admit a call, or `null` when it can. */
+  unavailableFor(): number | null {
+    return this.breakers.unavailableFor(PortalAPIService.BREAKER);
   }
 
   /**
@@ -283,6 +298,19 @@ export class PortalAPIService {
   }
 
   private async fetch(
+    url: string,
+    init: RequestInit,
+    operationOverride?: string,
+  ): Promise<Response> {
+    // Refuses without a request while open; only transport trouble counts.
+    return this.breakers.run(
+      PortalAPIService.BREAKER,
+      () => this.send(url, init, operationOverride),
+      { classify: (r) => classifyHttpResult(r) },
+    );
+  }
+
+  private async send(
     url: string,
     init: RequestInit,
     operationOverride?: string,

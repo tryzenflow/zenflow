@@ -213,6 +213,23 @@ import { ObservabilityModule } from "./observability/observability.module";
           .integer()
           .positive()
           .default(48_000),
+        // Outbound circuit breakers (common/outbound-breaker.ts), one per external
+        // API, currently "dlu-lms" and "dlu-portal". Opens after N consecutive
+        // transport failures (timeout, connect, 5xx, 429), stays open OPEN_MS,
+        // then admits one probe; a failed probe doubles the open time up to MAX.
+        // The INGESTION_ prefix is historical: the values apply to every breaker.
+        INGESTION_BREAKER_FAILURES: Joi.number()
+          .integer()
+          .positive()
+          .default(5),
+        INGESTION_BREAKER_OPEN_MS: Joi.number()
+          .integer()
+          .positive()
+          .default(60_000),
+        INGESTION_BREAKER_MAX_OPEN_MS: Joi.number()
+          .integer()
+          .positive()
+          .default(600_000),
         // --- DLU ingestion: the cross-student occurrence cache (issue #56) --
         // The rollout gate. Off by default, and the inverse of
         // INGESTION_ENABLED's "absent means on": this one lets a walk be SKIPPED

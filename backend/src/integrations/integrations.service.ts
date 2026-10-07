@@ -22,6 +22,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { CryptoService } from "../crypto/crypto.service";
 import { MasterKeyService } from "../crypto/master-key.service";
+import { UpstreamUnavailableHttpException } from "../common/upstream-unavailable.exception";
 import { SyncInflightGuard } from "./sync-inflight.service";
 import { IntegrationAuthService } from "./integration-auth.service";
 import { IngestionSyncService } from "../ingestion/ingestion-sync.service";
@@ -206,6 +207,18 @@ export class IntegrationsService {
       );
     }
 
+    // Upstream circuit breaker open: refuse with 503 + Retry-After instead of
+    // making the student wait out timeouts. A plain check, independent of the
+    // rate limiter, which runs earlier at the controller: that quota slot is
+    // already spent when we refuse here (documented tradeoff; refunding would
+    // couple this to LimitKit).
+    const wait = this.ingestionSync.upstreamUnavailableFor(provider);
+    if (wait !== null) {
+      throw new UpstreamUnavailableHttpException(
+        `DLU ${this.label(provider)} is temporarily unavailable. Your data is safe and will sync automatically; please try again later.`,
+        wait,
+      );
+    }
 
     // The 3-per-6h quota is LimitKit's `@RateLimit` on the controller (429);
     // an in-flight duplicate is a 409 here.

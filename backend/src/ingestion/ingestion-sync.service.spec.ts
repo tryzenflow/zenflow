@@ -6,13 +6,20 @@ import { Test, TestingModule } from "@nestjs/testing";
 // ExamWatcherService instead makes `ExamWatcherService` still-undefined when
 // IngestionSyncService's own `design:paramtypes` decorator metadata runs.
 import { IngestionSyncService } from "./ingestion-sync.service";
+import { LMSService } from "../lms/lms.service";
+import { PortalAPIService } from "../portal/portal-api.service";
 import { ExamWatcherService } from "./exam-watcher.service";
 import { LmsWatcherService } from "./lms-watcher.service";
 import { TimetableWatcherService } from "./timetable-watcher.service";
 
 const NOW = new Date("2026-09-06T04:00:00.000Z");
 
-async function makeService() {
+async function makeService(
+  waits: { LMS: number | null; PORTAL: number | null } = {
+    LMS: null,
+    PORTAL: null,
+  },
+) {
   const order: string[] = [];
   const lms = jest.fn(() => {
     order.push("lms");
@@ -33,6 +40,11 @@ async function makeService() {
       { provide: LmsWatcherService, useValue: { run: lms } },
       { provide: TimetableWatcherService, useValue: { run: timetable } },
       { provide: ExamWatcherService, useValue: { run: exam } },
+      { provide: LMSService, useValue: { unavailableFor: () => waits.LMS } },
+      {
+        provide: PortalAPIService,
+        useValue: { unavailableFor: () => waits.PORTAL },
+      },
     ],
   }).compile();
   const service = module.get<IngestionSyncService>(IngestionSyncService);
@@ -60,6 +72,13 @@ describe("IngestionSyncService", () => {
     expect(s.timetable).toHaveBeenCalledWith(NOW, "u1");
     expect(s.exam).toHaveBeenCalledWith(NOW, "u1");
     expect(s.order).toEqual(["timetable", "exam"]);
+  });
+
+  it("reports each provider's breaker wait, null when closed", async () => {
+    const s = await makeService({ LMS: 42_000, PORTAL: null });
+
+    expect(s.service.upstreamUnavailableFor("LMS")).toBe(42_000);
+    expect(s.service.upstreamUnavailableFor("PORTAL")).toBeNull();
   });
 
   it("resolves only once the run is done, so the status can be re-read", async () => {

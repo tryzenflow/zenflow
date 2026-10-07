@@ -1,3 +1,4 @@
+import { UpstreamUnavailableError } from "../common/outbound-breaker";
 import { forwardRef, Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
@@ -154,6 +155,12 @@ export class ExamWatcherService {
         );
       }
     } catch (error) {
+      if (error instanceof UpstreamUnavailableError) {
+        // Nothing was requested and nothing succeeded: drop the run rather
+        // than record a student failure; the ticker releases the claim.
+        await this.jobs.discardJob("PORTAL", jobId);
+        throw error;
+      }
       // The item carries the failure; the job still completes, exactly as in
       // the multi-request watchers, so the two never disagree about what
       // `lastSyncStatus: COMPLETED` means.
@@ -201,6 +208,10 @@ export class ExamWatcherService {
       }
       return result.token;
     } catch (error) {
+      if (error instanceof UpstreamUnavailableError) {
+        await this.jobs.discardJob("PORTAL", jobId);
+        throw error;
+      }
       await this.jobs.finishJob("PORTAL", jobId, "FAILED");
       this.logger.warn(
         `Portal sign-in failed for integration ${target.integrationId}: ${errorMessage(error)}`,

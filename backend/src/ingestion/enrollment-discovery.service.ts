@@ -1,3 +1,4 @@
+import { UpstreamUnavailableError } from "../common/outbound-breaker";
 import { forwardRef, Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { IntegrationsService } from "../integrations/integrations.service";
@@ -156,6 +157,12 @@ export class EnrollmentDiscoveryService {
       );
       return { ok: true, servedFromCache: false };
     } catch (error) {
+      if (error instanceof UpstreamUnavailableError) {
+        // Nothing was requested and nothing succeeded: drop the run rather
+        // than record a student failure; the ticker releases the claim.
+        await this.jobs.discardJob("PORTAL", jobId);
+        throw error;
+      }
       await this.jobs.completeItem("PORTAL", itemId, {
         status: "FAILED",
         statusCode: statusCodeOf(error),
@@ -322,6 +329,12 @@ export class EnrollmentDiscoveryService {
       await this.jobs.finishJob("LMS", jobId, "COMPLETED");
       return { ok: true, servedFromCache: false };
     } catch (error) {
+      if (error instanceof UpstreamUnavailableError) {
+        // Nothing was requested and nothing succeeded: drop the run rather
+        // than record a student failure; the ticker releases the claim.
+        await this.jobs.discardJob("LMS", jobId);
+        throw error;
+      }
       await this.jobs.completeItem("LMS", itemId, {
         status: "FAILED",
         statusCode: statusCodeOf(error),
@@ -488,6 +501,10 @@ export class EnrollmentDiscoveryService {
       }
       return result.token;
     } catch (error) {
+      if (error instanceof UpstreamUnavailableError) {
+        await this.jobs.discardJob("PORTAL", jobId);
+        throw error;
+      }
       await this.jobs.finishJob("PORTAL", jobId, "FAILED");
       this.logger.warn(
         `Portal sign-in failed for integration ${target.integrationId}: ${errorMessage(error)}`,
@@ -515,6 +532,10 @@ export class EnrollmentDiscoveryService {
       }
       return result.session;
     } catch (error) {
+      if (error instanceof UpstreamUnavailableError) {
+        await this.jobs.discardJob("LMS", jobId);
+        throw error;
+      }
       await this.jobs.finishJob("LMS", jobId, "FAILED");
       this.logger.warn(
         `LMS sign-in failed for integration ${target.integrationId}: ${errorMessage(error)}`,

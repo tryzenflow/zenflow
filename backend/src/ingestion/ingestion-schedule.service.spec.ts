@@ -123,6 +123,7 @@ function makePrismaDouble(
           kind?: string;
           lastSuccessTerm?: { not: string };
           OR?: { lastClaimedAt: null | { lt: Date } }[];
+          lastClaimedAt?: Date;
         };
         data: Record<string, unknown>;
       }) => {
@@ -135,6 +136,11 @@ function makePrismaDouble(
           )
             return false;
           if (args.where.kind !== undefined && s.kind !== args.where.kind)
+            return false;
+          if (
+            args.where.lastClaimedAt instanceof Date &&
+            s.lastClaimedAt?.getTime() !== args.where.lastClaimedAt.getTime()
+          )
             return false;
           // The compare-and-set: the row must still hold the value the caller
           // read, or this matches nothing.
@@ -449,7 +455,22 @@ describe("IngestionScheduleService — claimDue", () => {
       integrationId: "int2",
       userId: "u2",
       cacheHitStreak: 4,
+      dueAt: NOW,
+      claimedAt: NOW,
     });
+  });
+
+  it("releaseClaim restores the pre-claim due time and touches no failure counter", async () => {
+    const { db, service } = await makeService(PORTAL_INTEGRATIONS, [
+      schedule({ id: "a", consecutiveFailures: 2 }),
+    ]);
+    const [claimed] = await service.claimDue(kind, NOW, 10);
+    expect(db.schedules[0].nextDueAt.getTime()).toBeGreaterThan(NOW.getTime());
+
+    await service.releaseClaim(claimed);
+
+    expect(db.schedules[0].nextDueAt).toEqual(NOW);
+    expect(db.schedules[0].consecutiveFailures).toBe(2);
   });
 
   it("claims nothing for a zero or negative batch size", async () => {
