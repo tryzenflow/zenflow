@@ -42,7 +42,7 @@ import Animated, {
   useSharedValue,
 } from "react-native-reanimated";
 import { CELL_HEIGHT } from "./month-cell";
-import { MonthGrid, MonthGridSkeleton } from "./month-grid";
+import { MonthGrid } from "./month-grid";
 import { sessionTypeIcon } from "./session-type-badge";
 
 interface DragState {
@@ -137,6 +137,9 @@ export const MonthPage = memo(function MonthPage({
   const [sessions, setSessions] = useState<Session[] | null>(
     () => getCachedDaySessions(monthKey) ?? null,
   );
+  // Until the first result lands the real grid (day numbers, this month's row
+  // count) renders with placeholder pills, so the page never blanks or swaps
+  // to a different-shaped skeleton.
   const showSkeleton = useDelayedLoading(sessions === null);
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
@@ -507,11 +510,9 @@ export const MonthPage = memo(function MonthPage({
 
   return (
     <View ref={pageRef} onLayout={measureGeometry} className="flex-1">
-      {showSkeleton ? (
-        <MonthGridSkeleton />
-      ) : (
-        <MonthGrid
+      <MonthGrid
           ref={gridRef}
+          loading={showSkeleton}
           monthDate={monthDate}
           days={days}
           today={today}
@@ -524,7 +525,6 @@ export const MonthPage = memo(function MonthPage({
           onGridLayout={measureGeometry}
           justDroppedKey={justDroppedKey}
         />
-      )}
 
       {/* Drop-target highlight lives on `MonthCell` itself (`isDropTarget`);
           this floating pill is just the dragged copy following the finger —
