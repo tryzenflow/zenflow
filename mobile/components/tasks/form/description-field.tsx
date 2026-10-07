@@ -1,14 +1,19 @@
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
-import { downloadFileToCache, getFileMetadata, uploadFiles } from "@/api/files";
+import { getFileMetadata, uploadFiles } from "@/api/files";
 import {
   Bold,
   Check,
+  CheckSquare,
+  ClipboardList,
+  GraduationCap,
   Highlighter,
   ImagePlus,
   Italic,
   Link2,
   List,
+  Maximize2,
+  Notebook,
   ListOrdered,
   type LucideIcon,
   Quote,
@@ -16,14 +21,22 @@ import {
   Upload,
   X,
 } from "@/components/Icons";
-import { useScrollIntoViewOnFocus } from "@/components/tasks/task-form-screen";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { getBaseURL } from "@/lib/api-client";
-import { escapeHtml, parseFileIdFromHref } from "@/lib/file-link";
+import { escapeHtml } from "@/lib/file-link";
 import { loadGeistWebviewFontDataUri } from "@/lib/geist-webview-font";
+import {
+  LINK_TAP_SCRIPT,
+  handleNoteLinkMessage,
+  noteColors,
+  noteFont,
+  isNoteEmpty,
+  noteSnippet,
+  noteTypographyCss,
+} from "@/lib/note-html";
 import { toImageUploadPart } from "@/lib/picked-file";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
@@ -48,13 +61,17 @@ import {
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { useEffect, useRef, useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
 import {
-  Linking,
+  Keyboard,
+  Modal,
   Platform,
   Pressable,
+  ScrollView,
+  StyleSheet,
   View,
-  type ViewInstance,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { WebViewMessageEvent } from "react-native-webview";
 import { AudioBridge, VideoBridge } from "./media-bridges";
 
@@ -83,22 +100,129 @@ const EDITOR_EXTENSIONS = [
   OrderedListBridge,
 ];
 
-export function DescriptionField(props: {
-  initialValue: string;
-  onChange: (value: string) => void;
-  disabled?: boolean;
-}) {
-  useLanguage();
-  return <DescriptionFieldEditor {...props} />;
+/**
+ * Starter outlines offered while the note is empty. Only uses what the
+ * editor's schema supports (bold, lists, blockquote — no headings), so each
+ * section title is a bold line over an empty bullet to type into.
+ */
+const TEMPLATES: {
+  key: string;
+  icon: LucideIcon;
+  title: string;
+  hint: string;
+  sections: string[];
+}[] = [
+  {
+    key: "study",
+    icon: Notebook,
+    title: "Study notes",
+    hint: "Key ideas, questions, summary",
+    sections: ["Key ideas", "Questions", "Summary"],
+  },
+  {
+    key: "checklist",
+    icon: CheckSquare,
+    title: "Checklist",
+    hint: "A simple to-do list",
+    sections: ["To do"],
+  },
+  {
+    key: "exam",
+    icon: GraduationCap,
+    title: "Exam prep",
+    hint: "Topics, practice, formulas",
+    sections: ["Topics to review", "Practice", "Remember"],
+  },
+  {
+    key: "assignment",
+    icon: ClipboardList,
+    title: "Assignment brief",
+    hint: "Goal, requirements, resources",
+    sections: ["Goal", "Requirements", "Resources"],
+  },
+];
+
+function templateHtml(sections: string[]): string {
+  return sections
+    .map((s) => `<p><strong>${escapeHtml(t(s))}</strong></p><ul><li></li></ul>`)
+    .join("");
 }
 
-function DescriptionFieldEditor({
+export function DescriptionField({
   initialValue,
   onChange,
   disabled,
 }: {
   initialValue: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  useLanguage();
+  const [value, setValue] = useState(initialValue);
+  const [open, setOpen] = useState(false);
+  // A genuinely new `initialValue` from the parent (its fetch resolved after
+  // mount) replaces what the card shows; echoes of our own edits are no-ops.
+  useEffect(() => {
+    setValue(initialValue);
+  }, [initialValue]);
+  const snippet = noteSnippet(value);
+
+  return (
+    <>
+      <Pressable
+        onPress={() => setOpen(true)}
+        disabled={disabled}
+        accessibilityRole="button"
+        accessibilityLabel={t("Description")}
+        className={cn(
+          "min-h-[96px] flex-row items-start gap-3 rounded-[13px] border border-input bg-card px-3.5 py-3 active:bg-muted/40",
+          disabled && "opacity-50",
+        )}
+      >
+        <Text
+          numberOfLines={4}
+          className={cn(
+            "flex-1 text-[15px] leading-[21px]",
+            !snippet && "text-muted-foreground",
+          )}
+        >
+          {snippet || t("Add notes…")}
+        </Text>
+        <Maximize2 size={16} className="mt-0.5 text-muted-foreground" />
+      </Pressable>
+      <Modal
+        visible={open}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setOpen(false)}
+      >
+        <DescriptionFieldEditor
+          initialValue={value}
+          onChange={(html) => {
+            setValue(html);
+            onChange(html);
+          }}
+          onClose={() => setOpen(false)}
+          disabled={disabled}
+        />
+      </Modal>
+    </>
+  );
+}
+
+/**
+ * The full-screen editor, mounted only while the modal is open (so the
+ * WebView boots once per open, with the field's current content).
+ */
+function DescriptionFieldEditor({
+  initialValue,
+  onChange,
+  onClose,
+  disabled,
+}: {
+  initialValue: string;
+  onChange: (value: string) => void;
+  onClose: () => void;
   disabled?: boolean;
 }) {
   useLanguage();
@@ -121,13 +245,30 @@ function DescriptionFieldEditor({
   const valueRef = useRef(initialValue);
   const bootContentRef = useRef(initialValue);
   const [linkOpen, setLinkOpen] = useState(false);
+  const [isEmpty, setIsEmpty] = useState(() => isNoteEmpty(initialValue));
   const [linkTitle, setLinkTitle] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [fontDataUri, setFontDataUri] = useState<string | null>(null);
-  // RN 0.88: ref instance type is `ViewInstance`, not `View` -- see
-  // day-timeline.tsx's `scrollRef` comment.
-  const containerRef = useRef<ViewInstance>(null);
-  const scrollIntoView = useScrollIntoViewOnFocus();
+  const insets = useSafeAreaInsets();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  // iOS reports the keyboard frame early (`will*`) so the bar rides up with
+  // it. Android resizes the window itself (`softwareKeyboardLayoutMode`), so
+  // the bar needs no offset there.
+  useEffect(() => {
+    const show = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      (e) => setKeyboardHeight(e.endCoordinates.height),
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => setKeyboardHeight(0),
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   // Base64-embed Geist as a `@font-face` inside the editor's WebView
   // document once (see `lib/geist-webview-font.ts`'s doc comment for why a
@@ -172,10 +313,20 @@ function DescriptionFieldEditor({
     onChange: () => {
       editor.getHTML().then((html) => {
         valueRef.current = html;
+        setIsEmpty(isNoteEmpty(html));
         onChange(html);
       });
     },
   });
+
+  function applyTemplate(sections: string[]) {
+    const html = templateHtml(sections);
+    valueRef.current = html;
+    setIsEmpty(false);
+    editor.setContent(html);
+    onChange(html);
+    editor.focus("end");
+  }
 
   const state = useBridgeState(editor);
 
@@ -189,37 +340,12 @@ function DescriptionFieldEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialValue]);
 
-  useEffect(() => {
-    if (state.isFocused) {
-      scrollIntoView(containerRef);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.isFocused]);
-
   function injectContentStyles() {
-    const bg = isDarkColorScheme ? "rgb(29 26 23)" : "rgb(255 255 255)";
-    const fg = isDarkColorScheme ? "rgb(250 250 249)" : "rgb(28 25 23)";
-    // Same brand-orange RGB triplets as `--brand-orange` in
-    // `app/global.css` — this is a separate WebView document, so it can't
-    // reach that CSS variable and needs the literal value repeated here.
-    const linkColor = isDarkColorScheme ? "rgb(255 122 36)" : "rgb(255 142 62)";
-
-    const fontFace = fontDataUri
-      ? `@font-face { font-family: 'Geist'; src: url(${fontDataUri}) format('truetype'); font-weight: 400; font-style: normal; }`
-      : "";
-    const fontFamily = fontDataUri
-      ? "'Geist', -apple-system, sans-serif"
-      : "-apple-system, sans-serif";
+    const { bg, fg } = noteColors(isDarkColorScheme);
+    const { fontFace, family } = noteFont(fontDataUri);
     editor.injectCSS(
-      // `ImageBridge`'s own `extendCSS` (see `./media-bridges`) only sets
-      // `max-width: 100%; height: auto` — an uploaded photo at its native
-      // resolution can still render taller than this editor's whole fixed-
-      // height container, forcing a scroll fight between the WebView's
-      // internal scroll and the outer form's. Capping `max-height` here
-      // keeps any embedded image/video to a sane thumbnail-ish size, same
-      // idea as the web editor's `prose-img:max-h-64` (`frontend/src/
-      // index.css`).
-      `${fontFace} html, body { margin: 0; padding: 0; background-color: ${bg}; } .ProseMirror { box-sizing: border-box; background-color: ${bg}; color: ${fg}; font-family: ${fontFamily}; font-size: 15px; padding: 12px; line-height: 1.4; overflow-y: auto; } .ProseMirror > :first-child { margin-top: 0; } .ProseMirror > :last-child { margin-bottom: 0; } .ProseMirror a { color: ${linkColor}; text-decoration: underline; } .ProseMirror img, .ProseMirror video { max-height: 200px; width: auto; object-fit: contain; border-radius: 8px; }`,
+      // Bottom padding keeps the last lines scrollable above the floating bar.
+      `${fontFace} html, body { margin: 0; padding: 0; background-color: ${bg}; } .ProseMirror { box-sizing: border-box; background-color: ${bg}; color: ${fg}; font-family: ${family}; font-size: 17px; padding: 8px 20px 120px; line-height: 1.5; min-height: 100vh; } .ProseMirror > :first-child { margin-top: 0; } ${noteTypographyCss(".ProseMirror", isDarkColorScheme)}`,
       "description-field-theme",
     );
   }
@@ -229,88 +355,17 @@ function DescriptionFieldEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDarkColorScheme, fontDataUri]);
 
-  // `LinkBridge` (`@10play/tentap-editor`) configures Tiptap's `Link` with
-  // `openOnClick: false` — and even `true` wouldn't help: a browser's
-  // native behavior inside `contenteditable` is to place the cursor on a
-  // link tap, not follow it (that's the whole reason `openOnClick` exists
-  // as an override in the first place), and this library's WebView has no
-  // `onShouldStartLoadWithRequest`/`onOpenWindow` wired up to catch a
-  // `window.open()` call even if we did enable it. So taps on a link
-  // inside this editor currently do nothing at all. Fixed with our own
-  // capturing click listener injected straight into the WebView's DOM —
-  // independent of `openOnClick` — that hands the tapped href back to RN
-  // via `postMessage`, same channel Tentap's own bridge messages use (see
-  // `handleWebviewMessage` below), then opens it with the system browser.
-  const LINK_TAP_MESSAGE = "zenflow-open-link";
-
+  // Taps on a link inside a contenteditable only move the cursor, so a
+  // capturing click listener (see `lib/note-html.ts`) hands the href back to
+  // RN, which opens it. Anything that isn't a link tap is Tentap's own
+  // message and is deliberately not consumed (`exclusivelyUseCustomOnMessage`
+  // is false below).
   function injectLinkTapHandler() {
-    editor.webviewRef.current?.injectJavaScript(`
-      (function() {
-        if (window.__zenflowLinkTapBound) return true;
-        window.__zenflowLinkTapBound = true;
-        document.addEventListener('click', function(e) {
-          var a = e.target && e.target.closest ? e.target.closest('a') : null;
-          if (!a || !a.href) return;
-          e.preventDefault();
-          window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: ${JSON.stringify(LINK_TAP_MESSAGE)},
-            href: a.href,
-          }));
-        }, true);
-      })();
-      true;
-    `);
-  }
-
-  // Our own `/files/:id` links are cookie-auth protected; the system browser
-  // has no session, so download via the authenticated `api` client and hand
-  // the cached copy to the OS viewer / share sheet instead.
-  async function openNoteFile(id: string) {
-    try {
-      const { file, mimeType, name } = await downloadFileToCache(id);
-      await file.preview({ mimeType, title: name });
-    } catch {
-      toast({
-        title: t("Couldn't open file"),
-        description: t("Try again in a moment."),
-        variant: "destructive",
-        icon: Upload,
-      });
-    }
+    editor.webviewRef.current?.injectJavaScript(LINK_TAP_SCRIPT);
   }
 
   function handleWebviewMessage(event: WebViewMessageEvent) {
-    let data: unknown;
-    try {
-      data = JSON.parse(event.nativeEvent.data);
-    } catch {
-      return; // not JSON — not ours, and not Tentap's either; ignore.
-    }
-    if (
-      typeof data === "object" &&
-      data !== null &&
-      (data as { type?: unknown }).type === LINK_TAP_MESSAGE
-    ) {
-      const href = (data as { href?: unknown }).href;
-      if (typeof href === "string") {
-        const fileId = parseFileIdFromHref(href, getBaseURL());
-        if (fileId) {
-          void openNoteFile(fileId);
-          return;
-        }
-        Linking.openURL(href).catch(() => {
-          toast({
-            title: t("Couldn't open link"),
-            description: t("Try again in a moment."),
-            variant: "destructive",
-            icon: Link2,
-          });
-        });
-      }
-    }
-    // Any other message (bold/italic state, document height, …) is
-    // Tentap's own — deliberately not consumed here, see
-    // `exclusivelyUseCustomOnMessage={false}` below.
+    handleNoteLinkMessage(event.nativeEvent.data, toast);
   }
 
   useEffect(() => {
@@ -464,147 +519,263 @@ function DescriptionFieldEditor({
     );
   }
 
+  const tint = isDarkColorScheme
+    ? "rgba(29, 26, 23, 0.55)"
+    : "rgba(255, 255, 255, 0.55)";
+  const borderColor = isDarkColorScheme
+    ? "rgba(255, 255, 255, 0.18)"
+    : "rgba(255, 255, 255, 0.7)";
+  const sheen: [string, string, string] = isDarkColorScheme
+    ? ["rgba(255,255,255,0.10)", "rgba(255,255,255,0.03)", "rgba(255,255,255,0)"]
+    : ["rgba(255,255,255,0.85)", "rgba(255,255,255,0.30)", "rgba(255,255,255,0)"];
+  const barBottom =
+    Platform.OS === "ios" && keyboardHeight > 0
+      ? keyboardHeight + 20
+      : insets.bottom + 20;
+
   return (
-    <View ref={containerRef}>
-      {/* Outer: 13px radius + 1px border, no clipping of its own (RN's
-          overflow clipping differs between iOS/Android w.r.t. the border
-          box). Inner wrapper: radius = outer - border width (12px) so the
-          WebView's square corners are clipped concentrically inside the
-          border. Its bg matches the WebView/document bg. */}
-      <View className="min-h-[300px] max-h-[400px] w-full rounded-t-[13px] border border-b-0 border-input bg-card">
-        <View className="flex-1 overflow-hidden rounded-t-[12px] bg-card">
-          <RichText
-            editor={editor}
-            onLoad={() => {
-              injectContentStyles();
-              injectLinkTapHandler();
-              // Fires on every WebView (re)load. If the current content has
-              // drifted from what tentap booted with, this is a *reload* that
-              // just snapped the document back — restore the real content.
-              // On the very first load the two are equal, so this is a no-op.
-              if (valueRef.current !== bootContentRef.current) {
-                editor.setContent(valueRef.current);
-              }
-            }}
-            onMessage={handleWebviewMessage}
-            exclusivelyUseCustomOnMessage={false}
-          />
-        </View>
-      </View>
-      <View className="flex-row flex-wrap items-center gap-0.5 rounded-b-[13px] border border-input bg-background p-1">
-        <ToolbarButton
-          icon={Bold}
-          label={t("Bold")}
-          active={!!state.isBoldActive}
-          disabled={disabled}
-          onPress={() => editor.toggleBold()}
-        />
-        <ToolbarButton
-          icon={Italic}
-          label={t("Italic")}
-          active={!!state.isItalicActive}
-          disabled={disabled}
-          onPress={() => editor.toggleItalic()}
-        />
-        <ToolbarButton
-          icon={UnderlineIcon}
-          label={t("Underline")}
-          active={!!state.isUnderlineActive}
-          disabled={disabled}
-          onPress={() => editor.toggleUnderline()}
-        />
-        <ToolbarButton
-          icon={Highlighter}
-          label={t("Highlight")}
-          active={!!state.activeHighlight}
-          disabled={disabled}
-          onPress={() => editor.toggleHighlight(HIGHLIGHT_COLOR)}
-        />
-        <ToolbarButton
-          icon={Quote}
-          label={t("Blockquote")}
-          active={!!state.isBlockquoteActive}
-          disabled={disabled}
-          onPress={() => editor.toggleBlockquote()}
-        />
-        <View className="mx-1 h-4 w-px bg-black/10" />
-        <ToolbarButton
-          icon={Link2}
-          label={t("Link")}
-          active={linkOpen}
-          disabled={disabled}
-          onPress={openLink}
-        />
-        <ToolbarButton
-          icon={ImagePlus}
-          label={t("Insert image")}
-          disabled={disabled}
-          onPress={() => void handleInsertImage()}
-        />
-        <ToolbarButton
-          icon={Upload}
-          label={t("Upload file")}
-          disabled={disabled}
-          onPress={() => void handleUploadFile()}
-        />
-        <View className="mx-1 h-4 w-px bg-black/10" />
-        <ToolbarButton
-          icon={List}
-          label={t("Bulleted list")}
-          active={!!state.isBulletListActive}
-          disabled={disabled}
-          onPress={() => editor.toggleBulletList()}
-        />
-        <ToolbarButton
-          icon={ListOrdered}
-          label={t("Numbered list")}
-          active={!!state.isOrderedListActive}
-          disabled={disabled}
-          onPress={() => editor.toggleOrderedList()}
-        />
+    <View
+      className="flex-1 bg-background"
+      style={{
+        // Full-screen modal: it spans under the status bar / Dynamic Island.
+        paddingTop: insets.top,
+        // iOS: shrink the editor above the keyboard so the caret stays visible.
+        paddingBottom: Platform.OS === "ios" ? keyboardHeight : 0,
+      }}
+    >
+      <View className="flex-row items-center justify-between px-5 pb-2 pt-2">
+        <Text className="text-[19px] font-bold tracking-tight">
+          {t("Description")}
+        </Text>
+        <Pressable
+          onPress={() => {
+            Keyboard.dismiss();
+            onClose();
+          }}
+          accessibilityLabel={t("Done")}
+          className="h-9 flex-row items-center rounded-full bg-primary px-4"
+        >
+          <Text className="text-[14px] font-semibold text-primary-foreground">
+            {t("Done")}
+          </Text>
+        </Pressable>
       </View>
 
-      {linkOpen && (
-        <View className="mt-2 gap-1.5">
-          <Input
-            autoFocus
-            editable={!disabled}
-            value={linkTitle}
-            onChangeText={setLinkTitle}
-            placeholder={t("Title (optional)")}
-            returnKeyType="next"
-            className="h-10 rounded-full border border-input bg-card px-3.5 text-[13px] text-foreground"
-          />
-          <View className="flex-row items-center gap-1.5">
+      <View className="flex-1 bg-background">
+        <RichText
+          editor={editor}
+          onLoad={() => {
+            injectContentStyles();
+            injectLinkTapHandler();
+            // Fires on every WebView (re)load. If the current content has
+            // drifted from what tentap booted with, this is a *reload* that
+            // just snapped the document back — restore the real content.
+            // On the very first load the two are equal, so this is a no-op.
+            if (valueRef.current !== bootContentRef.current) {
+              editor.setContent(valueRef.current);
+            }
+            if (!disabled) editor.focus("end");
+          }}
+          onMessage={handleWebviewMessage}
+          exclusivelyUseCustomOnMessage={false}
+        />
+        {isEmpty && !disabled && (
+          <View
+            pointerEvents="box-none"
+            className="absolute inset-x-5 top-16 gap-2.5"
+          >
+            <Text className="text-[13px] font-semibold text-muted-foreground">
+              {t("Start with a template")}
+            </Text>
+            <View className="flex-row flex-wrap gap-2.5">
+              {TEMPLATES.map((tpl) => (
+                <Pressable
+                  key={tpl.key}
+                  onPress={() => applyTemplate(tpl.sections)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t(tpl.title)}
+                  className="w-[48%] gap-2 rounded-2xl border border-input bg-card p-3.5 active:bg-muted/50"
+                >
+                  <View className="h-9 w-9 items-center justify-center rounded-full bg-muted">
+                    <tpl.icon size={18} className="text-foreground" />
+                  </View>
+                  <View className="gap-0.5">
+                    <Text className="text-[14px] font-semibold">
+                      {t(tpl.title)}
+                    </Text>
+                    <Text className="text-[12px] leading-4 text-muted-foreground">
+                      {t(tpl.hint)}
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
+      </View>
+
+      {/* Floating glass bar (iOS Notes style): rides above the keyboard,
+          same translucent fill / hairline border / sheen as the Next up pill. */}
+      <View
+        pointerEvents="box-none"
+        style={{ position: "absolute", left: 28, right: 28, bottom: barBottom }}
+      >
+        {linkOpen && (
+          <View className="mb-2 gap-1.5 rounded-2xl border border-input bg-card p-2.5">
             <Input
+              autoFocus
               editable={!disabled}
-              value={linkUrl}
-              onChangeText={setLinkUrl}
-              placeholder={t("Link URL")}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              returnKeyType="done"
-              onSubmitEditing={() => void confirmLink()}
-              className="h-10 flex-1 rounded-full border border-input bg-card px-3.5 text-[13px] text-foreground"
+              value={linkTitle}
+              onChangeText={setLinkTitle}
+              placeholder={t("Title (optional)")}
+              returnKeyType="next"
+              className="h-10 rounded-full border border-input bg-background px-3.5 text-[13px] text-foreground"
             />
-            <Pressable
-              onPress={() => void confirmLink()}
-              accessibilityLabel={t("Confirm link")}
-              className="h-10 w-10 items-center justify-center rounded-full bg-primary"
+            <View className="flex-row items-center gap-1.5">
+              <Input
+                editable={!disabled}
+                value={linkUrl}
+                onChangeText={setLinkUrl}
+                placeholder={t("Link URL")}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                returnKeyType="done"
+                onSubmitEditing={() => void confirmLink()}
+                className="h-10 flex-1 rounded-full border border-input bg-background px-3.5 text-[13px] text-foreground"
+              />
+              <Pressable
+                onPress={() => void confirmLink()}
+                accessibilityLabel={t("Confirm link")}
+                className="h-10 w-10 items-center justify-center rounded-full bg-primary"
+              >
+                <Check size={16} className="text-primary-foreground" />
+              </Pressable>
+              <Pressable
+                onPress={() => setLinkOpen(false)}
+                accessibilityLabel={t("Cancel link")}
+                className="h-10 w-10 items-center justify-center rounded-full bg-muted"
+              >
+                <X size={16} className="text-muted-foreground" />
+              </Pressable>
+            </View>
+          </View>
+        )}
+        {/* Outer view carries the shadow only; rounding + clipping live inside. */}
+        <View
+          style={{
+            width: "100%",
+            borderRadius: 9999,
+            shadowColor: "#000",
+            shadowOpacity: isDarkColorScheme ? 0.4 : 0.14,
+            shadowRadius: 12,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 8,
+            backgroundColor: tint,
+          }}
+        >
+          <View
+            style={{
+              width: "100%",
+              borderRadius: 9999,
+              borderWidth: StyleSheet.hairlineWidth,
+              borderColor,
+              overflow: "hidden",
+              backgroundColor: tint,
+            }}
+          >
+            <LinearGradient
+              pointerEvents="none"
+              colors={sheen}
+              locations={[0, 0.4, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+            <ScrollView
+              horizontal
+              style={{ width: "100%", flexGrow: 0 }}
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="always"
+              contentContainerStyle={{
+                alignItems: "center",
+                gap: 2,
+                paddingHorizontal: 14,
+                paddingVertical: 5,
+              }}
             >
-              <Check size={16} className="text-primary-foreground" />
-            </Pressable>
-            <Pressable
-              onPress={() => setLinkOpen(false)}
-              accessibilityLabel={t("Cancel link")}
-              className="h-10 w-10 items-center justify-center rounded-full bg-muted"
-            >
-              <X size={16} className="text-muted-foreground" />
-            </Pressable>
+              <ToolbarButton
+                icon={Bold}
+                label={t("Bold")}
+                active={!!state.isBoldActive}
+                disabled={disabled}
+                onPress={() => editor.toggleBold()}
+              />
+              <ToolbarButton
+                icon={Italic}
+                label={t("Italic")}
+                active={!!state.isItalicActive}
+                disabled={disabled}
+                onPress={() => editor.toggleItalic()}
+              />
+              <ToolbarButton
+                icon={UnderlineIcon}
+                label={t("Underline")}
+                active={!!state.isUnderlineActive}
+                disabled={disabled}
+                onPress={() => editor.toggleUnderline()}
+              />
+              <ToolbarButton
+                icon={Highlighter}
+                label={t("Highlight")}
+                active={!!state.activeHighlight}
+                disabled={disabled}
+                onPress={() => editor.toggleHighlight(HIGHLIGHT_COLOR)}
+              />
+              <ToolbarButton
+                icon={Quote}
+                label={t("Blockquote")}
+                active={!!state.isBlockquoteActive}
+                disabled={disabled}
+                onPress={() => editor.toggleBlockquote()}
+              />
+              <View className="mx-1.5 h-5 w-px bg-black/10" />
+              <ToolbarButton
+                icon={List}
+                label={t("Bulleted list")}
+                active={!!state.isBulletListActive}
+                disabled={disabled}
+                onPress={() => editor.toggleBulletList()}
+              />
+              <ToolbarButton
+                icon={ListOrdered}
+                label={t("Numbered list")}
+                active={!!state.isOrderedListActive}
+                disabled={disabled}
+                onPress={() => editor.toggleOrderedList()}
+              />
+              <View className="mx-1.5 h-5 w-px bg-black/10" />
+              <ToolbarButton
+                icon={Link2}
+                label={t("Link")}
+                active={linkOpen}
+                disabled={disabled}
+                onPress={openLink}
+              />
+              <ToolbarButton
+                icon={ImagePlus}
+                label={t("Insert image")}
+                disabled={disabled}
+                onPress={() => void handleInsertImage()}
+              />
+              <ToolbarButton
+                icon={Upload}
+                label={t("Upload file")}
+                disabled={disabled}
+                onPress={() => void handleUploadFile()}
+              />
+            </ScrollView>
           </View>
         </View>
-      )}
+      </View>
     </View>
   );
 }
@@ -630,7 +801,7 @@ function ToolbarButton({
       accessibilityLabel={label}
       accessibilityState={{ selected: !!active, disabled: !!disabled }}
       className={cn(
-        "h-10 w-10 items-center justify-center rounded-full active:bg-muted/30",
+        "h-12 w-12 items-center justify-center rounded-full active:bg-muted/30",
         // Light amber active-state fill (this bar's own accent, distinct
         // from the app's `bg-primary`) reads clearly against a white bar —
         // the old `bg-white/25`-on-dark-pill treatment would be invisible
@@ -639,7 +810,7 @@ function ToolbarButton({
         disabled && "opacity-40",
       )}
     >
-      <Icon size={14} className="text-muted-foreground" />
+      <Icon size={21} className="text-foreground/70" />
     </Pressable>
   );
 }

@@ -62,6 +62,9 @@ import {
   LayoutPanelLeft,
   LifeBuoy,
   Link2,
+  Maximize2,
+  Pencil,
+  Repeat,
   KeyRound,
   MoreHorizontal,
   Unlink,
@@ -228,6 +231,9 @@ interopIcon(CalendarClock);
 interopIcon(ClipboardList);
 interopIcon(GraduationCap);
 interopIcon(Notebook);
+interopIcon(Maximize2);
+interopIcon(Pencil);
+interopIcon(Repeat);
 
 export {
   Activity,
@@ -288,6 +294,9 @@ export {
   LayoutPanelLeft,
   LifeBuoy,
   Link2,
+  Maximize2,
+  Pencil,
+  Repeat,
   KeyRound,
   MoreHorizontal,
   Unlink,
