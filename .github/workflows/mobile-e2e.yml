@@ -95,14 +95,6 @@ jobs:
           cat ../api.log
           exit 1
 
-      # ── Reset test data ───────────────────────────────────────────────
-      - name: Reset test data
-        if: steps.flows.outputs.present == 'true'
-        run: node mobile/maestro/scripts/reset-test-data.js
-        env:
-          EXPO_PUBLIC_API_URL: http://localhost:5000/api/v1
-          MAILHOG_URL: http://localhost:8025
-
       # ── Install Maestro ───────────────────────────────────────────────
       - name: Install Maestro CLI
         if: steps.flows.outputs.present == 'true'
@@ -195,11 +187,12 @@ jobs:
             adb shell monkey -p "$MAESTRO_APP_ID" -c android.intent.category.LAUNCHER 1
             sleep 10
 
-            # 7. Run P0 smoke suite.
-            maestro test \
-              --format junit \
-              --output maestro-report.xml \
-              maestro/flows/smoke.yaml
+            # 7. Run P0 smoke suite via the orchestrator:
+            #    reset → OTP request → MailHog fetch → seed → suite.
+            #    The runner calls the backend from the host, so it needs the
+            #    localhost URL while the app itself uses 10.0.2.2.
+            E2E_API_URL=http://localhost:5000/api/v1 \
+              node maestro/scripts/run-suite.js smoke
 
             kill $METRO_PID 2>/dev/null || true
         env:
@@ -349,14 +342,6 @@ jobs:
           cat ../api.log
           exit 1
 
-      # ── Reset test data ───────────────────────────────────────────────
-      - name: Reset test data
-        if: steps.flows.outputs.present == 'true'
-        run: node mobile/maestro/scripts/reset-test-data.js
-        env:
-          EXPO_PUBLIC_API_URL: http://localhost:5000/api/v1
-          MAILHOG_URL: http://localhost:8025
-
       # ── Install Maestro ───────────────────────────────────────────────
       - name: Install Maestro CLI
         if: steps.flows.outputs.present == 'true'
@@ -424,11 +409,9 @@ jobs:
           xcrun simctl launch "$SIMCTL_UDID" "$MAESTRO_APP_ID"
           sleep 10
 
-          # 7. Run P0 smoke suite.
-          maestro test \
-            --format junit \
-            --output maestro-report.xml \
-            maestro/flows/smoke.yaml
+          # 7. Run P0 smoke suite via the orchestrator:
+          #    reset → OTP request → MailHog fetch → seed → suite.
+          node maestro/scripts/run-suite.js smoke
 
           kill $METRO_PID 2>/dev/null || true
         env:
