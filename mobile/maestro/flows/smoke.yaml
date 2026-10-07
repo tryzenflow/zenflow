@@ -1,25 +1,23 @@
-# P0 Smoke Suite — runs all critical paths end-to-end
-# This is the entry point that CI executes.
+# P0 Smoke Suite — runs all critical paths end-to-end.
 #
-# Usage:
-#   maestro test mobile/maestro/flows/smoke.yaml
+# Entry point for CI and for scripts/run-suite.js. Do NOT run this file with
+# bare `maestro test`: login is two-phase (request → fetch OTP via
+# get-otp.js → verify), so the runner must execute login-request.yaml first
+# and export E2E_OTP before this suite. This file starts at verification.
 #
-# Requires:
-#   - Backend services running (Postgres, Redis, MailHog)
-#   - Expo dev client installed on emulator/simulator
-#   - Metro bundler running
-#   - EXPO_PUBLIC_API_URL pointing to test backend
-#   - MAESTRO_APP_ID set to the app bundle ID
+#   node mobile/maestro/scripts/run-suite.js smoke
+#
+# Requires: backend test stack (NODE_ENV=test), MailHog, Expo dev client
+# installed, Metro running, E2E_OTP + E2E_TODAY exported by the runner.
+# Env: MAESTRO_APP_ID, E2E_EMAIL, E2E_RUN_ID, E2E_OTP, E2E_TODAY.
 
 appId: ${MAESTRO_APP_ID}
 ---
-- launchApp
-
-# Flow 1: Login / OTP
+# Flow 1: Login / OTP (phase 2 — phase 1 ran before the suite)
 - runFlow:
-    file: login-otp.yaml
+    file: login-verify.yaml
 
-# Flow 2: Onboarding (only runs if user is fresh)
+# Flow 2: Onboarding (fresh user only)
 - runFlow:
     file: onboarding.yaml
 
@@ -27,15 +25,15 @@ appId: ${MAESTRO_APP_ID}
 - runFlow:
     file: task-create.yaml
 
-# Flow 4: Edit Task
+# Flow 4: Edit Task (seeded independently of Flow 3)
 - runFlow:
     file: task-edit.yaml
 
-# Flow 5: Calendar Week View
+# Flow 5: Calendar Week View (seeded independently of Flow 3)
 - runFlow:
     file: calendar-week.yaml
 
-# Flow 6: Calendar Month View
+# Flow 6: Calendar Month View (seeded independently of Flow 3)
 - runFlow:
     file: calendar-month.yaml
 

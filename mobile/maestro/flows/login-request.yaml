@@ -1,0 +1,25 @@
+# Login Phase 1/2 — request OTP
+# Enters the run-scoped email and requests an OTP via MailHog.
+# The OTP itself is fetched OUTSIDE Maestro (see scripts/run-suite.js:
+# get-otp.js polls MailHog, then login-verify.yaml enters it), because
+# Maestro flows cannot run shell commands mid-suite.
+#
+# Prerequisites: clean backend (reset-test-data.js), MailHog running.
+# Expected: OTP entry screen is showing (`auth.login.otpBoxes`).
+# Env: MAESTRO_APP_ID, E2E_EMAIL.
+
+appId: ${MAESTRO_APP_ID}
+---
+- launchApp
+
+- assertVisible:
+    id: auth.login.emailInput
+- tapOn:
+    id: auth.login.emailInput
+- inputText: ${E2E_EMAIL}
+- tapOn:
+    id: auth.login.sendOtpButton
+
+# OTP screen is up — the runner now fetches the code via get-otp.js.
+- assertVisible:
+    id: auth.login.otpBoxes

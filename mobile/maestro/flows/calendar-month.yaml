@@ -1,36 +1,51 @@
 # Calendar Month View Flow
-# Tests: Month tab → grid visible → tap date cell → date details → navigate next/prev month
-# Prerequisites: Seeded task on known date this month, onboarded user
-# Expected: Month navigation works, date selection works
+# Tests: Month tab → grid → tap today's cell → day sheet opens with the
+# seeded task → open it → back on the grid → month paging both ways.
+# Prerequisites: "E2E This Week" seeded on today (shared with the week
+# flow). Independent of Flow 3.
+# Expected: month navigation works and the day sheet opens/closes cleanly.
+#
+# E2E_TODAY is yyyy-MM-dd (runner exports it); cells are ID'd
+# `calendar.month.day.<yyyy-MM-dd>`. Tapping a row in the day sheet opens
+# the editor AND closes the sheet, which is how the flow gets back to a
+# clean grid without fragile swipe-to-dismiss gestures.
 
 appId: ${MAESTRO_APP_ID}
 ---
-# Start on Month tab
 - tapOn:
     id: tabs.month
 - assertVisible:
     id: calendar.month.grid
-
-# Tap Today or seeded date
-- tapOn:
-    id: calendar.todayButton
-
-# Verify date details/task list opens
-- assertVisible:
-    id: calendar.month.dateDetail
-
-# Navigate to next month
-- tapOn:
-    id: calendar.month.nextButton
-
-# Verify month header updated
 - assertVisible:
     id: calendar.month.header
 
-# Navigate back
+# Open today's day sheet
+- tapOn:
+    id: calendar.month.day.${E2E_TODAY}
+- assertVisible:
+    id: calendar.month.dateDetail
+
+# The seeded task is listed — open it (closes the sheet).
+# NOTE: this testID also exists on the week block + month pill behind the
+# sheet; Maestro taps the topmost (sheet row) match. If the runner ever
+# reports ambiguous taps, scope this step with `index:`.
+- tapOn:
+    id: calendar.taskCard.e2e-this-week
+- assertVisible:
+    id: tasks.form.titleInput
+
+# Back to the month grid, sheet gone
+- tapOn:
+    id: tasks.form.closeButton
+- assertVisible:
+    id: calendar.month.grid
+
+# Page to next month and back
+- tapOn:
+    id: calendar.month.nextButton
+- assertVisible:
+    id: calendar.month.grid
 - tapOn:
     id: calendar.month.prevButton
-
-# Verify back to original month
 - assertVisible:
     id: calendar.month.header

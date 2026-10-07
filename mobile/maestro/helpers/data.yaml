@@ -1,5 +1,7 @@
 # Test Data Helpers
-# Reusable YAML snippets for seeding and verifying test data
+# Reusable YAML snippets for seeding and verifying test data.
+# Card IDs are slugified titles (see lib/test-ids.ts): pass the slug,
+# e.g. taskId "e2e-focus-block-abc-1" for "E2E Focus Block abc-1".
 
 ---
 # Verify seeded task exists on calendar
@@ -30,7 +32,7 @@
         id: tasks.form.titleInput
     - inputText: ${title}
     - tapOn:
-        id: tasks.form.sessionType.${type}
+        id: tasks.form.sessionTypeTab.${type}
     - repeat:
         times: ${durationMinutes / 15}
         commands:

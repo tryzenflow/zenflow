@@ -29,10 +29,11 @@ videoRecording:
   enabled: true
   onFailure: true
 
-# Environment variables required:
+# Environment variables (set by scripts/run-suite.js unless overridden):
 # MAESTRO_APP_ID - App bundle ID (e.g., com.zenflow.app)
+# E2E_RUN_ID - Unique run identifier, slug-safe (e.g., local-20261007-2030)
 # E2E_EMAIL - Unique test email per run (e.g., mobile-e2e+<run-id>@example.test)
-# E2E_OTP - OTP retrieved from MailHog
-# E2E_RUN_ID - Unique run identifier
+# E2E_OTP - OTP fetched from MailHog by the runner (login-verify only)
+# E2E_TODAY - yyyy-MM-dd for month date-cell IDs (calendar.month.day.<date>)
 # EXPO_PUBLIC_API_URL - Backend API URL
 # MAILHOG_URL - MailHog API URL (e.g., http://localhost:8025)

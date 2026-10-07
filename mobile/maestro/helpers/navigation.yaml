@@ -1,5 +1,7 @@
 # Navigation Helpers
-# Reusable YAML snippets for tab navigation and common paths
+# Reusable YAML snippets for tab navigation and common paths.
+# Tab IDs come from components/tab-bar.tsx; calendar IDs from
+# components/calendar/*; form IDs from components/tasks/*.
 
 ---
 # Navigate to Week tab
@@ -34,7 +36,7 @@
     - assertVisible:
         id: tasks.form.titleInput
 
-# Open task by test ID
+# Open task by card slug (slugified title — see lib/test-ids.ts)
 - name: "openTask"
   parameters:
     - taskId

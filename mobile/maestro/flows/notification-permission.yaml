@@ -1,31 +1,33 @@
 # Notification Permission Flow (P1 Extended)
-# Tests: Navigate to notification settings → handle permission state → notification inbox works
-# Prerequisites:
-#   - User already authenticated and onboarded
-#   - Controlled permission state (pre-grant/revoke via simctl/adb)
-# Expected: Permission path reachable, denied doesn't break nav, inbox opens
+# Tests: notification bell reachable from Week → inbox screen opens with
+# its list → back to Week. The OS permission prompt itself is NOT driven
+# (system UI differs per platform/version); control it before the run:
+#
+#   Android: adb shell pm grant <app-id> android.permission.POST_NOTIFICATIONS
+#            (or revoke to test the denied path)
+#   iOS:     xcrun simctl privacy booted grant notifications <app-id>
+#            (or deny)
+#
+# Prerequisites: authenticated onboarded user (extended suite handles it).
+# Expected: inbox opens, back returns to Week, denied state never blocks nav.
 
 appId: ${MAESTRO_APP_ID}
 ---
-# This flow assumes the user is already logged in and onboarded.
-# When running standalone, run login-otp.yaml and onboarding.yaml first.
-#
-# Permission state control:
-# On Android: adb shell pm grant <package> android.permission.POST_NOTIFICATIONS (or revoke)
-# On iOS: xcrun simctl privacy booted grant notifications <bundle-id> (or deny)
-
-# Trigger notification permission (e.g., open settings → notifications)
 - tapOn:
-    id: tabs.settings
-- tapOn:
-    id: settings.notificationsSection
+    id: tabs.week
 
-# Assert notification screen accessible
-- assertVisible:
-    id: notifications.screen
-
-# Open notification bell
+# Bell is pinned top-right over the calendar header
 - tapOn:
     id: notifications.bell
+
+# Inbox screen with its list
+- assertVisible:
+    id: notifications.screen
 - assertVisible:
     id: notifications.inbox
+
+# Back to Week
+- tapOn:
+    id: notifications.backButton
+- assertVisible:
+    id: tabs.week

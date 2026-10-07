@@ -1,34 +1,37 @@
 # Create Task Flow
-# Tests: FAB tap → form opens → fill title/type/duration/deadline → save → verify on calendar
-# Prerequisites: Onboarded user on Week tab
-# Expected: Task appears on calendar with correct title/date
+# Tests: FAB tap → form opens → fill title/type/duration/deadline →
+# save → optional slot pick → verify on calendar.
+# Prerequisites: onboarded user on the Week tab.
+# Expected: "E2E Focus Block <run-id>" renders as a calendar card.
+# The card testID is the slugified title (see lib/test-ids.ts).
 
 appId: ${MAESTRO_APP_ID}
 ---
-# Start on Week tab
-- assertVisible:
+- tapOn:
     id: tabs.week
 - tapOn:
     id: tasks.newButton
 
 # Task form opens
 - assertVisible:
+    id: tasks.form.screen
+- assertVisible:
     id: tasks.form.titleInput
 - tapOn:
     id: tasks.form.titleInput
 - inputText: "E2E Focus Block ${E2E_RUN_ID}"
 
-# Select task type (focus)
+# Flexible task type (default, re-tap is a harmless no-op)
 - tapOn:
-    id: tasks.form.sessionType.focus
+    id: tasks.form.sessionTypeTab.TASK
 
-# Set duration
+# Duration 60 → 90 min
 - tapOn:
     id: tasks.form.durationStepper.increment
 - tapOn:
     id: tasks.form.durationStepper.increment
 
-# Set deadline (tomorrow)
+# Deadline tomorrow — keeps placement inside the visible week
 - tapOn:
     id: tasks.form.deadlineChip.tomorrow
 
@@ -36,11 +39,12 @@ appId: ${MAESTRO_APP_ID}
 - tapOn:
     id: tasks.form.saveButton
 
-# Optional: slot picker appears, pick first slot
+# Divergent placement opens the slot picker: keep the primary slot.
+# Absent when the engine placed the task directly.
 - optional:
     - tapOn:
-        id: tasks.scheduler.slot.0
+        id: tasks.scheduler.pickPrimaryButton
 
-# Verify task appears on calendar
+# The app jumps to the placed day — the new card is showing there.
 - assertVisible:
     id: calendar.taskCard.e2e-focus-block-${E2E_RUN_ID}

@@ -1,31 +1,32 @@
 # Edit Task Flow
-# Tests: tap seeded task → edit screen opens → change title → save → verify updated on calendar
-# Prerequisites: Seeded task exists (via API helper), onboarded user on Week tab
-# Expected: Task title updated on calendar
+# Tests: tap seeded task → edit screen opens → change title → save →
+# verify updated title on calendar.
+# Prerequisites: runner seeded "E2E Seeded <run-id>" pinned to today
+# (POST /test/seed-task with scheduledStartTime). Independent of Flow 3.
+# Expected: card slug updates to the edited title.
 
 appId: ${MAESTRO_APP_ID}
 ---
-# Start on Week tab
-- assertVisible:
+- tapOn:
     id: tabs.week
 
-# Tap the seeded task
+# Tap the seeded task — opens the edit screen
 - tapOn:
-    id: calendar.taskCard.e2e-seeded-task
-
-# Edit screen opens
+    id: calendar.taskCard.e2e-seeded-${E2E_RUN_ID}
 - assertVisible:
     id: tasks.form.titleInput
 
-# Change title
+# Replace the pre-filled title (erase first: inputText appends)
 - tapOn:
     id: tasks.form.titleInput
-- inputText: "E2E Edited Block ${E2E_RUN_ID}"
+- eraseText:
+    charactersToErase: 60
+- inputText: "E2E Edited ${E2E_RUN_ID}"
 
 # Save
 - tapOn:
     id: tasks.form.saveButton
 
-# Verify updated title on calendar
+# Verify the updated card on the calendar
 - assertVisible:
-    id: calendar.taskCard.e2e-edited-block-${E2E_RUN_ID}
+    id: calendar.taskCard.e2e-edited-${E2E_RUN_ID}

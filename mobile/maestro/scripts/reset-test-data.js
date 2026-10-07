@@ -5,7 +5,7 @@
  * Usage: node scripts/reset-test-data.js
  */
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
+const API_URL = process.env.E2E_API_URL || process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
 const MAILHOG_URL = process.env.MAILHOG_URL || 'http://localhost:8025';
 
 async function resetDatabase() {

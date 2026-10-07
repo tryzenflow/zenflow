@@ -1,42 +1,41 @@
 # Calendar Week View Flow
-# Tests: Week tab → header visible → Today button → seeded tasks visible → navigate next/prev week
-# Prerequisites: Seeded tasks in current and next week, onboarded user
-# Expected: Week navigation works, tasks render correctly
+# Tests: Week tab → header → seeded tasks render → swipe to next week →
+# seeded next-week task → swipe back.
+# Prerequisites: runner seeded "E2E This Week" (today 12:00 UTC) and
+# "E2E Next Week" (today+7 12:00 UTC). Independent of Flow 3.
+# Expected: week paging works and seeded cards render on their weeks.
+#
+# Navigation is swipe-driven — the pager has no prev/next buttons.
+# The Today pill only renders while off-today, so resetting is optional.
 
 appId: ${MAESTRO_APP_ID}
 ---
-# Start on Week tab
-- assertVisible:
+- tapOn:
     id: tabs.week
 - assertVisible:
     id: calendar.week.header
 
-# Reset to today
-- tapOn:
-    id: calendar.todayButton
+# Reset to today when the pill is showing (no-op otherwise)
+- optional:
+    - tapOn:
+        id: calendar.todayButton
 
-# Verify current week tasks
+# This week's seeded task renders
 - assertVisible:
     id: calendar.taskCard.e2e-this-week
 
-# Navigate to next week
-- tapOn:
-    id: calendar.week.nextButton
+# Page to next week
+- swipe:
+    direction: LEFT
 
-# Verify next week tasks
+# Next week's seeded task renders
 - assertVisible:
     id: calendar.taskCard.e2e-next-week
 
-# Navigate back
-- tapOn:
-    id: calendar.week.prevButton
+# Page back
+- swipe:
+    direction: RIGHT
 
-# Verify back to current week
+# Back on the current week
 - assertVisible:
     id: calendar.taskCard.e2e-this-week
-
-# Open a task card
-- tapOn:
-    id: calendar.taskCard.e2e-this-week
-- assertVisible:
-    id: tasks.form.titleInput

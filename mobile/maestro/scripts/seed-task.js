@@ -2,10 +2,15 @@
 /**
  * Seed Test Task Helper for Maestro E2E Tests
  * Creates a task via the backend API for edit/calendar flows
- * Usage: node scripts/seed-task.js <title> <type> <date> <durationMinutes>
+ * Usage: node scripts/seed-task.js <title> <type> <deadlineISO> <durationMinutes> [sessionCount] [scheduledStartISO]
+ *
+ * Types: TASK, DND, ASSIGNMENT, EXAM, LECTURE (backend SessionType enum).
+ * Pass scheduledStartISO to pin the session to a deterministic calendar
+ * slot — required for any task a calendar flow asserts on, since seeded
+ * rows bypass the placement engine.
  */
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
+const API_URL = process.env.E2E_API_URL || process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
 const MAILHOG_URL = process.env.MAILHOG_URL || 'http://localhost:8025';
 const EMAIL = process.env.E2E_EMAIL;
 
@@ -76,7 +81,7 @@ async function verifyOtp(email, otp) {
   return cookies;
 }
 
-async function seedTask(cookie, title, type, deadline, durationMinutes, sessionCount = 1) {
+async function seedTask(cookie, title, type, deadline, durationMinutes, sessionCount = 1, scheduledStartTime) {
   const response = await fetch(`${API_URL}/test/seed-task`, {
     method: 'POST',
     headers: {
@@ -89,6 +94,7 @@ async function seedTask(cookie, title, type, deadline, durationMinutes, sessionC
       deadline,
       durationMinutes,
       sessionCount,
+      ...(scheduledStartTime ? { scheduledStartTime } : {}),
     }),
   });
   const data = await response.json();
@@ -100,10 +106,10 @@ async function seedTask(cookie, title, type, deadline, durationMinutes, sessionC
 }
 
 async function main() {
-  const [title, type, date, durationMinutes, sessionCount] = process.argv.slice(2);
+  const [title, type, date, durationMinutes, sessionCount, scheduledStart] = process.argv.slice(2);
   if (!title || !type || !date || !durationMinutes) {
-    console.error('Usage: node seed-task.js <title> <type> <date> <durationMinutes> [sessionCount]');
-    console.error('Types: FOCUS, ASSIGNMENT, EXAM, LECTURE, DND');
+    console.error('Usage: node seed-task.js <title> <type> <deadlineISO> <durationMinutes> [sessionCount] [scheduledStartISO]');
+    console.error('Types: TASK, DND, ASSIGNMENT, EXAM, LECTURE');
     process.exit(1);
   }
 
@@ -135,7 +141,8 @@ async function main() {
       type,
       deadline,
       parseInt(durationMinutes),
-      parseInt(sessionCount) || 1
+      parseInt(sessionCount) || 1,
+      scheduledStart ? new Date(scheduledStart).toISOString() : undefined,
     );
 
     // Output task ID for shell capture

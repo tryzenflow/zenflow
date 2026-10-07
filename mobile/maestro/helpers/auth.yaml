@@ -1,5 +1,7 @@
 # Authentication Helpers
-# Reusable YAML snippets for auth flows
+# Reusable YAML snippets for auth flows. IDs verified against
+# app/(auth)/login.tsx (auth.login.*) and app/(app)/settings.tsx.
+# NOTE: sign-out applies immediately — there is no confirm dialog.
 
 ---
 # Login with email and OTP
@@ -47,6 +49,3 @@
         id: tabs.settings
     - tapOn:
         id: settings.logoutButton
-    - optional:
-        - tapOn:
-            id: settings.logoutConfirmButton

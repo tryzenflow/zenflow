@@ -1,51 +1,48 @@
 # DLU Accounts Integration Flow (P1 Extended)
-# Tests: Settings → DLU section → connect fixture provider → sync → manage → disconnect
-# Prerequisites: Fixture/test LMS/Portal provider available (no real credentials in CI)
-# Expected: Connect/manage/sync/disconnect state transitions work
+# Tests: Settings → DLU section renders both providers (LMS, PORTAL) with
+# rows + status → sign-in sheet opens from Connect.
+#
+# SCOPE: navigation + state visibility only. Submitting credentials needs
+# a fixture provider (E2E_DLU_USERNAME / E2E_DLU_PASSWORD); without one the
+# flow stops at the open sheet and backs out via the modal dismiss below.
+# Full connect → sync → disconnect is manual until a fixture exists.
+# Prerequisites: authenticated onboarded user. INGESTION_ENABLED may be
+# false — the section renders regardless.
 
 appId: ${MAESTRO_APP_ID}
 ---
-# Start authenticated on Week tab
-- assertVisible:
-    id: tabs.week
-
-# Open Settings
 - tapOn:
     id: tabs.settings
 - assertVisible:
     id: settings.screen
 
-# Open DLU accounts section
-- tapOn:
+# Section + provider list render
+- assertVisible:
     id: settings.dluAccounts.section
 - assertVisible:
     id: settings.dluAccounts.list
-
-# Connect fixture provider
-- tapOn:
-    id: settings.dluAccounts.dlu-portal.connectButton
-
-# Handle fixture auth (simulated - no real credentials)
-- optional:
-    - tapOn:
-        id: settings.dluAccounts.dlu-portal.fixtureLogin
-
-# Assert connected
 - assertVisible:
-    id: settings.dluAccounts.dlu-portal.connectedBadge
-
-# Trigger sync
-- tapOn:
-    id: settings.dluAccounts.dlu-portal.syncButton
-
-# Assert sync completes
+    id: settings.dluAccounts.LMS.row
 - assertVisible:
-    id: settings.dluAccounts.dlu-portal.lastSync
+    id: settings.dluAccounts.PORTAL.row
 
-# Disconnect
-- tapOn:
-    id: settings.dluAccounts.dlu-portal.disconnectButton
-
-# Assert disconnected
+# Status lines render for both providers (connected or not)
 - assertVisible:
-    id: settings.dluAccounts.dlu-portal.connectButton
+    id: settings.dluAccounts.LMS.statusText
+- assertVisible:
+    id: settings.dluAccounts.PORTAL.statusText
+
+# Connect opens the sign-in sheet (credentialed submit is fixture-gated)
+- tapOn:
+    id: settings.dluAccounts.LMS.connectButton
+- assertVisible:
+    id: settings.dluAccounts.signInSheet.usernameInput
+- assertVisible:
+    id: settings.dluAccounts.signInSheet.passwordInput
+
+# Dismiss the sheet so the next flow starts from a clean Settings screen.
+# (Swipe-down is the sheet's native dismiss gesture.)
+- swipe:
+    direction: DOWN
+- assertVisible:
+    id: settings.dluAccounts.section

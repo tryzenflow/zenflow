@@ -1,7 +1,12 @@
 # Onboarding Flow
-# Tests: language → name → DLU (skip) → notifications (skip) → timezone → reminder → tags → finish
-# Prerequisites: Fresh authenticated user (just completed login-otp)
-# Expected: User lands on Week tab, relaunch doesn't show onboarding again
+# Steps: language → name → DLU (skip) → notifications (skip) →
+# timezone → reminder → tags → done summary → Week tab.
+# Prerequisites: fresh authenticated user (login-verify just passed).
+# Expected: user lands on the Week tab; relaunch skips onboarding.
+#
+# testID map (all verified against app/(onboarding)/index.tsx):
+# continue/skip share one ID across steps: onboarding.continueButton /
+# onboarding.skipButton. Reminder values are minutes (15, not "15min").
 
 appId: ${MAESTRO_APP_ID}
 ---
@@ -22,16 +27,15 @@ appId: ${MAESTRO_APP_ID}
 - tapOn:
     id: onboarding.continueButton
 
-# DLU step - skip
+# DLU step — skip (P1 covers accounts separately)
 - tapOn:
     id: onboarding.skipButton
 
-# Notifications step - skip
-- optional:
-    - tapOn:
-        id: onboarding.skipForNowButton
+# Notifications step — skip for now (P1 covers the inbox separately)
+- tapOn:
+    id: onboarding.skipButton
 
-# Timezone step
+# Timezone step — keep the detected device zone
 - assertVisible:
     id: onboarding.timezone.searchInput
 - tapOn:
@@ -39,24 +43,25 @@ appId: ${MAESTRO_APP_ID}
 - tapOn:
     id: onboarding.continueButton
 
-# Reminder step
-- assertVisible:
-    id: onboarding.reminder.option.15min
+# Reminder step — 15 min default
 - tapOn:
-    id: onboarding.reminder.option.15min
+    id: onboarding.reminder.option.15
 - tapOn:
     id: onboarding.continueButton
 
-# Tags step
-- assertVisible:
+# Tags step — add one run-scoped custom tag, keep suggestions as-is
+- tapOn:
     id: onboarding.tags.input
+- inputText: "e2e"
 - tapOn:
-    id: onboarding.tags.suggestion.study
+    id: onboarding.tags.addButton
 - tapOn:
-    id: onboarding.tags.suggestion.work
-- tapOn:
-    id: onboarding.finishButton
+    id: onboarding.continueButton
 
-# Verify we're on Week tab
+# Done summary — opens the app (footer reuses the continue button ID)
+- tapOn:
+    id: onboarding.continueButton
+
+# Verify we're on the Week tab
 - assertVisible:
     id: tabs.week

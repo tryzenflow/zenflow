@@ -1,41 +1,31 @@
-# P1 Extended Suite — notification permission + DLU accounts integration
-# Run this after the P0 smoke suite passes. These flows depend on platform-
-# specific permission state and/or fixture providers that may not be stable
-# in every CI run.
+# P1 Extended Suite — notification permission + DLU accounts integration.
+# Run after the P0 smoke suite passes. Same two-phase login contract as
+# smoke.yaml: execute via the runner, never with bare `maestro test`.
 #
-# Usage:
-#   maestro test mobile/maestro/flows/extended.yaml
+#   node mobile/maestro/scripts/run-suite.js extended
 #
 # Prerequisites (in addition to the P0 smoke requirements):
 #   - Notification permission state pre-set via:
-#       Android: adb shell pm grant/revoke com.zenflow.app android.permission.POST_NOTIFICATIONS
-#       iOS:     xcrun simctl privacy booted grant/deny notifications com.zenflow.app
-#   - DLU fixture/test provider available (INGESTION_ENABLED may need to be true)
-#
-# Requires:
-#   - Backend services running with NODE_ENV=test
-#   - Expo dev client installed and Metro running
-#   - MAESTRO_APP_ID, E2E_EMAIL, EXPO_PUBLIC_API_URL, MAILHOG_URL set
+#       Android: adb shell pm grant/revoke <app-id> android.permission.POST_NOTIFICATIONS
+#       iOS:     xcrun simctl privacy booted grant/deny notifications <app-id>
+#   - The DLU flow asserts navigation + account states only. Full
+#     connect/sync/disconnect needs fixture credentials (E2E_DLU_USERNAME /
+#     E2E_DLU_PASSWORD); without them the credentialed steps are skipped and
+#     documented as manual.
+# Env: MAESTRO_APP_ID, E2E_EMAIL, E2E_RUN_ID, E2E_OTP, E2E_TODAY.
 
 appId: ${MAESTRO_APP_ID}
 ---
-- launchApp
-
-# ── Authenticate ────────────────────────────────────────────────────
 - runFlow:
-    file: login-otp.yaml
+    file: login-verify.yaml
 - runFlow:
     file: onboarding.yaml
 
 # ── P1 Flow 1: Notification Permission ──────────────────────────────
-# Tests the notification permission prompt, settings screen, and
-# inbox accessibility. Run with controlled permission state.
 - runFlow:
     file: notification-permission.yaml
 
 # ── P1 Flow 2: DLU Accounts Integration ────────────────────────────
-# Tests connecting/syncing/disconnecting a DLU fixture provider.
-# Requires a test provider endpoint; skipped if not available.
 - runFlow:
     file: dlu-accounts.yaml
 
