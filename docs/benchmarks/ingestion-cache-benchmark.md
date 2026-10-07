@@ -68,18 +68,36 @@ Checks:
 3. **Updates and removals reach everyone through fanout.** Calendars are identical to the no-cache run, and no student's own move or delete was overwritten or undone.
 4. **B is not free of data requests.** Ticks 3 and 5 still send 400-700 data requests, because the TTL expired and a representative per section refetched live.
 
+## Earlier baseline (no cache, cron-driven)
+Pre-cache measurement: 150 seeded students, all three watchers on `EVERY_MINUTE` for 5 minutes, counted by resource via the fake server's `/_/stats`.
+
+| Metric | Value |
+| ------ | ----- |
+| Total upstream requests (5 ticks x 150 users) | 6,395 |
+| Distinct resources requested | 21 |
+| Redundancy ratio | ~305x |
+| Data endpoints (calendar, timetable, exam) | 3,399 requests, 17 resources (~200x) |
+| Auth endpoints (login, sesskey, authenticate) | 2,996 requests |
+
+All 21 resources are term-scoped, not student-scoped. The cache should collapse requests toward that count.
+
 ## Limitations
-- **One run per case.** There is no spread. A tick with 0 requests (A tick 3, B tick 4) appears when a batch's due time lands a few milliseconds after the next tick and waits a tick; the spare tick 5 absorbs it.
+- **One run per case.** There is no spread. A 0-request tick (A tick 3, B tick 4) means a batch's due time landed a few ms after the next tick and waited; spare tick 5 absorbs it.
 - **Synthetic upstream.** Latency is 4-8 ms, far below real DLU. The fake assumes DKHP `CurriculumID` equals the timetable `ScheduleStudyUnitID`; this is not checked against the real DKHP API.
 - **Compressed schedule.** A 2-minute period and a 90 s TTL stand in for production's daily periods and 7-day TTL.
-- **Removals are checked for upcoming sessions only.** A walk reconciles from now onward, and the cache's cancellation pass applies the same forward-only rule, so past occurrences of a removed section correctly remain as history. (An earlier run of this benchmark caught the cache retiring already-held lectures of the current week; fixed.)
+- **Removals are checked for upcoming sessions only.** A walk and the cache's cancellation pass both reconcile forward only, so past occurrences of a removed section stay as history.
 - **No backend timing.** The portal client duration histogram was not collected (OpenTelemetry is off in the dev stack); timing comes from fake-server timestamps.
 
 ## Reproduce
 ```bash
 cd backend
 docker compose -f compose.dev.yml up -d
-npm run build
+pnpm build
 REPEATS=1 scripts/fixtures/dlu/bench.sh   # ticks=5, latency=4 ms
 ```
-`bench.sh` drops and recreates the dev `zenflow` database (and temporary `zenflow_seed*` copies). It overrides, per backend process, the LMS/portal/DKHP URLs (fake server on port 4100), dummy API keys, `PORT=8000`, the OTP rate limits and `INGESTION_TICK_MAX_BATCH=1000`, so `.env.dev` needs no benchmark-specific edits and the real hosts are never contacted. Output goes to `$OUT` (default `/tmp/dlu-bench`, wiped at start). The one-time setup takes about 5 minutes and each run about 7.
+- `bench.sh [TICKS=5] [LATENCY_MS=4]`; env `REPEATS` (default 3), `JITTER_MS` (4), `SETTLE_SEC` (70), `OUT` (`/tmp/dlu-bench`, wiped at start).
+- Drops and recreates the dev `zenflow` database (plus temporary `zenflow_seed*` copies) and flushes Redis.
+- Overrides per backend process: LMS/portal/DKHP URLs (fake server on :4100), dummy API keys, `PORT=8000`, OTP rate limits, `INGESTION_TICK_MAX_BATCH=1000`.
+- `.env.dev` needs no benchmark edits; real hosts are never contacted.
+- One-time setup takes about 5 minutes; each run about 7.
+- Helpers in `backend/scripts/fixtures/dlu/`: `measure.js`, `mutate.js`, `bench-report.js`.

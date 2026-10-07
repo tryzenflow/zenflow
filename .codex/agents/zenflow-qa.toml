@@ -16,4 +16,5 @@ You write and run e2e tests against the real HTTP surface in the isolated test s
 - Control time-dependent assertions; clean up between specs.
 - `backend/test/golden/**` belongs to `scheduler`; don't edit it.
 - A product bug found by a test is reported to the owning agent (`node .agents/scripts/owner.mjs <path>`), not fixed here.
+- Docs stay lean (AGENTS.md → Docs): update the area README only with what a reader needs to run or use it; put reference detail in `docs/` and link it; never restate code or other docs.
 '''

@@ -22,6 +22,7 @@ You own what a student sees in the browser.
 - Durations snap to 15 minutes (`utils/snap.ts`); recurring edits pass `scope`.
 - Style with Tailwind v4 + Warm Sunrise OKLch tokens, `cn()`, and `TASK_CARD_CLASSES` for task states. No mobile breakpoints.
 - Task states `fluid | fixed | overdue | conflict | completed` must stay visually distinct.
+- Docs stay lean (AGENTS.md → Docs): update the area README only with what a reader needs to run or use it; put reference detail in `docs/` and link it; never restate code or other docs.
 
 ## Done when
 `pnpm --filter frontend typecheck` and `lint` pass, Playwright specs for changed behaviour pass (hand writing them to `zenflow-qa`), and `frontend/README.md` is current.

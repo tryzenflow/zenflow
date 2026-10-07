@@ -10,9 +10,9 @@ Agents own domains, not tech layers. Exact globs live in `.agents/agents/*.md` (
 
 | Agent | Domain | Read first |
 | --- | --- | --- |
-| `scheduler` | Placement, sessions, series, TS fallback, Python contract | [ADR-0003](docs/adr/0003-python-authoritative-placement.md), [backend/README.md](backend/README.md) |
+| `scheduler` | Placement, sessions, series, TS fallback, Python contract | [ADR-0003](docs/adr/0003-python-authoritative-placement.md), [docs/backend/scheduler.md](docs/backend/scheduler.md) |
 | `bandit` | `services/bandit`, LinUCB, telemetry, A/B | [services/bandit/README.md](services/bandit/README.md), [ADR-0001](docs/adr/0001-linucb-model-design.md) |
-| `campus-sync` | DLU/LMS ingestion, integrations | [backend/README.md](backend/README.md) |
+| `campus-sync` | DLU/LMS ingestion, integrations | [docs/backend/ingestion.md](docs/backend/ingestion.md) |
 | `calendar-web` | `frontend/`, `packages/core` | [frontend/README.md](frontend/README.md) |
 | `calendar-mobile` | `mobile/`, `mockups/` | [mobile/README.md](mobile/README.md) |
 | `accounts-api` | Auth, users, files, notifications, Prisma, `packages/shared` | [ADR-0004](docs/adr/0004-s3-file-storage.md) |
@@ -55,8 +55,7 @@ frontend `dev | build | typecheck | lint | test:e2e`.
    **frozen** heuristic fallback (`slot-score.ts`, `preference.ts`, `series-spread.ts`, the
    pre-#62 behaviour), used only when Python is unavailable (`FallbackPlacer`, built on
    `HeuristicPlacer`); it stays pure (no I/O, clock, or randomness) and takes `now` as a
-   parameter. Do not add ranking logic to Nest. See [backend/README.md](backend/README.md) →
-   "Scheduler architecture".
+   parameter. Do not add ranking logic to Nest. See [docs/backend/scheduler.md](docs/backend/scheduler.md).
 
    **Ranking change => Python change + Python tests + contract fixtures.** Behaviour changes
    to scoring or placement go in `services/bandit/src/core/*` with pytest coverage and updated
@@ -113,7 +112,7 @@ frontend `dev | build | typecheck | lint | test:e2e`.
 
 - Backend unit tests are `*.spec.ts` (Jest) next to the code — pure functions like the
   scheduler are the priority to cover. E2e is `backend/test/jest-e2e.json` (needs the test
-  DB). Frontend e2e is Playwright in `frontend/e2e/` (needs the backend stack + Mailpit).
+  DB). Frontend e2e is Playwright (`testDir` is `frontend/e2e/`; no specs checked in yet; needs the backend stack + Mailpit).
 - Run `pnpm --filter <app> typecheck` and `lint` before finishing. After editing shared
   types, `pnpm shared:build` first.
 - **Formatting:** ESLint (+ Prettier on the backend), 2-space indentation (`.editorconfig`);
@@ -142,6 +141,7 @@ frontend `dev | build | typecheck | lint | test:e2e`.
 Update the matching README/ADR when a change touches schema, endpoints, the scheduler, screens, conventions or the ML roadmap.
 
 - Two audiences: user-facing (root `README.md`) and dev-facing (everything else). Say who it is for.
+- **Keep docs lean.** A README is a doorway, not a dump: what it is, how to run it, where the detail lives (aim for under ~150 lines). Reference detail (endpoint and env tables, schema, flows) goes in `docs/` and is linked. Never restate code or another doc; no changelogs, history, pasted output or config dumps.
 - Lead with what the reader does. Bullets, tables and code blocks over paragraphs; no history, no justification essays.
 - Link to the source of truth instead of restating it. Keep every real fact: commands, env vars, invariants, limits.
 - Don't over-correct: shorten wording, not information.

@@ -1,43 +1,39 @@
 # Contributing to Zenflow
 
-Thanks for working on Zenflow! This guide covers local setup, code style, and our commit
-convention. For the product overview and architecture, start with [README.md](README.md) and
-[AGENTS.md](AGENTS.md); each app has its own README with deeper conventions.
+Dev-facing guide: setup, code style, commits, PRs, tests, labels.
+Start with [README.md](README.md) and [AGENTS.md](AGENTS.md); each app's README has deeper conventions.
 
-## Prerequisites & setup
+## Prerequisites and setup
 
-- **Node 20+**, **pnpm 10.32.1**, **Docker** (backend stack), and the authenticated [**`gh` CLI**](https://cli.github.com) (issues and PRs).
+- **Node 20+**, **pnpm 10.32.1**, **Docker** (backend stack), authenticated [**`gh` CLI**](https://cli.github.com) (issues and PRs).
 
 ```bash
 pnpm install            # install all workspaces
-pnpm shared:build       # build @zenflow/shared — required before FE/BE typecheck
+pnpm shared:build       # build @zenflow/shared; required before FE/BE typecheck
 ```
 
-See the [root README quick start](README.md#quick-start) to bring up the API + frontend. Env files (`.env*`) are git-ignored; copy from each app's `.env.example`.
+- Bring up the API and frontend: [README quick start](README.md#quick-start).
+- Env files (`.env*`) are git-ignored; copy each app's `.env.example`.
 
-## Monorepo commands (from the repo root)
+## Monorepo commands (repo root)
 
 ```bash
-pnpm shared:build       # build the shared types package
-pnpm -r build           # build every package
-pnpm -r typecheck       # typecheck every package
-pnpm -r test            # test every package
-pnpm --filter <app> <script>   # target one app, e.g. pnpm --filter frontend dev
+pnpm shared:build              # build the shared types package
+pnpm -r build                  # build every package
+pnpm -r typecheck              # typecheck every package
+pnpm -r test                   # test every package
+pnpm check                     # shared build + typecheck
+pnpm --filter <app> <script>   # one app, e.g. pnpm --filter frontend dev
 ```
 
-## Code style & formatting
+## Code style
 
-- **Comment why, not what**. Only comment what for algorithms, and comment "why" for why a decision is made.
-- **Formatter / linter: ESLint** (flat config per app). The **backend** also runs **Prettier**
-  via `eslint-plugin-prettier`, so `eslint` is the single entry point for both.
-- **Indentation: 2 spaces** (no tabs), LF line endings, final newline, UTF-8 — enforced by
-  [`.editorconfig`](.editorconfig). Backend style is double quotes + semicolons (Prettier
-  defaults).
-- **Frontend import paths:** use the `@/…` alias instead of deep relative paths
-  (`../../utils/tz` → `@/utils/tz`). This is autofixed by
-  `eslint-plugin-no-relative-import-paths`; same-folder `./sibling` imports stay relative.
-- **Cross-package types** belong in `@zenflow/shared` — never redefine an API shape in an app.
-  Run `pnpm shared:build` after changing them.
+- **Comments:** explain why; comment what only for algorithms.
+- **Lint:** ESLint (flat config per app). The backend also runs Prettier via `eslint-plugin-prettier`, so `eslint` is the single entry point.
+- **Format:** 2 spaces, LF, final newline, UTF-8 ([`.editorconfig`](.editorconfig)). Backend uses double quotes and semicolons (Prettier defaults).
+- **Frontend imports:** use the `@/…` alias, not deep relative paths (`../../utils/tz` → `@/utils/tz`).
+  - `eslint-plugin-no-relative-import-paths` autofixes it; same-folder `./sibling` stays relative.
+- **Cross-package types** belong in `@zenflow/shared`; never redefine an API shape in an app. Run `pnpm shared:build` after changing them.
 
 Run before pushing:
 
@@ -45,38 +41,28 @@ Run before pushing:
 pnpm --filter backend lint        # eslint --fix (incl. prettier)
 pnpm --filter frontend lint       # eslint
 pnpm shared:build && pnpm -r typecheck
-# run the relevant tests (see Testing below)
+# then the relevant tests (see Testing)
 ```
 
-Agent hooks only format on edit; run these checks yourself (`pnpm check` = shared build + typecheck).
+Agent hooks only format on edit; run these checks yourself.
 
-## Commit convention — Conventional Commits 1.0.0
+## Commits: Conventional Commits 1.0.0
 
-We follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/). Each
-commit message is:
+Follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/):
 
 ```
 <type>(<scope>): <short summary>
 
-[optional body — explain the why]
+[optional body: explain the why]
 
 [optional footer(s)]
 ```
 
-**Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`,
-`chore`, `revert`.
-
-**Scope** (optional but encouraged) names the area touched, e.g. `backend`, `frontend`,
-`shared`, `scheduler`, `calendar`, `auth`, `tasks`, `ml`, `docs`.
-
-**Rules**
-
-- Summary in the imperative mood, lower-case, no trailing period (e.g. "add task comments").
-- A commit that introduces a breaking change appends `!` after the type/scope **and/or** adds
-  a `BREAKING CHANGE:` footer describing it.
-- Reference issues in the footer when relevant: `Refs #123` / `Closes #123`.
-
-**Examples** (consistent with this repo's history):
+- **Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.
+- **Scope** (optional, encouraged): the area touched, e.g. `backend`, `frontend`, `shared`, `scheduler`, `calendar`, `auth`, `tasks`, `ml`, `docs`.
+- Summary: imperative, lower-case, no trailing period ("add task comments").
+- Breaking change: append `!` after the type/scope and/or add a `BREAKING CHANGE:` footer.
+- Reference issues in the footer: `Refs #123` / `Closes #123`.
 
 ```
 feat(calendar): manual-pin drag, overlap conflicts, inline agenda
@@ -88,41 +74,35 @@ feat(api)!: rename /tasks reschedule payload field
 BREAKING CHANGE: `start` is now `requestedStartTime` in the reschedule body.
 ```
 
-## Branching & pull requests
+## Branches and pull requests
 
-- Branch off `master` using a `type/short-description` name (e.g. `feat/task-comments`,
-  `docs/contributing`).
-- Keep commits focused; don't mix unrelated changes (e.g. a feature + a repo-wide reformat).
-- Before opening a PR: lint, typecheck, and run the relevant tests; update the matching README
-  / `services/bandit/README.md` when you change schema, endpoints, the scheduler, screens, or the ML
-  roadmap.
-- PR descriptions should explain the **why** and link the issue.
+- Branch off `master` as `type/short-description` (`feat/task-comments`, `docs/contributing`).
+- Keep commits focused; don't mix unrelated changes (a feature plus a repo-wide reformat).
+- Before a PR: lint, typecheck, run the relevant tests.
+- Update the matching README or ADR when you change schema, endpoints, the scheduler, screens or the ML roadmap.
 
-### Opening a PR
-
-Fill in every section of [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) (`gh pr create` loads it).
+Opening a PR (`gh pr create` loads [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md); fill every section):
 
 - Title is a Conventional Commit; it becomes the squash commit.
 - Lead with the why; link the issue (`Closes #123`).
 - Tick the areas touched and give steps to test.
 - Lint, `pnpm check` and relevant tests are green before review (CI runs the same).
-- One logical change per PR; call out breaking changes with the `BREAKING CHANGE:` footer and a migration path.
+- One logical change per PR; call out breaking changes with a `BREAKING CHANGE:` footer and a migration path.
 - Respect the [AGENTS.md](AGENTS.md) invariants.
 - Use a draft while in progress; address review with follow-up commits, not force-pushes.
 
 ## Testing
 
-- **Backend unit:** Jest `*.spec.ts` next to the code (the pure scheduler is the priority to
-  cover) — `pnpm --filter backend test`.
-- **Backend e2e:** supertest over HTTP via `backend/test/jest-e2e.json` against the Docker
-  test env — `pnpm --filter backend test:e2e`.
-- **Frontend e2e:** Playwright in `frontend/e2e/` against a running stack —
-  `pnpm --filter frontend test:e2e`.
+| Layer | Tooling | Command |
+| --- | --- | --- |
+| Backend unit | Jest `*.spec.ts` beside the code (pure scheduler first) | `pnpm --filter backend test` |
+| Backend e2e | supertest via `backend/test/jest-e2e.json` against the Docker test env | `pnpm --filter backend test:e2e` |
+| Frontend e2e | Playwright (`frontend/playwright.config.ts`, `testDir` `frontend/e2e/`, no specs checked in yet) against a running stack | `pnpm --filter frontend test:e2e` |
 
-New behavior needs a test; a bug fix needs a regression test. Scheduler changes must update
-the matching `*.spec.ts` in the same commit.
+- New behaviour needs a test; a bug fix needs a regression test.
+- Scheduler changes update the matching `*.spec.ts` in the same commit.
 
-## Issues & labels
+## Issues and labels
 
 Open issues from the [templates](.github/ISSUE_TEMPLATE/) (bug, feature, chore) or `gh issue create`. Every issue has a Scope, Acceptance criteria and a Priority.
 
@@ -134,4 +114,8 @@ Open issues from the [templates](.github/ISSUE_TEMPLATE/) (bug, feature, chore) 
 
 ## Coding agents
 
-Claude Code and Codex share one setup in [`.agents/`](.agents/README.md): domain subagents, small skills and hooks. Edit `.agents/`, then run `pnpm sync:agents`; CI fails if the generated `.claude/` and `.codex/` drift. Conventions: [AGENTS.md](AGENTS.md).
+Claude Code and Codex share one setup in [`.agents/`](.agents/README.md): domain subagents, small skills and hooks.
+
+- Edit `.agents/`, then run `pnpm sync:agents`.
+- CI fails if the generated `.claude/` and `.codex/` drift.
+- Conventions: [AGENTS.md](AGENTS.md).

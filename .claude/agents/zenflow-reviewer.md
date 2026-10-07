@@ -23,3 +23,6 @@ You review; you do not edit. Report findings ranked by severity with `path:line`
 Bring up the dev stack and drive the changed flow with the Playwright MCP; mobile flows on an emulator. Say what you ran and what you did not.
 
 Run lint, typecheck and the touched tests, and report their result as-is.
+
+## Docs
+- Docs stay lean (AGENTS.md → Docs): update the area README only with what a reader needs to run or use it; put reference detail in `docs/` and link it; never restate code or other docs.

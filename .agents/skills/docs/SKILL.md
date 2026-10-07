@@ -11,6 +11,9 @@ description: "Write or tighten Zenflow docs (READMEs, docs/, ADRs): user-facing 
 
 ## Rules
 - Lead with what the reader does or needs. Cut history, motivation essays and defensive caveats.
+- A README is a doorway, not a dump: what it is, how to run it, where the detail lives. Aim for under ~150 lines.
+- Move reference detail (endpoint and env tables, schema, flows) to `docs/` and link it; never restate code or another doc.
+- No changelogs, history, pasted command output or config dumps in a README.
 - Bullets, tables and code blocks over paragraphs; one idea per line; no sentence over ~25 words.
 - Link to the source of truth (code path, ADR, other README) instead of restating it.
 - Keep every real fact: commands, env vars, invariants, limits. Shorten words, not information.
@@ -23,4 +26,4 @@ description: "Write or tighten Zenflow docs (READMEs, docs/, ADRs): user-facing 
 3. Check relative links resolve and that README tables still match the code.
 
 ## Output
-Changed files with line counts before and after.
+Changed files with line counts before and after, and where any moved detail now lives.

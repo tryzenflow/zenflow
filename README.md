@@ -41,7 +41,7 @@ Env: see each app's `.env.example`. Details: [backend/README.md](backend/README.
 | `packages/core/` | `@zenflow/core` logic shared by both clients | |
 | `mockups/` | Static HTML mobile screens | [index](mockups/index.html) |
 | `loadtest/` | k6 load tests | [README](loadtest/README.md) |
-| `docs/` | ADRs, scheduler design, ops, benchmarks | [adr](docs/adr/), [ops](docs/ops/) |
+| `docs/` | ADRs, backend reference, scheduler design, ops, benchmarks | [adr](docs/adr/), [backend](docs/backend/), [scheduler](docs/scheduler/), [ops](docs/ops/) |
 
 Architecture: [ARCHITECTURE.md](ARCHITECTURE.md). Decisions: [docs/adr/](docs/adr/).
 
