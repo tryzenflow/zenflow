@@ -28,6 +28,7 @@ import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { Text } from "@/components/ui/text";
 import { completeStep } from "@/hooks/use-checklist";
 import { useCalendarJump } from "@/hooks/use-calendar-jump";
+import { useSpotlight } from "@/hooks/use-spotlight";
 import { useUserStore } from "@/hooks/use-user-store";
 import { addMonths, monthLabel } from "@/lib/month-date-math";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
@@ -110,7 +111,9 @@ export default function MonthScreen() {
   // must not re-render pages whose props didn't change.
   const openDay = useCallback(
     (day: Date, tasks: Session[], drag: MonthDragHandle) => {
-      completeStep("open-day");
+      // "Show me: move a task" opens a day's list for the user; that isn't them
+      // trying "Open a day".
+      if (useSpotlight.getState().step !== "move-day") completeStep("open-day");
       taskListSheetRef.current?.open(day, tasks, drag);
     },
     [],

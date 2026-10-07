@@ -2,10 +2,11 @@ import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
 import { Text } from "@/components/ui/text";
 import { useLastCreated } from "@/hooks/use-last-created";
+import { useSpotlight } from "@/hooks/use-spotlight";
 import { dateKey, isOutsideMonth } from "@/lib/month-date-math";
 import type { Session } from "@zenflow/shared";
 import { isSameDay } from "date-fns";
-import { forwardRef, memo, useMemo } from "react";
+import { forwardRef, memo, useEffect, useMemo, useRef } from "react";
 import { View, type ViewInstance } from "react-native";
 import { CELL_HEIGHT, MonthCell } from "./month-cell";
 
@@ -36,6 +37,9 @@ interface MonthGridProps {
   loading: boolean;
   draggingSessionId: string | null;
   onPressDay: (day: Date, tasks: Session[]) => void;
+  /** Checklist "Move a task to another day": open the day that has a task so
+   * its list (the only place a task can be dragged from) is on screen. */
+  onOpenMoveDay?: (day: Date, tasks: Session[]) => void;
   onDoubleTapDay: (day: Date) => void;
   onPressOverflow: (day: Date, tasks: Session[]) => void;
   onGridLayout: () => void;
@@ -69,17 +73,18 @@ export const MonthGrid = memo(
       loading,
       draggingSessionId,
       onPressDay,
+      onOpenMoveDay,
       onDoubleTapDay,
       onPressOverflow,
       onGridLayout,
     },
     ref,
   ) {
-    // The cells the checklist's spotlights point at. "Open a day": today when
-    // it's in this month, else mid-month. "Move a task": the day holding the
-    // task the user just created, else the first day with one.
+    // The days the checklist points at. "Open a day": today when it's in this
+    // month, else mid-month (spotlighted cell). "Move a task": the day holding the
+    // task the user just created, else the first day with one (its list opens).
     const lastCreatedId = useLastCreated((s) => s.id);
-    const { openDayKey, moveDayKey } = useMemo(() => {
+    const { openDayKey, moveDayKey, targetKey } = useMemo(() => {
       const inMonth = days.filter((d) => !isOutsideMonth(d, monthDate));
       const openDay =
         inMonth.find((d) => isSameDay(d, today)) ??
@@ -96,11 +101,37 @@ export const MonthGrid = memo(
           break;
         }
       }
+      const moveKey = created ?? first ?? dateKey(openDay);
+      // Where the demo finger drops: the earliest *future* day (top rows
+      // first — the day sheet covers the lower grid), never the day being
+      // dragged from. Falls back to any other day of the month when nothing
+      // later is left (late in the month).
+      const todayKey = dateKey(today);
+      const target =
+        inMonth.find((d) => dateKey(d) > todayKey && dateKey(d) !== moveKey) ??
+        inMonth.find((d) => dateKey(d) !== moveKey);
       return {
         openDayKey: dateKey(openDay),
-        moveDayKey: created ?? first ?? dateKey(openDay),
+        moveDayKey: moveKey,
+        targetKey: target ? dateKey(target) : null,
       };
     }, [days, monthDate, today, tasksByDate, lastCreatedId]);
+    // Drag-to-another-day starts from a task row in the day's list, not from the
+    // grid pill, so "show me" opens that list (once per request).
+    const moveRequested = useSpotlight((s) => s.step === "move-day");
+    const openedRef = useRef(false);
+    useEffect(() => {
+      if (!moveRequested) {
+        openedRef.current = false;
+        return;
+      }
+      if (openedRef.current || !onOpenMoveDay) return;
+      const list = tasksByDate.get(moveDayKey);
+      const day = days.find((d) => dateKey(d) === moveDayKey);
+      if (!list?.length || !day) return;
+      openedRef.current = true;
+      onOpenMoveDay(day, list);
+    }, [moveRequested, moveDayKey, tasksByDate, days, onOpenMoveDay]);
     useLanguage();
     return (
       <View className="flex-1 px-3 pb-3.5 pt-2">
@@ -144,7 +175,7 @@ export const MonthGrid = memo(
                     sessions={tasksByDate.get(key) ?? NO_TASKS}
                     isToday={isSameDay(day, today)}
                     openDayTip={key === openDayKey}
-                    moveDayTip={key === moveDayKey}
+                    moveTargetTip={!!onOpenMoveDay && key === targetKey}
                     isDropTarget={highlightedKey === key}
                     isJustDropped={justDroppedKey === key}
                     loading={loading}

@@ -1,4 +1,5 @@
 import type { ChecklistStep } from "@zenflow/shared";
+import type { Rect } from "@/lib/spotlight";
 import { create } from "zustand";
 
 /**
@@ -10,12 +11,17 @@ import { create } from "zustand";
 export const useSpotlight = create<{
   step: ChecklistStep | null;
   shown: boolean;
+  /** "Move a task to another day": the grid cell the demo finger drops onto. */
+  dragTarget: Rect | null;
+  setDragTarget: (rect: Rect | null) => void;
   show: (step: ChecklistStep) => void;
   markShown: () => void;
   clear: () => void;
 }>((set) => ({
   step: null,
   shown: false,
+  dragTarget: null,
+  setDragTarget: (dragTarget) => set({ dragTarget }),
   show: (step) => set({ step, shown: false }),
   markShown: () => set({ shown: true }),
   clear: () => set({ step: null, shown: false }),

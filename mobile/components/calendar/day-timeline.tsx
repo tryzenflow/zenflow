@@ -18,6 +18,7 @@ import { isPastDeadlineDrop } from "@/lib/overdue";
 import { showErrorToast } from "@/lib/task-toasts";
 import { type PeekBlock, peekBlocksFromSegments } from "@/lib/peek";
 import { useSpotlight } from "@/hooks/use-spotlight";
+import { showMovedToast } from "@/lib/move-toast";
 import {
   fetchDaySessions,
   getCachedDaySessions,
@@ -780,7 +781,7 @@ export function DayTimeline({
             scope,
             skipConflicting,
           });
-          completeStep("move-task");
+          const firstMove = completeStep("move-task");
 
           // Handle divergent response — show picker for primary vs alternative slot
           if (
@@ -817,6 +818,11 @@ export function DayTimeline({
           setSessions((prev) =>
             prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)),
           );
+          showMovedToast(toast, {
+            first: firstMove,
+            to: zonedDate(updated.scheduledStartTime ?? startISO, tz),
+            withTime: true,
+          });
         } catch (error) {
           showErrorToast(
             toast,
@@ -891,6 +897,7 @@ export function DayTimeline({
       tasks,
       onRequestScopedUpdate,
       onRequestSlotPick,
+      tz,
     ],
   );
 

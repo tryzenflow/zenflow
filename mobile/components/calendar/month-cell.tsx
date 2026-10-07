@@ -1,7 +1,10 @@
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
 import { AlertTriangle } from "@/components/Icons";
-import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
+import {
+  DragTargetProbe,
+  SpotlightAnchor,
+} from "@/components/checklist/spotlight-anchor";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import {
@@ -53,8 +56,8 @@ interface MonthCellProps {
   isToday: boolean;
   /** Carry the checklist's "Open a day" spotlight anchor. */
   openDayTip: boolean;
-  /** Carry the checklist's "Move a task to another day" spotlight anchor. */
-  moveDayTip: boolean;
+  /** Carry the "Move a task to another day" demo's drop-target probe. */
+  moveTargetTip: boolean;
   /** True while this cell is the current drag drop target. */
   isDropTarget: boolean;
   /** True for a beat right after a drag drop landed here. */
@@ -103,7 +106,7 @@ export const MonthCell = memo(function MonthCell({
   sessions,
   isToday,
   openDayTip,
-  moveDayTip,
+  moveTargetTip,
   isDropTarget,
   isJustDropped,
   loading,
@@ -178,7 +181,7 @@ export const MonthCell = memo(function MonthCell({
       )}
     >
       {openDayTip ? <SpotlightAnchor step="open-day" /> : null}
-      {moveDayTip ? <SpotlightAnchor step="move-day" /> : null}
+      {moveTargetTip ? <DragTargetProbe /> : null}
       <Text
         className={cn(
           "h-[23px] w-[23px] rounded-full text-center text-[12.5px] font-semibold leading-[23px]",

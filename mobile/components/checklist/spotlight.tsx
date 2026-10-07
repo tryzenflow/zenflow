@@ -1,6 +1,7 @@
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
 import { Text } from "@/components/ui/text";
+import { useSpotlight } from "@/hooks/use-spotlight";
 import { STEP_COPY } from "@/lib/checklist";
 import {
   arrowLeft,
@@ -20,7 +21,7 @@ import {
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FullWindowOverlay } from "react-native-screens";
-import { Hand } from "lucide-react-native";
+import Svg, { Path } from "react-native-svg";
 import Animated, {
   Easing,
   cancelAnimation,
@@ -72,33 +73,50 @@ function Layer({
   );
 }
 
-/** Steps whose how-to is a gesture; shown as a looping hand over the control. */
-const GESTURE: Partial<Record<ChecklistStep, "drag-y" | "drag-x" | "hold">> = {
-  "move-task": "drag-y",
+/** Steps whose how-to is a gesture; shown as a looping fingertip over the control. */
+type Gesture = "drag-down" | "drag-to-cell" | "hold";
+const GESTURE: Partial<Record<ChecklistStep, Gesture>> = {
+  "move-task": "drag-down",
   "block-actions": "hold",
-  "move-day": "drag-x",
+  // Dragged out of the day's bottom sheet onto a cell of the month grid.
+  "move-day": "drag-to-cell",
 };
-const HAND = 40;
+const FINGER = 88;
+// Where the fingertip sits inside the finger glyph (fractions of its size), so
+// the tip — not the icon's centre — lands on the control.
+const TIP_X = 0.43;
+const TIP_Y = 0.09;
+const RIPPLE = 72;
+/** Without a measured cell, drag this far up (towards the grid). */
+const FALLBACK_DRAG_UP = 140;
 
 /**
- * A looping hand: press down on the control, drag (vertically for a task,
- * sideways for a day cell) or just hold, release, repeat. Purely decorative.
+ * One closed outline (no overlapping sub-paths, so no see-through gaps): a
+ * raised index finger over a curled fist.
+ */
+const FINGER_PATH =
+  "M8.5 14.2 L8.5 4 a1.75 1.75 0 0 1 3.5 0 v6.2 a1.5 1.5 0 0 1 3 0.1 v0.4 a1.5 1.5 0 0 1 3 0.3 v0.6 a1.5 1.5 0 0 1 3 0.4 V16 c0 4 -2.5 6.5 -6 6.5 h-1.2 c-2 0 -3.3 -0.8 -4.5 -2 l-3.3 -3.5 a1.6 1.6 0 0 1 2.4 -2.1 Z";
+
+/**
+ * A looping finger. Like the real gesture it first presses and holds (the
+ * ripple fills while the long-press builds), then drags — down a little for a
+ * block, onto a real grid cell for a day — and lets go. Purely decorative.
  */
 function GestureHint({
   kind,
   spot,
-  screenWidth,
+  target,
 }: {
-  kind: "drag-y" | "drag-x" | "hold";
+  kind: Gesture;
   spot: Rect;
-  screenWidth: number;
+  target: Rect | null;
 }) {
   const t = useSharedValue(0);
   useEffect(() => {
     t.value = withRepeat(
       withSequence(
         withTiming(1, {
-          duration: kind === "hold" ? 1800 : 2000,
+          duration: kind === "hold" ? 2800 : 3800,
           easing: Easing.linear,
         }),
         withDelay(500, withTiming(0, { duration: 0 })),
@@ -110,53 +128,118 @@ function GestureHint({
 
   const cx = spot.x + spot.width / 2;
   const cy = spot.y + spot.height / 2;
-  // Drag toward whichever side has room: down for a task, the roomier
-  // horizontal side for a day cell.
-  const dx =
-    kind === "drag-x" ? (cx > screenWidth * 0.6 ? -1 : 1) * (spot.width + 6) : 0;
-  const dy = kind === "drag-y" ? Math.min(spot.height * 0.5 + 20, 80) : 0;
+  let dx = 0;
+  let dy = 0;
+  if (kind === "drag-down") {
+    dy = Math.min(spot.height * 0.5 + 28, 96);
+  } else if (kind === "drag-to-cell") {
+    if (target) {
+      dx = target.x + target.width / 2 - cx;
+      dy = target.y + target.height / 2 - cy;
+    } else {
+      dy = -FALLBACK_DRAG_UP;
+    }
+  }
+  const hold = kind === "hold";
+  // Phase edges (fractions of the loop): appear, press+hold, drag, drop, fade.
+  const times = hold ? [0, 0.06, 0.12, 0.72, 0.8, 0.92, 1] : [0, 0.05, 0.1, 0.4, 0.82, 0.9, 1];
+  const moveX = [0, 0, 0, 0, dx, dx, dx];
+  const moveY = [0, 0, 0, 0, dy, dy, dy];
 
-  const handStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(t.value, [0, 0.08, 0.88, 1], [0, 1, 1, 0]),
+  const fingerStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(t.value, [0, 0.05, 0.9, 1], [0, 1, 1, 0]),
     transform: [
-      { translateX: interpolate(t.value, [0, 0.3, 0.8, 1], [0, 0, dx, dx]) },
-      { translateY: interpolate(t.value, [0, 0.3, 0.8, 1], [0, 0, dy, dy]) },
+      { translateX: interpolate(t.value, times, hold ? [0, 0, 0, 0, 0, 0, 0] : moveX) },
+      { translateY: interpolate(t.value, times, hold ? [0, 0, 0, 0, 0, 0, 0] : moveY) },
       {
+        // Presses in as the hold starts; springs back on release.
         scale: interpolate(
           t.value,
-          kind === "hold" ? [0, 0.15, 0.25, 0.9, 1] : [0, 0.2, 0.3, 0.8, 0.9],
-          kind === "hold" ? [1, 1, 0.82, 0.82, 1] : [1, 1, 0.82, 0.82, 1],
+          hold ? [0, 0.06, 0.12, 0.72, 0.8] : [0, 0.05, 0.1, 0.82, 0.9],
+          [1.15, 1.15, 0.92, 0.92, 1.15],
         ),
       },
     ],
   }));
-  // Ripple under the fingertip while it is pressed.
+  // Ripple under the fingertip: fills during the long-press, then rides along.
   const rippleStyle = useAnimatedStyle(() => ({
     opacity: interpolate(
       t.value,
-      kind === "hold" ? [0.2, 0.3, 0.9] : [0.25, 0.3, 0.8],
-      [0, 0.5, 0],
+      hold ? [0.06, 0.14, 0.72, 0.85] : [0.05, 0.12, 0.82, 0.9],
+      [0, 0.6, 0.6, 0],
       "clamp",
     ),
     transform: [
-      { translateX: interpolate(t.value, [0, 0.3, 0.8, 1], [0, 0, dx, dx]) },
-      { translateY: interpolate(t.value, [0, 0.3, 0.8, 1], [0, 0, dy, dy]) },
-      { scale: interpolate(t.value, [0.25, 0.9], [0.6, kind === "hold" ? 1.8 : 1.2], "clamp") },
+      { translateX: interpolate(t.value, times, hold ? [0, 0, 0, 0, 0, 0, 0] : moveX) },
+      { translateY: interpolate(t.value, times, hold ? [0, 0, 0, 0, 0, 0, 0] : moveY) },
+      {
+        scale: interpolate(
+          t.value,
+          hold ? [0.06, 0.4, 0.72] : [0.05, 0.4],
+          hold ? [0.4, 1.5, 1.7] : [0.4, 1.1],
+          "clamp",
+        ),
+      },
     ],
+  }));
+  // The target cell lights up while the finger travels to it and lets go.
+  const targetStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(t.value, [0.4, 0.55, 0.82, 0.9, 1], [0, 0.9, 1, 1, 0], "clamp"),
   }));
 
   return (
-    <View
-      pointerEvents="none"
-      className="absolute"
-      style={{ left: cx - HAND / 2, top: cy - HAND / 2, width: HAND, height: HAND }}
-    >
+    <View pointerEvents="none" className="absolute inset-0">
+      {kind === "drag-to-cell" && target ? (
+        <Animated.View
+          className="absolute rounded-lg border-2 border-white bg-white/25"
+          style={[
+            {
+              left: target.x,
+              top: target.y,
+              width: target.width,
+              height: target.height,
+            },
+            targetStyle,
+          ]}
+        />
+      ) : null}
       <Animated.View
-        className="absolute inset-0 rounded-full bg-white"
-        style={rippleStyle}
+        className="absolute rounded-full bg-white"
+        style={[
+          {
+            left: cx - RIPPLE / 2,
+            top: cy - RIPPLE / 2,
+            width: RIPPLE,
+            height: RIPPLE,
+          },
+          rippleStyle,
+        ]}
       />
-      <Animated.View style={handStyle}>
-        <Hand size={HAND} color="#fff" fill="rgba(255,255,255,0.25)" />
+      <Animated.View
+        style={[
+          {
+            position: "absolute",
+            left: cx - FINGER * TIP_X,
+            top: cy - FINGER * TIP_Y,
+            width: FINGER,
+            height: FINGER,
+            shadowColor: "#000",
+            shadowOpacity: 0.45,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 4 },
+          },
+          fingerStyle,
+        ]}
+      >
+        <Svg width={FINGER} height={FINGER} viewBox="0 0 24 24">
+          <Path
+            d={FINGER_PATH}
+            fill="#fff"
+            stroke="#18181b"
+            strokeWidth={0.9}
+            strokeLinejoin="round"
+          />
+        </Svg>
       </Animated.View>
     </View>
   );
@@ -180,6 +263,7 @@ export function Spotlight({
   const screen = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [bubbleHeight, setBubbleHeight] = useState(FALLBACK_BUBBLE_HEIGHT);
+  const dragTarget = useSpotlight((s) => s.dragTarget);
   const { title, hint } = STEP_COPY[step];
 
   const spot = spotlightRect(rect, screen);
@@ -226,11 +310,7 @@ export function Spotlight({
       </View>
 
       {GESTURE[step] ? (
-        <GestureHint
-          kind={GESTURE[step]!}
-          spot={spot}
-          screenWidth={screen.width}
-        />
+        <GestureHint kind={GESTURE[step]!} spot={spot} target={dragTarget} />
       ) : null}
 
       <View

@@ -6,6 +6,7 @@ import { listSessions, updateSession } from "@/api/tasks";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { completeStep } from "@/hooks/use-checklist";
+import { showMovedToast } from "@/lib/move-toast";
 import {
   dateKey,
   getMonthGridDays,
@@ -432,7 +433,12 @@ export const MonthPage = memo(function MonthPage({
         const updated = await updateSession(original.id, {
           scheduledStartTime: newStartISO,
         });
-        completeStep("move-day");
+        const firstMove = completeStep("move-day");
+        showMovedToast(toast, {
+          first: firstMove,
+          to: zonedDate(newStartISO, tz),
+          withTime: false,
+        });
         setSessions((cur) =>
           (cur ?? []).map((t) => (t.id === original.id ? updated : t)),
         );
@@ -522,6 +528,7 @@ export const MonthPage = memo(function MonthPage({
           highlightedKey={highlightedKey}
           draggingSessionId={dragging?.task.id ?? null}
           onPressDay={handleOpenDay}
+          onOpenMoveDay={isActive ? handleOpenOverflow : undefined}
           onDoubleTapDay={onDoubleTapDay}
           onPressOverflow={handleOpenOverflow}
           onGridLayout={measureGeometry}

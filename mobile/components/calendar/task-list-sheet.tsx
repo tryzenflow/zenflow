@@ -32,6 +32,7 @@ import {
 } from "react";
 import { type ListRenderItemInfo, Pressable, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
 import type { MonthDragHandle } from "./month-page";
 import { sessionTypeIcon } from "./session-type-badge";
 
@@ -115,7 +116,10 @@ export const SessionListSheet = forwardRef<
     <BottomSheet>
       <BottomSheetContent
         ref={bottomSheet.ref}
-        snapPoints={["70%"]}
+        // Short enough to leave the top weeks of the grid visible above it, so a
+        // task can be dragged onto a day you can see (and the checklist demo can
+        // point at one).
+        snapPoints={["62%"]}
         enableDynamicSizing={false}
         // Lets `close()` mean "animate away but stay mounted" — required for
         // drag-out-of-the-sheet to survive the sheet closing. See
@@ -186,6 +190,7 @@ export const SessionListSheet = forwardRef<
                   index > 0 && "border-t border-t-border",
                 )}
               >
+                {index === 0 ? <SpotlightAnchor step="move-day" ignoreFocus /> : null}
                 <SessionListRow
                   task={item}
                   tz={tz}
@@ -232,7 +237,7 @@ const ROW_STATE_LABELS: Record<SessionCardState, string> = {
 
 function summarize(tasks: Session[]): string {
   if (tasks.length === 0) return t("No tasks");
-  const count = `${tasks.length} ${tasks.length === 1 ? "session" : "sessions"}`;
+  const count = `${tasks.length} ${tasks.length === 1 ? t("session") : t("sessions")}`;
   return count;
 }
 

@@ -360,8 +360,12 @@ export default {
     "Chạm vào một ngày trong tháng để xem công việc của ngày đó.",
   "Move a task to another day":
     "Chuyển công việc sang ngày khác",
-  "Hold a task in the highlighted day and drag it onto another day.":
-    "Nhấn giữ một công việc trong ngày được đánh dấu rồi kéo sang ngày khác.",
+  "Hold a task in the day's list, then drag it onto another day.":
+    "Nhấn giữ một công việc trong danh sách của ngày rồi kéo sang ngày khác.",
+  "Nice! You moved a task.": "Tuyệt! Bạn đã chuyển một công việc.",
+  "Zenflow learns from every move to place tasks better.":
+    "Zenflow học từ mỗi lần bạn chuyển để xếp lịch tốt hơn.",
+  "Moved to {when}": "Đã chuyển sang {when}",
   "{title} · {count} of {total} have alternatives":
     "{title} · {count}/{total} buổi có thời gian khác",
   "Pick a time, then confirm.":
