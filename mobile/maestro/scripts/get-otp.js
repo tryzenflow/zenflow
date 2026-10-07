@@ -46,16 +46,25 @@ async function getOtp(email) {
     try {
       const messages = await fetchMessages(email);
 
-      // Find message for our email (check To header)
-      for (const msg of messages) {
+      // Collect every message for our email (check To header). More than
+      // one means MailHog was not reset before this run — picking any of
+      // them risks a stale OTP (the classic silent-wrong-code failure),
+      // so fail loudly instead of guessing.
+      const ours = messages.filter((msg) => {
         const to = msg.To || [];
-        if (to.some(t => t.Mailbox + '@' + t.Domain === email)) {
-          const html = msg.Content.Body || '';
-          const otp = extractOtp(html);
-          if (otp) {
-            console.log(`[get-otp] Found OTP: ${otp}`);
-            return otp;
-          }
+        return to.some(t => t.Mailbox + '@' + t.Domain === email);
+      });
+      if (ours.length > 1) {
+        throw new Error(
+          `Expected 1 message for ${email}, found ${ours.length} — MailHog was not reset (run reset-test-data.js first)`,
+        );
+      }
+      for (const msg of ours) {
+        const html = msg.Content.Body || '';
+        const otp = extractOtp(html);
+        if (otp) {
+          console.log(`[get-otp] Found OTP: ${otp}`);
+          return otp;
         }
       }
     } catch (error) {

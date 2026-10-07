@@ -31,7 +31,29 @@ async function requestOtp(email) {
   console.log('[seed-task] OTP requested for:', email);
 }
 
-async function getOtpFromMailHog(email, timeoutMs = 60000) {
+function messageId(msg) {
+  return msg.ID || JSON.stringify(msg.To) + (msg.Created || "");
+}
+
+async function knownIds(email) {
+  const ids = new Set();
+  try {
+    const response = await fetch(`${MAILHOG_URL}/api/v2/messages?limit=50`);
+    const data = await response.json();
+    for (const msg of data.items || []) {
+      const to = msg.To || [];
+      if (to.some(t => t.Mailbox + '@' + t.Domain === email)) ids.add(messageId(msg));
+    }
+  } catch { /* polling loop below retries */ }
+  return ids;
+}
+
+async function getOtpFromMailHog(email, timeoutMs = 60000, seenBefore = null) {
+  // Snapshot the box BEFORE requesting: earlier messages for this email
+  // (e.g. the device login OTP) must never be picked up. We wait for a
+  // message ID we have not seen before. Pass the pre-request snapshot in;
+  // when omitted we snapshot here (only safe if no request is in flight).
+  const seen = seenBefore || (await knownIds(email));
   const startTime = Date.now();
   const pollIntervalMs = 2000;
 
@@ -43,7 +65,7 @@ async function getOtpFromMailHog(email, timeoutMs = 60000) {
 
       for (const msg of messages) {
         const to = msg.To || [];
-        if (to.some(t => t.Mailbox + '@' + t.Domain === email)) {
+        if (to.some(t => t.Mailbox + '@' + t.Domain === email) && !seen.has(messageId(msg))) {
           const html = msg.Content.Body || '';
           const patterns = [
             /<strong[^>]*>(\d{6})<\/strong>/i,
@@ -66,10 +88,13 @@ async function getOtpFromMailHog(email, timeoutMs = 60000) {
 }
 
 async function verifyOtp(email, otp) {
+  // Field name must match the passport-local strategy (local.strategy.ts):
+  // usernameField=email, passwordField=otp. `providedOtp` is only the
+  // VerifyOTPDto shape — sending it here yields a 401.
   const response = await fetch(`${API_URL}/auth/otp/verify`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, providedOtp: otp }),
+    body: JSON.stringify({ email, otp }),
   });
   const data = await response.json();
   if (!data.success) {
@@ -122,12 +147,16 @@ async function main() {
     console.log('[seed-task] Starting task seeding...');
     console.log('[seed-task] Email:', EMAIL);
 
-    // 1. Request OTP
+    // 1. Snapshot MailHog BEFORE requesting, so the OTP we pick up is
+    // provably ours and not an earlier message for the same address.
+    const seenBefore = await knownIds(EMAIL);
+
+    // 2. Request OTP
     await requestOtp(EMAIL);
 
-    // 2. Get OTP from MailHog
+    // 3. Get OTP from MailHog
     console.log('[seed-task] Polling MailHog for OTP...');
-    const otp = await getOtpFromMailHog(EMAIL);
+    const otp = await getOtpFromMailHog(EMAIL, 60000, seenBefore);
     console.log('[seed-task] OTP received:', otp);
 
     // 3. Verify OTP and get session cookie

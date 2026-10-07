@@ -112,57 +112,81 @@ function runMaestro(flowFile) {
 }
 
 // 1. Clean backend + MailHog
-runNode("reset-test-data.js", []);
+async function main() {
+  runNode("reset-test-data.js", []);
 
-// 2. Request OTP on-device
-runMaestro("login-request.yaml");
+  // Fail fast if the reset did not actually empty MailHog — every OTP
+  // poller below assumes the next message for our email is provably ours,
+  // and a stale box turns into silent wrong-code failures.
+  {
+    const m = await (
+      await fetch(`${MAILHOG_URL}/api/v2/messages?limit=1`)
+    ).json();
+    if ((m.total ?? (m.items || []).length) > 0) {
+      console.error("[run-suite] MailHog not empty after reset — aborting");
+      process.exit(1);
+    }
+  }
 
-// 3. Fetch the OTP MailHog received for our email (prints log lines;
-//    the bare 6-digit line is the code)
-const otpOut = execFileSync(process.execPath, [path.join(SCRIPTS_DIR, "get-otp.js"), EMAIL], {
-  env,
-  encoding: "utf8",
-});
-const otp = otpOut
-  .split("\n")
-  .map((l) => l.trim())
-  .find((l) => /^\d{6}$/.test(l));
-if (!otp) {
-  console.error("[run-suite] could not parse OTP from get-otp.js output");
-  process.exit(1);
+  // 2. Request OTP on-device
+  runMaestro("login-request.yaml");
+
+  // 3. Fetch the OTP MailHog received for our email (prints log lines;
+  //    the bare 6-digit line is the code)
+  const otpOut = execFileSync(
+    process.execPath,
+    [path.join(SCRIPTS_DIR, "get-otp.js"), EMAIL],
+    {
+      env,
+      encoding: "utf8",
+    },
+  );
+  const otp = otpOut
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => /^\d{6}$/.test(l));
+  if (!otp) {
+    console.error("[run-suite] could not parse OTP from get-otp.js output");
+    process.exit(1);
+  }
+  console.log("[run-suite] OTP retrieved");
+  env.E2E_OTP = otp;
+
+  // 4. Seed deterministic tasks (local noon => same calendar day in any tz)
+  const noonToday = atNoon(now);
+  const noonNextWeek = atNoon(addDays(now, 7));
+  runNode("seed-task.js", [
+    `E2E Seeded ${RUN_ID}`,
+    "TASK",
+    addDays(noonToday, 2).toISOString(), // deadline
+    "60",
+    "1", // sessionCount
+    noonToday.toISOString(), // scheduledStartTime
+  ]);
+  runNode("seed-task.js", [
+    "E2E This Week",
+    "TASK",
+    addDays(noonToday, 2).toISOString(),
+    "60",
+    "1",
+    noonToday.toISOString(),
+  ]);
+  runNode("seed-task.js", [
+    "E2E Next Week",
+    "TASK",
+    addDays(noonNextWeek, 2).toISOString(),
+    "60",
+    "1",
+    noonNextWeek.toISOString(),
+  ]);
+
+  // 5. Run the suite (starts at login-verify.yaml)
+  runMaestro(suite === "extended" ? "extended.yaml" : "smoke.yaml");
+
+  console.log("[run-suite] SUITE PASSED — report: mobile/maestro-report.xml");
 }
-console.log("[run-suite] OTP retrieved");
-env.E2E_OTP = otp;
 
-// 4. Seed deterministic tasks (local noon => same calendar day in any tz)
-const noonToday = atNoon(now);
-const noonNextWeek = atNoon(addDays(now, 7));
-runNode("seed-task.js", [
-  `E2E Seeded ${RUN_ID}`,
-  "TASK",
-  addDays(noonToday, 2).toISOString(), // deadline
-  "60",
-  "1", // sessionCount
-  noonToday.toISOString(), // scheduledStartTime
-]);
-runNode("seed-task.js", [
-  "E2E This Week",
-  "TASK",
-  addDays(noonToday, 2).toISOString(),
-  "60",
-  "1",
-  noonToday.toISOString(),
-]);
-runNode("seed-task.js", [
-  "E2E Next Week",
-  "TASK",
-  addDays(noonNextWeek, 2).toISOString(),
-  "60",
-  "1",
-  noonNextWeek.toISOString(),
-]);
-
-// 5. Run the suite (starts at login-verify.yaml)
-runMaestro(suite === "extended" ? "extended.yaml" : "smoke.yaml");
-
-console.log("[run-suite] SUITE PASSED — report: mobile/maestro-report.xml");
+main().catch((err) => {
+  console.error(`[run-suite] ${err.message}`);
+  process.exit(1);
+});
