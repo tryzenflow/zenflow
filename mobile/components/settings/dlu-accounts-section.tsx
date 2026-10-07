@@ -14,6 +14,7 @@ import {
   EyeOff,
   GraduationCap,
   KeyRound,
+  Link2,
   MoreHorizontal,
   RefreshCw,
   Unlink,
@@ -277,6 +278,7 @@ export function DluAccountsSection({
       toast(
         mode === "connect" ? t("Connected") : t("Credentials updated"),
         "success",
+        { icon: Link2 },
       );
       closeSignInSheet();
     } catch (err) {
@@ -295,9 +297,14 @@ export function DluAccountsSection({
       toast(
         t("{provider} synced", { provider: PROVIDER_LABEL[provider] }),
         "success",
+        { icon: RefreshCw },
       );
     } catch (err) {
-      toast({ ...syncErrorToast(err), variant: "destructive" });
+      toast({
+        ...syncErrorToast(err),
+        variant: "destructive",
+        icon: RefreshCw,
+      });
       // A refused or failed sync can still have moved the status (a new failed
       // run, or a background sync we had not seen). If the server is still
       // mid-run — we gave up waiting, it did not — keep re-reading until it
@@ -314,10 +321,10 @@ export function DluAccountsSection({
     try {
       const status = await disconnectIntegration(selectedProvider);
       updateIntegration(selectedProvider, status);
-      toast(t("Disconnected"), "success");
+      toast(t("Disconnected"), "success", { icon: Unlink });
       confirmSheet.close();
     } catch {
-      toast(t("Couldn't disconnect"), "destructive");
+      toast(t("Couldn't disconnect"), "destructive", { icon: Unlink });
     } finally {
       setIsSubmitting(false);
     }

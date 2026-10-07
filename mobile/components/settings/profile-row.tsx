@@ -1,7 +1,11 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { updateBasicInfo } from "@/api/users";
-import { ChevronRight, Lock } from "@/components/Icons";
+import {
+  ChevronRight,
+  CircleUserRound,
+  Lock,
+} from "@/components/Icons";
 import {
   BottomSheet,
   BottomSheetContent,
@@ -71,13 +75,13 @@ export function ProfileRow({
     try {
       const updated = await updateBasicInfo({ name: trimmed });
       onUpdated(updated);
-      toast(t("Profile updated"), "success");
+      toast(t("Profile updated"), "success", { icon: CircleUserRound });
       bottomSheet.close();
     } catch (error) {
       const message =
         (isAxiosError(error) && error.response?.data?.message) ||
         t("Couldn't update profile");
-      toast(message, "destructive");
+      toast(message, "destructive", { icon: CircleUserRound });
     } finally {
       setSaving(false);
     }

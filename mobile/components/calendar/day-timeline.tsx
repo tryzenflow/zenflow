@@ -781,7 +781,12 @@ export function DayTimeline({
             prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)),
           );
         } catch (error) {
-          showErrorToast(toast, error, t("Couldn't move this session"));
+          showErrorToast(
+            toast,
+            error,
+            t("Couldn't move this session"),
+            "calendar-x",
+          );
         } finally {
           await refetch();
           setSettleKey((k) => k + 1);

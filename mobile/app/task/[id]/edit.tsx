@@ -130,7 +130,12 @@ function EditSessionForm() {
         }
       })
       .catch((error) => {
-        showErrorToast(toast, error, t("Couldn't open this session"));
+        showErrorToast(
+          toast,
+          error,
+          t("Couldn't open this session"),
+          "calendar-x",
+        );
         router.back();
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -213,17 +218,26 @@ function EditSessionForm() {
       }
 
       showDisplacedToast(toast, updated.displacedSessions);
-      toast(t("Session updated"), "success");
+      toast({
+        title: t("Session updated"),
+        variant: "success",
+        icon: "calendar-check",
+      });
       if (isSessionPastDeadline(updated)) {
         toast({
           title: t("Scheduled after deadline"),
           description: t("This session now ends past its due time."),
           variant: "warning",
+          icon: "calendar-clock",
           duration: 5000,
         });
       } else if (shouldSurfaceRescheduleHint()) {
-        toast(t("Tip"), "tip", 6000, "top", false, undefined, {
+        toast({
+          title: t("Tip"),
           description: t(RESCHEDULE_HINT),
+          variant: "tip",
+          icon: "lightbulb",
+          duration: 6000,
         });
       }
       // Jump the calendar to the (possibly new) time and pulse the block.
@@ -245,7 +259,12 @@ function EditSessionForm() {
         ),
       handleUpdated,
       (error) =>
-        showErrorToast(toast, error, t("Couldn't update session")),
+        showErrorToast(
+          toast,
+          error,
+          t("Couldn't update session"),
+          "calendar-x",
+        ),
     );
   }
 
@@ -293,10 +312,11 @@ function EditSessionForm() {
               : t("This and later occurrences removed")
             : t("Session deleted"),
         "success",
+        { icon: "trash" },
       );
       router.back();
     } catch (error) {
-      showErrorToast(toast, error, t("Couldn't delete session"));
+      showErrorToast(toast, error, t("Couldn't delete session"), "trash");
     } finally {
       setDeleting(false);
     }

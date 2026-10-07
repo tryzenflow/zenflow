@@ -274,6 +274,7 @@ function DescriptionFieldEditor({
         title: t("Couldn't open file"),
         description: t("Try again in a moment."),
         variant: "destructive",
+        icon: Upload,
       });
     }
   }
@@ -302,6 +303,7 @@ function DescriptionFieldEditor({
             title: t("Couldn't open link"),
             description: t("Try again in a moment."),
             variant: "destructive",
+            icon: Link2,
           });
         });
       }
@@ -393,6 +395,7 @@ function DescriptionFieldEditor({
         title: failureMessage,
         description: t("Check your connection and try again."),
         variant: "destructive",
+        icon: Upload,
       });
     }
   }
@@ -410,6 +413,7 @@ function DescriptionFieldEditor({
         title: t("Couldn't open file picker"),
         description: t("Try again in a moment."),
         variant: "destructive",
+        icon: Upload,
       });
       return;
     }
@@ -442,6 +446,7 @@ function DescriptionFieldEditor({
         title: t("Couldn't open photo library"),
         description: t("Try again in a moment."),
         variant: "destructive",
+        icon: ImagePlus,
       });
       return;
     }

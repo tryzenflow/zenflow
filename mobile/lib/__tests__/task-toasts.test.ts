@@ -126,16 +126,16 @@ describe("getSlotTakenError", () => {
 });
 
 describe("showSeriesAlternativesPrompt", () => {
-  it("is a non-auto-dismissing tip toast carrying a View action", () => {
+  it("is a persistent tip toast carrying a View action", () => {
     const toast = vi.fn();
     const onView = vi.fn();
     showSeriesAlternativesPrompt(toast, 3, 5, onView);
-    const { title, variant, duration, position, action, description } =
+    const { title, variant, persistent, position, action, description } =
       toast.mock.calls[0][0];
     expect(title).toBe("3 sittings have an alternative");
-    // "tip" is what keeps it up: only `success` auto-dismisses.
     expect(variant).toBe("tip");
-    expect(duration).toBeUndefined();
+    // Every other toast fades once its time in front is up.
+    expect(persistent).toBe(true);
     expect(position).toBe("bottom");
     expect(action.label).toBe("View");
     action.onPress();

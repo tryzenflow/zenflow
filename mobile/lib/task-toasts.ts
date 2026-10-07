@@ -1,6 +1,6 @@
 import { t } from "./i18n";
 import { format } from "./i18n";
-import type { useToast } from "@/components/ui/toast";
+import type { ToastIconName, useToast } from "@/components/ui/toast";
 import { placementQualifier, zonedDate } from "@zenflow/core";
 import {
   type DisplacedSession,
@@ -48,9 +48,10 @@ export function showSplitToast(
   toast: ToastFn,
   raw: string,
   variant: "success" | "destructive" | "warning" = "destructive",
+  icon?: ToastIconName,
 ): void {
   const { title, description } = splitToastMessage(t(raw));
-  toast({ title, description, variant });
+  toast({ title, description, variant, ...(icon && { icon }) });
 }
 
 /**
@@ -64,6 +65,7 @@ export function showErrorToast(
   toast: ToastFn,
   error: unknown,
   fallback: string,
+  icon?: ToastIconName,
 ): void {
   const message = describeSaveError(error, fallback);
   // Only the generic fallback is known: add a next step so it isn't a dead end.
@@ -71,6 +73,7 @@ export function showErrorToast(
     toast,
     message === fallback ? `${fallback}\n${t("Try again in a moment.")}` : message,
     "destructive",
+    icon,
   );
 }
 
@@ -214,13 +217,15 @@ export async function withInfeasibleRetry<T>(
     if (!infeasible) return onError(error);
     // One toast offering every policy, not one toast per policy.
     const { title, description } = splitToastMessage(infeasible.message);
+    // A decision, not a notice: nothing was saved yet, so it must not time
+    // out from under the user.
     toast({
       title,
       description,
       variant: "warning",
-      duration: 12000,
+      icon: "calendar-x",
+      persistent: true,
       position: "bottom",
-      showProgress: false,
       actions: infeasible.options.map((policy) => ({
         label: t(POLICY_LABEL[policy]),
         color: POLICY_COLOR[policy],
@@ -248,6 +253,7 @@ export function showDisplacedToast(
   toast({
     title: t("Moved {count} flexible tasks", { count: n }),
     description: t("To make room for the new session."),
+    icon: "calendar-clock",
     duration: 4000,
   });
 }
@@ -266,9 +272,9 @@ export function showAlternativePickToast(
     title: t("Moved to new slot"),
     description: t("{when}. Thanks, noted for next time.", { when }),
     variant: "success",
+    icon: "calendar-clock",
     duration: 4000,
     position: "bottom",
-    showProgress: false,
   });
 }
 
@@ -278,10 +284,10 @@ export function showAlternativePickToast(
  * the time this shows, so the copy has to say so — the prompt is an offer, not
  * a gate.
  *
- * Variant `"info"` is load-bearing: the toast provider only auto-dismisses
- * `success` toasts (`components/ui/toast.tsx`, `autoDismiss = !confirm &&
- * variant === "success"`), so an `info` prompt stays up until the user opens
- * it or closes it.
+ * `persistent` is load-bearing: every other toast fades once its time in
+ * front is up (`components/ui/toast.tsx`), and this offer must stay until the
+ * user opens it or closes it. It is otherwise a plain toast — same card, same
+ * button row — not a special A/B style.
  */
 export function showSeriesAlternativesPrompt(
   toast: ToastFn,
@@ -300,14 +306,13 @@ export function showSeriesAlternativesPrompt(
       total,
     }),
     variant: "tip",
+    icon: "sparkles",
+    persistent: true,
     position: "bottom",
-    showProgress: false,
     action: {
       label: t("View"),
       onPress: onView,
       color: { light: "#f97316", dark: "#fb923c" },
-      inline: true,
-      mockup: true,
     },
   });
 }
@@ -322,8 +327,8 @@ export function showSlotTakenToast(toast: ToastFn): void {
     title: t("That time was just taken"),
     description: t("Nothing moved. Pick another time or keep this one."),
     variant: "destructive",
+    icon: "calendar-x",
     position: "bottom",
-    showProgress: false,
   });
 }
 
@@ -348,9 +353,9 @@ export function showSeriesPickToast(
     title: t("Moved to new slot"),
     description: t("{when}. Thanks, noted for next time.", { when }),
     variant: "success",
+    icon: "calendar-clock",
     duration: 4000,
     position: "bottom",
-    showProgress: false,
   });
 }
 
@@ -368,6 +373,7 @@ export function showBulkPickToast(
     toast({
       title: t("Updated {count} sittings", { count: applied }),
       variant: "success",
+      icon: "calendar-check",
       duration: 4000,
       position: "bottom",
     });
@@ -377,8 +383,8 @@ export function showBulkPickToast(
     title: t("Updated {applied}, skipped {failed}", { applied, failed }),
     description: t("Skipped ones clashed with another sitting and stayed put."),
     variant: "warning",
+    icon: "calendar-clock",
     duration: 6000,
     position: "bottom",
-    showProgress: false,
   });
 }

@@ -210,6 +210,7 @@ export const MonthPage = memo(function MonthPage({
         toast(
           errorMessage(error, t("Couldn't load this month's tasks")),
           "destructive",
+          { icon: "calendar-x" },
         );
       }
     }
@@ -440,6 +441,7 @@ export const MonthPage = memo(function MonthPage({
         toast(
           errorMessage(error, t("Couldn't reschedule task")),
           "destructive",
+          { icon: "calendar-x" },
         );
       }
     };

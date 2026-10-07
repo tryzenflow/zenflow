@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Clock,
   Globe,
+  Sliders,
 } from "@/components/Icons";
 import {
   OptionSheet,
@@ -103,6 +104,7 @@ export function PreferencesSection() {
         title: t("Couldn't save preference"),
         description: t("Try again in a moment."),
         variant: "destructive",
+        icon: Sliders,
       });
     }
   }

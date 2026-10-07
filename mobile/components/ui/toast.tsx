@@ -13,10 +13,10 @@ import {
   useState,
 } from "react";
 import { Pressable, ScrollView, View } from "react-native";
-import Svg, { Path } from "react-native-svg";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   cancelAnimation,
+  Easing,
   Extrapolation,
   interpolate,
   runOnJS,
@@ -27,10 +27,16 @@ import Animated, {
 import {
   AlertCircle,
   AlertTriangle,
+  Bell,
+  CalendarCheck,
+  CalendarClock,
+  CalendarPlus,
+  CalendarX,
   CheckCircle,
   Info,
   Lightbulb,
   Sparkles,
+  Trash2,
   type LucideIcon,
   X,
 } from "../Icons";
@@ -41,9 +47,29 @@ export interface ToastAction {
   onPress: () => void;
   /** Accent for this button (tinted fill + border + text) so several choices
    * on one toast read as different options, not a row of identical pills. */
-  color?: { light: string; dark: string };
-  inline?: boolean;
-  mockup?: boolean;
+  color?: ToastAccent;
+}
+
+/** Icons by name, for callers that must stay free of React Native imports
+ * (`lib/task-toasts.ts` runs under plain-node Vitest). Components can pass a
+ * `LucideIcon` directly. */
+const TOAST_ICONS = {
+  "calendar-check": CalendarCheck,
+  "calendar-clock": CalendarClock,
+  "calendar-plus": CalendarPlus,
+  "calendar-x": CalendarX,
+  bell: Bell,
+  lightbulb: Lightbulb,
+  sparkles: Sparkles,
+  trash: Trash2,
+} satisfies Record<string, LucideIcon>;
+export type ToastIconName = keyof typeof TOAST_ICONS;
+export type ToastIcon = LucideIcon | ToastIconName;
+
+/** An explicit `#rrggbb` per color scheme. */
+export interface ToastAccent {
+  light: string;
+  dark: string;
 }
 
 /**
@@ -60,7 +86,6 @@ const TOAST_VARIANTS: Record<
     icon: string;
     Icon: LucideIcon;
     confirmBtn: string;
-    fillIcon?: boolean;
   }
 > = {
   default: {
@@ -98,7 +123,6 @@ const TOAST_VARIANTS: Record<
     icon: "text-primary",
     Icon: Sparkles,
     confirmBtn: "bg-primary",
-    fillIcon: true,
   },
 } satisfies Record<
   string,
@@ -107,7 +131,6 @@ const TOAST_VARIANTS: Record<
     icon: string;
     Icon: LucideIcon;
     confirmBtn: string;
-    fillIcon?: boolean;
   }
 >;
 
@@ -122,7 +145,7 @@ type ToastVariant = keyof typeof TOAST_VARIANTS;
  * of relying on utility classes. Amber/blue/green mirror the Tailwind 600/400
  * pairs the web toast uses.
  */
-const VARIANT_ACCENT: Record<ToastVariant, { light: string; dark: string }> = {
+const VARIANT_ACCENT: Record<ToastVariant, ToastAccent> = {
   // Plain notices read as info — blue, not the foreground ink.
   default: { light: "#2563eb", dark: "#60a5fa" },
   destructive: { light: "#e7000b", dark: "#ff6467" },
@@ -158,7 +181,8 @@ export interface ToastConfirmOptions extends ToastConfirm {
 }
 
 // iOS-style stack: newest in front, peeking slivers behind, a pill to expand.
-// Only `success` toasts auto-dismiss.
+// Only the front card's clock runs (with a progress bar); the cards behind it
+// wait their turn, and a confirm or `persistent` toast stays until closed.
 const STACK_PEEK_LAYERS = 2;
 /** How far each card behind the front one peeks out below it. */
 const STACK_PEEK_PX = 7;
@@ -169,6 +193,9 @@ const SWIPE_DISMISS_THRESHOLD = 72;
 const SWIPE_DISMISS_VELOCITY = 600;
 const ENTRANCE_DURATION = 220;
 const EXIT_DURATION = 180;
+/** How long a toast stays in front when the caller gives no `duration`. */
+const DEFAULT_DURATION = 4000;
+const DEFAULT_ERROR_DURATION = 6000;
 
 /**
  * Gap from the screen's bottom edge to the toast stack when `position` is
@@ -187,8 +214,14 @@ interface ToastProps {
   message: string;
   onHide: (id: number) => void;
   variant?: ToastVariant;
+  /** Glyph for the badge — what the toast is about (a calendar, a bell, a
+   * trash can…). Falls back to the variant's generic icon. */
+  icon?: ToastIcon;
+  /** Badge / progress / confirm color; falls back to the variant's. */
+  accent?: ToastAccent;
   duration?: number;
-  showProgress?: boolean;
+  /** Stays up until closed: no clock, no progress bar. */
+  persistent?: boolean;
   action?: ToastAction;
   /** Several choices on one toast (e.g. the infeasible-slot policies), shown
    * as a button row; takes precedence over `action`'s single button. */
@@ -197,11 +230,11 @@ interface ToastProps {
   /** Optional second line under the message, rendered muted. When set (and
    * this isn't a confirm toast) the `message` becomes a compact title. */
   description?: string;
-  /** Stop the auto-dismiss clock (the stack is expanded); restarts on resume.
-   * Only a `success` toast has one — every other variant stays up until closed. */
+  /** Stop the auto-dismiss clock (the stack is expanded); it resumes where
+   * it left off. */
   paused?: boolean;
-  /** Behind the front card of a collapsed stack: mounted (its timer keeps
-   * running) but not drawn. */
+  /** Behind the front card of a collapsed stack: mounted but not drawn, and
+   * its clock waits until it reaches the front. */
   hidden?: boolean;
   /** Gap below the card. */
   spacing?: number;
@@ -214,8 +247,10 @@ function Toast({
   message,
   onHide,
   variant = "default",
-  duration = 3000,
-  showProgress = true,
+  icon,
+  accent: accentOverride,
+  duration = DEFAULT_DURATION,
+  persistent = false,
   action,
   actions,
   confirm,
@@ -236,15 +271,14 @@ function Toast({
   const { isDarkColorScheme } = useColorScheme();
   const palette = isDarkColorScheme ? NAV_THEME.dark : NAV_THEME.light;
   const meta = TOAST_VARIANTS[variant] ?? TOAST_VARIANTS.default;
-  const Icon = meta.Icon;
-  const accent = (VARIANT_ACCENT[variant] ?? VARIANT_ACCENT.default)[
-    isDarkColorScheme ? "dark" : "light"
-  ];
+  const Icon =
+    (typeof icon === "string" ? TOAST_ICONS[icon] : icon) ?? meta.Icon;
+  const accent = (accentOverride ??
+    VARIANT_ACCENT[variant] ??
+    VARIANT_ACCENT.default)[isDarkColorScheme ? "dark" : "light"];
 
-  const autoDismiss = !confirm && variant === "success";
-  const buttons = confirm
-    ? []
-    : (actions ?? (action && !action.inline ? [action] : []));
+  const autoDismiss = !confirm && !persistent && duration > 0;
+  const buttons = confirm ? [] : (actions ?? (action ? [action] : []));
 
   const hide = useCallback(() => {
     onHide(id);
@@ -284,21 +318,24 @@ function Toast({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The clock runs only while this card is in front, collapsed and not under
+  // the finger; stopping it freezes the bar, and resuming finishes the time
+  // that was left rather than starting over.
+  const running = autoDismiss && !paused && !hidden && !dragging;
   useEffect(() => {
-    // Only success toasts auto-dismiss.
-    if (!autoDismiss) return;
-    cancelAnimation(progress);
-    progress.value = 0;
-    // Paused while expanded; restarts on collapse.
-    // Paused while expanded or being dragged; restarts on release.
-    if (paused || dragging) return;
+    if (!running) return;
+    const remaining = Math.max(duration * (1 - progress.value), 100);
     progress.value = withTiming(1, {
-      duration: Math.max(duration - ENTRANCE_DURATION, 100),
+      duration: remaining,
+      easing: Easing.linear,
     });
-    const timer = setTimeout(() => dismiss(0), duration);
-    return () => clearTimeout(timer);
+    const timer = setTimeout(() => dismiss(0), remaining);
+    return () => {
+      clearTimeout(timer);
+      cancelAnimation(progress);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [duration, paused, dragging]);
+  }, [running, duration]);
 
   // Swiping a toast away dismisses it; for a confirm toast that also counts as
   // pressing Cancel.
@@ -373,15 +410,11 @@ function Toast({
             alignSelf: "center",
             marginBottom: spacing,
             display: hidden ? "none" : "flex",
-            borderRadius: action?.mockup ? 16 : 18,
+            borderRadius: 18,
             borderWidth: 1,
-            borderColor: action?.mockup
-              ? isDarkColorScheme
-                ? "rgba(255,255,255,0.24)"
-                : "rgba(0,0,0,0.6)"
-              : palette.border,
-            backgroundColor: action?.mockup ? palette.card : palette.card,
-            padding: action?.mockup ? 14 : 14,
+            borderColor: palette.border,
+            backgroundColor: palette.card,
+            padding: 14,
             shadowColor: "#000",
             shadowOpacity: isDarkColorScheme ? 0.45 : 0.16,
             shadowRadius: 18,
@@ -402,16 +435,7 @@ function Toast({
               backgroundColor: `${accent}22`,
             }}
           >
-            {meta.fillIcon ? (
-              <Svg width={17} height={17} viewBox="0 0 24 24">
-                <Path
-                  d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"
-                  fill={accent}
-                />
-              </Svg>
-            ) : (
-              <Icon size={17} color={accent} />
-            )}
+            <Icon size={17} color={accent} />
           </View>
 
           <Pressable
@@ -443,32 +467,7 @@ function Toast({
             ) : null}
           </Pressable>
 
-          {action?.inline && !confirm && !actions ? (
-            <Pressable
-              onPress={() => {
-                action.onPress();
-                dismiss(0);
-              }}
-              hitSlop={8}
-              style={{
-                borderRadius: 8,
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-                backgroundColor:
-                  action.color?.[isDarkColorScheme ? "dark" : "light"] ??
-                  palette.primary,
-              }}
-            >
-              <Text
-                className="text-[12.5px] font-semibold"
-                style={{ color: "#fff" }}
-              >
-                {action.label}
-              </Text>
-            </Pressable>
-          ) : null}
-
-          {!confirm && !action?.inline && (
+          {!confirm && (
             <Pressable
               onPress={() => dismiss(0)}
               hitSlop={10}
@@ -563,7 +562,7 @@ function Toast({
           </View>
         )}
 
-        {showProgress && autoDismiss && (
+        {autoDismiss && (
           <View
             className="mt-2.5 overflow-hidden"
             style={{
@@ -685,9 +684,11 @@ interface ToastMessage {
   id: number;
   text: string;
   variant: ToastVariant;
+  icon?: ToastIcon;
+  accent?: ToastAccent;
   duration?: number;
+  persistent?: boolean;
   position?: string;
-  showProgress?: boolean;
   action?: ToastAction;
   actions?: ToastAction[];
   confirm?: ToastConfirm;
@@ -696,25 +697,26 @@ interface ToastMessage {
 /**
  * Object form of `toast()`. Copy rule: `title` is at most 5 words, verb-first,
  * no trailing period; the explanation or next step goes in `description`.
+ * Give it an `icon` for what it's about; `variant` only sets the tone.
  */
 export interface ToastInput {
   title: string;
   description?: string;
   variant?: ToastVariant;
+  icon?: ToastIcon;
+  accent?: ToastAccent;
+  /** Time in front before it fades (ms); the default depends on `variant`. */
   duration?: number;
+  /** A decision that must not time out — stays until closed. */
+  persistent?: boolean;
   position?: "top" | "bottom";
-  showProgress?: boolean;
   action?: ToastAction;
   actions?: ToastAction[];
 }
 type ToastPositionalArgs = [
   message: string,
   variant?: ToastVariant,
-  duration?: number,
-  position?: "top" | "bottom",
-  showProgress?: boolean,
-  action?: ToastAction,
-  opts?: { description?: string; actions?: ToastAction[] },
+  opts?: Omit<ToastInput, "title" | "variant">,
 ];
 export interface ToastFn {
   (input: ToastInput): void;
@@ -727,18 +729,8 @@ export function normalizeToastArgs(
 ): ToastInput {
   const first = args[0];
   if (typeof first === "object") return first;
-  const [message, variant, duration, position, showProgress, action, opts] =
-    args as ToastPositionalArgs;
-  return {
-    title: message,
-    variant,
-    duration,
-    position,
-    showProgress,
-    action,
-    description: opts?.description,
-    actions: opts?.actions,
-  };
+  const [message, variant, opts] = args as ToastPositionalArgs;
+  return { ...opts, title: message, variant };
 }
 interface ToastContextProps {
   toast: ToastFn;
@@ -771,9 +763,13 @@ function ToastProvider({
     const {
       title,
       variant = "default",
-      duration = 3000,
+      icon,
+      accent,
+      duration = variant === "destructive"
+        ? DEFAULT_ERROR_DURATION
+        : DEFAULT_DURATION,
+      persistent,
       position = "top",
-      showProgress = true,
       action,
       actions,
       description,
@@ -784,9 +780,11 @@ function ToastProvider({
         id: ++toastIdCounter,
         text: title,
         variant,
+        icon,
+        accent,
         duration,
+        persistent,
         position,
-        showProgress,
         action,
         actions,
         description,
@@ -803,7 +801,6 @@ function ToastProvider({
         text: message,
         variant,
         duration: 0,
-        showProgress: false,
         confirm: rest,
       },
     ]);
@@ -837,8 +834,10 @@ function ToastProvider({
       id={message.id}
       message={message.text}
       variant={message.variant}
+      icon={message.icon}
+      accent={message.accent}
       duration={message.duration}
-      showProgress={message.showProgress}
+      persistent={message.persistent}
       action={message.action}
       actions={message.actions}
       confirm={message.confirm}

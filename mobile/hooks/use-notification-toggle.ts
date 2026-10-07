@@ -68,6 +68,7 @@ export function useNotificationToggle() {
           ? t("Allow them in system settings.")
           : t("Try again in a moment."),
         variant: "destructive",
+        icon: "bell",
         duration: 6000,
         action: blocked
           ? {

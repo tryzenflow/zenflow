@@ -1,3 +1,4 @@
+import { CircleUserRound, Mail } from "@/components/Icons";
 import { getLanguage, t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -203,7 +204,7 @@ export default function LoginScreen() {
     clearErrors("email");
     try {
       await requestOtp(data.email, getLanguage());
-      toast(t("Check your inbox"), "info");
+      toast(t("Check your inbox"), "info", { icon: Mail });
       requestLockout.clear();
       setStage("otp");
       form.setValue("otp", "");
@@ -231,7 +232,7 @@ export default function LoginScreen() {
     clearErrors("otp");
     try {
       const result = await verifyOtp(getValues("email"), data.otp);
-      toast(t("Welcome back"), "success");
+      toast(t("Welcome back"), "success", { icon: CircleUserRound });
       let user: User = result.data;
       // The language shown on this screen (the top-right select, or the
       // Vietnamese default) overrides the account's stored preference.

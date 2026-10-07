@@ -7,6 +7,7 @@ import { getSessionDetails } from "@/api/tasks";
 import { useToast } from "@/components/ui/toast";
 import { usePushStatusStore } from "@/hooks/use-push-status-store";
 import { useUserStore } from "@/hooks/use-user-store";
+import { notificationToastVisual } from "@/lib/notification-visual";
 import {
   claimNotification,
   configureForegroundHandler,
@@ -83,6 +84,7 @@ export function usePushRegistration(): void {
             title: t("Couldn't find that item"),
             description: t("It's no longer on your calendar."),
             variant: "destructive",
+            icon: "calendar-x",
           });
           return;
         }
@@ -118,13 +120,12 @@ export function usePushRegistration(): void {
           rawTitle.replace(/^\[.*?\]\s*/, "").trim() || t("New notification");
         const body = notification.request.content.body || undefined;
 
-        toast(
+        toast({
           title,
-          "default",
-          7000,
-          "top",
-          true,
-          sessionId
+          description: body,
+          ...notificationToastVisual(data?.eventName),
+          duration: 7000,
+          action: sessionId
             ? {
                 label: t("View on calendar"),
                 onPress: async () => {
@@ -141,13 +142,13 @@ export function usePushRegistration(): void {
                       title: t("Couldn't find that item"),
                       description: t("It's no longer on your calendar."),
                       variant: "destructive",
+                      icon: "calendar-x",
                     });
                   }
                 },
               }
             : undefined,
-          { description: body },
-        );
+        });
       },
     );
 
