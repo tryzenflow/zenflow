@@ -26,6 +26,7 @@ import { TodayButton } from "@/components/calendar/today-button";
 import { GettingStarted } from "@/components/checklist/getting-started";
 import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { Text } from "@/components/ui/text";
+import { haptic } from "@/lib/haptics";
 import { completeStep } from "@/hooks/use-checklist";
 import { useUserStore } from "@/hooks/use-user-store";
 import { addMonths, monthLabel } from "@/lib/month-date-math";
@@ -102,9 +103,9 @@ export default function MonthScreen() {
     [],
   );
 
-  // Double tap a day cell → Week view with that day selected. The Week screen
-  // reads `date` as a UTC instant and re-homes it to the tz wall clock.
-  const handleDoubleTapDay = useCallback(
+  // The day sheet's "Open day" → Week view with that day selected. The Week
+  // screen reads `date` as a UTC instant and re-homes it to the tz wall clock.
+  const openDayInWeek = useCallback(
     (day: Date) => {
       router.navigate({
         pathname: "/",
@@ -173,30 +174,40 @@ export default function MonthScreen() {
       <NotificationBell />
       <GettingStarted />
       <View
-        className="flex-row justify-between items-center gap-3 border-b border-border bg-background px-4 pb-4"
+        className="flex-row justify-between items-center gap-3 border-b border-border bg-background px-4 pb-2"
         style={{ paddingTop: insets.top + 16 }}
       >
         <View className="min-w-0 shrink gap-1">
           <View className="flex-row items-center gap-2">
             <Pressable
-              onPress={() => goToMonth(addMonths(monthDate, -1))}
-              hitSlop={8}
+              onPress={() => {
+                haptic.tap();
+                goToMonth(addMonths(monthDate, -1));
+              }}
+              accessibilityRole="button"
               accessibilityLabel={t("Previous month")}
+              className="-ml-3 size-11 items-center justify-center"
             >
-              <ChevronLeft size={18} className="text-muted-foreground" />
+              <ChevronLeft size={20} className="text-muted-foreground" />
             </Pressable>
             <Text
               numberOfLines={1}
+              accessibilityRole="header"
+              accessibilityLiveRegion="polite"
               className="shrink text-xl font-bold tracking-tight"
             >
               {monthLabel(visibleMonth)}
             </Text>
             <Pressable
-              onPress={() => goToMonth(addMonths(monthDate, 1))}
-              hitSlop={8}
+              onPress={() => {
+                haptic.tap();
+                goToMonth(addMonths(monthDate, 1));
+              }}
+              accessibilityRole="button"
               accessibilityLabel={t("Next month")}
+              className="-mr-1 size-11 items-center justify-center"
             >
-              <ChevronRight size={18} className="text-muted-foreground" />
+              <ChevronRight size={20} className="text-muted-foreground" />
             </Pressable>
           </View>
         </View>
@@ -229,7 +240,6 @@ export default function MonthScreen() {
               onDragActiveChange={setDragActive}
               onOpenDay={openDay}
               onOpenOverflow={openDay}
-              onDoubleTapDay={handleDoubleTapDay}
             />
           )}
         />
@@ -243,6 +253,7 @@ export default function MonthScreen() {
       <SessionListSheet
         ref={taskListSheetRef}
         tz={tz}
+        onOpenDay={openDayInWeek}
         onSelectSession={openSessionFromSheet}
         onReschedule={openReschedule}
       />

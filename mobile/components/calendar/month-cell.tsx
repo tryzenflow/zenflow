@@ -1,6 +1,6 @@
 import { useLanguage } from "@/hooks/use-language";
-import { sessionTypeTextClass } from "@/lib/session-type-class";
-import { t } from "@/lib/i18n";
+import { FONT_SCALE_CAP } from "@/lib/constants";
+import { format, t } from "@/lib/i18n";
 import { AlertTriangle } from "@/components/Icons";
 import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
 import { Text } from "@/components/ui/text";
@@ -19,14 +19,13 @@ import {
 } from "@/lib/task-card";
 import { cn } from "@/lib/utils";
 import type { Session } from "@zenflow/shared";
-import { memo, useEffect, useMemo, useRef } from "react";
+import { memo, useMemo } from "react";
 import { Pressable, View } from "react-native";
-import { sessionTypeIcon } from "./session-type-badge";
 
 /** A week row's *preferred* height. Rows shrink below it (equally) when the
  * month doesn't fit between the header and the tab bar — small screens,
  * 6-week months — so the last week is never hidden under the bar. */
-export const CELL_HEIGHT = 96;
+export const CELL_HEIGHT = 104;
 
 interface MonthCellProps {
   day: Date;
@@ -44,17 +43,11 @@ interface MonthCellProps {
   /** The task id currently being dragged (any cell), so its origin pill can
    * hide in place while the ghost overlay stands in for it. */
   draggingSessionId: string | null;
-  /** Receives the day's tasks too — a single tap opens the detail sheet in
-   * place rather than navigating away. */
+  /** Receives the day's tasks too — a tap opens the detail sheet in place
+   * rather than navigating away (the sheet's "Open day" goes to Week). */
   onPressDay: (day: Date, tasks: Session[]) => void;
-  /** A double tap on the cell jumps to the Week view with this day selected. */
-  onDoubleTapDay: (day: Date) => void;
   onPressOverflow: (day: Date, tasks: Session[]) => void;
 }
-
-/** Max gap (ms) between two taps on a cell for the second to count as a
- * double tap → Week view. A single tap resolves after this delay. */
-const DOUBLE_TAP_MS = 240;
 
 /**
  * A single day cell in the Month grid — RN port of
@@ -87,41 +80,10 @@ export const MonthCell = memo(function MonthCell({
   isJustDropped,
   draggingSessionId,
   onPressDay,
-  onDoubleTapDay,
   onPressOverflow,
 }: MonthCellProps) {
   useLanguage();
   const outside = isOutsideMonth(day, monthDate);
-
-  // Single vs. double tap: a single tap opens the day sheet (deferred by
-  // `DOUBLE_TAP_MS` so a second tap can cancel it); a double tap jumps to
-  // Week view. `Pressable` has no native double-tap, so it's timed here.
-  const lastTapRef = useRef(0);
-  const singleTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (singleTapTimer.current) clearTimeout(singleTapTimer.current);
-    },
-    [],
-  );
-  const handlePress = () => {
-    const now = Date.now();
-    if (now - lastTapRef.current < DOUBLE_TAP_MS) {
-      lastTapRef.current = 0;
-      if (singleTapTimer.current) {
-        clearTimeout(singleTapTimer.current);
-        singleTapTimer.current = null;
-      }
-      onDoubleTapDay(day);
-      return;
-    }
-    lastTapRef.current = now;
-    if (singleTapTimer.current) clearTimeout(singleTapTimer.current);
-    singleTapTimer.current = setTimeout(() => {
-      singleTapTimer.current = null;
-      onPressDay(day, sessions);
-    }, DOUBLE_TAP_MS);
-  };
 
   // `groupSessionsByDate` always hands us `sessions` in chronological order
   // (the day sheet relies on that), so re-sort a copy by type severity here —
@@ -137,24 +99,40 @@ export const MonthCell = memo(function MonthCell({
     [sessions],
   );
   const { visible, overflowCount } = splitCellSessions(bySeverity);
+  // "Tuesday, Oct 7, 3 items": the cell reads as one control, its pills don't repeat.
+  const count = sessions.length;
+  const dayLabel = [
+    format(day, "EEEE, MMM d"),
+    isToday ? t("Today") : null,
+    count === 0
+      ? t("No items")
+      : count === 1
+        ? t("1 item")
+        : t("{count} items", { count }),
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   return (
     <Pressable
-      onPress={handlePress}
+      onPress={() => onPressDay(day, sessions)}
       style={{ width: `${100 / 7}%` }}
+      accessibilityRole="button"
+      accessibilityLabel={dayLabel}
+      accessibilityHint={t("Opens this day's sessions")}
       className={cn(
-        "overflow-hidden border-b border-r border-border p-[5px] pb-[6px]",
+        "overflow-hidden border-b border-r border-border p-[3px] pb-[6px]",
         outside ? "bg-muted/40" : "bg-transparent",
-        isToday &&
-          "border-t-2 border-t-orange-500 bg-orange-50 dark:bg-orange-950/20",
+        isToday && "border-t-2 border-t-primary-text bg-primary/10",
         (isDropTarget || isJustDropped) && "bg-primary/[0.14]",
       )}
     >
       {openDayTip ? <SpotlightAnchor step="open-day" /> : null}
       {moveDayTip ? <SpotlightAnchor step="move-day" /> : null}
       <Text
+        maxFontSizeMultiplier={FONT_SCALE_CAP.grid}
         className={cn(
-          "h-[23px] w-[23px] rounded-full text-center text-[12.5px] font-semibold leading-[23px]",
+          "ml-[2px] h-[23px] w-[23px] rounded-full text-center text-[12.5px] font-semibold leading-[23px]",
           outside
             ? "text-muted-foreground opacity-60"
             : isToday
@@ -176,10 +154,17 @@ export const MonthCell = memo(function MonthCell({
         {overflowCount > 0 && (
           <Pressable
             onPress={() => onPressOverflow(day, sessions)}
-            hitSlop={6}
+            hitSlop={{ top: 6, bottom: 8, left: 6, right: 6 }}
+            accessibilityRole="link"
+            accessibilityLabel={t("{count} more sessions, open the day", {
+              count: overflowCount,
+            })}
             className="rounded-[5px] px-1 py-0.5"
           >
-            <Text className="text-[9.5px] font-bold leading-tight text-muted-foreground">
+            <Text
+              maxFontSizeMultiplier={FONT_SCALE_CAP.grid}
+              className="text-label font-bold leading-tight text-muted-foreground"
+            >
               +{overflowCount} {t("more")}
             </Text>
           </Pressable>
@@ -200,41 +185,38 @@ const MonthPill = memo(function MonthPill({ session, hidden }: MonthPillProps) {
   useLanguage();
   const state = deriveState(session);
   const late = isSessionPastDeadline(session);
-  const Icon = sessionTypeIcon(session.type);
   const continuation = isContinuationEntry(session);
 
+  // No per-type glyph: at 11px a cell is ~50pt wide and the icon cost half the
+  // title. The type reads from the pill's hue and outline (dashed for DND);
+  // the day sheet shows the full badge. Only the states that need a symbol
+  // keep one: past the deadline, or continuing from yesterday.
   return (
     <View
       style={hidden ? { opacity: 0 } : undefined}
       className={cn(
-        "flex-row items-center gap-1 rounded-[5px] border-l-2 px-1.5 py-0.5",
-        late ? "border-l-amber-500 bg-amber-500/15" : MONTH_PILL_CLASSES[state],
+        "flex-row items-center gap-[3px] rounded-[5px] border px-1 py-0.5",
+        late ? "border-warning/60 bg-warning/15" : MONTH_PILL_CLASSES[state],
         continuation &&
           "rounded-t-none border-t-[1.5px] border-t-muted-foreground/50 [border-top-style:dashed]",
       )}
     >
       {late ? (
-        <AlertTriangle
-          size={9}
-          className="shrink-0 text-amber-700 dark:text-amber-300"
-        />
+        <AlertTriangle size={11} className="shrink-0 text-warning" />
       ) : continuation ? (
-        <Text className="shrink-0 text-[9px] leading-none text-muted-foreground">
+        <Text
+          maxFontSizeMultiplier={FONT_SCALE_CAP.grid}
+          className="shrink-0 text-label leading-none text-muted-foreground"
+        >
           ↳
         </Text>
-      ) : (
-        <Icon
-          size={9}
-          className={cn("shrink-0", sessionTypeTextClass(session.type))}
-        />
-      )}
+      ) : null}
       <Text
         numberOfLines={1}
+        maxFontSizeMultiplier={FONT_SCALE_CAP.grid}
         className={cn(
-          "flex-1 text-[9.5px] font-semibold leading-tight",
-          late
-            ? "text-amber-700 dark:text-amber-300"
-            : MONTH_PILL_TEXT_CLASSES[state],
+          "flex-1 text-label font-semibold leading-tight",
+          late ? "text-warning" : MONTH_PILL_TEXT_CLASSES[state],
         )}
       >
         {session.title}

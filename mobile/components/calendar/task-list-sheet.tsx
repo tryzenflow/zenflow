@@ -15,6 +15,7 @@ import {
   MousePointer2,
 } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
+import { TextLink } from "@/components/ui/text-link";
 import { isContinuationEntry } from "@/lib/month-date-math";
 import { isSessionPastDeadline } from "@/lib/overdue";
 import { deriveState } from "@/lib/task-card";
@@ -48,6 +49,8 @@ export interface SessionListSheetHandle {
 
 interface SessionListSheetProps {
   tz: string;
+  /** The header's "Open day": closes the sheet and shows this day in the Week view. */
+  onOpenDay?: (day: Date) => void;
   /** Tapping a row closes the sheet and hands the task back to the screen
    * (`app/(app)/month.tsx` pushes `/task/[id]/edit`). */
   onSelectSession: (task: Session) => void;
@@ -59,7 +62,7 @@ interface SessionListSheetProps {
 export const SessionListSheet = forwardRef<
   SessionListSheetHandle,
   SessionListSheetProps
->(({ tz, onSelectSession, onReschedule }, ref) => {
+>(({ tz, onOpenDay, onSelectSession, onReschedule }, ref) => {
   useLanguage();
   const bottomSheet = useBottomSheet();
   const [day, setDay] = useState<Date | null>(null);
@@ -137,13 +140,26 @@ export const SessionListSheet = forwardRef<
       >
         <BottomSheetHeader>
           <View className="min-w-0 flex-1">
-            <Text className="text-[19px] font-bold">
+            <Text accessibilityRole="header" className="text-[19px] font-bold">
               {day ? formatTitle(day, "EEE, MMM d") : ""}
             </Text>
             <Text className="mt-[3px] text-[13px] text-muted-foreground">
               {summarize(sessions)}
             </Text>
           </View>
+          {onOpenDay && day ? (
+            <TextLink
+              tone="primary"
+              onPress={() => {
+                bottomSheet.close();
+                onOpenDay(day);
+              }}
+              accessibilityHint={t("Shows this day in the Week view")}
+              className="self-center"
+            >
+              {t("Open day")}
+            </TextLink>
+          ) : null}
         </BottomSheetHeader>
         {sessions.length > 0 && (
           <View className="mx-5 mb-1 mt-2 flex-row items-center gap-2 rounded-lg bg-muted/60 px-3 py-2">
@@ -151,7 +167,7 @@ export const SessionListSheet = forwardRef<
               size={13}
               className="shrink-0 text-muted-foreground"
             />
-            <Text className="flex-1 text-[12px] leading-snug text-muted-foreground">
+            <Text className="flex-1 text-xs leading-snug text-muted-foreground">
               {t(
                 "Press and hold, then drag onto another day this month — or tap Move to pick any date.",
               )}
@@ -332,6 +348,8 @@ function SessionListRow({
     <GestureDetector gesture={pan}>
       <Pressable
         onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`${task.title}, ${timeLabel} – ${endLabel}`}
         className="flex-row items-center gap-[13px] px-4 py-3.5"
       >
         {/* Start over end, joined by a short rule — reads as a span. */}
@@ -369,11 +387,8 @@ function SessionListRow({
             </Text>
             {late && (
               <View className="flex-row items-center gap-0.5">
-                <AlertTriangle
-                  size={11}
-                  className="text-amber-700 dark:text-amber-300"
-                />
-                <Text className="text-[12px] font-semibold text-amber-700 dark:text-amber-300">
+                <AlertTriangle size={12} className="text-warning" />
+                <Text className="text-xs font-semibold text-warning">
                   {t("late")}
                 </Text>
               </View>
@@ -383,11 +398,13 @@ function SessionListRow({
         {onReschedule && (
           <Pressable
             onPress={onReschedule}
-            hitSlop={8}
+            accessibilityRole="button"
             accessibilityLabel={t("Move {title}", { title: task.title })}
-            className="h-9 w-9 flex-none items-center justify-center rounded-full bg-muted"
+            className="-mr-2 size-11 flex-none items-center justify-center"
           >
-            <CalendarClock size={16} className="text-muted-foreground" />
+            <View className="size-9 items-center justify-center rounded-full bg-muted">
+              <CalendarClock size={16} className="text-muted-foreground" />
+            </View>
           </Pressable>
         )}
       </Pressable>

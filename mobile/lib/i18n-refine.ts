@@ -37,4 +37,11 @@ export default {
   "{count} unread": "{count} chưa đọc",
   "Select none": "Bỏ chọn tất cả",
   "Select all": "Chọn tất cả",
+  "No items": "Không có mục nào",
+  "1 item": "1 mục",
+  "{count} items": "{count} mục",
+  "Opens this day's sessions": "Mở các lịch trong ngày này",
+  "{count} more sessions, open the day": "Còn {count} lịch nữa, mở ngày",
+  "Open day": "Mở ngày",
+  "Shows this day in the Week view": "Xem ngày này trong màn hình tuần",
 } as Record<string, string>;
