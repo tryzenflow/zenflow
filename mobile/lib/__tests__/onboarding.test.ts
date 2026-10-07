@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_TIMEZONE,
+  FIRST_STEP,
   addCustomTag,
   canGoBack,
   filterTimezones,
@@ -7,9 +9,12 @@ import {
   mergeTagNames,
   newTagsForBulk,
   nextStep,
+  onboardingStepKey,
+  parseStoredStep,
   pendingSetupItems,
   prevStep,
   routeForSession,
+  suggestedTimezone,
   tagOptions,
   tagsForBulk,
   toggleTag,
@@ -37,16 +42,47 @@ describe("routeForSession", () => {
 
 describe("step navigation", () => {
   it("walks forward and clamps", () => {
-    expect(nextStep("name")).toBe("dlu");
+    expect(nextStep("dlu")).toBe("name");
+    expect(nextStep("name")).toBe("notifications");
     expect(nextStep("tags")).toBe("done");
     expect(nextStep("done")).toBe("done");
   });
   it("walks back and clamps; no back on first/done", () => {
-    expect(prevStep("dlu")).toBe("name");
-    expect(prevStep("name")).toBe("name");
-    expect(canGoBack("name")).toBe(false);
-    expect(canGoBack("dlu")).toBe(true);
+    expect(prevStep("name")).toBe("dlu");
+    expect(prevStep("dlu")).toBe("dlu");
+    expect(canGoBack("dlu")).toBe(false);
+    expect(canGoBack("name")).toBe(true);
     expect(canGoBack("done")).toBe(false);
+  });
+});
+
+describe("resume", () => {
+  it("keys the stored step per user", () => {
+    expect(onboardingStepKey("u1")).not.toBe(onboardingStepKey("u2"));
+  });
+  it("resumes a valid step and falls back to the first", () => {
+    expect(parseStoredStep("timezone")).toBe("timezone");
+    expect(parseStoredStep("done")).toBe("done");
+    expect(parseStoredStep("bogus")).toBe(FIRST_STEP);
+    expect(parseStoredStep(null)).toBe(FIRST_STEP);
+    expect(parseStoredStep(undefined)).toBe(FIRST_STEP);
+  });
+});
+
+describe("suggestedTimezone", () => {
+  const offsets: Record<string, number> = {
+    "Asia/Ho_Chi_Minh": 420,
+    "Asia/Saigon": 420,
+    "America/Los_Angeles": -420,
+  };
+  const offsetOf = (tz: string) => offsets[tz] ?? 0;
+  it("keeps a device already on Vietnam time", () => {
+    expect(suggestedTimezone("Asia/Saigon", offsetOf)).toBe("Asia/Saigon");
+  });
+  it("otherwise offers Ho Chi Minh", () => {
+    expect(suggestedTimezone("America/Los_Angeles", offsetOf)).toBe(
+      DEFAULT_TIMEZONE,
+    );
   });
 });
 

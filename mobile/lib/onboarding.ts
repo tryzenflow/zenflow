@@ -7,8 +7,8 @@ import { BULK_TAGS_MAX, TAG_NAME_MAX } from "@zenflow/shared";
  */
 
 export const ONBOARDING_STEPS = [
-  "name",
   "dlu",
+  "name",
   "notifications",
   "timezone",
   "reminder",
@@ -17,7 +17,35 @@ export const ONBOARDING_STEPS = [
 ] as const;
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 
-export const FIRST_STEP: OnboardingStep = "name";
+/** DLU first: it is the one step that makes the calendar fill itself. */
+export const FIRST_STEP: OnboardingStep = "dlu";
+
+/** The app is for DLU students, so Vietnam time is the default, not a 400-row choice. */
+export const DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh";
+
+/** Where an interrupted onboarding resumes; per user so a second account starts fresh. */
+export const onboardingStepKey = (userId: string) =>
+  `zenflow.onboarding-step.${userId}`;
+
+/** A stored step if it is a real one, else the first step (never trust storage). */
+export function parseStoredStep(raw: string | null | undefined): OnboardingStep {
+  return (ONBOARDING_STEPS as readonly string[]).includes(raw ?? "")
+    ? (raw as OnboardingStep)
+    : FIRST_STEP;
+}
+
+/**
+ * The timezone the step offers first: the device's when it is already on
+ * Vietnam time (so the app keeps following it), else Asia/Ho_Chi_Minh.
+ */
+export function suggestedTimezone(
+  device: string,
+  offsetOf: (tz: string) => number = utcOffsetMinutes,
+): string {
+  return offsetOf(device) === offsetOf(DEFAULT_TIMEZONE)
+    ? device
+    : DEFAULT_TIMEZONE;
+}
 
 /** Next step, clamped at "done". */
 export function nextStep(step: OnboardingStep): OnboardingStep {
