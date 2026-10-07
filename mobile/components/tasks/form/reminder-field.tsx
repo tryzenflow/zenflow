@@ -89,8 +89,8 @@ export function ReminderField({
               })}
               className="flex-row items-center gap-1.5 py-1.5 pl-3 pr-1.5"
             >
-              <Bell size={14} className="text-primary" />
-              <Text className="text-[13px] font-medium text-primary">
+              <Bell size={14} className="text-primary-text" />
+              <Text className="text-[13px] font-medium text-primary-text">
                 {localizedReminderLabel(m)}
               </Text>
             </Pressable>
@@ -103,7 +103,7 @@ export function ReminderField({
               hitSlop={8}
               className="mr-1.5 size-4 items-center justify-center rounded-full bg-primary/20"
             >
-              <X size={10} className="text-primary" />
+              <X size={10} className="text-primary-text" />
             </Pressable>
           </View>
         ))}
@@ -168,7 +168,7 @@ export function ReminderField({
                     <Text
                       className={cn(
                         "text-[13px] font-semibold text-muted-foreground",
-                        m === current && "text-primary",
+                        m === current && "text-primary-text",
                       )}
                     >
                       {localizedReminderLeadLabel(m)}
@@ -208,7 +208,7 @@ export function ReminderField({
                     <Text
                       className={cn(
                         "text-[12px] font-semibold text-muted-foreground",
-                        u.id === unit && "text-primary",
+                        u.id === unit && "text-primary-text",
                       )}
                     >
                       {t(u.id)}

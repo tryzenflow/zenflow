@@ -1086,8 +1086,8 @@ export function DayTimeline({
                       height: (EMPTY_ZONE_MINUTES / DAILY_HORIZON) * totalHeight,
                     }}
                   >
-                    <Plus size={20} className="text-brand-orange" />
-                    <Text className="text-center text-[14px] font-semibold text-brand-orange">
+                    <Plus size={20} className="text-primary-text" />
+                    <Text className="text-center text-[14px] font-semibold text-primary-text">
                       {t("Tap to add a session")}
                     </Text>
                     <Text className="text-center text-[12px] text-muted-foreground">

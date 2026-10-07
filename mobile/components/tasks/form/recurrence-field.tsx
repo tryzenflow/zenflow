@@ -67,7 +67,7 @@ export function RecurrenceField({
               <Text
                 className={cn(
                   "text-[12px] font-semibold",
-                  active ? "text-primary" : "text-muted-foreground",
+                  active ? "text-primary-text" : "text-muted-foreground",
                 )}
               >
                 {f === "NONE"
@@ -107,7 +107,7 @@ export function RecurrenceField({
                 <Text
                   className={cn(
                     "text-[12px] font-semibold",
-                    active ? "text-primary" : "text-muted-foreground",
+                    active ? "text-primary-text" : "text-muted-foreground",
                   )}
                 >
                   {locale() === "vi-VN"

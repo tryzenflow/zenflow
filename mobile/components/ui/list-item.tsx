@@ -21,7 +21,7 @@ const listItemTextVariants = cva(
     variants: {
       variant: {
         default: "text-foreground",
-        primary: "text-primary",
+        primary: "text-primary-text",
         link: "text-blue-500",
         destructive: "text-destructive",
       },

@@ -1,4 +1,5 @@
 import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
+import { sessionTypeTextClass } from "@/lib/session-type-class";
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { locale, localizedDeadlineShort } from "@/lib/i18n";
@@ -838,7 +839,7 @@ function SessionBlockImpl({
                   size={11}
                   className={cn(
                     "shrink-0",
-                    SESSION_TYPE_META[segment.type].textClass,
+                    sessionTypeTextClass(segment.type),
                   )}
                 />
               )}

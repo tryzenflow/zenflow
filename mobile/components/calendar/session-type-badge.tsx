@@ -1,4 +1,5 @@
 import { t } from "@/lib/i18n";
+import { sessionTypeTextClass } from "@/lib/session-type-class";
 import { useLanguage } from "@/hooks/use-language";
 import {
   AlertCircle,
@@ -68,12 +69,12 @@ export function SessionTypeBadge({
         className,
       )}
     >
-      <Icon size={iconSize} className={meta.textClass} />
+      <Icon size={iconSize} className={sessionTypeTextClass(type)} />
       {showLabel && (
         <Text
           className={cn(
             "text-[10px] font-semibold leading-[13px]",
-            meta.textClass,
+            sessionTypeTextClass(type),
           )}
         >
           {t(meta.label)}

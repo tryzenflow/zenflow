@@ -77,11 +77,11 @@ export const BlockActionsSheet = forwardRef<
             onPress={() => run(onSessionBefore)}
             className="flex-row items-center gap-3 rounded-xl bg-primary/10 px-3 py-3.5 active:opacity-70"
           >
-            <Plus size={18} className="text-primary" />
-            <Text className="flex-1 text-[14px] font-semibold text-primary">
+            <Plus size={18} className="text-primary-text" />
+            <Text className="flex-1 text-[14px] font-semibold text-primary-text">
               {t("Add study session before this")}
             </Text>
-            <ChevronRight size={16} className="text-primary/60" />
+            <ChevronRight size={16} className="text-primary-text/60" />
           </Pressable>
 
           <Pressable

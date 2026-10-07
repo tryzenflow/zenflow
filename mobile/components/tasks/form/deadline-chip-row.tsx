@@ -211,7 +211,7 @@ export function DeadlineChipRow({
               <Text
                 className={cn(
                   "text-[11px] font-semibold",
-                  chip === c.id ? "text-primary" : "text-muted-foreground",
+                  chip === c.id ? "text-primary-text" : "text-muted-foreground",
                 )}
               >
                 {t(c.label)}

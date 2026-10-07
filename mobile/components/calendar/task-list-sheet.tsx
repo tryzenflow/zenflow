@@ -1,4 +1,5 @@
 import { t } from "@/lib/i18n";
+import { sessionTypeTextClass } from "@/lib/session-type-class";
 import { useLanguage } from "@/hooks/use-language";
 import { format, formatTitle } from "@/lib/i18n";
 import {
@@ -350,7 +351,7 @@ function SessionListRow({
         ) : (
           <TypeIcon
             size={16}
-            className={cn("flex-none", SESSION_TYPE_META[task.type].textClass)}
+            className={cn("flex-none", sessionTypeTextClass(task.type))}
           />
         )}
         <View className="min-w-0 flex-1">

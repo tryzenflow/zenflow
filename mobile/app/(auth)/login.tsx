@@ -65,7 +65,7 @@ function LockoutNotice({ children }: { children: ReactNode }) {
   useLanguage();
   return (
     <View className="mt-2 flex-row items-start gap-1.5">
-      <Clock size={15} className="mt-px shrink-0 text-brand-yellow" />
+      <Clock size={15} className="mt-px shrink-0 text-warning" />
       <Text className="flex-1 text-[13px] font-medium text-foreground">
         {children}
       </Text>

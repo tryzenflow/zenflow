@@ -271,7 +271,7 @@ export const RescheduleSheet = forwardRef<
                 {crossesMidnight && (
                   <View pointerEvents="none" className="absolute ml-1 -top-2">
                     <Text
-                      className="text-primary"
+                      className="text-primary-text"
                       style={{
                         fontSize: 11,
                         lineHeight: 12,

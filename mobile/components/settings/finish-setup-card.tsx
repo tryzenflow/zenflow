@@ -45,7 +45,7 @@ export function FinishSetupCard({
     <View className="mt-[22px] overflow-hidden rounded-2xl border border-primary/40 bg-primary/10">
       <View className="flex-row items-center justify-between px-4 pb-1 pt-3.5">
         <View className="flex-row items-center gap-2">
-          <AlarmClockIcon size={16} className="text-primary" />
+          <AlarmClockIcon size={16} className="text-primary-text" />
           <Text className="text-[15px] font-bold">
             {t("Finish setting up Zenflow")}
           </Text>

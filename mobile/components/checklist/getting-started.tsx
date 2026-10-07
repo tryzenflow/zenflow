@@ -187,7 +187,7 @@ export function GettingStarted() {
                         {item.hint}
                       </Text>
                       {item.blockedBy ? (
-                        <Text className="mt-0.5 text-[12.5px] font-medium text-primary">
+                        <Text className="mt-0.5 text-[12.5px] font-medium text-primary-text">
                           {t("Create a task first.")}
                         </Text>
                       ) : null}

@@ -95,7 +95,7 @@ const TOAST_VARIANTS: Record<
   },
   tip: {
     badge: "bg-primary/15",
-    icon: "text-primary",
+    icon: "text-primary-text",
     Icon: Sparkles,
     confirmBtn: "bg-primary",
     fillIcon: true,

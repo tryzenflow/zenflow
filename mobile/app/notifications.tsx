@@ -314,7 +314,7 @@ export default function NotificationsScreen() {
               hitSlop={8}
               className="rounded-full px-3 py-1.5 active:bg-muted"
             >
-              <Text className="text-[13px] font-semibold text-primary">
+              <Text className="text-[13px] font-semibold text-primary-text">
                 {allSelected ? t("None") : t("All")}
               </Text>
             </Pressable>
@@ -363,7 +363,7 @@ export default function NotificationsScreen() {
                 hitSlop={8}
                 className="rounded-full px-3 py-1.5 active:bg-muted"
               >
-                <Text className="text-[14px] font-semibold text-primary">
+                <Text className="text-[14px] font-semibold text-primary-text">
                   {t("Select")}
                 </Text>
               </Pressable>
@@ -395,7 +395,7 @@ export default function NotificationsScreen() {
           ListEmptyComponent={
             <View className="flex-1 items-center justify-center px-8 py-16">
               <View className="mb-4 h-14 w-14 items-center justify-center rounded-full border border-primary/30 bg-primary/10">
-                <Check size={24} className="text-primary" />
+                <Check size={24} className="text-primary-text" />
               </View>
               <Text className="text-center text-[16px] font-semibold text-foreground">
                 {t("You're all caught up")}

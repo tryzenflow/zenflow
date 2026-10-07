@@ -20,7 +20,7 @@ export const MONTH_PILL_CLASSES: Record<SessionCardState, string> = {
 
 /** Pill label text color per state, paired with {@link MONTH_PILL_CLASSES}. */
 export const MONTH_PILL_TEXT_CLASSES: Record<SessionCardState, string> = {
-  fluid: "text-brand-orange",
+  fluid: "text-primary-text",
   conflict: "text-amber-700 dark:text-amber-300",
   assignment: "text-teal-700 dark:text-teal-300",
   exam: "text-rose-600 dark:text-rose-300",

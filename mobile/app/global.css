@@ -8,6 +8,12 @@
  * "Design tokens"). Re-derive these by running the OKLch->sRGB conversion again if the web palette
  * changes — do not hand-tweak them independently of frontend/src/index.css.
  *
+ * Deliberate mobile-only accessibility deviations from the web palette (WCAG AA, computed):
+ * --muted-foreground (light) is darker so small text passes on --muted (5.11:1, was 4.40),
+ * --primary-text is the orange to use for TEXT and ICONS on surfaces (light 5.37:1 on background,
+ * 5.50 card, 4.97 muted; the brand orange is 2.07-2.28 and stays for fills), --warning is the amber
+ * for text/icons (light 6.26:1 on background). Dark values already passed.
+ *
  * Stored as space-separated "R G B" channels (not hex) and consumed via rgb(var(--x) / <alpha-value>)
  * in tailwind.config.ts — that's what lets Tailwind's /NN opacity modifiers (bg-primary/10, etc.)
  * actually apply alpha under NativeWind on native. A bare hex string in the variable makes the
@@ -23,10 +29,12 @@
     --popover-foreground: 15 13 10;
     --primary: 255 142 62;
     --primary-foreground: 43 20 6;
+    --primary-text: 178 72 0;
+    --warning: 130 86 0;
     --secondary: 246 243 239;
     --secondary-foreground: 28 26 24;
     --muted: 246 243 239;
-    --muted-foreground: 121 112 101;
+    --muted-foreground: 110 102 92;
     --accent: 246 243 239;
     --accent-foreground: 28 26 24;
     --destructive: 231 0 11;
@@ -49,6 +57,8 @@
     --popover-foreground: 251 250 248;
     --primary: 255 122 36;
     --primary-foreground: 43 20 6;
+    --primary-text: 255 122 36;
+    --warning: 246 185 21;
     --secondary: 44 40 35;
     --secondary-foreground: 251 250 248;
     --muted: 44 40 34;

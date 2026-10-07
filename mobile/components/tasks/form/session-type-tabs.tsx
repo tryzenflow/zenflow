@@ -40,7 +40,10 @@ const FIXED_TYPES: {
  * classes: NativeWind color interop on lucide icons is unreliable on native.
  */
 const TYPE_ACCENT: Record<SessionFormType, { light: string; dark: string }> = {
-  TASK: { light: NAV_THEME.light.primary, dark: NAV_THEME.dark.primary },
+  TASK: {
+    light: NAV_THEME.light.primaryText,
+    dark: NAV_THEME.dark.primaryText,
+  },
   ASSIGNMENT: { light: "#0d9488", dark: "#2dd4bf" },
   EXAM: { light: "#e11d48", dark: "#fb7185" },
   LECTURE: { light: "#0284c7", dark: "#38bdf8" },

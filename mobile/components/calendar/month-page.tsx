@@ -1,4 +1,5 @@
 import { t } from "@/lib/i18n";
+import { sessionTypeTextClass } from "@/lib/session-type-class";
 import { useLanguage } from "@/hooks/use-language";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import { format } from "@/lib/i18n";
@@ -544,7 +545,7 @@ export const MonthPage = memo(function MonthPage({
           >
             <GhostIcon
               size={10}
-              className={SESSION_TYPE_META[ghostSession.type].textClass}
+              className={sessionTypeTextClass(ghostSession.type)}
             />
             <Text
               numberOfLines={1}

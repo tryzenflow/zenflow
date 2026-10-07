@@ -570,7 +570,7 @@ export default function OnboardingScreen() {
           <View className="mt-4 gap-3 px-1">
             {COPY.notifications.bullets.map((b) => (
               <View key={t(b)} className="flex-row items-start gap-2.5">
-                <Check size={16} className="mt-0.5 text-primary" />
+                <Check size={16} className="mt-0.5 text-primary-text" />
                 <Text className="flex-1 text-[13.5px] text-muted-foreground">
                   {t(b)}
                 </Text>
@@ -591,7 +591,7 @@ export default function OnboardingScreen() {
                   onPress={() => void Linking.openSettings()}
                   className="mt-2"
                 >
-                  <Text className="text-[13.5px] font-semibold text-primary">
+                  <Text className="text-[13.5px] font-semibold text-primary-text">
                     {COPY.notifications.openSettings}
                   </Text>
                 </Pressable>
@@ -634,7 +634,7 @@ export default function OnboardingScreen() {
                 : "border-border bg-card",
             )}
           >
-            <MapPin size={20} className="text-primary" />
+            <MapPin size={20} className="text-primary-text" />
             <View className="flex-1">
               <Text className="text-[12.5px] font-semibold text-muted-foreground">
                 {COPY.timezone.detected}
@@ -818,7 +818,7 @@ export default function OnboardingScreen() {
                       setStep(r.step as OnboardingStep);
                     }}
                   >
-                    <Text className="text-[13px] font-semibold text-primary">
+                    <Text className="text-[13px] font-semibold text-primary-text">
                       {t("Set up")}
                     </Text>
                   </Pressable>
@@ -902,7 +902,7 @@ export default function OnboardingScreen() {
             </View>
           ) : Hero ? (
             <View className="mb-4 size-12 items-center justify-center rounded-2xl bg-primary/10">
-              <Hero size={24} className="text-primary" />
+              <Hero size={24} className="text-primary-text" />
             </View>
           ) : null}
           <Text

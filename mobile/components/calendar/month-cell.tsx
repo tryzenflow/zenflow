@@ -1,4 +1,5 @@
 import { useLanguage } from "@/hooks/use-language";
+import { sessionTypeTextClass } from "@/lib/session-type-class";
 import { t } from "@/lib/i18n";
 import { AlertTriangle } from "@/components/Icons";
 import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
@@ -224,7 +225,7 @@ const MonthPill = memo(function MonthPill({ session, hidden }: MonthPillProps) {
       ) : (
         <Icon
           size={9}
-          className={cn("shrink-0", SESSION_TYPE_META[session.type].textClass)}
+          className={cn("shrink-0", sessionTypeTextClass(session.type))}
         />
       )}
       <Text
