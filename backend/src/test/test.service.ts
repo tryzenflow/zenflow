@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import type { SessionType } from "../../generated/prisma";
+import type { SeedTaskInput } from "@zenflow/shared";
 
 @Injectable()
 export class TestService {
@@ -43,21 +43,12 @@ export class TestService {
    * Seeds a test task (Session) for the given user.
    * Requires authenticated user context.
    *
-   * `scheduledStartTime` is written verbatim when provided so Maestro flows
-   * can place seeded tasks on deterministic calendar days without going
-   * through the placement engine (which would choose its own slot).
+   * `scheduledStartTime` is always written so Maestro flows can place seeded
+   * tasks on deterministic calendar days without going through the placement
+   * engine (which would choose its own slot), and because a live session row
+   * must never have a null start (the DTO rejects a seed without one).
    */
-  async seedTask(
-    userId: string,
-    input: {
-      title: string;
-      type: SessionType;
-      deadline: string; // ISO string
-      durationMinutes: number;
-      sessionCount?: number;
-      scheduledStartTime?: string; // ISO string, optional
-    },
-  ) {
+  async seedTask(userId: string, input: SeedTaskInput) {
     const {
       title,
       type,
@@ -66,9 +57,7 @@ export class TestService {
       sessionCount = 1,
       scheduledStartTime,
     } = input;
-    const scheduled = scheduledStartTime
-      ? new Date(scheduledStartTime)
-      : undefined;
+    const scheduled = new Date(scheduledStartTime);
 
     if (sessionCount > 1) {
       // Create a series with multiple sessions
@@ -91,7 +80,7 @@ export class TestService {
               type,
               source: "USER",
               deadline: new Date(deadline),
-              ...(scheduled ? { scheduledStartTime: scheduled } : {}),
+              scheduledStartTime: scheduled,
             },
           }),
         ),
@@ -109,7 +98,7 @@ export class TestService {
         type,
         source: "USER",
         deadline: new Date(deadline),
-        ...(scheduled ? { scheduledStartTime: scheduled } : {}),
+        scheduledStartTime: scheduled,
       },
     });
 

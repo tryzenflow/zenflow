@@ -8,9 +8,10 @@ import {
 } from "@nestjs/common";
 import { ApiTags, ApiOperation } from "@nestjs/swagger";
 import { TestService } from "./test.service";
+import { SeedTaskDto } from "./dto/seed-task.dto";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
-import type { SessionType, User } from "../../generated/prisma";
+import type { User } from "../../generated/prisma";
 
 /**
  * Test-only controller — registered conditionally in AppModule when
@@ -38,7 +39,7 @@ export class TestController {
   })
   async reset() {
     await this.testService.resetDatabase();
-    return { success: true, message: "Test data reset" };
+    return { success: true, message: "Test data reset", data: null };
   }
 
   /**
@@ -53,19 +54,8 @@ export class TestController {
     description:
       "Creates a session/task directly via Prisma. Only available when NODE_ENV=test.",
   })
-  async seedTask(
-    @CurrentUser() user: User,
-    @Body()
-    body: {
-      title: string;
-      type: SessionType;
-      deadline: string;
-      durationMinutes: number;
-      sessionCount?: number;
-      scheduledStartTime?: string;
-    },
-  ) {
+  async seedTask(@CurrentUser() user: User, @Body() body: SeedTaskDto) {
     const result = await this.testService.seedTask(user.id, body);
-    return { success: true, data: result };
+    return { success: true, message: "Test task seeded", data: result };
   }
 }
