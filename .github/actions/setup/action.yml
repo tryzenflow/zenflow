@@ -1,12 +1,17 @@
 name: Setup workspace
 description: Node + pnpm (cached) install, then build @zenflow/shared and @zenflow/core and generate the Prisma client.
+inputs:
+  node-version:
+    description: Node.js version passed to setup-node (workspace default 20; mobile jobs need 22+ for expo)
+    required: false
+    default: "20"
 runs:
   using: composite
   steps:
     - uses: pnpm/action-setup@v4 # version comes from package.json "packageManager"
     - uses: actions/setup-node@v4
       with:
-        node-version: 20
+        node-version: ${{ inputs.node-version }}
         cache: pnpm
     - name: Install
       shell: bash
