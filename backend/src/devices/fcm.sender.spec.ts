@@ -94,7 +94,7 @@ describe("FcmSender", () => {
     });
     expect(arg.android).toEqual({
       priority: "high",
-      notification: { channelId: "zenflow-default" },
+      notification: { channelId: "zenflow-default-v2" },
     });
   });
 
