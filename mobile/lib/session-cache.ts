@@ -45,6 +45,12 @@ interface DayCacheEntry {
 
 let disk: SessionDisk | null = null;
 
+/** Bumped whenever the cache is wiped or switches account. A request records
+ * it when it starts and drops its result if it moved, so a response that
+ * lands after logout never writes into the next account's memory or disk. */
+let generation = 0;
+let hydratedUserId: string | null = null;
+
 /** Wire the disk layer once, at startup. */
 export function attachSessionDisk(d: SessionDisk | null): void {
   disk = d;
@@ -52,6 +58,8 @@ export function attachSessionDisk(d: SessionDisk | null): void {
 
 /** Load `userId`'s persisted calendar into the memory cache (null = signed out: wipe disk). */
 export function hydrateSessionCache(userId: string | null): void {
+  if (userId !== hydratedUserId) generation++;
+  hydratedUserId = userId;
   if (!disk) return;
   for (const [key, entry] of disk.load(userId)) {
     if (cache.has(key)) continue; // fresher in-memory data wins
@@ -165,13 +173,14 @@ export function fetchDaySessions(
 ): Promise<Session[]> {
   const existing = inFlight.get(dayKey);
   if (existing) return existing;
+  const startedIn = generation;
   const p = loader()
     .then((sessions) => {
-      setCachedDaySessions(dayKey, sessions);
+      if (startedIn === generation) setCachedDaySessions(dayKey, sessions);
       return sessions;
     })
     .finally(() => {
-      inFlight.delete(dayKey);
+      if (inFlight.get(dayKey) === p) inFlight.delete(dayKey);
     });
   inFlight.set(dayKey, p);
   return p;
@@ -179,6 +188,7 @@ export function fetchDaySessions(
 
 /** Drop everything — e.g. on logout, so the next user never sees stale days. */
 export function clearDaySessionCache(): void {
+  generation++;
   cache.clear();
   inFlight.clear();
   disk?.clear();
