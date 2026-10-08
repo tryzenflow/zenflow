@@ -113,10 +113,10 @@ describe("splitCellSessions", () => {
     });
   });
 
-  it("defaults the cap to 2 (the fixed month-grid overflow cap)", () => {
-    expect(splitCellSessions(["a", "b", "c"])).toEqual({
-      visible: ["a", "b"],
-      overflowCount: 1,
+  it("defaults the cap to 4 (the fixed month-grid overflow cap)", () => {
+    expect(splitCellSessions(["a", "b", "c", "d", "e", "f"])).toEqual({
+      visible: ["a", "b", "c", "d"],
+      overflowCount: 2,
     });
   });
 });

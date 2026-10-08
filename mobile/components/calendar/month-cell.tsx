@@ -231,7 +231,7 @@ export const MonthCell = memo(function MonthCell({
             className="rounded-[5px] px-1 py-0.5"
           >
             <Text className="text-[9.5px] font-bold leading-tight text-muted-foreground">
-              +{overflowCount} {t("more")}
+              +{overflowCount}
             </Text>
           </Pressable>
         )}

@@ -24,7 +24,9 @@ import {
 
 export const WEEK_STARTS_ON = 1;
 
-export const MONTH_PILL_CAP = 2;
+/** Sessions a month cell shows before it rolls the rest into "+N". The grid fills
+ * the screen, so cells are tall enough for four pills. */
+export const MONTH_PILL_CAP = 4;
 
 export const MONTH_CELL_VISIBILITY_WEIGHTS = {
   EXAM: 10,
@@ -83,9 +85,8 @@ export interface CellSessionSplit<T> {
 
 /**
  * Split a day's tasks into what a `MonthCell` renders directly vs. what
- * rolls into the "+N more" overflow pill. Fixed at `cap` (2 — the mockup /
- * issue checklist's cap; deliberately NOT responsive to cell height, see
- * GitHub issue #21's "open questions").
+ * rolls into the "+N" overflow pill. Fixed at `cap`, deliberately NOT
+ * responsive to cell height (see GitHub issue #21's "open questions").
  */
 export function splitCellSessions<T>(
   tasks: T[],
