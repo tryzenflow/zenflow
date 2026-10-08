@@ -344,8 +344,8 @@ export default {
     "Chạm +, hoặc nhấn giữ một ô trống.",
   "Move a task":
     "Di chuyển công việc",
-  "Hold and drag it to reschedule in 15-minute steps. Tap to edit.":
-    "Nhấn giữ và kéo để đổi lịch theo từng 15 phút. Chạm để chỉnh sửa.",
+  "Hold one of your tasks and drag it to reschedule in 15-minute steps. Timetable classes and exams stay put.":
+    "Nhấn giữ một công việc của bạn rồi kéo để đổi lịch theo từng 15 phút. Thời khóa biểu và lịch thi giữ nguyên.",
   "Hold a task for more actions":
     "Nhấn giữ công việc để xem thêm thao tác",
   "Hold it without moving. Move to… changes the day.":
@@ -360,8 +360,8 @@ export default {
     "Chạm vào một ngày trong tháng để xem công việc của ngày đó.",
   "Move a task to another day":
     "Chuyển công việc sang ngày khác",
-  "Hold a task in the day's list, then drag it onto another day.":
-    "Nhấn giữ một công việc trong danh sách của ngày rồi kéo sang ngày khác.",
+  "Hold one of your tasks in the day's list, then drag it onto another day. Timetable classes and exams stay put.":
+    "Nhấn giữ một công việc của bạn trong danh sách của ngày rồi kéo sang ngày khác. Thời khóa biểu và lịch thi giữ nguyên.",
   "Nice! You moved a task.": "Tuyệt! Bạn đã chuyển một công việc.",
   "Zenflow learns from every move to place tasks better.":
     "Zenflow học từ mỗi lần bạn chuyển để xếp lịch tốt hơn.",

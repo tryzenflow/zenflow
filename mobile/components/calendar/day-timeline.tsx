@@ -434,10 +434,11 @@ export function DayTimeline({
   const layout = useMemo(() => getOverlapLayout(segments), [segments]);
 
   // The block the checklist's "Move a task" / "Hold a task" spotlights point at:
-  // the task the user just created when it's on this day, else the first whole one.
+  // the task the user just created when it's on this day, else the first whole
+  // one. Only plain tasks: timetable lectures, exams etc. aren't the ones to demo.
   const lastCreatedId = useLastCreated((s) => s.id);
   const tipSegmentId = useMemo(() => {
-    const whole = segments.filter((s) => !s.continued);
+    const whole = segments.filter((s) => !s.continued && s.type === "TASK");
     return (
       (whole.find((s) => s.taskId === lastCreatedId) ?? whole[0])?.segmentId ??
       null

@@ -64,6 +64,9 @@ export const SessionListSheet = forwardRef<
   const bottomSheet = useBottomSheet();
   const [day, setDay] = useState<Date | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
+  // The "Move a task to another day" demo points at a plain task, never a
+  // timetable lecture or exam.
+  const firstTaskIndex = sessions.findIndex((s) => s.type === "TASK");
   const dragRef = useRef<MonthDragHandle | null>(null);
   // Read inside the pan callbacks, which are built once per row and must not
   // capture the day the sheet happened to be showing on that render.
@@ -190,7 +193,7 @@ export const SessionListSheet = forwardRef<
                   index > 0 && "border-t border-t-border",
                 )}
               >
-                {index === 0 ? <SpotlightAnchor step="move-day" ignoreFocus /> : null}
+                {index === firstTaskIndex ? <SpotlightAnchor step="move-day" ignoreFocus /> : null}
                 <SessionListRow
                   task={item}
                   tz={tz}

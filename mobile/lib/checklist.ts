@@ -24,11 +24,11 @@ export const STEP_COPY: Record<ChecklistStep, { title: string; hint: string }> =
   {
     "switch-day": copy("Switch day", "Swipe the calendar, or tap a day at the top."),
     "create-task": copy("Create a task", "Tap +, or tap the orange area on an empty day."),
-    "move-task": copy("Move a task", "Hold and drag it to reschedule in 15-minute steps. Tap to edit."),
+    "move-task": copy("Move a task", "Hold one of your tasks and drag it to reschedule in 15-minute steps. Timetable classes and exams stay put."),
     "block-actions": copy("Hold a task for more actions", "Hold it without moving. Move to… changes the day."),
     "open-month": copy("Open the Month view", "Tap Month in the tab bar."),
     "open-day": copy("Open a day", "Tap a day in the month to see its tasks."),
-    "move-day": copy("Move a task to another day", "Hold a task in the day's list, then drag it onto another day."),
+    "move-day": copy("Move a task to another day", "Hold one of your tasks in the day's list, then drag it onto another day. Timetable classes and exams stay put."),
   };
 
 /**
