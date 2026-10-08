@@ -14,6 +14,7 @@ export default {
   Reminders: "Nhắc nhở",
   Offline: "Ngoại tuyến",
   "Overdue at": "Hết hạn vào",
+  "Load link previews": "Tải xem trước liên kết",
   Hour: "Giờ",
   Minute: "Phút",
   "+{count} more": "+{count} nữa",

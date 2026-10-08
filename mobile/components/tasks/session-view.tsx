@@ -27,10 +27,7 @@ import {
   noteTypographyCss,
 } from "@/lib/note-html";
 import { useColorScheme } from "@/lib/useColorScheme";
-import {
-  fromRrule,
-  zonedDate,
-} from "@zenflow/core";
+import { fromRrule, zonedDate } from "@zenflow/core";
 import type { Session } from "@zenflow/shared";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Linking, Pressable, View } from "react-native";
@@ -157,13 +154,21 @@ function Property({
   oneLine?: boolean;
   children: ReactNode;
 }) {
+  // Plain-text rows are one VoiceOver element reading "Label, value". Rows
+  // holding a link or button stay ungrouped so those remain focusable; the
+  // icon carries the label there.
+  const plain = typeof children === "string";
   return (
     <View
       className="flex-row items-center gap-4"
-      accessible
-      accessibilityLabel={label}
+      accessible={plain}
+      accessibilityLabel={plain ? `${label}, ${children}` : undefined}
     >
-      <View className="w-7 items-center">
+      <View
+        className="w-7 items-center"
+        accessible={!plain}
+        accessibilityLabel={plain ? undefined : label}
+      >
         <Icon size={22} className="text-muted-foreground" />
       </View>
       {typeof children === "string" ? (
@@ -303,16 +308,28 @@ function NoteHtml({ html }: { html: string }) {
 
   // Link-only paragraphs become preview cards; fetch each target's Open Graph
   // metadata (title, description, cover image) and rebuild the page with it.
+  // Fetching contacts the link's server (and reveals the viewer), and notes can
+  // be imported from course material — so only on an explicit tap.
   const [previews, setPreviews] = useState<Record<string, LinkPreview>>({});
-  useEffect(() => {
-    const urls = Array.from(
-      html.matchAll(
-        /<p[^>]*>\s*<a [^>]*href="([^"]+)"[^>]*>[^<]*<\/a>\s*<\/p>/gi,
+  const [previewsRequested, setPreviewsRequested] = useState(false);
+  const previewUrls = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          Array.from(
+            html.matchAll(
+              /<p[^>]*>\s*<a [^>]*href="([^"]+)"[^>]*>[^<]*<\/a>\s*<\/p>/gi,
+            ),
+            (m) => m[1].replace(/&amp;/g, "&"),
+          ).filter((u) => /^https?:\/\//i.test(u)),
+        ),
       ),
-      (m) => m[1].replace(/&amp;/g, "&"),
-    ).filter((u) => /^https?:\/\//i.test(u));
+    [html],
+  );
+  useEffect(() => {
+    if (!previewsRequested) return;
     let cancelled = false;
-    for (const url of new Set(urls)) {
+    for (const url of previewUrls) {
       fetchLinkPreview(url).then((p) => {
         if (p && !cancelled) setPreviews((prev) => ({ ...prev, [url]: p }));
       });
@@ -320,7 +337,7 @@ function NoteHtml({ html }: { html: string }) {
     return () => {
       cancelled = true;
     };
-  }, [html]);
+  }, [previewsRequested, previewUrls]);
 
   const source = useMemo(() => {
     const { fg } = noteColors(isDarkColorScheme);
@@ -365,17 +382,30 @@ function NoteHtml({ html }: { html: string }) {
   }
 
   return (
-    <WebView
-      originWhitelist={["*"]}
-      source={source}
-      style={{ height, backgroundColor: "transparent" }}
-      scrollEnabled={false}
-      // iOS needs the view itself non-opaque for the transparent page to show the sheet behind.
-      opaque={false}
-      injectedJavaScript={injected}
-      onMessage={onMessage}
-      // Links are routed through `handleNoteLinkMessage`; never navigate in-place.
-      onShouldStartLoadWithRequest={(req) => req.url === "about:blank"}
-    />
+    <View className="gap-2">
+      <WebView
+        originWhitelist={["*"]}
+        source={source}
+        style={{ height, backgroundColor: "transparent" }}
+        scrollEnabled={false}
+        // iOS needs the view itself non-opaque for the transparent page to show the sheet behind.
+        opaque={false}
+        injectedJavaScript={injected}
+        onMessage={onMessage}
+        // Links are routed through `handleNoteLinkMessage`; never navigate in-place.
+        onShouldStartLoadWithRequest={(req) => req.url === "about:blank"}
+      />
+      {previewUrls.length > 0 && !previewsRequested && (
+        <Pressable
+          onPress={() => setPreviewsRequested(true)}
+          accessibilityRole="button"
+          hitSlop={8}
+        >
+          <Text className="text-[13px] font-semibold text-primary">
+            {t("Load link previews")}
+          </Text>
+        </Pressable>
+      )}
+    </View>
   );
 }
