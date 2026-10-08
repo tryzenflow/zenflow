@@ -159,7 +159,7 @@ describe("parseMonthlyView — assignments", () => {
         scheduledStartTime: new Date("2026-04-01T00:15:00.000Z"),
         durationMinutes: 15,
         location: ASSIGN_DUE_0739.url,
-        note: `<p><a href="${ASSIGN_DUE_0739.url}">Submission Link</a></p>`,
+        note: `<p><a href="${ASSIGN_DUE_0739.url}">${ASSIGN_DUE_0739.url}</a></p>`,
         lmsCourse: {
           lmsCourseId: 90002,
           fullName: COURSE_90002.fullname,
@@ -178,7 +178,7 @@ describe("parseMonthlyView — assignments", () => {
 
     expect(item.location).toBe(ASSIGN_DUE_0739.url);
     expect(item.note).toBe(
-      `${description}<p><a href="${ASSIGN_DUE_0739.url}">Submission Link</a></p>`,
+      `${description}<p><a href="${ASSIGN_DUE_0739.url}">${ASSIGN_DUE_0739.url}</a></p>`,
     );
   });
 

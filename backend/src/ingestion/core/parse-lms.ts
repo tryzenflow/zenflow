@@ -199,7 +199,7 @@ export function parseMonthlyView(
       });
       continue;
     }
-    const submissionLinkHtml = `<p><a href="${event.url}">Submission Link</a></p>`;
+    const submissionLinkHtml = `<p><a href="${event.url}">${event.url}</a></p>`;
     items.push({
       externalKey: lmsAssignKey(event.instance!),
       title: event.name,
