@@ -9,7 +9,11 @@ import {
   Tag,
   type LucideIcon,
 } from "@/components/Icons";
-import { SessionTypeBadge } from "@/components/calendar/session-type-badge";
+import {
+  OverdueBadge,
+  SessionTypeBadge,
+} from "@/components/calendar/session-type-badge";
+import { isSessionPastDeadline } from "@/lib/overdue";
 import { localizedReminderLabel } from "@/components/tasks/form/reminder-field";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
@@ -32,7 +36,7 @@ import {
 } from "@zenflow/core";
 import type { Session } from "@zenflow/shared";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { Pressable, View } from "react-native";
+import { Linking, Pressable, View } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
 const WEEKDAYS: Record<string, string> = {
@@ -106,6 +110,40 @@ function TagChips({ tags }: { tags: string[] }) {
         </Pressable>
       )}
     </View>
+  );
+}
+
+const URL_RE = /^https?:\/\/\S+$/i;
+
+/** A room or building as plain text; a link as tappable, underlined orange text (one line). */
+function LocationValue({ location }: { location: string }) {
+  const url = location.trim();
+  if (!URL_RE.test(url)) {
+    return (
+      <Text
+        className="flex-1 text-[15px] leading-[22px]"
+        numberOfLines={1}
+        ellipsizeMode="tail"
+      >
+        {location}
+      </Text>
+    );
+  }
+  return (
+    <Pressable
+      className="min-w-0 flex-1"
+      accessibilityRole="link"
+      accessibilityLabel={url}
+      onPress={() => void Linking.openURL(url).catch(() => {})}
+    >
+      <Text
+        className="text-[15px] leading-[22px] text-primary underline"
+        numberOfLines={1}
+        ellipsizeMode="middle"
+      >
+        {url}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -191,12 +229,16 @@ export function SessionView({
         )}
         {deadline && (
           <Property icon={CalendarClock} label={t("Deadline")}>
-            {deadline}
+            <View className="flex-1 flex-row flex-wrap items-center gap-2">
+              {/* Scheduled past its deadline: say so, the date alone doesn't. */}
+              {isSessionPastDeadline(task) && <OverdueBadge size="lg" />}
+              <Text className="text-[15px] leading-[22px]">{deadline}</Text>
+            </View>
           </Property>
         )}
         {!!values.location && (
           <Property icon={MapPin} label={t("Location")} oneLine>
-            {values.location}
+            <LocationValue location={values.location} />
           </Property>
         )}
         {repeat && (

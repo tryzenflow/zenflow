@@ -99,9 +99,12 @@ export function SessionTypeBadge({
  */
 export function OverdueBadge({
   iconOnly = false,
+  size = "md",
   className,
 }: {
   iconOnly?: boolean;
+  /** `lg` for the read-only session view, where it labels the deadline. */
+  size?: "md" | "lg";
   className?: string;
 }) {
   useLanguage();
@@ -112,15 +115,23 @@ export function OverdueBadge({
   return (
     <View
       className={cn(
-        "flex-row items-center gap-1 self-start rounded border border-red-500/40 bg-red-500/15",
-        iconOnly ? "px-0.5 py-0.5" : "px-1.5 py-0.5",
+        "flex-row items-center gap-1 self-start border border-red-500/40 bg-red-500/15",
+        size === "lg" ? "gap-1.5 rounded-full px-3 py-1.5" : "rounded",
+        size === "lg" ? "" : iconOnly ? "px-0.5 py-0.5" : "px-1.5 py-0.5",
         className,
       )}
     >
-      <AlertCircle size={iconOnly ? 10 : 11} color={red} />
+      <AlertCircle
+        size={size === "lg" ? 15 : iconOnly ? 10 : 11}
+        color={red}
+      />
       {!iconOnly && (
         <Text
-          className="text-[10px] font-semibold leading-[13px]"
+          className={
+            size === "lg"
+              ? "text-[13px] font-semibold"
+              : "text-[10px] font-semibold leading-[13px]"
+          }
           style={{ color: red }}
         >
           {t("Overdue")}
