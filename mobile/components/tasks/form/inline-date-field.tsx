@@ -240,7 +240,10 @@ export function InlineDateField({
             </Text>
           </View>
           <View className="mt-3 items-center px-5">
-            {Platform.OS === "android" ? (
+            {/* The native iOS picker titles Vietnamese months "tháng 10 năm 2026"
+                (lowercase, long form); the app grid reads "Tháng 10/2026" like
+                every other screen. */}
+            {Platform.OS === "android" || locale() === "vi-VN" ? (
               <LocalizedDateGrid
                 value={anchor}
                 minimumDate={minimumDate}
