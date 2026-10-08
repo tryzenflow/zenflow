@@ -3,7 +3,12 @@ import { t } from "@/lib/i18n";
 import { Plus } from "@/components/Icons";
 import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
 import { FAB_GLOW_INNER, FAB_GLOW_OUTER } from "@/lib/fab-glow";
-import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
+import {
+  BAR_LIFT,
+  BAR_MARGIN,
+  FAB_SIZE,
+} from "@/lib/tab-bar-metrics";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   snapToNearestLaterQuarterHour,
   zonedNow,
@@ -40,7 +45,7 @@ export function createSessionAtNowHref(tz: string): Href {
 export function CreateSessionFab({ tz }: { tz: string }) {
   useLanguage();
   const router = useRouter();
-  const tabBarOverlay = useTabBarOverlayHeight();
+  const insets = useSafeAreaInsets();
   return (
     // Wrapper + button carry the two halves of the shared amber glow (see
     // `lib/fab-glow.ts`) — the same treatment the tab bar's Optimize button
@@ -48,20 +53,22 @@ export function CreateSessionFab({ tz }: { tz: string }) {
     <View
       style={[
         FAB_GLOW_OUTER,
-        // Anchored to the top of the tab bar rather than the screen's bottom
-        // edge: the bar now overlays the screen, so a plain `bottom-6` would
-        // tuck this behind it. Sitting tight above the bar also keeps it off
-        // the month grid's last row.
-        { borderRadius: 20, bottom: tabBarOverlay + 8 },
+        // Same row as the floating tab bar, to its right and the same height,
+        // so the calendar keeps the whole screen above them.
+        {
+          borderRadius: FAB_SIZE / 2,
+          bottom: insets.bottom + BAR_LIFT,
+          right: BAR_MARGIN,
+        },
       ]}
-      className="absolute right-[18px] z-[35]"
+      className="absolute z-[35]"
     >
       <Pressable
         onPress={() => router.push(createSessionAtNowHref(tz))}
         accessibilityRole="button"
         accessibilityLabel={t("New task")}
-        style={FAB_GLOW_INNER}
-        className="size-[52px] items-center justify-center rounded-[20px] bg-primary"
+        style={[FAB_GLOW_INNER, { width: FAB_SIZE, height: FAB_SIZE, borderRadius: FAB_SIZE / 2 }]}
+        className="items-center justify-center bg-primary"
       >
         <SpotlightAnchor step="create-task" />
         <Plus size={26} color="black" className="text-primary-foreground" />

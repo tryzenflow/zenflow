@@ -1,6 +1,6 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
-import { Settings } from "@/components/Icons";
+import { SettingsIcon } from "@/components/brand/icons";
 import { AppTabBar } from "@/components/tab-bar";
 import { MonthTabIcon, WeekTabIcon } from "@/components/tab-icons";
 import { Tabs } from "expo-router";
@@ -42,7 +42,7 @@ export default function AppTabsLayout() {
         options={{
           title: t("Settings"),
           tabBarIcon: ({ color, size }) => (
-            <Settings color={color} size={size} />
+            <SettingsIcon color={color} size={size} />
           ),
         }}
       />
