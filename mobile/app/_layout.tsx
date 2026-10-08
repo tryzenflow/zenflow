@@ -4,6 +4,7 @@ import { setLanguage } from "@/lib/i18n";
 import { me } from "@/api/auth";
 import { PortalHost } from "@/components/primitives/portal";
 import { ToastProvider } from "@/components/ui/toast";
+import { useConnectivityWatch } from "@/hooks/use-connectivity-watch";
 import { useNotificationsSubscription } from "@/hooks/use-notifications";
 import { usePushRegistration } from "@/hooks/use-push-registration";
 import { useUserStore } from "@/hooks/use-user-store";
@@ -76,6 +77,7 @@ function PushRegistrar() {
 function NotificationsSubscriber() {
   useLanguage();
   useNotificationsSubscription();
+  useConnectivityWatch();
   return null;
 }
 
@@ -279,7 +281,11 @@ export default function RootLayout() {
               {/* The ingestion inbox — LMS / portal notifications. */}
               <Stack.Screen
                 name="notifications"
-                options={{ presentation: "modal" }}
+                options={{
+                  // Own bottom sheet (~68% height) drawn by the screen.
+                  presentation: "transparentModal",
+                  animation: "slide_from_bottom",
+                }}
               />
             </Stack>
             <AuthGate />
