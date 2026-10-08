@@ -205,6 +205,11 @@ export function SessionView({
     task.type === "TASK" && task.deadline
       ? format(zonedDate(task.deadline, tz), "EEE, MMM d · HH:mm")
       : null;
+  const overdue =
+    task.type === "TASK" &&
+    !!task.deadline &&
+    (isSessionPastDeadline(task) ||
+      new Date(task.deadline).getTime() < Date.now());
   const repeat = repeatLabel(task.rrule);
   const reminders = values.reminders ?? [];
   const note = values.note ?? "";
@@ -227,12 +232,16 @@ export function SessionView({
         {deadline && (
           <Property icon={CalendarClock} label={t("Deadline")}>
             <Text className="flex-1 text-[15px] leading-[22px]">
-              {/* Scheduled past its deadline: say so in words before the time. */}
-              {isSessionPastDeadline(task) && (
-                <Text className="text-[15px] font-semibold leading-[22px] text-destructive">
-                  {t("Overdue at")}{" "}
-                </Text>
-              )}
+              {/* Always label the time; red "Overdue at" once it has passed. */}
+              <Text
+                className={
+                  overdue
+                    ? "text-[15px] font-semibold leading-[22px] text-destructive"
+                    : "text-[15px] font-semibold leading-[22px] text-muted-foreground"
+                }
+              >
+                {overdue ? t("Overdue at") : t("Due at")}{" "}
+              </Text>
               {deadline}
             </Text>
           </Property>
