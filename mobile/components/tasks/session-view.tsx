@@ -9,16 +9,20 @@ import {
   Tag,
   type LucideIcon,
 } from "@/components/Icons";
+import { SessionTypeBadge } from "@/components/calendar/session-type-badge";
 import { localizedReminderLabel } from "@/components/tasks/form/reminder-field";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { loadGeistWebviewFontDataUri } from "@/lib/geist-webview-font";
+import { type LinkPreview, fetchLinkPreview } from "@/lib/link-preview";
 import {
   HEIGHT_MESSAGE,
+  LINK_CARD_SCRIPT,
   LINK_TAP_SCRIPT,
   handleNoteLinkMessage,
   noteColors,
   noteFont,
+  noteLinkCardCss,
   noteTypographyCss,
 } from "@/lib/note-html";
 import { useColorScheme } from "@/lib/useColorScheme";
@@ -27,8 +31,8 @@ import {
   zonedDate,
 } from "@zenflow/core";
 import type { Session } from "@zenflow/shared";
-import { useEffect, useMemo, useState } from "react";
-import { View } from "react-native";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { Pressable, View } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
 const WEEKDAYS: Record<string, string> = {
@@ -50,21 +54,6 @@ export interface SessionViewValues {
   reminders?: number[];
 }
 
-function typeLabel(type: Session["type"]): string {
-  switch (type) {
-    case "TASK":
-      return t("Task");
-    case "ASSIGNMENT":
-      return t("Assignment");
-    case "EXAM":
-      return t("Exam");
-    case "LECTURE":
-      return t("Lecture");
-    default:
-      return t("Do not disturb");
-  }
-}
-
 function repeatLabel(rrule: string | null): string | null {
   const state = fromRrule(rrule);
   if (state.freq === "NONE") return null;
@@ -79,22 +68,80 @@ function repeatLabel(rrule: string | null): string | null {
     : base;
 }
 
+const TAG_MAX_CHARS = 20;
+const TAGS_SHOWN = 3;
+
+/** Orange chip like the form's tag pills; long names are trimmed. */
+function TagChip({ name }: { name: string }) {
+  const short =
+    name.length > TAG_MAX_CHARS ? `${name.slice(0, TAG_MAX_CHARS - 1)}…` : name;
+  return (
+    <View className="rounded-full border border-brand-orange/45 bg-brand-orange/15 px-3 py-1.5">
+      <Text className="text-[13px] font-semibold text-brand-orange">
+        {short}
+      </Text>
+    </View>
+  );
+}
+
+function TagChips({ tags }: { tags: string[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const extra = tags.length - TAGS_SHOWN;
+  const shown = expanded ? tags : tags.slice(0, TAGS_SHOWN);
+  return (
+    <View className="flex-1 flex-row flex-wrap items-center gap-1.5">
+      {shown.map((tag) => (
+        <TagChip key={tag} name={tag} />
+      ))}
+      {extra > 0 && (
+        <Pressable
+          onPress={() => setExpanded((e) => !e)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          className="rounded-full border border-border bg-muted px-3 py-1.5 active:opacity-70"
+        >
+          <Text className="text-[13px] font-semibold text-muted-foreground">
+            {expanded ? t("Show less") : t("+{count} more", { count: extra })}
+          </Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
+/** One property row: a larger icon in place of the "<icon> <label>" pair (the label stays for screen readers). */
 function Property({
   icon: Icon,
   label,
+  oneLine,
   children,
 }: {
   icon: LucideIcon;
   label: string;
-  children: string;
+  /** Trim to a single line with an ellipsis (locations, URLs). */
+  oneLine?: boolean;
+  children: ReactNode;
 }) {
   return (
-    <View className="flex-row items-start gap-3">
-      <View className="w-[104px] flex-row items-center gap-2 pt-px">
-        <Icon size={15} className="text-muted-foreground" />
-        <Text className="text-[13px] text-muted-foreground">{label}</Text>
+    <View
+      className="flex-row items-center gap-4"
+      accessible
+      accessibilityLabel={label}
+    >
+      <View className="w-7 items-center">
+        <Icon size={22} className="text-muted-foreground" />
       </View>
-      <Text className="flex-1 text-[14px] leading-5">{children}</Text>
+      {typeof children === "string" ? (
+        <Text
+          className="flex-1 text-[15px] leading-[22px]"
+          numberOfLines={oneLine ? 1 : undefined}
+          ellipsizeMode="tail"
+        >
+          {children}
+        </Text>
+      ) : (
+        children
+      )}
     </View>
   );
 }
@@ -130,11 +177,7 @@ export function SessionView({
   return (
     <View className="gap-5">
       <View className="gap-2">
-        <View className="self-start rounded-full bg-muted px-2.5 py-1">
-          <Text className="text-[12px] font-semibold text-muted-foreground">
-            {typeLabel(task.type)}
-          </Text>
-        </View>
+        <SessionTypeBadge type={task.type} size="lg" />
         <Text className="text-[26px] font-bold leading-8 tracking-tight">
           {values.title}
         </Text>
@@ -152,7 +195,7 @@ export function SessionView({
           </Property>
         )}
         {!!values.location && (
-          <Property icon={MapPin} label={t("Location")}>
+          <Property icon={MapPin} label={t("Location")} oneLine>
             {values.location}
           </Property>
         )}
@@ -168,7 +211,7 @@ export function SessionView({
         )}
         {values.tags.length > 0 && (
           <Property icon={Tag} label={t("Tags")}>
-            {values.tags.map((tag) => `#${tag}`).join("  ")}
+            <TagChips tags={values.tags} />
           </Property>
         )}
       </View>
@@ -206,15 +249,37 @@ function NoteHtml({ html }: { html: string }) {
     };
   }, []);
 
+  // Link-only paragraphs become preview cards; fetch each target's Open Graph
+  // metadata (title, description, cover image) and rebuild the page with it.
+  const [previews, setPreviews] = useState<Record<string, LinkPreview>>({});
+  useEffect(() => {
+    const urls = Array.from(
+      html.matchAll(
+        /<p[^>]*>\s*<a [^>]*href="([^"]+)"[^>]*>[^<]*<\/a>\s*<\/p>/gi,
+      ),
+      (m) => m[1].replace(/&amp;/g, "&"),
+    ).filter((u) => /^https?:\/\//i.test(u));
+    let cancelled = false;
+    for (const url of new Set(urls)) {
+      fetchLinkPreview(url).then((p) => {
+        if (p && !cancelled) setPreviews((prev) => ({ ...prev, [url]: p }));
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [html]);
+
   const source = useMemo(() => {
-    const { bg, fg } = noteColors(isDarkColorScheme);
+    const { fg } = noteColors(isDarkColorScheme);
     const { fontFace, family } = noteFont(fontDataUri);
     return {
-      html: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><style>${fontFace} html, body { margin: 0; padding: 0; background: ${bg}; } body { color: ${fg}; font-family: ${family}; font-size: 16px; line-height: 1.55; word-wrap: break-word; } ${noteTypographyCss("body", isDarkColorScheme)}</style></head><body><div id="note">${html}</div></body></html>`,
+      html: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><style>${fontFace} html, body { margin: 0; padding: 0; background: transparent; } body { color: ${fg}; font-family: ${family}; font-size: 16px; line-height: 1.55; word-wrap: break-word; } ${noteTypographyCss("body", isDarkColorScheme)} ${noteLinkCardCss("body", isDarkColorScheme)}</style></head><body><div id="note">${html}</div><script>window.ZF_PREVIEWS = ${JSON.stringify(previews).replace(/</g, "\\u003c")};</script></body></html>`,
     };
-  }, [html, isDarkColorScheme, fontDataUri]);
+  }, [html, isDarkColorScheme, fontDataUri, previews]);
 
   const injected = `${LINK_TAP_SCRIPT}
+    ${LINK_CARD_SCRIPT}
     (function() {
       function post() {
         var el = document.getElementById('note');
@@ -253,6 +318,8 @@ function NoteHtml({ html }: { html: string }) {
       source={source}
       style={{ height, backgroundColor: "transparent" }}
       scrollEnabled={false}
+      // iOS needs the view itself non-opaque for the transparent page to show the sheet behind.
+      opaque={false}
       injectedJavaScript={injected}
       onMessage={onMessage}
       // Links are routed through `handleNoteLinkMessage`; never navigate in-place.
