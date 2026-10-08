@@ -10,10 +10,11 @@ The screen or flow, plus any issue number or acceptance criteria.
 
 ## Steps
 1. Read `mockups/index.html` and the closest existing screen (`day-view.html`, `task-form.html`, `settings.html`, ...). Reuse its markup, `gallery-chrome.css`, and the Warm Sunrise tokens in `mockups/src/input.css`.
-2. Write or edit `mockups/<screen>.html` (Tailwind v4, mobile viewport, no JS frameworks). Show real states: empty, loading, error, long text, dark mode, and each task state (`fluid | fixed | overdue | conflict | completed`).
-3. Add or update the entry in `mockups/index.html`.
-4. Build the CSS: `pnpm --filter mobile-mockups build`. Open the page and check it at phone width (Playwright MCP screenshot if available).
-5. Note data the screen needs that `@zenflow/shared` doesn't provide.
+2. Check the screen against `docs/mobile/design.md` (Sunrise Flow): one focal accent, glass only on floating chrome, custom SVG not lucide on brand surfaces.
+3. Write or edit `mockups/<screen>.html` (Tailwind v4, mobile viewport, no JS frameworks). Show real states: empty, loading, error, long text, dark mode, offline, and each task state (`fluid | fixed | overdue | conflict | completed`).
+4. Add or update the entry in `mockups/index.html`.
+5. Build the CSS: `pnpm --filter mobile-mockups build`. Open the page and check it at phone width (Playwright MCP screenshot if available).
+6. Note data the screen needs that `@zenflow/shared` doesn't provide.
 
 ## Rules
 Mockups are references, not production code: no data fetching, no real student data.
