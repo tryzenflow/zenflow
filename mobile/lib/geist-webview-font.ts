@@ -1,5 +1,7 @@
 import { Asset } from "expo-asset";
-import * as FileSystem from "expo-file-system";
+// Legacy API: the root `expo-file-system` export (SDK 54+) no longer has
+// `readAsStringAsync`, which made this load throw and the font silently fall back.
+import * as FileSystem from "expo-file-system/legacy";
 
 /**
  * Base64 `data:` URI for the Geist Regular font file, for embedding as a
