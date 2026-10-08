@@ -123,7 +123,7 @@ Work (completed):
   (seeded rows bypass the engine, so unpinned tasks render nowhere).
 - `reset-test-data.js` calls the reset endpoint + clears MailHog.
 - `seed-task.js` authenticates via OTP, then seeds a task via the test endpoint.
-- `run-suite.js` orchestrates reset → OTP request → MailHog fetch → seed → suite.
+- `run-suite.js` orchestrates reset → OTP request → MailHog fetch → seed → OTP verify + suite (verify and the suite share one maestro session).
 
 Validation:
 
@@ -335,7 +335,7 @@ pnpm --filter mobile test:e2e:android
 pnpm --filter mobile test:e2e:ios
 
 # One flow while developing (only AFTER run-suite logged in + seeded,
-# with E2E_OTP/E2E_TODAY exported — smoke.yaml itself starts at verify)
+# with E2E_TODAY exported — smoke.yaml itself starts at onboarding)
 pnpm --filter mobile test:e2e:flow mobile/maestro/flows/calendar-week.yaml
 ```
 

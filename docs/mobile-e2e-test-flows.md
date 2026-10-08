@@ -235,7 +235,7 @@ Rules:
   2. `login-request.yaml` sends the OTP on-device.
   3. `get-otp.js` polls MailHog and exports `E2E_OTP`.
   4. `seed-task.js` × 3 pins deterministic sessions via `POST /test/seed-task` with `scheduledStartTime` — seeded rows bypass the placement engine, so without an explicit slot they would render nowhere. Seeds use local noon (same calendar day in any timezone).
-  5. `smoke.yaml` / `extended.yaml` starts at `login-verify.yaml`.
+  5. `login-verify.yaml` (enter `${E2E_OTP}`) runs in the SAME `maestro test` invocation as `smoke.yaml` / `extended.yaml`, so nothing restarts between verification and onboarding; the suites themselves start at onboarding.
 - Edit/calendar flows use seeded data so they don't depend on create-task passing.
 - OTP is retrieved from the MailHog API — no real email service needed.
 

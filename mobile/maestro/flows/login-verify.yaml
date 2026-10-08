@@ -1,7 +1,9 @@
 # Login Phase 2/2 — enter OTP and verify
 # Enters the OTP the runner fetched from MailHog into E2E_OTP.
-# Run ONLY after login-request.yaml + get-otp.js in the same session —
-# the app must still be sitting on the OTP screen.
+# Run by the runner AFTER get-otp.js, chained with the suite in ONE
+# maestro invocation — the app is still sitting on the OTP screen from
+# login-request.yaml, so there is NO launchApp and nothing restarts in
+# between.
 #
 # Expected: fresh users land on onboarding; re-runs on an onboarded user
 # land on the Week tab (covered by the optional branch).
@@ -9,9 +11,7 @@
 
 appId: ${MAESTRO_APP_ID}
 ---
-# Resume the app — no clearState, so the OTP screen is still showing.
-- launchApp
-
+# App is already on OTP screen from login-request.yaml — NO launchApp!
 - tapOn:
     id: auth.login.otpBoxes
 - inputText: ${E2E_OTP}

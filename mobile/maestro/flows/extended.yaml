@@ -1,6 +1,5 @@
 # P1 Extended Suite — notification permission + DLU accounts integration.
-# Run after the P0 smoke suite passes. Same two-phase login contract as
-# smoke.yaml: execute via the runner, never with bare `maestro test`.
+# Run after the P0 smoke suite passes. Login is ALREADY DONE by run-suite.js.
 #
 #   node mobile/maestro/scripts/run-suite.js extended
 #
@@ -12,12 +11,11 @@
 #     connect/sync/disconnect needs fixture credentials (E2E_DLU_USERNAME /
 #     E2E_DLU_PASSWORD); without them the credentialed steps are skipped and
 #     documented as manual.
-# Env: MAESTRO_APP_ID, E2E_EMAIL, E2E_RUN_ID, E2E_OTP, E2E_TODAY.
+# Env: MAESTRO_APP_ID, E2E_RUN_ID, E2E_TODAY.
 
 appId: ${MAESTRO_APP_ID}
 ---
-- runFlow:
-    file: login-verify.yaml
+# Onboarding (fresh user only)
 - runFlow:
     file: onboarding.yaml
 

@@ -12,7 +12,9 @@
  *   2. maestro login-request.yaml            (email → send OTP)
  *   3. poll MailHog for the OTP              (get-otp.js)
  *   4. seed deterministic tasks via API      (seed-task.js × 3)
- *   5. maestro smoke|extended.yaml           (E2E_OTP + E2E_TODAY exported)
+ *   5. maestro login-verify.yaml + suite     (ONE session: enter OTP, then
+ *                                             the flows — E2E_OTP/E2E_TODAY
+ *                                             exported)
  *
  * Env (all optional — sane local defaults):
  *   MAESTRO_APP_ID, E2E_RUN_ID, E2E_EMAIL, E2E_TODAY (yyyy-MM-dd),
@@ -97,16 +99,16 @@ function runNode(script, args) {
   }
 }
 
-function runMaestro(flowFile) {
-  const flowPath = path.join(FLOWS_DIR, flowFile);
-  console.log(`[run-suite] maestro test ${flowFile}`);
+function runMaestro(flowFiles) {
+  const flowPaths = flowFiles.map(f => path.join(FLOWS_DIR, f));
+  console.log(`[run-suite] maestro test ${flowFiles.join(" ")}`);
   const r = spawnSync(
     "maestro",
-    ["test", "--format", "junit", "--output", "maestro-report.xml", flowPath],
+    ["test", "--format", "junit", "--output", "maestro-report.xml", ...flowPaths],
     { env, stdio: "inherit", cwd: MOBILE_DIR },
   );
   if (r.status !== 0) {
-    console.error(`[run-suite] ${flowFile} FAILED — see maestro-report.xml`);
+    console.error(`[run-suite] ${flowFiles.join(" ")} FAILED — see maestro-report.xml`);
     process.exit(r.status ?? 1);
   }
 }
@@ -115,9 +117,7 @@ function runMaestro(flowFile) {
 async function main() {
   runNode("reset-test-data.js", []);
 
-  // Fail fast if the reset did not actually empty MailHog — every OTP
-  // poller below assumes the next message for our email is provably ours,
-  // and a stale box turns into silent wrong-code failures.
+  // Fail fast if the reset did not actually empty MailHog
   {
     const m = await (
       await fetch(`${MAILHOG_URL}/api/v2/messages?limit=1`)
@@ -128,11 +128,12 @@ async function main() {
     }
   }
 
-  // 2. Request OTP on-device
-  runMaestro("login-request.yaml");
+  // 2. Request the OTP. Own Maestro invocation: the code does not exist
+  //    until MailHog has it (step 3), so it cannot be entered yet. The app
+  //    stays on the OTP screen — no launchApp in any later flow.
+  runMaestro(["login-request.yaml"]);
 
-  // 3. Fetch the OTP MailHog received for our email (prints log lines;
-  //    the bare 6-digit line is the code)
+  // 3. Fetch the OTP MailHog received for our email
   const otpOut = execFileSync(
     process.execPath,
     [path.join(SCRIPTS_DIR, "get-otp.js"), EMAIL],
@@ -180,8 +181,12 @@ async function main() {
     noonNextWeek.toISOString(),
   ]);
 
-  // 5. Run the suite (starts at login-verify.yaml)
-  runMaestro(suite === "extended" ? "extended.yaml" : "smoke.yaml");
+  // 5. Enter the OTP and run the suite in ONE Maestro session, so nothing
+  //    restarts between verification and onboarding.
+  runMaestro([
+    "login-verify.yaml",
+    suite === "extended" ? "extended.yaml" : "smoke.yaml",
+  ]);
 
   console.log("[run-suite] SUITE PASSED — report: mobile/maestro-report.xml");
 }
