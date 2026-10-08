@@ -1,7 +1,7 @@
 name: Mobile
 
 # Native builds + Maestro e2e for mobile/ (issue #79). Unit + component tests
-# already run on every PR through ci.yml (`pnpm --filter mobile test`); this
+# run on every PR through ci.yml and again here as a gate for the builds; this
 # workflow is the slow, native half: PRs that touch mobile/ get a build-only
 # check, the e2e suite runs nightly, on release/** pushes and on demand.
 # Not wired into ci.yml's `ci-ok` on purpose (macOS minutes, emulator flakiness).
@@ -61,8 +61,20 @@ env:
   IOS_E2E_API_URL: http://localhost:8000/api/v1
 
 jobs:
+  # Cheap gate: no point spending native-build minutes on a red tree.
+  test:
+    name: Unit + component tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: pnpm shared:build
+      - run: pnpm --filter mobile test
+
   build-android:
     name: Build Android APK
+    needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -100,6 +112,7 @@ jobs:
 
   build-ios:
     name: Build iOS simulator app
+    needs: test
     runs-on: macos-latest
     timeout-minutes: 75
     env:

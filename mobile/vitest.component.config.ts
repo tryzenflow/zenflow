@@ -22,6 +22,7 @@ export default defineConfig({
       { find: /^@react-native-async-storage\/async-storage$/, replacement: path.resolve(__dirname, "test/mocks/async-storage.ts") },
       { find: /^expo-blur$/, replacement: path.resolve(__dirname, "test/mocks/expo-blur.tsx") },
       { find: /^react-native-reanimated$/, replacement: path.resolve(__dirname, "test/mocks/reanimated.tsx") },
+      { find: /^react-native-screens$/, replacement: path.resolve(__dirname, "test/mocks/screens.tsx") },
       { find: /^@\//, replacement: `${path.resolve(__dirname)}/` },
     ],
   },
