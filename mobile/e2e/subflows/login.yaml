@@ -1,0 +1,21 @@
+# Signs in a brand-new user (unique email) through the real OTP flow.
+# Leaves the app on the onboarding screen (new accounts aren't onboarded).
+appId: com.zenflow.app
+---
+- runScript: ../scripts/new-user.js
+- tapOn:
+    id: login.email
+- inputText: ${output.email}
+- tapOn:
+    id: login.submit
+- extendedWaitUntil:
+    visible:
+      id: login.change-email
+    timeout: 20000
+- runScript:
+    file: ../scripts/otp.js
+    env:
+      EMAIL: ${output.email}
+      MAILPIT_URL: ${MAILPIT_URL}
+# The hidden OTP input is autofocused; 6 digits auto-submit.
+- inputText: ${output.otp}

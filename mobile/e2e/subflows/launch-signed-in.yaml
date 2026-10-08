@@ -1,0 +1,10 @@
+# Fresh install state -> signed in + onboarded, on the calendar.
+appId: com.zenflow.app
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      notifications: deny
+- runFlow: login.yaml
+- runFlow: finish-onboarding.yaml

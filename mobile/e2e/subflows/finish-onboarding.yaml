@@ -1,0 +1,36 @@
+# Walks every onboarding step taking the lightest path: skip optional steps,
+# continue the rest, until the calendar's tab bar shows. Bounded, not `while`,
+# so a stuck screen fails the flow instead of hanging it. Taps are optional
+# because a button can vanish mid-transition between the check and the tap.
+appId: com.zenflow.app
+---
+- repeat:
+    times: 8
+    commands:
+      - runFlow:
+          when:
+            notVisible:
+              id: tab.index
+          commands:
+            - runFlow:
+                when:
+                  visible:
+                    id: onboarding.secondary
+                commands:
+                  - tapOn:
+                      id: onboarding.secondary
+                      optional: true
+            - runFlow:
+                when:
+                  visible:
+                    id: onboarding.primary
+                  notVisible:
+                    id: onboarding.secondary
+                commands:
+                  - tapOn:
+                      id: onboarding.primary
+                      optional: true
+- extendedWaitUntil:
+    visible:
+      id: tab.index
+    timeout: 15000

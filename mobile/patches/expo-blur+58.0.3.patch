@@ -1,0 +1,12 @@
+diff --git a/node_modules/expo-blur/expo-module.config.json b/node_modules/expo-blur/expo-module.config.json
+index 756423a..2e64491 100644
+--- a/node_modules/expo-blur/expo-module.config.json
++++ b/node_modules/expo-blur/expo-module.config.json
+@@ -8,6 +8,7 @@
+     "publication": {
+       "groupId": "host.exp.exponent",
+       "artifactId": "expo.modules.blur",
++      "version": "58.0.3",
+       "repository": "local-maven-repo"
+     }
+   }

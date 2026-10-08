@@ -1,0 +1,13 @@
+appId: com.zenflow.app
+tags: [smoke]
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- assertVisible:
+    id: login.email
+- runFlow: ../subflows/login.yaml
+- extendedWaitUntil:
+    visible:
+      id: onboarding.primary
+    timeout: 20000

@@ -122,6 +122,7 @@ function ModeToggle({
         accessibilityRole="button"
         accessibilityState={{ selected: active }}
         accessibilityLabel={label}
+        testID={editing ? "task.mode.edit" : "task.mode.view"}
         hitSlop={4}
         className={cn(
           "h-9 w-11 items-center justify-center rounded-full",
@@ -206,6 +207,7 @@ export function SessionFormScreen({
           {headerRight}
           {editSwitch && <ModeToggle {...editSwitch} />}
           <Pressable
+            testID="task.close"
             onPress={() => router.back()}
             accessibilityLabel={t("Close")}
             className="h-10 w-10 items-center justify-center"

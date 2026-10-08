@@ -5,6 +5,8 @@ import type { ConfigContext, ExpoConfig } from "@expo/config";
 const withAndroidBuildFixes = require("./plugins/withAndroidBuildFixes");
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const withIosBuildFixes = require("./plugins/withIosBuildFixes");
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const withE2eCleartext = require("./plugins/withE2eCleartext");
 
 // FCM (Android push) needs the Firebase Android app config baked into the
 // native build. Drop `google-services.json` (from the Firebase console) next
@@ -14,6 +16,12 @@ const withIosBuildFixes = require("./plugins/withIosBuildFixes");
 const googleServicesFile = existsSync("./google-services.json")
   ? "./google-services.json"
   : undefined;
+
+// One version for the whole repo (changesets fixed group): mobile/package.json
+// is the source. Store builds need a plain x.y.z, so a `-beta.N` suffix becomes
+// the build number instead.
+const [appVersion, prerelease] = require("./package.json").version.split("-");
+const betaNumber = Number(prerelease?.split(".")[1] ?? 0);
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -28,7 +36,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   // TurboModules too, so this isn't optional even in principle anymore). The
   // app runs on the New Architecture unconditionally now -- flag any
   // native-module behavior anywhere in the app that assumed the old one.
-  version: "0.1.0",
+  version: appVersion,
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: "zenflow",
@@ -50,6 +58,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // personal-team device builds need their own throwaway identifier;
     // override it via EXPO_IOS_BUNDLE_ID (e.g. "com.<your-name>.zenflowdev").
     bundleIdentifier: process.env.EXPO_IOS_BUNDLE_ID ?? "com.zenflow.app",
+    buildNumber: String(betaNumber + 1),
     // Only set for local personal-team device builds -- see the
     // `ios:personal-team` package.json script. Not committed anywhere else
     // since a development team is specific to one developer's Apple ID.
@@ -63,6 +72,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       backgroundColor: "#ffffff",
     },
     package: "com.zenflow.app",
+    versionCode: betaNumber + 1,
     ...(googleServicesFile ? { googleServicesFile } : {}),
     // Resize the visible window when the keyboard opens instead of the
     // default pan behavior — required for `KeyboardAvoidingView`
@@ -123,6 +133,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     "expo-web-browser",
     withAndroidBuildFixes,
     withIosBuildFixes,
+    withE2eCleartext,
   ],
   experiments: {
     typedRoutes: true,

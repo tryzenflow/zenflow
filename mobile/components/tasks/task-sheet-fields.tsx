@@ -83,6 +83,7 @@ export function SessionSheetFields({
           return (
             <Field label={t("Title")} error={fieldState.error?.message}>
               <Input
+                testID="task.title"
                 editable={!disabled}
                 value={field.value}
                 onChangeText={field.onChange}

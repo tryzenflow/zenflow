@@ -50,6 +50,7 @@ function TabItem({
   onPress,
   onLongPress,
   accessibilityLabel,
+  testID,
   spotlight,
 }: {
   index: number;
@@ -62,6 +63,7 @@ function TabItem({
   onPress: () => void;
   onLongPress: () => void;
   accessibilityLabel: string;
+  testID?: string;
   spotlight: boolean;
 }) {
   const activeOpacity = useAnimatedStyle(() => ({
@@ -99,6 +101,7 @@ function TabItem({
       accessibilityRole="button"
       accessibilityState={focused ? { selected: true } : {}}
       accessibilityLabel={accessibilityLabel}
+      testID={testID}
       className="flex-1 items-center justify-center gap-1"
     >
       {spotlight ? <SpotlightAnchor step="open-month" ignoreFocus /> : null}
@@ -216,6 +219,7 @@ export function AppTabBar({
           emitter.emit({ type: "tabLongPress", target: route.key })
         }
         accessibilityLabel={options.tabBarAccessibilityLabel ?? label}
+        testID={`tab.${route.name}`}
         spotlight={route.name === "month"}
       />
     );

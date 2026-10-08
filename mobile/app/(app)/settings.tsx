@@ -174,6 +174,7 @@ export default function SettingsScreen() {
         <SettingsSectionLabel>{t("Account")}</SettingsSectionLabel>
         <View className="mb-[18px] overflow-hidden rounded-2xl border border-border bg-card">
           <Pressable
+            testID="settings.sign-out"
             onPress={handleSignOut}
             disabled={loggingOut}
             className="flex-row items-center gap-[13px] bg-card px-4 py-3.5"

@@ -198,6 +198,7 @@ export function DeadlineChipRow({
           return (
             <Pressable
               key={c.id}
+              testID={`task.deadline.${c.id}`}
               disabled={chipDisabled}
               onPress={() => pick(c.id)}
               className={cn(

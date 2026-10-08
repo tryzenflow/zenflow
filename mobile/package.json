@@ -1,7 +1,7 @@
 {
   "name": "mobile",
   "main": "index.ts",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "license": "Apache-2.0",
   "private": true,
   "scripts": {
@@ -18,7 +18,10 @@
     "format": "biome check --no-errors-on-unmatched --apply .",
     "expo-check": "expo install --check",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "pnpm test:unit && pnpm test:component",
+    "test:unit": "vitest run",
+    "test:component": "vitest run -c vitest.component.config.ts",
+    "e2e": "bash e2e/run.sh"
   },
   "dependencies": {
     "@10play/tentap-editor": "^1.0.1",
@@ -101,7 +104,10 @@
   "devDependencies": {
     "@babel/core": "^7.26.0",
     "@babel/runtime": "^7.26.0",
+    "@testing-library/react": "^16.3.3",
     "@types/react": "~19.3.0",
+    "happy-dom": "^20.14.5",
+    "msw": "^2.15.0",
     "patch-package": "^8.0.1",
     "tailwindcss": "3.4.1",
     "typescript": "~6.0.3",

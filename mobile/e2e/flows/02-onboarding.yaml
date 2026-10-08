@@ -1,0 +1,22 @@
+appId: com.zenflow.app
+tags: [smoke]
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      notifications: deny
+- runFlow: ../subflows/login.yaml
+- runFlow: ../subflows/finish-onboarding.yaml
+- assertVisible:
+    id: tab.index
+- assertVisible:
+    id: fab.new-task
+# Onboarding is one-time: a relaunch lands on the calendar, not on onboarding.
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: tab.index
+    timeout: 20000
+- assertNotVisible:
+    id: onboarding.primary

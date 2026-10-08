@@ -1,0 +1,21 @@
+appId: com.zenflow.app
+tags: [smoke]
+---
+- runFlow: ../subflows/launch-signed-in.yaml
+- tapOn:
+    id: tab.settings
+- scrollUntilVisible:
+    element:
+      id: settings.sign-out
+- tapOn:
+    id: settings.sign-out
+- extendedWaitUntil:
+    visible:
+      id: login.email
+    timeout: 15000
+# Session is really gone: relaunching stays on the login screen.
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: login.email
+    timeout: 15000

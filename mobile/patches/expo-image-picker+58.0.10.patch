@@ -1,0 +1,12 @@
+diff --git a/node_modules/expo-image-picker/expo-module.config.json b/node_modules/expo-image-picker/expo-module.config.json
+index 6ce2c61..59c7b10 100644
+--- a/node_modules/expo-image-picker/expo-module.config.json
++++ b/node_modules/expo-image-picker/expo-module.config.json
+@@ -8,6 +8,7 @@
+     "publication": {
+       "groupId": "host.exp.exponent",
+       "artifactId": "expo.modules.imagepicker",
++      "version": "58.0.10",
+       "repository": "local-maven-repo"
+     }
+   }

@@ -16,6 +16,7 @@ import { useLastCreated } from "@/hooks/use-last-created";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
 import { setPendingSlotPick } from "@/lib/pending-slot-pick";
+import { warmLandingDay } from "@/lib/warm-day";
 import { divergentSittings } from "@/lib/series-alternatives";
 import {
   RESCHEDULE_HINT,
@@ -219,7 +220,7 @@ function NewSessionForm() {
 
   async function onSubmit(values: SessionFormValues) {
     if (!user) return;
-    const handleCreated = (
+    const handleCreated = async (
       response: Awaited<ReturnType<typeof createSession>>,
     ) => {
       completeStep("create-task");
@@ -242,6 +243,7 @@ function NewSessionForm() {
           slotProposalId: response.slotProposalId,
           tz,
         });
+        await warmLandingDay(response.primarySlot, tz);
         router.replace({
           pathname: "/",
           params: { date: response.primarySlot, flash: response.id },
@@ -261,6 +263,7 @@ function NewSessionForm() {
           sittings: series,
           tz,
         });
+        await warmLandingDay(series[0].primarySlot, tz);
         router.replace({
           pathname: "/",
           params: { date: series[0].primarySlot, flash: series[0].session.id },
@@ -289,6 +292,7 @@ function NewSessionForm() {
       // A TASK the scheduler couldn't fit before its deadline comes back
       // unscheduled — nothing to jump to, so just pop back.
       if (response.scheduledStartTime) {
+        await warmLandingDay(response.scheduledStartTime, tz);
         router.replace({
           pathname: "/",
           params: {
@@ -340,6 +344,7 @@ function NewSessionForm() {
       subtitle={subtitle}
       footer={
         <Button
+          testID="task.save"
           className="h-[52px] w-full"
           disabled={loading}
           onPress={form.handleSubmit(onSubmit, onInvalid)}

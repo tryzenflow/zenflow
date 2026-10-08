@@ -840,6 +840,7 @@ function SessionBlockImpl({
       )}
       <GestureDetector gesture={composedGesture}>
         <Animated.View
+          testID={`task-block.${segment.taskId}`}
           style={[moveStyle, { height }]}
           className={cn(
             "flex overflow-hidden rounded-[14px]",

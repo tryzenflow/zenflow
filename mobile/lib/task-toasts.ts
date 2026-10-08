@@ -199,12 +199,12 @@ export function getSlotTakenError(error: unknown): SlotTakenError | null {
 export async function withInfeasibleRetry<T>(
   toast: ToastFn,
   attempt: (policy?: InfeasiblePolicy) => Promise<T>,
-  onSuccess: (result: T) => void,
+  onSuccess: (result: T) => void | Promise<void>,
   onError: (error: unknown) => void,
 ): Promise<void> {
   const retry = async (policy: InfeasiblePolicy) => {
     try {
-      onSuccess(await attempt(policy));
+      await onSuccess(await attempt(policy));
     } catch (e) {
       onError(e);
     }
@@ -237,7 +237,7 @@ export async function withInfeasibleRetry<T>(
   // A throw while handling a *successful* save (bad response shape, a
   // navigation error…) must still surface, not reject out of `handleSubmit`.
   try {
-    onSuccess(result);
+    await onSuccess(result);
   } catch (e) {
     onError(e);
   }
