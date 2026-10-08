@@ -1,4 +1,5 @@
 import { t } from "@/lib/i18n";
+import { warmLandingDay } from "@/lib/warm-day";
 import { useLanguage } from "@/hooks/use-language";
 import { format } from "@/lib/i18n";
 import {
@@ -176,7 +177,7 @@ function EditSessionForm() {
       patch.rrule = values.rrule || null;
     }
 
-    const handleUpdated = (
+    const handleUpdated = async (
       updated: Awaited<ReturnType<typeof updateSession>>,
     ) => {
       // Handle divergent response — hand the primary-vs-alternative pick off
@@ -196,6 +197,7 @@ function EditSessionForm() {
           slotProposalId: updated.slotProposalId,
           tz,
         });
+        await warmLandingDay(updated.primarySlot, tz);
         router.replace({
           pathname: "/",
           params: { date: updated.primarySlot, flash: updated.id },
@@ -213,6 +215,7 @@ function EditSessionForm() {
           sittings: series,
           tz,
         });
+        await warmLandingDay(series[0].primarySlot, tz);
         router.replace({
           pathname: "/",
           params: { date: series[0].primarySlot, flash: series[0].session.id },
@@ -245,6 +248,7 @@ function EditSessionForm() {
       }
       // Jump the calendar to the (possibly new) time and pulse the block.
       if (updated.scheduledStartTime) {
+        await warmLandingDay(updated.scheduledStartTime, tz);
         router.replace({
           pathname: "/",
           params: { date: updated.scheduledStartTime, flash: updated.id },
