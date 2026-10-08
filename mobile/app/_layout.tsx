@@ -165,12 +165,14 @@ export default function RootLayout() {
         if (fresh) await cacheSessionUser(fresh);
         else await clearCachedSessionUser();
       } catch (err) {
-        if (isAxiosError(err) && err.response) {
-          // Server answered (401/403): the session is dead.
+        const status = isAxiosError(err) ? err.response?.status : undefined;
+        if (status === 401 || status === 403) {
+          // Server answered 401/403: the session is dead.
           setUser(null);
           await clearCachedSessionUser();
         } else if (cached) {
-          // Offline / timeout: fall back to the cached user.
+          // Offline / timeout / 5xx: fall back to the cached user and keep
+          // the saved calendar.
           setUser(cached);
         }
       } finally {
