@@ -1,12 +1,15 @@
 # Calendar Week View Flow
-# Tests: Week tab → header → seeded tasks render → swipe to next week →
-# seeded next-week task → swipe back.
-# Prerequisites: runner seeded "E2E This Week" (today 12:00 UTC) and
-# "E2E Next Week" (today+7 12:00 UTC). Independent of Flow 3.
-# Expected: week paging works and seeded cards render on their weeks.
+# Tests: Week tab → header → seeded cards render on their days → explicit
+# navigation to the seeded next-week day → Today pill returns to today.
+# Prerequisites: runner seeded "E2E This Week" (today 12:00) and
+# "E2E Next Week" (today+7 12:00) BEFORE login (see scripts/run-suite.js).
+# Expected: seeded cards render on their weeks and date navigation works.
 #
-# Navigation is swipe-driven — the pager has no prev/next buttons.
-# The Today pill only renders while off-today, so resetting is optional.
+# Navigation is chip-tap based (calendar.week.day.<yyyy-MM-dd>), not swipe:
+# a timeline swipe advances ONE day, and a decisive flick at a week edge
+# pages a whole week — so swiping to a fixed fixture day is timing-dependent.
+# The day timeline opens scrolled to "now", so each card is scrolled into
+# view first (try DOWN — noon may be ahead of now — then UP as fallback).
 
 appId: ${MAESTRO_APP_ID}
 ---
@@ -20,22 +23,49 @@ appId: ${MAESTRO_APP_ID}
     - tapOn:
         id: calendar.todayButton
 
-# This week's seeded task renders
-- assertVisible:
-    id: calendar.taskCard.e2e-this-week
+# This week's seeded task renders (today's noon slot)
+- optional:
+    - scrollUntilVisible:
+        element:
+          id: calendar.taskCard.e2e-this-week
+        direction: DOWN
+        timeout: 3000
+- scrollUntilVisible:
+    element:
+      id: calendar.taskCard.e2e-this-week
+    direction: UP
+    timeout: 5000
 
-# Page to next week
-- swipe:
-    direction: LEFT
+# Navigate to the seeded next-week day via its header chip
+- tapOn:
+    id: calendar.week.day.${E2E_NEXT_WEEK}
 
-# Next week's seeded task renders
-- assertVisible:
-    id: calendar.taskCard.e2e-next-week
+# Next week's seeded task renders (its noon slot)
+- optional:
+    - scrollUntilVisible:
+        element:
+          id: calendar.taskCard.e2e-next-week
+        direction: DOWN
+        timeout: 3000
+- scrollUntilVisible:
+    element:
+      id: calendar.taskCard.e2e-next-week
+    direction: UP
+    timeout: 5000
 
-# Page back
-- swipe:
-    direction: RIGHT
+# The Today pill (visible now — we are off-today) returns to today
+- tapOn:
+    id: calendar.todayButton
 
 # Back on the current week
-- assertVisible:
-    id: calendar.taskCard.e2e-this-week
+- optional:
+    - scrollUntilVisible:
+        element:
+          id: calendar.taskCard.e2e-this-week
+        direction: DOWN
+        timeout: 3000
+- scrollUntilVisible:
+    element:
+      id: calendar.taskCard.e2e-this-week
+    direction: UP
+    timeout: 5000

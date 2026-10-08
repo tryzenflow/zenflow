@@ -1,14 +1,36 @@
 # Edit Task Flow
 # Tests: tap seeded task → edit screen opens → change title → save →
 # verify updated title on calendar.
-# Prerequisites: runner seeded "E2E Seeded <run-id>" pinned to today
-# (POST /test/seed-task with scheduledStartTime). Independent of Flow 3.
+# Prerequisites: runner seeded "E2E Seeded <run-id>" at today's noon before
+# login (POST /test/seed-task with scheduledStartTime). Runs after
+# task-create.yaml, which jumps the calendar to the newly placed task — so
+# reset to today first. The day timeline opens scrolled to "now", so the
+# noon card is scrolled into view (try DOWN, then UP as fallback).
 # Expected: card slug updates to the edited title.
 
 appId: ${MAESTRO_APP_ID}
 ---
 - tapOn:
     id: tabs.week
+
+# task-create left the calendar on the placed day — go back to today
+# (the pill only renders when off-today, hence optional).
+- optional:
+    - tapOn:
+        id: calendar.todayButton
+
+# Find the seeded task at today's noon slot
+- optional:
+    - scrollUntilVisible:
+        element:
+          id: calendar.taskCard.e2e-seeded-${E2E_RUN_ID}
+        direction: DOWN
+        timeout: 3000
+- scrollUntilVisible:
+    element:
+      id: calendar.taskCard.e2e-seeded-${E2E_RUN_ID}
+    direction: UP
+    timeout: 5000
 
 # Tap the seeded task — opens the edit screen
 - tapOn:
@@ -27,6 +49,7 @@ appId: ${MAESTRO_APP_ID}
 - tapOn:
     id: tasks.form.saveButton
 
-# Verify the updated card on the calendar
+# Verify the updated card on the calendar (same day/slot — the calendar
+# keeps its scroll position behind the edit screen)
 - assertVisible:
     id: calendar.taskCard.e2e-edited-${E2E_RUN_ID}

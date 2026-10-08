@@ -295,6 +295,7 @@ function WeekHeaderImpl(
     return (
       <Pressable
         key={key}
+        testID={`calendar.week.day.${key}`}
         onPress={() => onSelectDay(day)}
         className={`flex-1 items-center gap-1 rounded-xl py-1.5 ${
           isFocused ? "bg-muted" : ""
