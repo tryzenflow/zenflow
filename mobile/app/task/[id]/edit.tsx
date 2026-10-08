@@ -368,7 +368,7 @@ function EditSessionForm() {
             disabled={loading}
             onPress={form.handleSubmit(onSubmit, onInvalid)}
           >
-            <Text className="text-base font-semibold text-foreground">
+            <Text className="text-base font-semibold text-primary-foreground">
               {loading ? t("Saving…") : t("Save changes")}
             </Text>
           </Button>
