@@ -1,4 +1,14 @@
 {
   "mode": "pre",
-  "tag": "beta"
+  "tag": "beta",
+  "changesets": [
+    "mobile-test-pyramid"
+  ],
+  "initialVersions": {
+    "backend": "0.0.0",
+    "frontend": "0.0.0",
+    "mobile": "0.0.0",
+    "@zenflow/core": "0.0.0",
+    "@zenflow/shared": "0.0.0"
+  }
 }
