@@ -229,7 +229,7 @@ export default function MonthScreen() {
 
       {/* The grid fills the screen down to just above the floating bar, so every
           week row is fully visible. */}
-      <View className="flex-1" style={{ paddingBottom: tabBarOverlay - 6 }}>
+      <View className="flex-1" style={{ paddingBottom: tabBarOverlay }}>
         <MonthPager
           monthDate={monthDate}
           onMonthChange={goToMonth}

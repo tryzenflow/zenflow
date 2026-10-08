@@ -138,7 +138,7 @@ export const MonthGrid = memo(
     const weekRows = chunkIntoWeeks(days);
     const rowHeight =
       gridHeight > 0
-        ? Math.max(CELL_HEIGHT / 2, gridHeight / weekRows.length)
+        ? Math.max(CELL_HEIGHT / 2, (gridHeight - 2) / weekRows.length)
         : CELL_HEIGHT;
     return (
       <View className="flex-1 px-3 pt-2">
