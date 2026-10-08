@@ -1,3 +1,4 @@
+import { scaleType } from "@/lib/type-scale";
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
 // This project uses code from shadcn/ui.
@@ -172,7 +173,13 @@ const FormMessage = React.forwardRef<
         ref={ref}
         nativeID={formMessageNativeID}
         className={stripFontWeightClass(mergedClassName)}
-        style={[{ fontFamily: resolveGeistFontFamily(mergedClassName) }, style]}
+        style={[
+          {
+            fontFamily: resolveGeistFontFamily(mergedClassName),
+            ...scaleType(mergedClassName),
+          },
+          style,
+        ]}
         {...props}
       >
         {body}
