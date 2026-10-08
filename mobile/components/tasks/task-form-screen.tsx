@@ -208,7 +208,7 @@ export function SessionFormScreen({
           <Pressable
             onPress={() => router.back()}
             accessibilityLabel={t("Close")}
-            className="h-10 w-10 items-center justify-center rounded-full bg-muted"
+            className="h-10 w-10 items-center justify-center"
           >
             <X size={20} className="text-muted-foreground" />
           </Pressable>

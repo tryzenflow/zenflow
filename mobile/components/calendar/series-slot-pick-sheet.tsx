@@ -286,7 +286,7 @@ const SeriesSlotPickSheet = forwardRef<
               onPress={handleDismiss}
               disabled={busy}
               accessibilityLabel={t("Close — keeps everything as scheduled")}
-              className="inline-flex size-8 items-center justify-center rounded-full bg-muted shrink-0"
+              className="inline-flex size-8 items-center justify-center shrink-0"
             >
               <X size={15} className="text-muted-foreground" />
             </Pressable>
