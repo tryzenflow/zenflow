@@ -9,10 +9,7 @@ import {
   Tag,
   type LucideIcon,
 } from "@/components/Icons";
-import {
-  OverdueBadge,
-  SessionTypeBadge,
-} from "@/components/calendar/session-type-badge";
+import { SessionTypeBadge } from "@/components/calendar/session-type-badge";
 import { isSessionPastDeadline } from "@/lib/overdue";
 import { localizedReminderLabel } from "@/components/tasks/form/reminder-field";
 import { Text } from "@/components/ui/text";
@@ -229,11 +226,15 @@ export function SessionView({
         )}
         {deadline && (
           <Property icon={CalendarClock} label={t("Deadline")}>
-            <View className="flex-1 flex-row flex-wrap items-center gap-2">
-              {/* Scheduled past its deadline: say so, the date alone doesn't. */}
-              {isSessionPastDeadline(task) && <OverdueBadge size="lg" />}
-              <Text className="text-[15px] leading-[22px]">{deadline}</Text>
-            </View>
+            <Text className="flex-1 text-[15px] leading-[22px]">
+              {/* Scheduled past its deadline: say so in words before the time. */}
+              {isSessionPastDeadline(task) && (
+                <Text className="text-[15px] font-semibold leading-[22px] text-destructive">
+                  {t("Overdue at")}{" "}
+                </Text>
+              )}
+              {deadline}
+            </Text>
           </Property>
         )}
         {!!values.location && (

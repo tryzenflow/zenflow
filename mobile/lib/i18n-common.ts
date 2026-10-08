@@ -13,6 +13,7 @@ export default {
   General: "Thông báo chung",
   Reminders: "Nhắc nhở",
   Offline: "Ngoại tuyến",
+  "Overdue at": "Hết hạn vào",
   Hour: "Giờ",
   Minute: "Phút",
   "+{count} more": "+{count} nữa",
