@@ -130,9 +130,16 @@ const BottomSheetContent = React.forwardRef<
       index = 0,
       backdropProps,
       backgroundStyle,
-      android_keyboardInputMode = "adjustResize",
+      // Edge-to-edge Android never resizes the window for the keyboard, and
+      // gorhom's "adjustResize" mode assumes it does (it zeroes the keyboard
+      // height), so the keyboard would cover the sheet. "adjustPan" makes
+      // gorhom lift the sheet by the keyboard height itself.
+      android_keyboardInputMode = "adjustPan",
       children,
-      keyboardBehavior = "fillParent",
+      // "fillParent" stretches a dynamically-sized sheet to full height when
+      // the keyboard opens, leaving a big blank gap under short content.
+      // "interactive" just lifts the sheet above the keyboard at its own height.
+      keyboardBehavior = "interactive",
       keyboardBlurBehavior = "restore",
       ...props
     },
