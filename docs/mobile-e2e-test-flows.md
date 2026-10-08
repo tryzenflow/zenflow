@@ -15,7 +15,7 @@ mobile/maestro/
 │   ├── onboarding.yaml                 # First-run setup
 │   ├── task-create.yaml                # Create a flexible task
 │   ├── task-edit.yaml                  # Edit a seeded task
-│   ├── calendar-week.yaml              # Week view navigation (swipe)
+│   ├── calendar-week.yaml              # Week view navigation (header chips)
 │   ├── calendar-month.yaml             # Month view navigation
 │   ├── logout.yaml                     # Sign out + verify login screen
 │   ├── notification-permission.yaml    # P1: bell → inbox → back
@@ -25,7 +25,7 @@ mobile/maestro/
 │   ├── navigation.yaml                 # Tab navigation
 │   └── data.yaml                       # Data helpers
 └── scripts/
-    ├── run-suite.js                    # Orchestrator: reset → OTP → seed → suite
+    ├── run-suite.js                    # Orchestrator: reset → seed → OTP → suite
     ├── get-otp.js                      # Fetch OTP from MailHog
     ├── reset-test-data.js              # POST /test/reset + clear MailHog
     └── seed-task.js                    # OTP login → POST /test/seed-task
@@ -36,7 +36,7 @@ mobile/maestro/
 ### Prerequisites
 
 1. Install dependencies: `pnpm install`
-2. Install Maestro: `curl -Ls "https://get.maestro.mobile.dev" | bash`
+2. Install Maestro: `curl -Ls "https://get.maestro.mobile.dev" | MAESTRO_VERSION=2.11.0 bash`
 3. Start backend test stack (dev.yml owns Postgres, Redis ×2, MailHog,
    MinIO — bandit skipped; ports must match dev.yml's mapping, and dev.yml
    reads per-service env from `backend/.env.dev`):
@@ -60,10 +60,10 @@ pnpm --filter backend exec dotenv -e .env.test -- env PORT=5000 node dist/main
 4. Build and install the Expo dev client:
 ```bash
 # Android
-cd mobile && npx expo run:android
+cd mobile && pnpm exec expo run:android
 
 # iOS
-cd mobile && npx expo run:ios
+cd mobile && pnpm exec expo run:ios
 ```
 
 5. Start Metro: `pnpm --filter mobile dev`
@@ -71,14 +71,51 @@ cd mobile && npx expo run:ios
 ### Commands
 
 ```bash
-# P0 smoke suite (reset → OTP → seed → suite, the only supported entry)
+# P0 smoke suite (reset → seed → OTP → suite, the only supported entry)
 pnpm --filter mobile test:e2e
 
 # P1 extended suite (notification + DLU)
 pnpm --filter mobile test:e2e:extended
 
-# Raw Maestro is only for developing a single flow AFTER the runner has
-# logged in and seeded (it exports E2E_OTP/E2E_TODAY into your shell):
+# Raw Maestro for developing ONE flow — see the manual setup below; the
+# runner logs out when it finishes, so it cannot hand you a live session.
+```
+
+### One flow at a time (manual setup)
+
+The runner's suites end in logout, so a single raw `maestro test <flow>`
+needs a logged-in, onboarding-completed, seeded app first. Unlike the
+runner (which must seed before login because Maestro cannot shell out
+mid-suite), the manual order logs in first and seeds afterwards — the
+seed's own OTP login cannot disturb an already-verified device session:
+
+```bash
+# Run-scoped env every flow expects (app id, card slugs, date-cell IDs)
+export MAESTRO_APP_ID=com.zenflow.app
+export E2E_RUN_ID=local-manual
+export E2E_EMAIL=mobile-e2e+local-manual@example.test
+export E2E_TODAY=$(date +%F)
+export E2E_NEXT_WEEK=$(node -e "const d=new Date();d.setDate(d.getDate()+7);console.log(d.toISOString().slice(0,10))")
+
+# 1. Fresh backend + mailbox (from the repo root)
+node mobile/maestro/scripts/reset-test-data.js
+
+# 2. Two-phase device login: request → fetch the code → verify
+maestro test mobile/maestro/flows/login-request.yaml
+E2E_OTP=$(node mobile/maestro/scripts/get-otp.js "$E2E_EMAIL" | tail -1) \
+  maestro test mobile/maestro/flows/login-verify.yaml
+
+# 3. First-run onboarding (fresh user only)
+maestro test mobile/maestro/flows/onboarding.yaml
+
+# 4. Seed the fixtures the flow asserts on (one OTP login per invocation)
+NOON_TODAY=$(node -e "const d=new Date();d.setHours(12,0,0,0);console.log(d.toISOString())")
+NOON_NEXT=$(node -e "const d=new Date();d.setDate(d.getDate()+7);d.setHours(12,0,0,0);console.log(d.toISOString())")
+DL=$(node -e "const d=new Date();d.setDate(d.getDate()+2);d.setHours(12,0,0,0);console.log(d.toISOString())")
+node mobile/maestro/scripts/seed-task.js "E2E This Week" TASK "$DL" 60 1 "$NOON_TODAY"
+node mobile/maestro/scripts/seed-task.js "E2E Next Week" TASK "$DL" 60 1 "$NOON_NEXT"
+
+# 5. The single flow — raw Maestro is fine from here on
 maestro test mobile/maestro/flows/calendar-week.yaml
 ```
 
@@ -96,8 +133,9 @@ run shell mid-suite, so `run-suite.js` owns the sequencing.
 | `MAILHOG_URL` | OTP helper | `http://localhost:8025` |
 | `E2E_RUN_ID` | unique titles/email | `local-20261006-001` |
 | `E2E_EMAIL` | login OTP | `mobile-e2e+local-20261006-001@example.test` |
-| `E2E_OTP` | login-verify (runner exports) | `483920` |
-| `E2E_TODAY` | month date-cell IDs (runner exports) | `2026-10-07` |
+| `E2E_OTP` | login-verify (runner fetches and passes it into the verify step) | `483920` |
+| `E2E_TODAY` | month date-cell IDs (runner passes to flows) | `2026-10-07` |
+| `E2E_NEXT_WEEK` | week-header chip target (calendar-week; runner passes to flows) | `2026-10-14` |
 
 ## Running in CI
 
@@ -232,10 +270,10 @@ Rules:
 - Every run uses a disposable test email: `mobile-e2e+<run-id>@example.test`.
 - `run-suite.js` owns sequencing (Maestro can't shell out mid-suite):
   1. `reset-test-data.js` truncates all tables via `POST /test/reset` and clears MailHog.
-  2. `login-request.yaml` sends the OTP on-device.
-  3. `get-otp.js` polls MailHog and exports `E2E_OTP`.
-  4. `seed-task.js` × 3 pins deterministic sessions via `POST /test/seed-task` with `scheduledStartTime` — seeded rows bypass the placement engine, so without an explicit slot they would render nowhere. Seeds use local noon (same calendar day in any timezone).
-  5. `login-verify.yaml` (enter `${E2E_OTP}`) runs in the SAME `maestro test` invocation as `smoke.yaml` / `extended.yaml`, so nothing restarts between verification and onboarding; the suites themselves start at onboarding.
+  2. `seed-task.js` × 3 pins deterministic sessions via `POST /test/seed-task` with `scheduledStartTime` — seeded rows bypass the placement engine, so without an explicit slot they would render nowhere. Seeds run before the device login and reuse one cached OTP session (`E2E_SESSION_FILE`), so they make exactly one OTP request and leave MailHog clean for the device.
+  3. The runner deletes the device's MailHog messages and checks the mailbox is empty — the backend allows 3 OTP requests per 9 minutes per email, and a seeded session must not consume the device's budget.
+  4. `login-request.yaml` sends the OTP on-device; `get-otp.js` polls MailHog for `E2E_OTP`.
+  5. `login-verify.yaml` (enter `${E2E_OTP}`) runs in the SAME `maestro test` invocation as `smoke.yaml` / `extended.yaml`, so nothing restarts between verification and onboarding; the suites themselves start at onboarding. Seeds use local noon (same calendar day in any timezone).
 - Edit/calendar flows use seeded data so they don't depend on create-task passing.
 - OTP is retrieved from the MailHog API — no real email service needed.
 

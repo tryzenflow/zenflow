@@ -87,10 +87,11 @@ Work (completed):
 - Added package scripts:
 ```json
 {
-  "test:e2e": "maestro test mobile/maestro/flows/smoke.yaml",
-  "test:e2e:smoke": "maestro test mobile/maestro/flows/smoke.yaml",
-  "test:e2e:android": "maestro test mobile/maestro/flows/smoke.yaml",
-  "test:e2e:ios": "maestro test mobile/maestro/flows/smoke.yaml"
+  "test:e2e": "node maestro/scripts/run-suite.js smoke",
+  "test:e2e:smoke": "node maestro/scripts/run-suite.js smoke",
+  "test:e2e:extended": "node maestro/scripts/run-suite.js extended",
+  "test:e2e:android": "node maestro/scripts/run-suite.js smoke",
+  "test:e2e:ios": "node maestro/scripts/run-suite.js smoke"
 }
 ```
 - Added a smoke entry flow that runs P0 flows in order.
@@ -161,7 +162,7 @@ Work (completed):
   - `expo prebuild` → `gradlew assembleDebug` → `adb install`.
   - Metro in production mode (`--no-dev --minify`).
 - Maestro test run:
-  - `maestro test` with JUnit XML output.
+  - `node maestro/scripts/run-suite.js smoke` (Maestro invoked with `--format junit` → `mobile/maestro-report.xml`).
   - Android emulator uses `http://10.0.2.2:5000/api/v1` to reach host backend.
 - Failure artifacts: JUnit report, screenshots, recordings, API logs, compose logs.
 - Teardown: compose down on every run.
@@ -324,27 +325,23 @@ pnpm --filter mobile typecheck
 pnpm --filter mobile test
 ```
 
-Planned command model after Maestro is added:
+Command model (implemented):
 
 ```bash
-# P0 smoke suite (runner owns OTP + seeds — the only supported entry)
-pnpm --filter mobile test:e2e:smoke
+# P0 smoke suite (runner owns reset → seed → OTP → suite — the only supported entry)
+pnpm --filter mobile test:e2e            # alias: test:e2e:smoke
+pnpm --filter mobile test:e2e:extended   # P1: notification + DLU
 
-# Platform-specific smoke runs
+# Platform-specific aliases (same runner)
 pnpm --filter mobile test:e2e:android
 pnpm --filter mobile test:e2e:ios
-
-# One flow while developing (only AFTER run-suite logged in + seeded,
-# with E2E_TODAY exported — smoke.yaml itself starts at onboarding)
-pnpm --filter mobile test:e2e:flow mobile/maestro/flows/calendar-week.yaml
 ```
 
-Raw Maestro examples for operators (same logged-in + seeded precondition):
-
-```bash
-maestro test mobile/maestro/flows/calendar-week.yaml
-maestro test mobile/maestro/flows/login-request.yaml
-```
+The runner logs out when it finishes, so it cannot hand you a logged-in
+session for a single raw flow — `docs/mobile-e2e-test-flows.md` →
+"One flow at a time (manual setup)" documents the full manual sequence
+(login → onboarding → seed → `maestro test <flow>`) including the
+`E2E_TODAY`/`E2E_NEXT_WEEK`/`E2E_RUN_ID` exports the flows require.
 
 Document expected local run sequence:
 
@@ -359,11 +356,12 @@ Document expected local run sequence:
    - Android emulator may need `http://10.0.2.2:5000/api/v1` unless the app rewrites loopback correctly.
 8. Build/install Expo dev client.
 9. Start Metro.
-10. Run Maestro.
+10. Run the suite: `pnpm --filter mobile test:e2e` (the runner owns
+    reset → seed → OTP → suite — see `docs/mobile-e2e-test-flows.md`).
 
 ## How the tests run in CI
 
-Document a planned CI workflow, not a committed workflow in this docs-only pass.
+CI workflow: `.github/workflows/mobile-e2e.yml` (two jobs).
 
 CI steps:
 
@@ -376,7 +374,8 @@ CI steps:
 7. Start backend API.
 8. Build/install mobile dev client on emulator.
 9. Start Metro.
-10. Run `maestro test mobile/maestro/flows/smoke.yaml`.
+10. Run `node maestro/scripts/run-suite.js smoke` (JUnit report +
+    failure screenshots/recordings).
 11. Upload artifacts on failure.
 12. Tear down test services.
 
