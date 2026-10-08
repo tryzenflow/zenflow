@@ -16,14 +16,17 @@ async function resetDatabase() {
         'Content-Type': 'application/json',
       },
     });
-    const data = await response.json();
-    if (data.success) {
-      console.log('[reset-test-data] Test database reset successfully');
-    } else {
-      console.warn('[reset-test-data] Reset failed:', data.message);
+    const data = await response.json().catch(() => ({}));
+    // Throw instead of warning: a backend started without NODE_ENV=test
+    // answers 404 here (the /test module is not mounted), and continuing
+    // would seed/verify against data that was never cleared — the failure
+    // would surface much later as a confusing login or seed error.
+    if (!response.ok || data.success !== true) {
+      throw new Error(data.message || `HTTP ${response.status}`);
     }
+    console.log('[reset-test-data] Test database reset successfully');
   } catch (error) {
-    console.error('[reset-test-data] Database reset error:', error.message);
+    console.error('[reset-test-data] Database reset failed:', error.message);
     throw error;
   }
 }
@@ -33,13 +36,13 @@ async function resetMailHog() {
     const response = await fetch(`${MAILHOG_URL}/api/v1/messages`, {
       method: 'DELETE',
     });
-    if (response.ok) {
-      console.log('[reset-test-data] MailHog cleared');
-    } else {
-      console.warn(`[reset-test-data] MailHog clear failed: ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
     }
+    console.log('[reset-test-data] MailHog cleared');
   } catch (error) {
-    console.warn(`[reset-test-data] MailHog clear error: ${error.message}`);
+    console.error('[reset-test-data] MailHog clear failed:', error.message);
+    throw error;
   }
 }
 

@@ -2,17 +2,27 @@
 /**
  * Seed Test Task Helper for Maestro E2E Tests
  * Creates a task via the backend API for edit/calendar flows
- * Usage: node scripts/seed-task.js <title> <type> <deadlineISO> <durationMinutes> [sessionCount] [scheduledStartISO]
+ * Usage: node scripts/seed-task.js <title> <type> <deadlineISO> <durationMinutes> <sessionCount> <scheduledStartISO>
  *
  * Types: TASK, DND, ASSIGNMENT, EXAM, LECTURE (backend SessionType enum).
- * Pass scheduledStartISO to pin the session to a deterministic calendar
- * slot — required for any task a calendar flow asserts on, since seeded
- * rows bypass the placement engine.
+ * scheduledStartISO is REQUIRED — it pins the session to a deterministic
+ * calendar slot for any task a calendar flow asserts on, since seeded rows
+ * bypass the placement engine, and the API rejects seeds without a start.
+ *
+ * Auth: OTP login once per session. Set E2E_SESSION_FILE to a writable path
+ * and the first call stores the session cookie there for later calls to
+ * reuse (run-suite.js seeds ×3 with ONE OTP request this way — a fresh
+ * request per seed would replace the device's pending login code and blow
+ * the 3-per-email rate limit). A cached cookie that the backend rejects
+ * (e.g. after a reset) is re-logged-in once automatically.
  */
+
+const fs = require("node:fs");
 
 const API_URL = process.env.E2E_API_URL || process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
 const MAILHOG_URL = process.env.MAILHOG_URL || 'http://localhost:8025';
 const EMAIL = process.env.E2E_EMAIL;
+const SESSION_FILE = process.env.E2E_SESSION_FILE;
 
 async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -122,18 +132,48 @@ async function seedTask(cookie, title, type, deadline, durationMinutes, sessionC
       ...(scheduledStartTime ? { scheduledStartTime } : {}),
     }),
   });
-  const data = await response.json();
-  if (!data.success) {
-    throw new Error(`Failed to seed task: ${data.message}`);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.success) {
+    const err = new Error(
+      `Failed to seed task: ${data.message || `HTTP ${response.status}`}`,
+    );
+    err.status = response.status;
+    throw err;
   }
   console.log('[seed-task] Task seeded:', JSON.stringify(data.data, null, 2));
   return data.data;
 }
 
+function readSessionFile() {
+  if (!SESSION_FILE) return null;
+  try {
+    const cookie = fs.readFileSync(SESSION_FILE, 'utf8').trim();
+    return cookie || null;
+  } catch {
+    return null; // no cached session yet
+  }
+}
+
+function writeSessionFile(cookie) {
+  if (SESSION_FILE && cookie) fs.writeFileSync(SESSION_FILE, cookie);
+}
+
+/** One OTP login: snapshot MailHog → request → poll (ours only) → verify. */
+async function login() {
+  const seenBefore = await knownIds(EMAIL);
+  await requestOtp(EMAIL);
+  console.log('[seed-task] Polling MailHog for OTP...');
+  const otp = await getOtpFromMailHog(EMAIL, 60000, seenBefore);
+  console.log('[seed-task] OTP received:', otp);
+  const cookie = await verifyOtp(EMAIL, otp);
+  writeSessionFile(cookie);
+  return cookie;
+}
+
 async function main() {
   const [title, type, date, durationMinutes, sessionCount, scheduledStart] = process.argv.slice(2);
-  if (!title || !type || !date || !durationMinutes) {
-    console.error('Usage: node seed-task.js <title> <type> <deadlineISO> <durationMinutes> [sessionCount] [scheduledStartISO]');
+  if (!title || !type || !date || !durationMinutes || !sessionCount || !scheduledStart) {
+    console.error('Usage: node seed-task.js <title> <type> <deadlineISO> <durationMinutes> <sessionCount> <scheduledStartISO>');
     console.error('Types: TASK, DND, ASSIGNMENT, EXAM, LECTURE');
     process.exit(1);
   }
@@ -143,36 +183,49 @@ async function main() {
     process.exit(1);
   }
 
+  const startMs = Date.parse(scheduledStart);
+  if (Number.isNaN(startMs)) {
+    console.error(`[seed-task] scheduledStartISO is not a valid date: ${scheduledStart}`);
+    process.exit(1);
+  }
+
   try {
     console.log('[seed-task] Starting task seeding...');
     console.log('[seed-task] Email:', EMAIL);
 
-    // 1. Snapshot MailHog BEFORE requesting, so the OTP we pick up is
-    // provably ours and not an earlier message for the same address.
-    const seenBefore = await knownIds(EMAIL);
+    // Reuse the cached session when present (the FIRST seed logs in and
+    // writes it; later seeds must NOT request another OTP — that would
+    // replace the device's pending login code and count against the
+    // 3-per-email request window). A cookie the backend rejects (e.g. the
+    // runner reset the DB between runs) falls through to one fresh login.
+    let cookie = readSessionFile();
+    if (cookie) {
+      console.log('[seed-task] Reusing cached seed session');
+    } else {
+      cookie = await login();
+    }
 
-    // 2. Request OTP
-    await requestOtp(EMAIL);
-
-    // 3. Get OTP from MailHog
-    console.log('[seed-task] Polling MailHog for OTP...');
-    const otp = await getOtpFromMailHog(EMAIL, 60000, seenBefore);
-    console.log('[seed-task] OTP received:', otp);
-
-    // 3. Verify OTP and get session cookie
-    const cookie = await verifyOtp(EMAIL, otp);
-
-    // 4. Seed task
     const deadline = new Date(date).toISOString();
-    const result = await seedTask(
-      cookie,
-      title,
-      type,
-      deadline,
-      parseInt(durationMinutes),
-      parseInt(sessionCount) || 1,
-      scheduledStart ? new Date(scheduledStart).toISOString() : undefined,
-    );
+    const doSeed = (c) =>
+      seedTask(
+        c,
+        title,
+        type,
+        deadline,
+        parseInt(durationMinutes),
+        parseInt(sessionCount),
+        new Date(startMs).toISOString(),
+      );
+
+    let result;
+    try {
+      result = await doSeed(cookie);
+    } catch (err) {
+      if (err.status !== 401 && err.status !== 403) throw err;
+      console.log('[seed-task] Cached session rejected — logging in again');
+      cookie = await login();
+      result = await doSeed(cookie);
+    }
 
     // Output task ID for shell capture
     if (result.session) {
