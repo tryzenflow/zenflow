@@ -1,70 +1,32 @@
-import { useLanguage } from "@/hooks/use-language";
-import { t } from "@/lib/i18n";
-import { ChevronRight, Clock } from "@/components/Icons";
+import { Clock, ChevronRight } from "@/components/Icons";
 import {
   BottomSheet,
   BottomSheetContent,
   BottomSheetOpenTrigger,
-  BottomSheetScrollView,
-  type BottomSheetScrollViewRef,
   BottomSheetView,
   useBottomSheet,
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
+import { useLanguage } from "@/hooks/use-language";
+import { getLanguage, t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { minutesToLabel } from "@/utils/preferences";
-import { useCallback, useRef } from "react";
-import { Pressable, View, useWindowDimensions } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
+import { useCallback } from "react";
+import { Pressable, View } from "react-native";
 
-/** The 12 selectable hours on a 12-hour clock (1 … 12). */
-const HOURS = Array.from({ length: 12 }, (_, i) => i + 1);
-/** Minutes column always steps by 15 — the scheduler's grid — matching
- * `frontend/src/components/ui/time-picker.tsx`'s `MINUTE_STEPS`. */
+/** Minutes always step by 15, the scheduler's grid (see `frontend/src/components/ui/time-picker.tsx`). */
 const MINUTE_STEPS = [0, 15, 30, 45];
 const MERIDIEMS = ["AM", "PM"] as const;
 type Meridiem = (typeof MERIDIEMS)[number];
 
-/** Row pitch (px): `h-10` row (40) + `gap-1.5` (6). Used to size the columns in
- * whole rows and to auto-scroll the active entry into view. */
-const ROW_HEIGHT = 46;
-const MIN_ROWS = 5;
-const MAX_ROWS = 10;
-/** Share of the window the sheet may occupy. */
-const SHEET_HEIGHT_RATIO = 0.6;
+/** English reads a 12-hour clock with AM/PM; Vietnamese a 24-hour clock. */
+const is24h = () => getLanguage() === "vi";
 
-/**
- * Sheet chrome around the columns: handle (24) + title (26) + gap (16) + gap
- * (16) + Done (48) + bottom gap (20) + slack (8), plus the safe-area inset.
- */
-function sheetChrome(bottomInset: number): number {
-  return 24 + 26 + 16 + 16 + 48 + 20 + 8 + bottomInset;
-}
-
-/** Whole visible rows that fit in `windowHeight`'s share of the sheet. */
-export function visibleRowsFor(
-  windowHeight: number,
-  bottomInset: number,
-): number {
-  const avail = windowHeight * SHEET_HEIGHT_RATIO - sheetChrome(bottomInset);
-  return Math.min(MAX_ROWS, Math.max(MIN_ROWS, Math.floor(avail / ROW_HEIGHT)));
-}
-
-/**
- * Explicit sheet height (dynamic sizing under-measures this content) and the
- * matching column height. Columns are sized from the window so the sheet is
- * filled by the columns instead of leaving an empty gap under the Done button.
- */
-function useTimeSheetLayout(): { snapPoints: number[]; columnHeight: number } {
-  const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
-  const columnHeight = visibleRowsFor(height, insets.bottom) * ROW_HEIGHT;
-  return {
-    snapPoints: [sheetChrome(insets.bottom) + columnHeight],
-    columnHeight,
-  };
-}
+/** Hour grid: every hour on screen at once, no scrolling (3 rows of 4, or 4 rows of 6). */
+const HOURS_12 = Array.from({ length: 12 }, (_, i) => i + 1);
+const HOURS_24 = Array.from({ length: 24 }, (_, i) => i);
 
 /** Split a minutes-of-day value into 12-hour clock parts. */
 function toParts(value: number): {
@@ -87,105 +49,91 @@ function fromParts(hour: number, minute: number, meridiem: Meridiem): number {
   return militaryHour * 60 + minute;
 }
 
-function scrollIntoView(
-  ref: React.RefObject<BottomSheetScrollViewRef | null>,
-  index: number,
-  columnHeight: number,
-) {
-  const y = Math.max(0, index * ROW_HEIGHT - columnHeight / 2 + ROW_HEIGHT / 2);
-  ref.current?.scrollTo({ y, animated: false });
-}
-
-function Column<T extends number | string>({
-  items,
-  isActive,
-  renderLabel,
-  onSelect,
-  scrollRef,
-  height,
+function Cell({
+  label,
+  active,
+  onPress,
+  className,
 }: {
-  items: T[];
-  isActive: (item: T) => boolean;
-  renderLabel: (item: T) => string;
-  onSelect: (item: T) => void;
-  scrollRef?: React.RefObject<BottomSheetScrollViewRef | null>;
-  height: number;
+  label: string;
+  active: boolean;
+  onPress: () => void;
+  className?: string;
 }) {
   return (
-    // Was a plain `ScrollView` from "react-native" — nested inside
-    // `BottomSheetContent` (a real `@gorhom/bottom-sheet` `BottomSheetModal`
-    // on native), a bare RN `ScrollView` fights the sheet's own pan gesture
-    // for vertical touch since it isn't registered with gorhom's internal
-    // gesture coordination, which is why only taps (not drags) worked on the
-    // hour/minute columns. `BottomSheetScrollView` (re-exported per-platform
-    // from `@/components/ui/bottom-sheet`) is gorhom's own scrollable that
-    // reads `useBottomSheetInternal()` so the sheet yields to it correctly.
-    <BottomSheetScrollView
-      ref={scrollRef}
-      style={{ height }}
-      className="flex-1"
-      contentContainerClassName="gap-1.5 pb-1"
-      showsVerticalScrollIndicator={false}
+    <Pressable
+      onPress={() => {
+        Haptics.selectionAsync().catch(() => {});
+        onPress();
+      }}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      className={cn(
+        "h-11 items-center justify-center rounded-xl border",
+        active
+          ? "border-primary bg-primary"
+          : "border-border bg-muted/60 active:bg-muted",
+        className,
+      )}
     >
-      {items.map((item) => {
-        const active = isActive(item);
-        return (
-          <Pressable
-            key={String(item)}
-            onPress={() => onSelect(item)}
-            className={cn(
-              "h-10 items-center justify-center rounded-lg",
-              active ? "bg-primary" : "bg-transparent",
-            )}
-          >
-            <Text
-              className={cn(
-                "text-[15px] font-medium",
-                active ? "text-primary-foreground" : "text-foreground",
-              )}
-            >
-              {renderLabel(item)}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </BottomSheetScrollView>
+      <Text
+        className={cn(
+          "text-[16px] font-medium tabular-nums",
+          active ? "text-primary-foreground" : "text-foreground",
+        )}
+      >
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
-/** Scroll refs + the `BottomSheetContent.onChange` handler that scrolls the
- * active hour/minute into view whenever the sheet opens — shared by both
- * trigger variants below since the refs must live above `BottomSheetContent`
- * (its `onChange` prop is what fires on every open, not just first mount). */
-function useTimePickerScroll(value: number, columnHeight: number) {
-  const hourScrollRef = useRef<BottomSheetScrollViewRef>(null);
-  const minuteScrollRef = useRef<BottomSheetScrollViewRef>(null);
-
-  const onSheetChange = useCallback(
-    (index: number) => {
-      if (index < 0) return;
-      const parts = toParts(value);
-      scrollIntoView(hourScrollRef, HOURS.indexOf(parts.hour), columnHeight);
-      scrollIntoView(
-        minuteScrollRef,
-        MINUTE_STEPS.indexOf(parts.minute),
-        columnHeight,
-      );
-    },
-    [value, columnHeight],
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <View className="gap-2">
+      <Text className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {title}
+      </Text>
+      {children}
+    </View>
   );
+}
 
-  return { hourScrollRef, minuteScrollRef, onSheetChange };
+/** Lays `items` out in rows of `perRow` equal cells. */
+function Grid<T extends number | string>({
+  items,
+  perRow,
+  render,
+}: {
+  items: T[];
+  perRow: number;
+  render: (item: T) => React.ReactNode;
+}) {
+  const rows: T[][] = [];
+  for (let i = 0; i < items.length; i += perRow) {
+    rows.push(items.slice(i, i + perRow));
+  }
+  return (
+    <View className="gap-2">
+      {rows.map((row) => (
+        <View key={String(row[0])} className="flex-row gap-2">
+          {row.map((item) => (
+            <View key={String(item)} className="flex-1">
+              {render(item)}
+            </View>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
 }
 
 /**
- * Shared three-column hour / 15-min-block / AM-PM picker body — RN port of
- * `frontend/src/components/ui/time-picker.tsx`'s popover contents, without
- * that file's dead 23:59-as-59-minutes special case (the backend no longer
- * ever returns a non-grid deadline instant, see `deadline-chip-row.tsx`).
- * Rendered inside a `BottomSheetContent` (RN has no hover/click-outside
- * popover primitive) with a trailing "Done" button, instead of either
- * legacy component's single flat scrollable list.
+ * Hour / 15-minute / AM-PM picker body, RN port of
+ * `frontend/src/components/ui/time-picker.tsx`. Every option is visible at
+ * once (no scroll columns), so the sheet sizes itself to its content with no
+ * dead space under the Done button. English: 12 hours + AM/PM. Vietnamese:
+ * 24 hours, no meridiem.
  */
 function TimePickerBody({
   title,
@@ -193,32 +141,30 @@ function TimePickerBody({
   value,
   onChange,
   onDone,
-  hourScrollRef,
-  minuteScrollRef,
-  columnHeight,
 }: {
   title: string;
   subtitle?: string;
   value: number;
   onChange: (minutes: number) => void;
   onDone: () => void;
-  hourScrollRef: React.RefObject<BottomSheetScrollViewRef | null>;
-  minuteScrollRef: React.RefObject<BottomSheetScrollViewRef | null>;
-  columnHeight: number;
 }) {
   useLanguage();
+  const h24 = is24h();
   const { hour, minute, meridiem } = toParts(value);
+  const hour24 = Math.floor(Math.min(Math.max(value, 0), 1439) / 60);
 
-  const commit = useCallback(
+  const setHour24 = useCallback(
+    (h: number) => onChange(h * 60 + minute),
+    [onChange, minute],
+  );
+  const commit12 = useCallback(
     (h: number, m: number, mer: Meridiem) => onChange(fromParts(h, m, mer)),
     [onChange],
   );
 
-  // `BottomSheetView` adds the safe-area bottom padding that the sheet height
-  // in `useTimeSheetLayout` accounts for.
   return (
-    <BottomSheetView hadHeader={false} className="px-0">
-      <View className="px-5">
+    <BottomSheetView hadHeader={false} className="gap-4 px-5">
+      <View>
         <Text className="text-[19px] font-bold tracking-tight">{t(title)}</Text>
         {subtitle && (
           <Text className="mt-[3px] text-[13px] text-muted-foreground">
@@ -226,54 +172,70 @@ function TimePickerBody({
           </Text>
         )}
       </View>
-      <View className="mt-4 flex-row gap-2 px-5">
-        <Column
-          items={HOURS}
-          isActive={(h) => h === hour}
-          renderLabel={(h) => String(h)}
-          onSelect={(h) => commit(h, minute, meridiem)}
-          scrollRef={hourScrollRef}
-          height={columnHeight}
-        />
-        <Column
+
+      <Section title={t("Hour")}>
+        {h24 ? (
+          <Grid
+            items={HOURS_24}
+            perRow={6}
+            render={(h) => (
+              <Cell
+                label={String(h).padStart(2, "0")}
+                active={h === hour24}
+                onPress={() => setHour24(h)}
+              />
+            )}
+          />
+        ) : (
+          <Grid
+            items={HOURS_12}
+            perRow={4}
+            render={(h) => (
+              <Cell
+                label={String(h)}
+                active={h === hour}
+                onPress={() => commit12(h, minute, meridiem)}
+              />
+            )}
+          />
+        )}
+      </Section>
+
+      <Section title={t("Minute")}>
+        <Grid
           items={MINUTE_STEPS}
-          isActive={(m) => m === minute}
-          renderLabel={(m) => m.toString().padStart(2, "0")}
-          onSelect={(m) => commit(hour, m, meridiem)}
-          scrollRef={minuteScrollRef}
-          height={columnHeight}
+          perRow={4}
+          render={(m) => (
+            <Cell
+              label={m.toString().padStart(2, "0")}
+              active={m === minute}
+              onPress={() =>
+                h24 ? onChange(hour24 * 60 + m) : commit12(hour, m, meridiem)
+              }
+            />
+          )}
         />
-        <View className="w-16 gap-1.5">
-          {MERIDIEMS.map((mer) => (
-            <Pressable
-              key={mer}
-              onPress={() => commit(hour, minute, mer)}
-              className={cn(
-                "h-10 items-center justify-center rounded-lg",
-                mer === meridiem ? "bg-primary" : "bg-transparent",
-              )}
-            >
-              <Text
-                className={cn(
-                  "text-[15px] font-medium",
-                  mer === meridiem
-                    ? "text-primary-foreground"
-                    : "text-foreground",
-                )}
-              >
-                {t(mer)}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-      <View className="px-5 pt-4">
-        <Button className="w-full" onPress={onDone}>
-          <Text className="font-semibold text-primary-foreground">
-            {t("Done")}
-          </Text>
-        </Button>
-      </View>
+      </Section>
+
+      {!h24 && (
+        <Grid
+          items={[...MERIDIEMS]}
+          perRow={2}
+          render={(mer) => (
+            <Cell
+              label={t(mer)}
+              active={mer === meridiem}
+              onPress={() => commit12(hour, minute, mer)}
+            />
+          )}
+        />
+      )}
+
+      <Button className="w-full" onPress={onDone}>
+        <Text className="font-semibold text-primary-foreground">
+          {t("Done")}
+        </Text>
+      </Button>
     </BottomSheetView>
   );
 }
@@ -305,11 +267,6 @@ export function TimePickerRow({
 }: TimePickerRowProps) {
   useLanguage();
   const bottomSheet = useBottomSheet();
-  const { snapPoints, columnHeight } = useTimeSheetLayout();
-  const { hourScrollRef, minuteScrollRef, onSheetChange } = useTimePickerScroll(
-    value,
-    columnHeight,
-  );
 
   return (
     <BottomSheet>
@@ -329,12 +286,6 @@ export function TimePickerRow({
       </BottomSheetOpenTrigger>
       <BottomSheetContent
         ref={bottomSheet.ref}
-        enableDynamicSizing={false}
-        snapPoints={snapPoints}
-        // Vertical drags inside the sheet scroll the hour/minute columns
-        // instead of dragging the sheet; the handle still pans it closed.
-        enableContentPanningGesture={false}
-        onChange={onSheetChange}
       >
         <TimePickerBody
           title={sheetTitle ?? label}
@@ -342,9 +293,6 @@ export function TimePickerRow({
           value={value}
           onChange={onChange}
           onDone={bottomSheet.close}
-          hourScrollRef={hourScrollRef}
-          minuteScrollRef={minuteScrollRef}
-          columnHeight={columnHeight}
         />
       </BottomSheetContent>
     </BottomSheet>
@@ -374,11 +322,6 @@ export function TimePickerInline({
 }: TimePickerInlineProps) {
   useLanguage();
   const bottomSheet = useBottomSheet();
-  const { snapPoints, columnHeight } = useTimeSheetLayout();
-  const { hourScrollRef, minuteScrollRef, onSheetChange } = useTimePickerScroll(
-    value,
-    columnHeight,
-  );
 
   return (
     <BottomSheet>
@@ -397,21 +340,12 @@ export function TimePickerInline({
       </BottomSheetOpenTrigger>
       <BottomSheetContent
         ref={bottomSheet.ref}
-        enableDynamicSizing={false}
-        snapPoints={snapPoints}
-        // Vertical drags inside the sheet scroll the hour/minute columns
-        // instead of dragging the sheet; the handle still pans it closed.
-        enableContentPanningGesture={false}
-        onChange={onSheetChange}
       >
         <TimePickerBody
           title={label}
           value={value}
           onChange={onChange}
           onDone={bottomSheet.close}
-          hourScrollRef={hourScrollRef}
-          minuteScrollRef={minuteScrollRef}
-          columnHeight={columnHeight}
         />
       </BottomSheetContent>
     </BottomSheet>

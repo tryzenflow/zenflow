@@ -21,10 +21,10 @@ import {
 import { Pressable, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const ROW_HEIGHT = 52;
+const ROW_HEIGHT = 54;
 const HANDLE_AND_HEADER = 72;
-/** `pb-8` on the scroll content. */
-const LIST_BOTTOM_PADDING = 32;
+/** Gap under the last row, plus the safe-area inset. */
+const LIST_BOTTOM_PADDING = 8;
 
 export interface OptionSheetHandle {
   open: () => void;
@@ -81,6 +81,9 @@ function OptionSheetInner<T extends string | number>(
   // clipped), so size explicitly: header + rows + bottom padding, capped just
   // below the status bar so long lists (timezones) scroll instead.
   const maxHeight = Math.round(height - insets.top - 24);
+  // The list's own bottom padding is `LIST_BOTTOM_PADDING + insets.bottom`
+  // (below) and is counted once here, so the sheet ends right under the last
+  // row instead of leaving a double gap.
   const contentHeight =
     HANDLE_AND_HEADER +
     options.length * ROW_HEIGHT +
@@ -115,7 +118,10 @@ function OptionSheetInner<T extends string | number>(
         </BottomSheetHeader>
         {/* Scrollable: the timezone list is taller than a dynamic sheet. */}
         <BottomSheetScrollView
-          contentContainerClassName="px-4 pb-8"
+          contentContainerClassName="px-4"
+          contentContainerStyle={{
+            paddingBottom: LIST_BOTTOM_PADDING + insets.bottom,
+          }}
           keyboardShouldPersistTaps="handled"
         >
           {search ? (
@@ -154,7 +160,7 @@ function OptionSheetInner<T extends string | number>(
                   ) : null}
                   <Text
                     className={cn(
-                      "text-[15px]",
+                      "text-[16px]",
                       selected
                         ? "font-semibold text-primary"
                         : "text-foreground",
@@ -164,7 +170,7 @@ function OptionSheetInner<T extends string | number>(
                   </Text>
                 </View>
                 {option.detail ? (
-                  <Text className="ml-3 text-[13px] text-muted-foreground">
+                  <Text className="ml-3 text-[14px] text-muted-foreground">
                     {option.detail}
                   </Text>
                 ) : null}
