@@ -139,7 +139,7 @@ const taskTranslations: Record<string, string> = {
   "Couldn't open photo library": "Chưa mở được thư viện ảnh",
   "Couldn't upload file": "Chưa tải được tệp lên",
   "Couldn't upload image": "Chưa tải được ảnh lên",
-  Session: "Lịch",
+  "Session details": "Chi tiết phiên",
   "Start with a template": "Bắt đầu từ mẫu",
   "Study notes": "Ghi chú học tập",
   "Key ideas, questions, summary": "Ý chính, câu hỏi, tóm tắt",

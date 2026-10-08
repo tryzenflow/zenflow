@@ -19,7 +19,10 @@ const buttonVariants = cva(
         link: "web:underline-offset-4 web:hover:underline web:focus:underline ",
       },
       size: {
-        default: "h-10 px-4 py-2 native:h-12 native:px-5 native:py-3",
+        // No vertical padding: with a fixed height it only shrinks the box the label
+        // is laid out in (24px of 48px), which clipped larger text; `items-center`
+        // already centres it.
+        default: "h-10 px-4 native:h-12 native:px-5",
         sm: "h-9 rounded-md px-3",
         lg: "h-11 rounded-md px-8 native:h-14",
         icon: "h-10 w-10",
