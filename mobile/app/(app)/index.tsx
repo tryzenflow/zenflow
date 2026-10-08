@@ -54,7 +54,6 @@ import {
   type SlotPickResult,
   singleSitting,
 } from "@/lib/series-alternatives";
-import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { dateKey } from "@/lib/week-date-math";
 import { zonedDate, zonedNow } from "@zenflow/core";
 import type { Session, SlotPickResponse, UpdateScope } from "@zenflow/shared";
@@ -154,7 +153,6 @@ export default function WeekScreen() {
     useCalendarJump.getState().clearWeekJump();
   }, [weekJump, commitFocusedDate]);
 
-  const tabBarOverlay = useTabBarOverlayHeight();
 
   // Per-day distinct session types for the visible week, for the header's
   // dot row — see `use-week-day-types.ts`.
@@ -511,7 +509,7 @@ export default function WeekScreen() {
         dayTypes={dayTypes}
       />
 
-      <View className="flex-1" style={{ paddingBottom: tabBarOverlay }}>
+      <View className="flex-1">
         <WeekPager
           ref={pagerRef}
           focusedDate={focusedDate}

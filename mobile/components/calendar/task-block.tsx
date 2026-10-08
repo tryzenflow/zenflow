@@ -10,7 +10,6 @@ import {
   MapPin,
 } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
-import { NAV_THEME } from "@/lib/constants";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
 import { differenceInCalendarDays } from "date-fns";
@@ -28,7 +27,8 @@ import type { DaySegment } from "@zenflow/shared";
 import { toZonedTime } from "date-fns-tz";
 import * as Haptics from "expo-haptics";
 import { memo, useCallback, useEffect, useState } from "react";
-import { View, useWindowDimensions } from "react-native";
+import { BlurView } from "expo-blur";
+import { Platform, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Svg, { Path } from "react-native-svg";
 import Animated, {
@@ -162,10 +162,10 @@ function LocationChip({ location }: { location: string }) {
   const online = isOnlineLocation(location);
   const Icon = online ? Globe : MapPin;
   return (
-    <View className="min-w-0 flex-row items-center gap-1 rounded bg-muted px-1 py-0.5">
+    <View className="min-w-0 flex-row items-center gap-1 rounded bg-white/40 px-1.5 py-0.5 dark:bg-white/10">
       <Icon size={11} className="shrink-0 text-muted-foreground" />
       <Text
-        className="shrink text-xs font-medium leading-none text-muted-foreground"
+        className="shrink text-[10.5px] font-medium leading-none text-muted-foreground"
         numberOfLines={1}
         ellipsizeMode="tail"
       >
@@ -284,15 +284,16 @@ function SessionBlockImpl({
       ? DAILY_HORIZON
       : rawEndMin;
   const duration = endMin - startMin;
-  // ≤30 min: one row with the time inline after the title — a 30-min block is
-  // too short for the stacked title + time + chips layout on a phone.
-  const isCompact = duration <= 30;
+  // Under ~40px tall: one row with the time inline after the title; shorter
+  // than that is too short for the stacked title + time + chips layout. Judged
+  // by pixels, not minutes, so a taller hour grid lets a 30-min block stack.
+  const isCompact = (duration / DAILY_HORIZON) * totalHeight < 40;
   // Bare Lucide icon for the one-line compact layout (the bordered
   // `SessionTypeBadge` chip is itself taller than a 15-min block).
   const CompactTypeIcon = sessionTypeIcon(segment.type);
   const showTags = duration > TAGS_MIN_DURATION && segment.tags.length > 0;
-  // Short blocks show just the type icon; roomy ones get the icon + label.
-  const typeBadgeIconOnly = duration <= TAGS_MIN_DURATION;
+  // Every full (non-compact) block, 30 min included, names its type in the badge.
+  const typeBadgeIconOnly = false;
 
   // Overlapping blocks render in their normal type colour — no conflict state,
   // no annotation. `layout` still cascades them (see `DayTimeline`).
@@ -716,14 +717,14 @@ function SessionBlockImpl({
     tapGesture,
   );
 
-  const borderChrome = cn(
-    "border-t-black border-r-black border-b-black dark:border-t-white/50 dark:border-r-white/50 dark:border-b-white/50",
-    // The resting `ring-1` is part of every block's normal chrome (it softens
-    // the hard 1px border); the flash just intensifies it. Drag changes
-    // neither — the only "landing" effect is the flash on create / reschedule /
-    // teleport.
-    flashing ? "ring-2 ring-amber-400" : "ring-1 ring-amber-500/40",
-  );
+  // Glass edge: each state tints its own rim (below); the only extra ring is
+  // the "landing" flash on create / reschedule / teleport.
+  // Always a ring class (transparent at rest): a className that gains `ring-*`
+  // between renders makes NativeWind "upgrade" the component mid-life, which
+  // crashed the block right after a save (the flash).
+  const flashRing = flashing
+    ? "ring-2 ring-amber-400"
+    : "ring-1 ring-transparent";
   // DND diagonal hatch (`.hatch-dnd` in mockups/day-view.html). Explicit line
   // segments: an SVG `<Pattern>` clipped its 1px stroke at the tile edge.
   const dndHatchPath =
@@ -731,20 +732,74 @@ function SessionBlockImpl({
   const dndHatchStroke = isDarkColorScheme
     ? "rgb(148,163,184)" // slate-400
     : "rgb(100,116,139)"; // slate-500
-  const stateClasses =
-    // No bare `border` here: `cn` would let it override the base `border-l-4`
-    // and the thick red left edge collapsed to 1px.
-    overdue
-      ? `${borderChrome} border-l-red-500 bg-red-500/15 dark:bg-red-500/20`
+  // Translucent fills (no opaque layer anywhere) so overlapping blocks blend.
+  // One even 1px rim per state (a thick left border + rounded corners drew a
+  // mitred, uneven outline); the coloured accent is a separate rounded bar
+  // inset inside the block, like Apple Calendar.
+  const stateClasses = overdue
+    ? `${flashRing} bg-red-500/12 dark:bg-red-500/18`
+    : state === "dnd"
+      ? `${flashRing} bg-slate-500/[0.06] dark:bg-slate-400/[0.08]`
+      : state === "assignment"
+        ? `${flashRing} bg-teal-400/12`
+        : state === "exam"
+          ? `${flashRing} bg-rose-400/12`
+          : state === "lecture"
+            ? `${flashRing} bg-sky-400/12`
+            : `${flashRing} bg-primary/[0.11] dark:bg-primary/[0.12]`;
+  // Solid single-colour rim, drawn as its own overlay ABOVE the blur: a border on
+  // the blurred container itself came out jagged (the blur mask isn't anti-aliased).
+  const edgeColor = isDarkColorScheme
+    ? overdue
+      ? "#ef4444"
       : state === "dnd"
-        ? `${borderChrome} border-l-slate-400 [border-left-style:dashed] bg-slate-500/[0.07] dark:bg-slate-400/10`
+        ? "#64748b"
         : state === "assignment"
-          ? `${borderChrome} border-l-teal-500 bg-teal-50/50 dark:bg-teal-950/20`
+          ? "#14b8a6"
           : state === "exam"
-            ? `${borderChrome} border-l-rose-500 bg-rose-50/50 dark:bg-rose-950/20`
+            ? "#f43f5e"
             : state === "lecture"
-              ? `${borderChrome} border-l-sky-500 bg-sky-50/50 dark:bg-sky-950/20`
-              : `${borderChrome} border-l-primary glass-task`;
+              ? "#0ea5e9"
+              : "#f97316"
+    : overdue
+      ? "#f87171"
+      : state === "dnd"
+        ? "#94a3b8"
+        : state === "assignment"
+          ? "#5eead4"
+          : state === "exam"
+            ? "#fda4af"
+            : state === "lecture"
+              ? "#7dd3fc"
+              : "#fdba74";
+  const topRadius = segment.continued ? 0 : 14;
+  const bottomRadius = segment.continues && !drawsThrough ? 0 : 14;
+
+  const accentColor = overdue
+    ? "#ef4444"
+    : state === "dnd"
+      ? "#94a3b8"
+      : state === "assignment"
+        ? "#14b8a6"
+        : state === "exam"
+          ? "#f43f5e"
+          : state === "lecture"
+            ? "#0ea5e9"
+            : isDarkColorScheme
+              ? "#ff7a24"
+              : "#ff8e3e";
+  // Meta/time text: a deeper shade of the block's own colour (lighter in dark mode).
+  const timeClass = overdue
+    ? "text-red-800 dark:text-red-200"
+    : state === "dnd"
+      ? "text-slate-700 dark:text-slate-300"
+      : state === "assignment"
+        ? "text-teal-800 dark:text-teal-200"
+        : state === "exam"
+          ? "text-rose-800 dark:text-rose-200"
+          : state === "lecture"
+            ? "text-sky-800 dark:text-sky-200"
+            : "text-orange-800 dark:text-orange-200";
 
   const horizontal = {
     left: leftOffset + nestOffset,
@@ -757,25 +812,16 @@ function SessionBlockImpl({
       style={[
         wrapperStyle,
         { ...horizontal, height },
-        isStacked && {
-          borderRadius: 10,
-          backgroundColor: (isDarkColorScheme
-            ? NAV_THEME.dark
-            : NAV_THEME.light
-          ).background,
-          shadowColor: "#000",
-          shadowOpacity: isDarkColorScheme ? 0.5 : 0.18,
-          shadowRadius: 6,
-          shadowOffset: { width: 0, height: 3 },
-          elevation: 6,
-        },
+        // No shadow and no opaque backing: on a translucent block a shadow shows
+        // through as gray, and a stacked block must let the one beneath show.
+        isStacked && { borderRadius: 14 },
       ]}
     >
       {isDraggingJS && (
         <Animated.View
           pointerEvents="none"
           style={footprintStyle}
-          className="absolute inset-0 rounded-[10px] border-[1.5px] border-dashed border-muted-foreground/40 bg-muted/40"
+          className="absolute inset-0 rounded-[14px] border-[1.5px] border-dashed border-muted-foreground/40 bg-muted/40"
         />
       )}
       {tip && !segment.continued ? (
@@ -788,17 +834,17 @@ function SessionBlockImpl({
         <Animated.View
           pointerEvents="none"
           style={flashRingStyle}
-          className="absolute -inset-[3px] rounded-[13px] border-2 border-primary"
+          className="absolute -inset-[3px] rounded-[17px] border-2 border-primary"
         />
       )}
       <GestureDetector gesture={composedGesture}>
         <Animated.View
           style={[moveStyle, { height }]}
           className={cn(
-            "flex overflow-hidden rounded-[10px] border border-l-4",
+            "flex overflow-hidden rounded-[14px]",
             isCompact
-              ? "flex-row items-center gap-1 px-2"
-              : "flex-col gap-0.5 px-2.5 py-1.5",
+              ? "flex-row items-center gap-1 pl-3.5 pr-2"
+              : "flex-col gap-0.5 pl-4 pr-2.5 py-1.5",
             segment.continues && !drawsThrough && "rounded-b-none",
             segment.continued && "rounded-t-none [border-top-style:dashed]",
             isInteractive && "cursor-grab",
@@ -811,6 +857,58 @@ function SessionBlockImpl({
             tz,
           )} ${t("to")} ${fmt(segment.taskEnd, tz)}`}
         >
+          {/* Real glass on iOS: blur whatever is behind, including the block
+              beneath an overlapping one, so colours blend; the tint comes from
+              the translucent fill above. */}
+          {Platform.OS === "ios" ? (
+            <BlurView
+              pointerEvents="none"
+              intensity={isDarkColorScheme ? 35 : 28}
+              tint={isDarkColorScheme ? "dark" : "light"}
+              // UIVisualEffectView ignores the parent's rounded clip: round it
+              // itself or its square corners show past the rim.
+              style={[
+                StyleSheet.absoluteFill,
+                {
+                  overflow: "hidden",
+                  borderTopLeftRadius: topRadius,
+                  borderTopRightRadius: topRadius,
+                  borderBottomLeftRadius: bottomRadius,
+                  borderBottomRightRadius: bottomRadius,
+                },
+              ]}
+            />
+          ) : null}
+          {/* Accent bar: inset and fully rounded. Must sit ABOVE the blur layer,
+              or the blur smears it into a wide glow. */}
+          <View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              top: 6,
+              bottom: 6,
+              left: 6,
+              width: 4,
+              borderRadius: 2,
+              backgroundColor: accentColor,
+            }}
+          />
+          <View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              top: 0,
+              right: 0,
+              bottom: 0,
+              left: 0,
+              borderWidth: 1,
+              borderColor: edgeColor,
+              borderTopLeftRadius: topRadius,
+              borderTopRightRadius: topRadius,
+              borderBottomLeftRadius: bottomRadius,
+              borderBottomRightRadius: bottomRadius,
+            }}
+          />
           {state === "dnd" && (
             <View pointerEvents="none" className="absolute inset-0">
               <Svg width="100%" height="100%">
@@ -835,7 +933,7 @@ function SessionBlockImpl({
                 </Text>
               ) : (
                 <CompactTypeIcon
-                  size={11}
+                  size={16}
                   className={cn(
                     "shrink-0",
                     SESSION_TYPE_META[segment.type].textClass,
@@ -846,7 +944,7 @@ function SessionBlockImpl({
                   the card is already red). */}
               {overdue && (
                 <AlertCircle
-                  size={11}
+                  size={15}
                   color={isDarkColorScheme ? "#fca5a5" : "#dc2626"}
                   style={{ flexShrink: 0 }}
                 />
@@ -861,8 +959,14 @@ function SessionBlockImpl({
               >
                 {segment.title}
               </Text>
+              {/* Location sits right after the title; the title gives way first. */}
+              {!!segment.location && !segment.continued && (
+                <View style={{ flexShrink: 1, maxWidth: "38%" }}>
+                  <LocationChip location={segment.location} />
+                </View>
+              )}
               <Text
-                className="shrink-0 text-[9px] leading-[12px] text-muted-foreground"
+                className={cn("shrink-0 text-[9px] leading-[12px]", timeClass)}
                 style={COMPACT_TEXT_STYLE}
               >
                 {segment.continued
@@ -893,7 +997,9 @@ function SessionBlockImpl({
                 </Text>
               </View>
               <View className="flex-row flex-wrap items-center gap-1">
-                <Text className="text-[10px] leading-[12px] text-muted-foreground">
+                <Text
+                  className={cn("text-[10px] font-medium leading-[12px]", timeClass)}
+                >
                   {segment.continued
                     ? t("cont. → {time}", { time: fmt(segment.taskEnd, tz) })
                     : segment.continues && !drawsThrough

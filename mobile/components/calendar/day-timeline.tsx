@@ -1,3 +1,4 @@
+import { useConnectivity } from "@/lib/connectivity";
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { locale } from "@/lib/i18n";
@@ -138,9 +139,9 @@ function stackShifts(
 }
 
 const GUTTER_WIDTH = 64;
-const HOUR_HEIGHT_DEFAULT = 64;
-const HOUR_HEIGHT_MIN = 48;
-const HOUR_HEIGHT_MAX = 96;
+const HOUR_HEIGHT_DEFAULT = 132;
+const HOUR_HEIGHT_MIN = 80;
+const HOUR_HEIGHT_MAX = 200;
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 const LOADING_PLACEHOLDERS = [
@@ -379,9 +380,14 @@ export function DayTimeline({
           setSessions((prev) =>
             sameSessions(prev, sessions) ? prev : sessions,
           );
+        useConnectivity.getState().setStale(false);
       })
       .catch(() => {
-        if (!cancelled) setError(true);
+        // Saved data on screen: keep showing it and flag offline (a quiet
+        // glyph) instead of replacing the day with the error state.
+        if (cancelled) return;
+        if (cached != null) useConnectivity.getState().setStale(true);
+        else setError(true);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -411,8 +417,11 @@ export function DayTimeline({
         sameSessions(prev, res.sessions) ? prev : res.sessions,
       );
       setError(false);
+      useConnectivity.getState().setStale(false);
     } catch {
-      setError(true);
+      const saved = getCachedDaySessions(format(date, "yyyy-MM-dd"));
+      if (saved) useConnectivity.getState().setStale(true);
+      else setError(true);
     }
   }, [date]);
 
@@ -1137,9 +1146,24 @@ export function DayTimeline({
             >
               <TimeGutter hourHeight={hourHeight} />
 
+              {/* The scroll padding under midnight (it clears the floating bar)
+                  stays part of the day column: same panel, same gutter rule. */}
               <View
-                className="absolute top-0 bottom-0 bg-card"
-                style={{ left: GUTTER_WIDTH, right: rightInset }}
+                pointerEvents="none"
+                className="absolute w-px bg-border"
+                style={{
+                  left: GUTTER_WIDTH - 1,
+                  top: totalHeight,
+                  height: bottomInset,
+                }}
+              />
+              <View
+                className="absolute top-0 bg-card"
+                style={{
+                  left: GUTTER_WIDTH,
+                  right: rightInset,
+                  bottom: -bottomInset,
+                }}
               >
                 {/* Hour separator lines */}
                 {HOURS.map((hour) => (
