@@ -182,6 +182,17 @@ describe("parseMonthlyView — assignments", () => {
     );
   });
 
+  it("escapes HTML-sensitive characters in the submission link", () => {
+    const url = 'https://lms.test/mod/assign/view.php?id=1&x=<b>"';
+    const [item] = parseMonthlyView(
+      view([{ ...ASSIGN_DUE_0739, url }]),
+      BEFORE_ALL,
+    ).items;
+
+    const escaped = "https://lms.test/mod/assign/view.php?id=1&amp;x=&lt;b&gt;&quot;";
+    expect(item.note).toBe(`<p><a href="${escaped}">${escaped}</a></p>`);
+  });
+
   it("handles an 11:59 PM deadline (16:59 UTC → 16:30–16:45)", () => {
     const [item] = parseMonthlyView(view([ASSIGN_DUE_2359]), BEFORE_ALL).items;
 

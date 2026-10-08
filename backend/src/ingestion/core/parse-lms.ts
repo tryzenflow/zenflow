@@ -199,7 +199,8 @@ export function parseMonthlyView(
       });
       continue;
     }
-    const submissionLinkHtml = `<p><a href="${event.url}">${event.url}</a></p>`;
+    const url = escapeHtml(event.url);
+    const submissionLinkHtml = `<p><a href="${url}">${url}</a></p>`;
     items.push({
       externalKey: lmsAssignKey(event.instance!),
       title: event.name,
@@ -274,4 +275,12 @@ export function parseMonthlyView(
   }
 
   return { items, courses: [...courses.values()], skipped };
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
