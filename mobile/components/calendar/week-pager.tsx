@@ -7,6 +7,7 @@ import type { PeekBlock } from "@/lib/peek";
 import { useColorScheme } from "@/lib/useColorScheme";
 import {
   centeredDays,
+  jumpWindow,
   dateKey,
   dayIndexInWeek,
   shiftDays,
@@ -45,11 +46,13 @@ import Animated, {
   useAnimatedReaction,
   useAnimatedStyle,
   useDerivedValue,
+  useReducedMotion,
   runOnUI,
   useSharedValue,
   withTiming,
   type SharedValue,
 } from "react-native-reanimated";
+import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { DayTimeline, type TimelineState } from "./day-timeline";
 import type {
   PendingSessionUpdate,
@@ -236,6 +239,8 @@ function WeekPagerImpl(
   // swipe (the "next day stops covering the current day" glitch).
   const [settling, setSettling] = useState(false);
   const releaseSettle = useCallback(() => setSettling(false), []);
+  const reduceMotion = useReducedMotion();
+  const tabBarOverlay = useTabBarOverlayHeight();
   // 1 while the Week header owns the strip for its week swipe: the window is a
   // transient same-weekday `[f−7, f, f+7]`, `progress` is driven from the
   // header's pan, and the pager's own pan is disabled. Cleared when the
@@ -384,6 +389,19 @@ function WeekPagerImpl(
     fromSV.value = 1;
     toSV.value = 1;
   }, [days, progress, width, fromSV, toSV]);
+
+  // Starts the slide queued by the focus effect (a day outside the window),
+  // after React committed the transient window so the incoming page is the
+  // target day. `animateRolesTo` here is the one built for that very render.
+  const pendingJumpRef = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const idx = pendingJumpRef.current;
+    if (idx == null) return;
+    pendingJumpRef.current = null;
+    commitRoles(1);
+    animateRolesTo(idx);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only a new window starts a queued jump.
+  }, [days]);
 
   // Warm the days just outside the 3-page window so a quick second swipe lands
   // on cached data instead of a cold mount. `fetchDaySessions` de-dupes with
@@ -665,16 +683,37 @@ function WeekPagerImpl(
       animateRolesTo(idx);
       return;
     }
-    // Day outside the window (a header week jump): rebuild the centered
-    // window around it and snap straight to rest. Multi-slot jumps would
-    // sweep through an empty viewport — the pager paints only the outgoing/
-    // incoming pair — so those snap straight to the target day.
-    const fresh = centeredDays(focusedDate);
-    applyWindow(fresh);
+    // Day outside the window (a far chip tap, Today, a deep link, a header
+    // week jump). Time flows: instead of cutting, put the target in the
+    // neighbour slot on the side it lies (`[prev, focused, target]` or
+    // `[target, focused, next]`) and slide to it like an adjacent tap. The
+    // pager only paints the outgoing/incoming pair, so a one-slot slide is the
+    // only shape that never sweeps through an empty viewport. The slide starts
+    // in the `[days]` layout-effect below, once React has mounted the target
+    // page; settle then re-centres on the target as for any swipe.
+    const current = days[focusedIndex];
+    if (!current || reduceMotion) {
+      const fresh = centeredDays(focusedDate);
+      applyWindow(fresh);
+      setFocusedIndex(1);
+      setSettling(false);
+      commitRoles(1);
+      snapTo(1, false);
+      return;
+    }
+    const target = new Date(focusedDate);
+    // Warm the target so the incoming page paints from cache, not a skeleton.
+    const targetKey = dateKey(target);
+    if (!isDayCacheFresh(targetKey)) {
+      fetchDaySessions(targetKey, () =>
+        listSessions("day", target).then((res) => res.sessions),
+      ).catch(() => {});
+    }
+    const jump = jumpWindow(days, current, target, dateKey);
+    pendingJumpRef.current = jump.toIndex;
+    applyWindow(jump.window);
     setFocusedIndex(1);
-    setSettling(false);
-    commitRoles(1);
-    snapTo(1, false);
+    setSettling(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reads the
     // current window; only the focused day drives this.
   }, [focusedDate, settling]);
@@ -1086,6 +1125,9 @@ function WeekPagerImpl(
                 <DayTimeline
                   date={day}
                   showHeader={false}
+                  // The pager spans the full height under the floating bar; the
+                  // grid pads its own end so 11:45 PM can scroll clear of it.
+                  contentBottomInset={tabBarOverlay + 8}
                   refreshKey={focusTick}
                   isActive={active}
                   syncScroll

@@ -1,3 +1,4 @@
+import { OfflineIndicator } from "@/components/offline-indicator";
 import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
@@ -12,7 +13,10 @@ import {
   weekHeaderBlocks,
   weekStart,
 } from "@/lib/week-date-math";
+import { springTo, useReducedMotion } from "@/lib/motion";
+import { useColorScheme } from "@/lib/useColorScheme";
 import { SETTLE_MS } from "@/lib/week-pager-math";
+import * as Haptics from "expo-haptics";
 import { monthLabel } from "@/lib/month-date-math"
 import type { SessionType } from "@zenflow/shared";
 
@@ -24,6 +28,7 @@ import {
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
+  memo,
   useMemo,
   useRef,
   useState,
@@ -51,6 +56,119 @@ const SETTLE = {
   duration: SETTLE_MS,
   easing: Easing.out(Easing.cubic),
 } as const;
+
+const CHIP_GAP = 6;
+const ROW_PADDING_X = 16;
+
+/**
+ * The selection highlight: one warm pill that slides under the focused chip
+ * instead of each chip toggling its own background. `index` is the focused
+ * day's slot in this week block (-1 when the focus is in another block, which
+ * hides it). It follows the finger-tracked `shownDate`, so it travels with the
+ * pager.
+ */
+function ChipPill({ index, chipWidth }: { index: number; chipWidth: number }) {
+  const reduceMotion = useReducedMotion();
+  const { isDarkColorScheme } = useColorScheme();
+  const x = useSharedValue(Math.max(index, 0));
+  const visible = useSharedValue(index >= 0 ? 1 : 0);
+  useEffect(() => {
+    if (index >= 0) {
+      x.value = springTo(index, reduceMotion);
+      visible.value = withTiming(1, { duration: 120 });
+    } else {
+      visible.value = withTiming(0, { duration: 120 });
+    }
+  }, [index, reduceMotion, x, visible]);
+  const style = useAnimatedStyle(() => ({
+    opacity: visible.value,
+    transform: [{ translateX: x.value * (chipWidth + CHIP_GAP) }],
+  }));
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        {
+          position: "absolute",
+          top: 4,
+          bottom: 2,
+          left: ROW_PADDING_X,
+          width: chipWidth,
+          borderRadius: 12,
+          backgroundColor: isDarkColorScheme
+            ? "rgba(255, 122, 36, 0.16)"
+            : "rgba(255, 142, 62, 0.12)",
+          borderWidth: 1,
+          borderColor: isDarkColorScheme
+            ? "rgba(255, 150, 80, 0.26)"
+            : "rgba(255, 142, 62, 0.22)",
+        },
+        style,
+      ]}
+    />
+  );
+}
+
+const NO_TYPES: SessionType[] = [];
+
+const WeekChip = memo(function WeekChip({
+  day,
+  isFocused,
+  isToday,
+  types,
+  onSelectDay,
+}: {
+  day: Date;
+  isFocused: boolean;
+  isToday: boolean;
+  /** Already deduped and in canonical order, so dots never jitter. */
+  types: SessionType[];
+  onSelectDay: (day: Date) => void;
+}) {
+  return (
+      <Pressable
+        onPress={() => {
+          if (!isFocused) Haptics.selectionAsync().catch(() => {});
+          onSelectDay(day);
+        }}
+        className="flex-1 items-center gap-1 rounded-xl py-1.5"
+        accessibilityLabel={`${format(day, "EEEE, MMMM d")}${
+          isToday ? t(", today") : ""
+        }${
+          types.length > 0
+            ? `, ${types.map((type) => t(SESSION_TYPE_META[type].label)).join(", ")}`
+            : ""
+        }`}
+      >
+        <Text className="text-[10.5px] font-semibold text-muted-foreground">
+          {formatTitle(day, "EEE")}
+        </Text>
+        <View
+          className={`h-[30px] w-[30px] items-center justify-center rounded-full text-base ${
+            isToday ? "bg-primary text-primary-foreground" : "text-foreground"
+          }`}
+        >
+          <Text
+            className={`text-base font-semibold ${
+              isToday ? "text-primary-foreground" : "text-foreground"
+            }`}
+          >
+            {format(day, "d")}
+          </Text>
+        </View>
+        {/* Fixed-height row so a 0-dot day reserves the same space as a
+            5-dot day — the chip's height never jumps day to day. */}
+        <View className="h-[5px] flex-row items-center gap-[3px]">
+          {types.map((type) => (
+            <View
+              key={type}
+              className={`h-[4px] w-[4px] rounded-full ${SESSION_TYPE_META[type].dotClass}`}
+            />
+          ))}
+        </View>
+      </Pressable>
+  );
+});
 
 interface WeekHeaderProps {
   /** The *committed* focused day — anchors the chip carousel's week block and
@@ -129,6 +247,7 @@ function WeekHeaderImpl(
   useLanguage();
   const now = useNow();
   const { width } = useWindowDimensions();
+  const chipWidth = (width - ROW_PADDING_X * 2 - CHIP_GAP * 6) / 7;
   const insets = useSafeAreaInsets();
 
   // What the title / range / highlight read. The carousel and anchor logic
@@ -287,59 +406,34 @@ function WeekHeaderImpl(
     [weekModeSV],
   );
 
+  // Sorted once per `dayTypes` change instead of per chip per render.
+  const sortedDayTypes = useMemo(() => {
+    const sorted = new Map<string, SessionType[]>();
+    for (const [k, v] of dayTypes) {
+      sorted.set(
+        k,
+        v
+          .slice()
+          .sort(
+            (a, b) =>
+              SESSION_TYPE_ORDER.indexOf(a) - SESSION_TYPE_ORDER.indexOf(b),
+          ),
+      );
+    }
+    return sorted;
+  }, [dayTypes]);
+
   const renderChip = (day: Date) => {
     const key = dateKey(day);
-    const isFocused = key === focusedKey;
-    const isToday = key === todayKey;
-    // Dedupe already happened in `sessionTypesByDay`; sort into a stable,
-    // canonical order so the dots don't jitter between renders/days.
-    const types = (dayTypes.get(key) ?? [])
-      .slice()
-      .sort(
-        (a, b) => SESSION_TYPE_ORDER.indexOf(a) - SESSION_TYPE_ORDER.indexOf(b),
-      );
     return (
-      <Pressable
+      <WeekChip
         key={key}
-        onPress={() => onSelectDay(day)}
-        className={`flex-1 items-center gap-1 rounded-xl py-1.5 ${
-          isFocused ? "bg-muted" : ""
-        }`}
-        accessibilityLabel={`${format(day, "EEEE, MMMM d")}${
-          isToday ? t(", today") : ""
-        }${
-          types.length > 0
-            ? `, ${types.map((type) => t(SESSION_TYPE_META[type].label)).join(", ")}`
-            : ""
-        }`}
-      >
-        <Text className="text-[10.5px] font-semibold text-muted-foreground">
-          {formatTitle(day, "EEE")}
-        </Text>
-        <View
-          className={`h-[30px] w-[30px] items-center justify-center rounded-full text-base ${
-            isToday ? "bg-primary text-primary-foreground" : "text-foreground"
-          }`}
-        >
-          <Text
-            className={`text-base font-semibold ${
-              isToday ? "text-primary-foreground" : "text-foreground"
-            }`}
-          >
-            {format(day, "d")}
-          </Text>
-        </View>
-        {/* Fixed-height row so a 0-dot day reserves the same space as a
-            5-dot day — the chip's height never jumps day to day. */}
-        <View className="h-[5px] flex-row items-center gap-[3px]">
-          {types.map((type) => (
-            <View
-              key={type}
-              className={`h-[4px] w-[4px] rounded-full ${SESSION_TYPE_META[type].dotClass}`}
-            />
-          ))}
-        </View>
-      </Pressable>
+        day={day}
+        isFocused={key === focusedKey}
+        isToday={key === todayKey}
+        types={sortedDayTypes.get(key) ?? NO_TYPES}
+        onSelectDay={onSelectDay}
+      />
     );
   };
 
@@ -357,6 +451,13 @@ function WeekHeaderImpl(
             {format(titleDays[0], "MMM d")} – {format(titleDays[6], "MMM d")}
           </Text>
         </View>
+        {/* Sits left of the notification bell (36px at right-4). */}
+        <View
+          className="absolute right-[60px] z-10"
+          style={{ top: insets.top + 8 }}
+        >
+          <OfflineIndicator dayKey={`${focusedKey}`} />
+        </View>
 
         <Animated.View
           style={[{ flexDirection: "row", width: width * 3 }, stripStyle]}
@@ -366,6 +467,10 @@ function WeekHeaderImpl(
               <View className="flex-row gap-1.5 px-4 pt-1 pb-0.5">
                 {/* The middle block is the week on screen. */}
                 {i === 1 ? <SpotlightAnchor step="switch-day" /> : null}
+                <ChipPill
+                  index={weekDates.findIndex((d) => dateKey(d) === focusedKey)}
+                  chipWidth={chipWidth}
+                />
                 {weekDates.map((day) => renderChip(day))}
               </View>
             </View>
