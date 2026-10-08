@@ -340,7 +340,7 @@ function EditSessionForm() {
 
   return (
     <SessionFormScreen
-      title={editing ? t("Edit session") : t("Session")}
+      title={editing ? t("Edit session") : t("Session details")}
       editSwitch={
         task ? { value: editing, onValueChange: setEditing } : undefined
       }

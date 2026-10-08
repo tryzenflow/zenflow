@@ -75,7 +75,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { WebViewMessageEvent } from "react-native-webview";
 import { AudioBridge, VideoBridge } from "./media-bridges";
 
-const HIGHLIGHT_COLOR = "#fde68a";
+// A light tint of the brand orange (`--brand-orange`); note text on it stays
+// dark in both schemes (see `noteTypographyCss`).
+const HIGHLIGHT_COLOR = "#ffc9a1";
 
 // `ImageBridge` is the library's own (wraps `@tiptap/extension-image`,
 // pre-configured `allowBase64: true`, which also keeps notes written
@@ -245,6 +247,7 @@ function DescriptionFieldEditor({
   const valueRef = useRef(initialValue);
   const bootContentRef = useRef(initialValue);
   const [linkOpen, setLinkOpen] = useState(false);
+  const linkAnchorRef = useRef("");
   const [isEmpty, setIsEmpty] = useState(() => isNoteEmpty(initialValue));
   // "selection": a text range is selected (or sits in a link) -> URL only, applied to that
   // text. "insert": nothing selected -> title + URL inserted as a new link at the end.
@@ -348,7 +351,7 @@ function DescriptionFieldEditor({
     const { fontFace, family } = noteFont(fontDataUri);
     editor.injectCSS(
       // Bottom padding keeps the last lines scrollable above the floating bar.
-      `${fontFace} html, body { margin: 0; padding: 0; background-color: ${bg}; } .ProseMirror { box-sizing: border-box; background-color: ${bg}; color: ${fg}; font-family: ${family}; font-size: 17px; padding: 8px 20px 120px; line-height: 1.5; min-height: 100vh; } .ProseMirror > :first-child { margin-top: 0; } ${noteTypographyCss(".ProseMirror", isDarkColorScheme)}`,
+      `${fontFace} html, body { margin: 0; padding: 0; background-color: ${bg}; } .ProseMirror { box-sizing: border-box; background-color: ${bg}; color: ${fg}; font-family: ${family}; font-size: 17px; padding: 20px 20px 120px; line-height: 1.5; min-height: 100vh; } .ProseMirror > :first-child { margin-top: 0; } ${noteTypographyCss(".ProseMirror", isDarkColorScheme)}`,
       "description-field-theme",
     );
   }
@@ -385,8 +388,38 @@ function DescriptionFieldEditor({
     setLinkMode(onText ? "selection" : "insert");
     setLinkTitle("");
     setLinkUrl(state.activeLink ?? "");
+    linkAnchorRef.current = `${state.selection?.from ?? 0}:${state.selection?.to ?? 0}`;
+    // Focusing the URL field blurs the WebView, which drops the native
+    // selection highlight (Android most visibly). Paint the range ourselves
+    // with the CSS Custom Highlight API until the popup closes; the ProseMirror
+    // selection itself survives the blur, so `setLink` still targets it.
+    if (onText) {
+      editor.injectCSS(
+        "::highlight(zf-link-sel) { background-color: rgba(255, 142, 62, 0.35); }",
+        "zf-link-sel",
+      );
+      editor.injectJS(
+        "(function(){try{var s=getSelection();if(s&&s.rangeCount&&!s.isCollapsed&&window.CSS&&CSS.highlights){CSS.highlights.set('zf-link-sel',new Highlight(s.getRangeAt(0).cloneRange()));}}catch(e){}})();true;",
+      );
+    }
     setLinkOpen(true);
   }
+
+  // The popup belongs to the selection it was opened for: once the user moves
+  // the cursor / reselects in the text, drop it (its title field would
+  // otherwise linger for a selection that no longer exists). Also clears the
+  // painted highlight whenever it closes.
+  const selectionKey = `${state.selection?.from ?? 0}:${state.selection?.to ?? 0}`;
+  useEffect(() => {
+    if (linkOpen && selectionKey !== linkAnchorRef.current) setLinkOpen(false);
+  }, [selectionKey, linkOpen]);
+  useEffect(() => {
+    if (linkOpen) return;
+    editor.injectJS(
+      "(function(){try{if(window.CSS&&CSS.highlights)CSS.highlights.delete('zf-link-sel');}catch(e){}})();true;",
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkOpen]);
 
   async function confirmLink() {
     let url = linkUrl.trim();
@@ -548,7 +581,7 @@ function DescriptionFieldEditor({
         paddingBottom: Platform.OS === "ios" ? keyboardHeight : 0,
       }}
     >
-      <View className="flex-row items-center justify-between px-5 pb-2 pt-2">
+      <View className="flex-row items-center justify-between px-5 pb-3 pt-2">
         <Text className="text-[19px] font-bold tracking-tight">
           {t("Description")}
         </Text>

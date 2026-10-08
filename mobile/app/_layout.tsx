@@ -22,8 +22,6 @@ import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { isAxiosError } from "axios";
 import { useFonts } from "expo-font";
 import {
-  Href,
-  Redirect,
   SplashScreen,
   Stack,
   type Theme,
@@ -61,7 +59,7 @@ SplashScreen.preventAutoHideAsync();
 
 /**
  * Headless: registers this device for native push while signed in and routes
- * a tapped notification. Rendered as a sibling of <Stack> (like <AuthGate/>)
+ * a tapped notification. Rendered as a sibling of <Stack>
  * so its `useRouter()` sits under the mounted navigator.
  */
 function PushRegistrar() {
@@ -78,35 +76,6 @@ function NotificationsSubscriber() {
   useLanguage();
   useNotificationsSubscription();
   useConnectivityWatch();
-  return null;
-}
-
-/**
- * Auth gate: no server round-trip on every navigation, just a redirect based
- * on the Zustand user store (hydrated once, below, from the cookie session /
- * secure-store cache). Mirrors the web `WithAuth` HOC (CLAUDE.md §7).
- *
- * Rendered as a sibling of <Stack>, never wrapping it: expo-router requires
- * the Root Layout to mount a navigator on its very first render, so this can
- * only ever add a <Redirect/> alongside the Stack, not replace it.
- */
-function AuthGate() {
-  useLanguage();
-  const segments = useSegments();
-  const user = useUserStore((s) => s.user);
-  const loading = useUserStore((s) => s.loading);
-
-  if (loading) return null;
-
-  const group = segments[0] as string;
-
-  // Signed out -> login; signed in with `onboardedAt === null` -> onboarding
-  // (server-side flag, so it follows the user across devices); otherwise out
-  // of the auth/onboarding groups. Group-qualified hrefs, not bare "/":
-  // `(app)/index` and `(auth)/index` both compile to "/", so a bare redirect
-  // could resolve back into the focused group.
-  const target = routeForSession(user, group);
-  if (target) return <Redirect href={target as Href} />;
   return null;
 }
 
@@ -142,7 +111,7 @@ export default function RootLayout() {
   // guarded, so a throw from `readCachedSessionUser`/`restoreSessionCookie`
   // (e.g. `expo-secure-store` has no web implementation) skipped the
   // `finally` entirely, leaving `loading` stuck `true` forever — which makes
-  // `AuthGate` a permanent no-op (never redirects, on a 403 or anything else).
+  // the route guards stuck on the loading state forever.
   React.useEffect(() => {
     (async () => {
       setLoading(true);
@@ -181,12 +150,14 @@ export default function RootLayout() {
     })();
   }, []);
 
-  // The session is resolved but `AuthGate` may still have to redirect (e.g. a
+  // The session is resolved but the route guards may still have to switch group (e.g. a
   // signed-out launch lands on the "/" calendar first). Keep the splash up
   // until the focused group is the one the gate wants, so the wrong screen
   // never flashes before the redirect.
   const segments = useSegments();
   const sessionUser = useUserStore((s) => s.user);
+  const needsOnboarding = !!sessionUser && !sessionUser.onboardedAt;
+  const isOnboarded = !!sessionUser?.onboardedAt;
   const routeSettled =
     !loading && routeForSession(sessionUser, segments[0] as string) === null;
   // Safety net only for a redirect that never settles; it starts once the
@@ -253,44 +224,52 @@ export default function RootLayout() {
     // outside the gesture root, which is exactly the
     // "GestureDetector must be used as a descendant of
     // GestureHandlerRootView" crash. Kept last among the root's children so
-    // portaled content still paints on top of the Stack/AuthGate.
+    // portaled content still paints on top of the Stack.
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ToastProvider>
         <ThemeProvider value={isDarkColorScheme ? DARK_THEME : LIGHT_THEME}>
           <BottomSheetModalProvider>
             <Stack screenOptions={{ headerShown: false }}>
-              {/* No transition between the three groups: `AuthGate` swaps them
-                  with a redirect, and an animated replace shows the previous
-                  group (the week view, on a signed-out launch) sliding away as
-                  the splash lifts. */}
-              <Stack.Screen name="(auth)" options={{ animation: "none" }} />
-              <Stack.Screen
-                name="(onboarding)"
-                options={{ animation: "none" }}
-              />
-              <Stack.Screen name="(app)" options={{ animation: "none" }} />
-              {/* Session create/edit — full screens, not bottom sheets (see
-                  mobile/README.md); presented modally so they still read
-                  as "on top of" the tabs instead of replacing them. */}
-              <Stack.Screen
-                name="task/new"
-                options={{ presentation: "modal" }}
-              />
-              <Stack.Screen
-                name="task/[id]/edit"
-                options={{ presentation: "modal" }}
-              />
-              {/* The ingestion inbox — LMS / portal notifications. */}
-              <Stack.Screen
-                name="notifications"
-                options={{
-                  // Own bottom sheet (~68% height) drawn by the screen.
-                  presentation: "transparentModal",
-                  animation: "slide_from_bottom",
-                }}
-              />
+              {/* Guards, not a post-hoc redirect: a screen outside the current
+                  session state is never mounted, so a signed-out or
+                  not-yet-onboarded user can't see the calendar flash before
+                  being bounced. No transition between the groups. While the
+                  session is still loading every group is mounted (under the
+                  splash), so the launch URL "/" resolves to a real screen
+                  instead of a 404; the guards narrow once it's known. */}
+              <Stack.Protected guard={loading || !sessionUser}>
+                <Stack.Screen name="(auth)" options={{ animation: "none" }} />
+              </Stack.Protected>
+              <Stack.Protected guard={loading || needsOnboarding}>
+                <Stack.Screen
+                  name="(onboarding)"
+                  options={{ animation: "none" }}
+                />
+              </Stack.Protected>
+              <Stack.Protected guard={loading || isOnboarded}>
+                <Stack.Screen name="(app)" options={{ animation: "none" }} />
+                {/* Session create/edit — full screens, not bottom sheets (see
+                    mobile/README.md); presented modally so they still read
+                    as "on top of" the tabs instead of replacing them. */}
+                <Stack.Screen
+                  name="task/new"
+                  options={{ presentation: "modal" }}
+                />
+                <Stack.Screen
+                  name="task/[id]/edit"
+                  options={{ presentation: "modal" }}
+                />
+                {/* The ingestion inbox — LMS / portal notifications. */}
+                <Stack.Screen
+                  name="notifications"
+                  options={{
+                    // Own bottom sheet (~68% height) drawn by the screen.
+                    presentation: "transparentModal",
+                    animation: "slide_from_bottom",
+                  }}
+                />
+              </Stack.Protected>
             </Stack>
-            <AuthGate />
             <PushRegistrar />
             <NotificationsSubscriber />
             {/* Visible and themed, not `hidden`: on Android a hidden status

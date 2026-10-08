@@ -12,8 +12,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { Pressable, ScrollView, View } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from "react-native-gesture-handler";
+import { FullWindowOverlay } from "react-native-screens";
 import Animated, {
   cancelAnimation,
   Easing,
@@ -849,62 +854,82 @@ function ToastProvider({
     />
   );
 
+  const layer = (
+    <View
+      pointerEvents="box-none"
+      style={{
+        position: "absolute",
+        left: 0,
+        right: 0,
+        paddingHorizontal: 16,
+        alignItems: "center",
+        // Above every sibling screen/sheet host (Android orders by elevation).
+        zIndex: 9999,
+        elevation: 9999,
+        ...(position === "top" ? { top: 45 } : { bottom: TOAST_BOTTOM_INSET }),
+      }}
+    >
+      <View
+        pointerEvents="box-none"
+        style={{ width: "100%", maxWidth: TOAST_MAX_WIDTH }}
+      >
+        {count > 1 && (
+          <StackControls
+            count={count}
+            expanded={expanded}
+            onToggle={() => setExpanded((e) => !e)}
+            onClearAll={clearAll}
+          />
+        )}
+        {expanded ? (
+          <ScrollView
+            style={{ maxHeight: EXPANDED_MAX_HEIGHT }}
+            showsVerticalScrollIndicator={false}
+          >
+            {ordered.map((message) => renderToast(message, false))}
+          </ScrollView>
+        ) : (
+          <View
+            pointerEvents="box-none"
+            style={{ paddingBottom: STACK_PEEK_PX * peekLayers }}
+          >
+            {/* Deepest layer first, so shallower ones paint over it. */}
+            {Array.from({ length: peekLayers }, (_, i) => peekLayers - i).map(
+              (depth) => (
+                <StackLayer
+                  key={`layer-${depth}`}
+                  depth={depth}
+                  layers={peekLayers}
+                  onPress={() => setExpanded(true)}
+                />
+              ),
+            )}
+            {ordered.map((message, index) => renderToast(message, index > 0))}
+          </View>
+        )}
+      </View>
+    </View>
+  );
+
   return (
     <ToastContext.Provider value={{ toast, confirm, removeToast }}>
       {children}
-      <View
-        pointerEvents="box-none"
-        style={{
-          position: "absolute",
-          left: 0,
-          right: 0,
-          paddingHorizontal: 16,
-          alignItems: "center",
-          ...(position === "top"
-            ? { top: 45 }
-            : { bottom: TOAST_BOTTOM_INSET }),
-        }}
-      >
-        <View
-          pointerEvents="box-none"
-          style={{ width: "100%", maxWidth: TOAST_MAX_WIDTH }}
-        >
-          {count > 1 && (
-            <StackControls
-              count={count}
-              expanded={expanded}
-              onToggle={() => setExpanded((e) => !e)}
-              onClearAll={clearAll}
-            />
-          )}
-          {expanded ? (
-            <ScrollView
-              style={{ maxHeight: EXPANDED_MAX_HEIGHT }}
-              showsVerticalScrollIndicator={false}
-            >
-              {ordered.map((message) => renderToast(message, false))}
-            </ScrollView>
-          ) : (
-            <View
+      {/* iOS: a native modal / sheet is its own view controller, so only a
+          full-window overlay can paint over it. Mounted while a toast is up. */}
+      {Platform.OS === "ios" ? (
+        count > 0 && (
+          <FullWindowOverlay>
+            <GestureHandlerRootView
+              style={StyleSheet.absoluteFill}
               pointerEvents="box-none"
-              style={{ paddingBottom: STACK_PEEK_PX * peekLayers }}
             >
-              {/* Deepest layer first, so shallower ones paint over it. */}
-              {Array.from({ length: peekLayers }, (_, i) => peekLayers - i).map(
-                (depth) => (
-                  <StackLayer
-                    key={`layer-${depth}`}
-                    depth={depth}
-                    layers={peekLayers}
-                    onPress={() => setExpanded(true)}
-                  />
-                ),
-              )}
-              {ordered.map((message, index) => renderToast(message, index > 0))}
-            </View>
-          )}
-        </View>
-      </View>
+              {layer}
+            </GestureHandlerRootView>
+          </FullWindowOverlay>
+        )
+      ) : (
+        layer
+      )}
     </ToastContext.Provider>
   );
 }

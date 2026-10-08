@@ -159,7 +159,7 @@ describe("parseMonthlyView — assignments", () => {
         scheduledStartTime: new Date("2026-04-01T00:15:00.000Z"),
         durationMinutes: 15,
         location: ASSIGN_DUE_0739.url,
-        note: `<p><a href="${ASSIGN_DUE_0739.url}">Submission Link</a></p>`,
+        note: `<p><a href="${ASSIGN_DUE_0739.url}">${ASSIGN_DUE_0739.url}</a></p>`,
         lmsCourse: {
           lmsCourseId: 90002,
           fullName: COURSE_90002.fullname,
@@ -178,8 +178,19 @@ describe("parseMonthlyView — assignments", () => {
 
     expect(item.location).toBe(ASSIGN_DUE_0739.url);
     expect(item.note).toBe(
-      `${description}<p><a href="${ASSIGN_DUE_0739.url}">Submission Link</a></p>`,
+      `${description}<p><a href="${ASSIGN_DUE_0739.url}">${ASSIGN_DUE_0739.url}</a></p>`,
     );
+  });
+
+  it("escapes HTML-sensitive characters in the submission link", () => {
+    const url = 'https://lms.test/mod/assign/view.php?id=1&x=<b>"';
+    const [item] = parseMonthlyView(
+      view([{ ...ASSIGN_DUE_0739, url }]),
+      BEFORE_ALL,
+    ).items;
+
+    const escaped = "https://lms.test/mod/assign/view.php?id=1&amp;x=&lt;b&gt;&quot;";
+    expect(item.note).toBe(`<p><a href="${escaped}">${escaped}</a></p>`);
   });
 
   it("handles an 11:59 PM deadline (16:59 UTC → 16:30–16:45)", () => {

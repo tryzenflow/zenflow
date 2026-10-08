@@ -28,9 +28,11 @@ export function pushToneFor(eventName: string): PushTone {
 /**
  * Android channel id per tone. Channel sound is immutable once created, so
  * these are new ids (the legacy `"default"` channel keeps the system sound).
+ * `-v2`: the first `zenflow-*` channels were created before the sound files
+ * shipped in the native build, so they are stuck on the system sound.
  */
 export function pushChannelId(tone: PushTone): string {
-  return `zenflow-${tone}`;
+  return `zenflow-${tone}-v2`;
 }
 
 /** Bundled sound file name (iOS payload `sound`, expo-notifications local `sound`). */

@@ -26,6 +26,7 @@ import {
   noteLinkCardCss,
   noteTypographyCss,
 } from "@/lib/note-html";
+import { useReducedMotion } from "@/lib/motion";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { fromRrule, zonedDate } from "@zenflow/core";
 import type { Session } from "@zenflow/shared";
@@ -308,10 +309,12 @@ function NoteHtml({ html }: { html: string }) {
 
   // Link-only paragraphs become preview cards; fetch each target's Open Graph
   // metadata (title, description, cover image) and rebuild the page with it.
-  // Fetching contacts the link's server (and reveals the viewer), and notes can
-  // be imported from course material — so only on an explicit tap.
+  // Until a fetch settles the card is a skeleton of the final shape. Targets
+  // can be chosen by a course author, so nothing is fetched (and no IP is
+  // revealed) until the viewer asks for previews.
+  const [previewsOn, setPreviewsOn] = useState(false);
   const [previews, setPreviews] = useState<Record<string, LinkPreview>>({});
-  const [previewsRequested, setPreviewsRequested] = useState(false);
+  const [settled, setSettled] = useState<Record<string, true>>({});
   const previewUrls = useMemo(
     () =>
       Array.from(
@@ -326,26 +329,33 @@ function NoteHtml({ html }: { html: string }) {
       ),
     [html],
   );
+  const pendingUrls = useMemo(
+    () => (previewsOn ? previewUrls.filter((u) => !settled[u]) : []),
+    [previewsOn, previewUrls, settled],
+  );
   useEffect(() => {
-    if (!previewsRequested) return;
+    if (!previewsOn) return;
     let cancelled = false;
     for (const url of previewUrls) {
       fetchLinkPreview(url).then((p) => {
-        if (p && !cancelled) setPreviews((prev) => ({ ...prev, [url]: p }));
+        if (cancelled) return;
+        if (p) setPreviews((prev) => ({ ...prev, [url]: p }));
+        setSettled((prev) => ({ ...prev, [url]: true }));
       });
     }
     return () => {
       cancelled = true;
     };
-  }, [previewsRequested, previewUrls]);
+  }, [previewsOn, previewUrls]);
 
+  const reduceMotion = useReducedMotion();
   const source = useMemo(() => {
     const { fg } = noteColors(isDarkColorScheme);
     const { fontFace, family } = noteFont(fontDataUri);
     return {
-      html: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><style>${fontFace} html, body { margin: 0; padding: 0; background: transparent; } body { color: ${fg}; font-family: ${family}; font-size: 16px; line-height: 1.55; word-wrap: break-word; } ${noteTypographyCss("body", isDarkColorScheme)} ${noteLinkCardCss("body", isDarkColorScheme)}</style></head><body><div id="note">${html}</div><script>window.ZF_PREVIEWS = ${JSON.stringify(previews).replace(/</g, "\\u003c")};</script></body></html>`,
+      html: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><style>${fontFace} html, body { margin: 0; padding: 0; background: transparent; } body { color: ${fg}; font-family: ${family}; font-size: 16px; line-height: 1.55; word-wrap: break-word; } ${noteTypographyCss("body", isDarkColorScheme)} ${noteLinkCardCss("body", isDarkColorScheme, reduceMotion)}</style></head><body><div id="note">${html}</div><script>window.ZF_PREVIEWS = ${JSON.stringify(previews).replace(/</g, "\\u003c")}; window.ZF_PENDING = ${JSON.stringify(pendingUrls).replace(/</g, "\u003c")};</script></body></html>`,
     };
-  }, [html, isDarkColorScheme, fontDataUri, previews]);
+  }, [html, isDarkColorScheme, fontDataUri, previews, pendingUrls, reduceMotion]);
 
   const injected = `${LINK_TAP_SCRIPT}
     ${LINK_CARD_SCRIPT}
@@ -395,13 +405,9 @@ function NoteHtml({ html }: { html: string }) {
         // Links are routed through `handleNoteLinkMessage`; never navigate in-place.
         onShouldStartLoadWithRequest={(req) => req.url === "about:blank"}
       />
-      {previewUrls.length > 0 && !previewsRequested && (
-        <Pressable
-          onPress={() => setPreviewsRequested(true)}
-          accessibilityRole="button"
-          hitSlop={8}
-        >
-          <Text className="text-[13px] font-semibold text-primary">
+      {previewUrls.length > 0 && !previewsOn && (
+        <Pressable onPress={() => setPreviewsOn(true)} hitSlop={8}>
+          <Text className="text-[13px] font-medium text-primary">
             {t("Load link previews")}
           </Text>
         </Pressable>

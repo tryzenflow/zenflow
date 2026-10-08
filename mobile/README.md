@@ -61,7 +61,7 @@ Components have no automated coverage; Vitest covers pure RN-free `lib/` logic o
 
 ```
 mobile/
-├── app/            # Expo Router: _layout (AuthGate), (auth), (onboarding), (app) tabs, task/, notifications
+├── app/            # Expo Router: _layout (Stack.Protected guards), (auth), (onboarding), (app) tabs, task/, notifications
 ├── api/            # the only HTTP layer: auth, tasks, users, tags, files, devices, integrations, notifications
 ├── components/     # ui/, primitives/ (.native/.web), calendar/, tasks/ (+ form/), settings/, checklist/, onboarding/
 ├── hooks/          # use-user-store, use-task-form, use-checklist, use-notifications, use-push-registration, ...
@@ -73,8 +73,9 @@ mobile/
 
 ## Routing
 
-`AuthGate` (root layout, Zustand-driven) redirects: signed out to login, signed in without
-`onboardedAt` to onboarding, else to the app. Custom tab bar: Week, Month, Settings.
+The root layout uses `Stack.Protected` guards (Zustand-driven): signed out mounts only login,
+signed in without `onboardedAt` only onboarding, else the app. While the session loads every group
+is mounted under the splash so the launch URL `/` resolves, then the guards narrow. Custom tab bar: Week, Month, Settings.
 
 | Route               | Screen                                                                            |
 | ------------------- | --------------------------------------------------------------------------------- |

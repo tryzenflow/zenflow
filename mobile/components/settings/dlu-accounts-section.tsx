@@ -35,7 +35,7 @@ import { useIntegrationStore } from "@/hooks/use-integration-store";
 import { cn } from "@/lib/utils";
 import type { IntegrationProvider, IntegrationStatus } from "@zenflow/shared";
 import { isAxiosError } from "axios";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -228,6 +228,7 @@ export function DluAccountsSection({
   const [studentId, setStudentId] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const passwordRef = useRef<React.ElementRef<typeof BottomSheetInput>>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Per provider, so syncing one account never locks the other's button.
@@ -560,7 +561,13 @@ export function DluAccountsSection({
                 placeholder={
                   mode === "connect" ? "••••••••" : t("Leave blank to keep")
                 }
+                // Remount on toggle: Android keeps masking (or blanks) a field
+                // whose `secureTextEntry` flips live. Refocus keeps typing flowing.
+                key={showPassword ? "password-visible" : "password-hidden"}
+                ref={passwordRef}
                 secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
                 editable={!isSubmitting}
                 className={cn(
                   error && "border-destructive ring-[3px] ring-destructive/15",
@@ -568,7 +575,10 @@ export function DluAccountsSection({
                 aria-invalid={!!error}
                 rightElement={
                   <Pressable
-                    onPress={() => setShowPassword(!showPassword)}
+                    onPress={() => {
+                      setShowPassword(!showPassword);
+                      setTimeout(() => passwordRef.current?.focus(), 80);
+                    }}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
                     {showPassword ? (

@@ -4,6 +4,7 @@ import {
   listNotifications,
   markNotificationActionTaken,
   markNotificationRead,
+  rescheduleConflicts,
   subscribeNotificationsStream,
 } from "@/api/notifications";
 import { getSessionDetails } from "@/api/tasks";
@@ -309,6 +310,8 @@ export function useNotificationsSubscription(): void {
         if (!claimNotification(n.id, "sse")) return;
 
         const cleanTitle = (n.title || "").replace(/^\[.*?\]\s*/, "").trim();
+        const hasConflicts =
+          kind === "CONFLICT" && (n.conflictSessionIds?.length ?? 0) > 0;
 
         // 1. In-app tap-to-act toast with clear title and "View on calendar" action
         const { router: currentRouter, toast: currentToast } =
@@ -318,7 +321,37 @@ export function useNotificationsSubscription(): void {
           description: n.content,
           ...notificationToastVisual(n.eventName),
           duration: 8000,
-          action: n.sessionId
+          action: hasConflicts
+            ? {
+                label: t("Reschedule them all"),
+                onPress: () => {
+                  void rescheduleConflicts(n.id)
+                    .then((res) => {
+                      const ok = res.rescheduled.length;
+                      const failed = res.failedSessionIds.length;
+                      currentToast({
+                        title: failed
+                          ? t("Rescheduled {ok}, {failed} left", { ok, failed })
+                          : t("Rescheduled {count} tasks", { count: ok }),
+                        description: failed
+                          ? t("The rest still overlap. Move them by hand.")
+                          : undefined,
+                        variant: failed ? "warning" : "success",
+                        icon: failed ? "calendar-clock" : "calendar-check",
+                      });
+                      void fetchNotifications("refresh");
+                    })
+                    .catch(() =>
+                      currentToast({
+                        title: t("Couldn't reschedule tasks"),
+                        description: t("Try again in a moment."),
+                        variant: "destructive",
+                        icon: "calendar-x",
+                      }),
+                    );
+                },
+              }
+            : n.sessionId
             ? {
                 label: t("View on calendar"),
                 onPress: () =>
@@ -333,7 +366,9 @@ export function useNotificationsSubscription(): void {
         });
 
         // 2. System notification in Android notification shade / lock screen
-        if (Platform.OS !== "web") {
+        // Only while the app is open: a backgrounded app is already covered by
+        // the server's native push, and posting this too showed it twice.
+        if (Platform.OS !== "web" && AppState.currentState === "active") {
           const tone = pushToneFor(n.eventName);
           void Notifications.scheduleNotificationAsync({
             content: {
