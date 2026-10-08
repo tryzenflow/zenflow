@@ -26,6 +26,7 @@ const MSG: PushMessage = {
     sessionId: "s1",
     url: "/calendar?session=s1",
   },
+  tone: "default",
 };
 
 /** base64 of a minimal service-account-shaped JSON. */
@@ -91,7 +92,10 @@ describe("FcmSender", () => {
       sessionId: "s1",
       url: "/calendar?session=s1",
     });
-    expect(arg.android).toEqual({ priority: "high" });
+    expect(arg.android).toEqual({
+      priority: "high",
+      notification: { channelId: "zenflow-default" },
+    });
   });
 
   it("collects only dead-token codes as invalid; logs the rest", async () => {

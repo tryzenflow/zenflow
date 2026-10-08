@@ -146,6 +146,7 @@ describe("PushService", () => {
           sessionId: "s1",
           url: "/calendar?session=s1",
         },
+        tone: "default",
       });
       expect(apns.send).toHaveBeenCalledWith(["i1"], expect.anything());
     });

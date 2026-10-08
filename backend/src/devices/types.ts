@@ -1,4 +1,4 @@
-import type { PushDataPayload } from "@zenflow/shared";
+import type { PushDataPayload, PushTone } from "@zenflow/shared";
 
 /**
  * A platform-agnostic push, ready for a sender to translate into an FCM
@@ -8,6 +8,7 @@ export interface PushMessage {
   title: string;
   body: string;
   data: PushDataPayload;
+  tone: PushTone;
 }
 
 /** What a sender hands back so {@link PushService} can log + prune. */

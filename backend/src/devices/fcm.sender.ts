@@ -2,6 +2,7 @@ import { Injectable, Logger, type OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { cert, deleteApp, initializeApp, type App } from "firebase-admin/app";
 import { getMessaging, type Messaging } from "firebase-admin/messaging";
+import { pushChannelId } from "@zenflow/shared";
 import { toStringMap, type PushMessage, type SendResult } from "./types";
 
 /** FCM caps a multicast at 500 tokens per call. */
@@ -70,7 +71,10 @@ export class FcmSender implements OnModuleDestroy {
           tokens: batch,
           notification: { title: msg.title, body: msg.body },
           data,
-          android: { priority: "high" },
+          android: {
+            priority: "high",
+            notification: { channelId: pushChannelId(msg.tone) },
+          },
         });
         res.responses.forEach((r, j) => {
           if (r.success) {

@@ -83,7 +83,19 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // Adds the iOS push entitlement (`aps-environment`) + the Android
     // notification permission / channel wiring. Raw FCM/APNs tokens come from
     // `Notifications.getDevicePushTokenAsync()` (see `lib/push.ts`).
-    "expo-notifications",
+    [
+      "expo-notifications",
+      {
+        // Zenflow's own chimes (see docs/mobile/design.md, Sound). Bundled into
+        // iOS and Android res/raw; Android channel sounds are immutable once
+        // created, so channels using these need new ids.
+        sounds: [
+          "./assets/sounds/zenflow_default.wav",
+          "./assets/sounds/zenflow_reminder.wav",
+          "./assets/sounds/zenflow_urgent.wav",
+        ],
+      },
+    ],
     // SDK 58 requires these autolinked packages' config plugins to be listed
     // explicitly (previously implicit) -- `expo install --fix` /
     // `expo-doctor` flagged this after the SDK 52 -> 58 jump.

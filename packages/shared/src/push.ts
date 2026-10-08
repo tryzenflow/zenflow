@@ -11,6 +11,33 @@
  */
 
 
+/**
+ * Which Zenflow chime a push plays. Chosen server-side from the event so the
+ * sound is right even when the app is closed (Android binds sound to the
+ * notification channel, iOS to the payload's sound file).
+ */
+export type PushTone = "default" | "reminder" | "urgent";
+
+/** Event slug → tone: reminders are soft, sync conflicts need action, the rest is the default chime. */
+export function pushToneFor(eventName: string): PushTone {
+  if (eventName === "reminder.fired") return "reminder";
+  if (eventName.startsWith("sync_conflict.")) return "urgent";
+  return "default";
+}
+
+/**
+ * Android channel id per tone. Channel sound is immutable once created, so
+ * these are new ids (the legacy `"default"` channel keeps the system sound).
+ */
+export function pushChannelId(tone: PushTone): string {
+  return `zenflow-${tone}`;
+}
+
+/** Bundled sound file name (iOS payload `sound`, expo-notifications local `sound`). */
+export function pushSoundFile(tone: PushTone): string {
+  return `zenflow_${tone}.wav`;
+}
+
 /** Which push provider a device token belongs to. Mirrors the Prisma enum. */
 export type DevicePlatform = "IOS" | "ANDROID";
 

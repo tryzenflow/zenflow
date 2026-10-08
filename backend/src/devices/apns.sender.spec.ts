@@ -29,6 +29,7 @@ const MSG: PushMessage = {
     sessionId: "s1",
     url: "/calendar?session=s1",
   },
+  tone: "default",
 };
 
 const FULL = {
@@ -90,6 +91,7 @@ describe("ApnsSender", () => {
     expect(recipients).toEqual(["t1"]);
     expect(note.topic).toBe("com.zenflow.app");
     expect(note.alert).toEqual({ title: MSG.title, body: MSG.body });
+    expect(note.sound).toBe("zenflow_default.wav");
     expect(note.payload).toEqual({
       notificationId: "n1",
       eventName: "exam.created",
