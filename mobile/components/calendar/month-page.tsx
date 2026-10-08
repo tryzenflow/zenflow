@@ -206,13 +206,13 @@ export const MonthPage = memo(function MonthPage({
       setSessions((prev) =>
         prev != null && sameSessions(prev, fetched) ? prev : fetched,
       );
-      useConnectivity.getState().setStale(false);
+      useConnectivity.getState().setStale(monthKey, false);
     } catch (error) {
       // Saved data on screen: show it, flag offline (a quiet glyph), no error toast.
       const saved = getCachedDaySessions(monthKey);
       if (saved) {
         setSessions((cur) => cur ?? saved);
-        useConnectivity.getState().setStale(true);
+        useConnectivity.getState().setStale(monthKey, true);
         return;
       }
       setSessions((cur) => cur ?? []);

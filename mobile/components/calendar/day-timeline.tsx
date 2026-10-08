@@ -380,13 +380,13 @@ export function DayTimeline({
           setSessions((prev) =>
             sameSessions(prev, sessions) ? prev : sessions,
           );
-        useConnectivity.getState().setStale(false);
+        useConnectivity.getState().setStale(dayKey, false);
       })
       .catch(() => {
         // Saved data on screen: keep showing it and flag offline (a quiet
         // glyph) instead of replacing the day with the error state.
         if (cancelled) return;
-        if (cached != null) useConnectivity.getState().setStale(true);
+        if (cached != null) useConnectivity.getState().setStale(dayKey, true);
         else setError(true);
       })
       .finally(() => {
@@ -417,10 +417,11 @@ export function DayTimeline({
         sameSessions(prev, res.sessions) ? prev : res.sessions,
       );
       setError(false);
-      useConnectivity.getState().setStale(false);
+      useConnectivity.getState().setStale(format(date, "yyyy-MM-dd"), false);
     } catch {
-      const saved = getCachedDaySessions(format(date, "yyyy-MM-dd"));
-      if (saved) useConnectivity.getState().setStale(true);
+      const key = format(date, "yyyy-MM-dd");
+      const saved = getCachedDaySessions(key);
+      if (saved) useConnectivity.getState().setStale(key, true);
       else setError(true);
     }
   }, [date]);

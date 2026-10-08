@@ -30,7 +30,7 @@ export const useUserStore = create<State & Action>((set) => ({
   setUser: (user) => {
     if (user) setLanguage(user.lang);
     hydrateSessionCache(user?.id ?? null);
-    if (!user) useConnectivity.getState().setStale(false);
+    if (!user) useConnectivity.getState().clearStale();
     set({ user });
   },
   updateUser: (user) => {

@@ -14,21 +14,31 @@ export function isOnline(s: NetState): boolean {
 interface ConnectivityState {
   /** Device-level reachability from NetInfo. */
   online: boolean;
-  /** A fetch failed and the screen is showing saved data instead. */
-  stale: boolean;
+  /** Cache keys (day / `month:…`) whose last refresh failed, so saved data is on screen. */
+  staleKeys: ReadonlySet<string>;
   setOnline: (online: boolean) => void;
-  setStale: (stale: boolean) => void;
+  setStale: (key: string, stale: boolean) => void;
+  clearStale: () => void;
 }
 
 export const useConnectivity = create<ConnectivityState>((set) => ({
   online: true,
-  stale: false,
+  staleKeys: new Set(),
   setOnline: (online) => set({ online }),
-  setStale: (stale) =>
-    set((s) => (s.stale === stale ? s : { stale })),
+  setStale: (key, stale) =>
+    set((s) => {
+      if (s.staleKeys.has(key) === stale) return s;
+      const next = new Set(s.staleKeys);
+      if (stale) next.add(key);
+      else next.delete(key);
+      return { staleKeys: next };
+    }),
+  clearStale: () =>
+    set((s) => (s.staleKeys.size ? { staleKeys: new Set() } : s)),
 }));
 
-/** Offline in effect: no network, or the server was unreachable on the last fetch. */
+/** Offline in effect: no network, or a visible refresh failed and saved data is shown.
+ * A neighbouring page refreshing fine clears only its own key, never another's. */
 export function selectOffline(s: ConnectivityState): boolean {
-  return !s.online || s.stale;
+  return !s.online || s.staleKeys.size > 0;
 }
