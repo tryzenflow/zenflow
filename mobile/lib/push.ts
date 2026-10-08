@@ -1,7 +1,13 @@
 import { registerDevice, unregisterDevice } from "@/api/devices";
 import { debugLog } from "@/lib/debug-log";
 import type { PushPermission } from "@/lib/push-sync";
-import type { DevicePlatform, PushDataPayload } from "@zenflow/shared";
+import {
+  type DevicePlatform,
+  type PushDataPayload,
+  type PushTone,
+  pushChannelId,
+  pushSoundFile,
+} from "@zenflow/shared";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import type { Href } from "expo-router";
@@ -19,7 +25,6 @@ import { t } from "./i18n";
  * push capability; every entry point fails soft.
  */
 
-export const ANDROID_CHANNEL_ID = "default";
 
 /**
  * `data.source` on the system notification the SSE handler posts itself
@@ -107,16 +112,28 @@ export function configureForegroundHandler(): void {
   });
 }
 
-/** Android 8+ needs an explicit channel or notifications are dropped silently. */
+const TONES: PushTone[] = ["default", "reminder", "urgent"];
+
+/**
+ * Android 8+ needs explicit channels or notifications are dropped silently.
+ * One channel per Zenflow chime; sound is bound to the channel and immutable
+ * after creation, hence the `zenflow-*` ids (the legacy `"default"` channel is
+ * left alone).
+ */
 export async function ensureAndroidChannel(): Promise<void> {
   if (Platform.OS !== "android") return;
-  await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
-    name: t("General"),
-    importance: Notifications.AndroidImportance.MAX,
-    vibrationPattern: [0, 250, 250, 250],
-    lightColor: "#f97316",
-    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-  });
+  await Promise.all(
+    TONES.map((tone) =>
+      Notifications.setNotificationChannelAsync(pushChannelId(tone), {
+        name: t(tone === "urgent" ? "Urgent" : tone === "reminder" ? "Reminders" : "General"),
+        importance: Notifications.AndroidImportance.MAX,
+        sound: pushSoundFile(tone),
+        vibrationPattern: tone === "urgent" ? [0, 200, 120, 200] : [0, 250, 250, 250],
+        lightColor: "#f97316",
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      }),
+    ),
+  );
 }
 
 /**

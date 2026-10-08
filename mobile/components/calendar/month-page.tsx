@@ -3,6 +3,7 @@ import { useLanguage } from "@/hooks/use-language";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import { format } from "@/lib/i18n";
 import { listSessions, updateSession } from "@/api/tasks";
+import { useConnectivity } from "@/lib/connectivity";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { completeStep } from "@/hooks/use-checklist";
@@ -205,7 +206,15 @@ export const MonthPage = memo(function MonthPage({
       setSessions((prev) =>
         prev != null && sameSessions(prev, fetched) ? prev : fetched,
       );
+      useConnectivity.getState().setStale(monthKey, false);
     } catch (error) {
+      // Saved data on screen: show it, flag offline (a quiet glyph), no error toast.
+      const saved = getCachedDaySessions(monthKey);
+      if (saved) {
+        setSessions((cur) => cur ?? saved);
+        useConnectivity.getState().setStale(monthKey, true);
+        return;
+      }
       setSessions((cur) => cur ?? []);
       if (isActiveRef.current) {
         toast(
@@ -316,11 +325,14 @@ export const MonthPage = memo(function MonthPage({
     const { x, y, width, height, rows } = gridRectRef.current;
     if (width === 0 || rows === 0) return null;
     const cellWidth = width / 7;
-    // Rows shrink to fit small screens, so use the measured height, not
-    // `CELL_HEIGHT`.
+    // Rows share the measured height above the floating bar; the last row also
+    // spans the bar's area (see `MonthGrid`), so clamp into it.
     const rowHeight = height > 0 ? height / rows : CELL_HEIGHT;
     const col = Math.floor((absoluteX - x) / cellWidth);
-    const row = Math.floor((absoluteY - y) / rowHeight);
+    const row = Math.min(
+      rows - 1,
+      Math.floor((absoluteY - y) / rowHeight),
+    );
     if (col < 0 || col > 6 || row < 0 || row >= rows) return null;
     return days[row * 7 + col] ?? null;
   }

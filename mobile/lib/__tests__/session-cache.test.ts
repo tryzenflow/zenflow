@@ -71,3 +71,17 @@ describe("fetchDaySessions", () => {
     expect(ok).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("account switch", () => {
+  it("drops a response that lands after the cache was cleared", async () => {
+    let resolve!: (s: Session[]) => void;
+    const pending = fetchDaySessions(
+      "2026-09-01",
+      () => new Promise<Session[]>((r) => (resolve = r)),
+    );
+    clearDaySessionCache(); // logout
+    resolve(sessions(1));
+    await pending;
+    expect(getCachedDaySessions("2026-09-01")).toBeUndefined();
+  });
+});

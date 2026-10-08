@@ -40,6 +40,7 @@ import {
   type LucideIcon,
   X,
 } from "../Icons";
+import { Glass } from "./glass";
 import { Text } from "./text";
 
 export interface ToastAction {
@@ -411,19 +412,16 @@ function Toast({
             marginBottom: spacing,
             display: hidden ? "none" : "flex",
             borderRadius: 18,
-            borderWidth: 1,
-            borderColor: palette.border,
-            backgroundColor: palette.card,
-            padding: 14,
+            // Shadow only here; the glass body (clipping) is inside.
             shadowColor: "#000",
-            shadowOpacity: isDarkColorScheme ? 0.45 : 0.16,
+            shadowOpacity: isDarkColorScheme ? 0.4 : 0.14,
             shadowRadius: 18,
             shadowOffset: { width: 0, height: 8 },
-            elevation: 10,
           },
           containerStyle,
         ]}
       >
+        <Glass radius={18} clear intensity={55} style={{ padding: 14 }}>
         <View className="flex-row items-center" style={{ gap: 10 }}>
           <View
             style={{
@@ -579,6 +577,7 @@ function Toast({
             />
           </View>
         )}
+        </Glass>
       </Animated.View>
     </GestureDetector>
   );

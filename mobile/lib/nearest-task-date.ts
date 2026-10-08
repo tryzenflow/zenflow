@@ -1,27 +1,16 @@
 import { listSessions } from "@/api/tasks";
 import { fetchDaySessions } from "@/lib/session-cache";
-import { groupSessionsByDate } from "@/lib/month-date-math";
+import { dateFromKey, nearestDayWithTask } from "@/lib/nearest-day";
 import { addMonths, format } from "date-fns";
 
-const DAY_MS = 86_400_000;
-
-/** Wall-clock midnight of a `'YYYY-MM-DD'` key, in the local fields (same
- * convention as `zonedDate`). */
-export function dateFromKey(key: string): Date {
-  const [y, m, d] = key.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-function dayNumber(day: Date): number {
-  return Math.round(Date.UTC(day.getFullYear(), day.getMonth(), day.getDate()) / DAY_MS);
-}
+export { dateFromKey, nearestDayWithTask };
 
 /**
- * The day closest to `from` (ties go to the future) that has at least one
- * session, searching `from`'s month and the months either side. Months go
- * through the shared day cache under the same `month:` key `month-page.tsx`
- * uses, so a month the user already saw costs no request. `null` when those
- * three months are empty (or the lookup fails).
+ * Searches `from`'s month and the months either side for the nearest day with
+ * a task (see {@link nearestDayWithTask}). Months go through the shared day
+ * cache under the same `month:` key `month-page.tsx` uses, so a month the user
+ * already saw costs no request. `null` when those three months hold no task
+ * (even if they hold a timetable), or the lookup fails.
  */
 export async function findNearestTaskDate(
   from: Date,
@@ -36,24 +25,7 @@ export async function findNearestTaskDate(
         ),
       ),
     );
-    const days = groupSessionsByDate(lists.flat(), tz);
-    const origin = dayNumber(from);
-    let best: { date: Date; dist: number; future: boolean } | null = null;
-    for (const [key, group] of days) {
-      if (group.length === 0) continue;
-      const date = dateFromKey(key);
-      const diff = dayNumber(date) - origin;
-      const dist = Math.abs(diff);
-      const future = diff >= 0;
-      if (
-        !best ||
-        dist < best.dist ||
-        (dist === best.dist && future && !best.future)
-      ) {
-        best = { date, dist, future };
-      }
-    }
-    return best?.date ?? null;
+    return nearestDayWithTask(lists.flat(), from, tz);
   } catch {
     return null;
   }

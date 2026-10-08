@@ -36,6 +36,24 @@ export function centeredDays(day: Date): Date[] {
   return [shiftDays(day, -1), day, shiftDays(day, 1)];
 }
 
+/**
+ * Transient pager window for a jump to a day outside the live window: the
+ * target takes the neighbour slot on the side it lies, so the pager can slide
+ * to it one page. `toIndex` is the slot to animate to (2 = later, 0 = earlier).
+ * Day keys are `yyyy-MM-dd`, which sort chronologically as strings.
+ */
+export function jumpWindow(
+  window: Date[],
+  focused: Date,
+  target: Date,
+  keyOf: (d: Date) => string,
+): { window: Date[]; toIndex: 0 | 2 } {
+  const [prev, , next] = window;
+  return keyOf(target) > keyOf(focused)
+    ? { window: [prev, focused, target], toIndex: 2 }
+    : { window: [target, focused, next], toIndex: 0 };
+}
+
 /** The Week header strip's 3 week blocks — previous / anchored / next week,
  * each 7 dates Monday-first. The middle block (`weekDays(anchor)`) is the one
  * shown at rest; the neighbours are pre-rendered so a week swipe slides one

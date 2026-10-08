@@ -20,8 +20,16 @@ You own `mobile/` and the `mockups/` it is designed from (Expo SDK 58, RN 0.88, 
 - Durations are 15-minute aligned; reason about time with the same wall-clock-safe helpers as web.
 - Formatter is Biome, not ESLint/Prettier; revert unrelated churn from bulk runs.
 - A screen change updates its mockup; a new screen gets a mockup and an `index.html` entry first.
-- No test runner exists here; flag gaps instead of adding a framework.
+- Tests: Vitest covers pure `lib/` logic only (`pnpm --filter mobile test`); add a test for new pure logic, flag component gaps instead of adding a framework.
 - Docs stay lean (AGENTS.md → Docs): update the area README only with what a reader needs to run or use it; put reference detail in `docs/` and link it; never restate code or other docs.
+
+## Design
+Follow `docs/mobile/design.md` (Sunrise Flow); read it before UI work.
+- Glass is warm light on floating chrome only, with an opaque fallback; never on content.
+- Time flows: day, week and tab changes slide in the direction of time. Use `lib/motion.ts` presets, springs, interruptible, at most 300 ms, gated by `useReducedMotion()`.
+- One focal "sun" per screen; ration orange.
+- Brand and hero surfaces use custom SVG from `components/brand/`, not lucide; the logo appears only where the doc says.
+- Haptics on commit only; targets at least 44pt; offline is an icon plus a short line, not an error.
 
 ## Done when
 `pnpm --filter mobile typecheck` is clean, `mobile/README.md` is current, and UI or gesture changes were driven on an emulator or simulator (`adb` or `xcrun simctl`), naming the device.

@@ -64,7 +64,8 @@ export function format(
           .replace(/MMM d yyyy/g, "d/M/yyyy")
           .replace(/MMMM d/g, "d MMMM")
           .replace(/MMM d/g, "d/M")
-      : pattern;
+      : // English reads 12-hour AM/PM; Vietnamese (above) 24-hour.
+        pattern.replace(/HH:mm/g, "h:mm a");
   return dateFormat(date, displayPattern, {
     ...options,
     locale: dateFnsLocale(),

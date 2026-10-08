@@ -4,6 +4,7 @@ import { setLanguage } from "@/lib/i18n";
 import { me } from "@/api/auth";
 import { PortalHost } from "@/components/primitives/portal";
 import { ToastProvider } from "@/components/ui/toast";
+import { useConnectivityWatch } from "@/hooks/use-connectivity-watch";
 import { useNotificationsSubscription } from "@/hooks/use-notifications";
 import { usePushRegistration } from "@/hooks/use-push-registration";
 import { useUserStore } from "@/hooks/use-user-store";
@@ -76,6 +77,7 @@ function PushRegistrar() {
 function NotificationsSubscriber() {
   useLanguage();
   useNotificationsSubscription();
+  useConnectivityWatch();
   return null;
 }
 
@@ -163,12 +165,14 @@ export default function RootLayout() {
         if (fresh) await cacheSessionUser(fresh);
         else await clearCachedSessionUser();
       } catch (err) {
-        if (isAxiosError(err) && err.response) {
-          // Server answered (401/403): the session is dead.
+        const status = isAxiosError(err) ? err.response?.status : undefined;
+        if (status === 401 || status === 403) {
+          // Server answered 401/403: the session is dead.
           setUser(null);
           await clearCachedSessionUser();
         } else if (cached) {
-          // Offline / timeout: fall back to the cached user.
+          // Offline / timeout / 5xx: fall back to the cached user and keep
+          // the saved calendar.
           setUser(cached);
         }
       } finally {
@@ -279,7 +283,11 @@ export default function RootLayout() {
               {/* The ingestion inbox — LMS / portal notifications. */}
               <Stack.Screen
                 name="notifications"
-                options={{ presentation: "modal" }}
+                options={{
+                  // Own bottom sheet (~68% height) drawn by the screen.
+                  presentation: "transparentModal",
+                  animation: "slide_from_bottom",
+                }}
               />
             </Stack>
             <AuthGate />

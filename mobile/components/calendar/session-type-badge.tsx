@@ -35,7 +35,7 @@ interface SessionTypeBadgeProps {
   type: SessionType;
   /** `sm` — the compact day block / month pill (icon only by default).
    * `md` — the roomy day block and list rows (icon + label). */
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "lg";
   /** Force icon-only even at `md` (e.g. very short blocks). */
   iconOnly?: boolean;
   className?: string;
@@ -56,14 +56,19 @@ export function SessionTypeBadge({
   useLanguage();
   const meta = SESSION_TYPE_META[type];
   const Icon = TYPE_ICON[type];
-  const showLabel = size === "md" && !iconOnly;
-  const iconSize = size === "sm" ? 10 : 12;
+  const showLabel = size !== "sm" && !iconOnly;
+  const iconSize = size === "sm" ? 10 : size === "lg" ? 15 : 12;
 
   return (
     <View
       className={cn(
-        "flex-row items-center self-start rounded border",
-        size === "sm" ? "gap-0.5 px-1 py-0.5" : "gap-1 px-1.5 py-0.5",
+        "flex-row items-center self-start border",
+        size === "lg" ? "rounded-full" : "rounded",
+        size === "sm"
+          ? "gap-0.5 px-1 py-0.5"
+          : size === "lg"
+            ? "gap-1.5 px-3 py-1.5"
+            : "gap-1 px-1.5 py-0.5",
         meta.badgeClass,
         className,
       )}
@@ -72,7 +77,9 @@ export function SessionTypeBadge({
       {showLabel && (
         <Text
           className={cn(
-            "text-[10px] font-semibold leading-[13px]",
+            size === "lg"
+              ? "text-[13px] font-semibold"
+              : "text-[10px] font-semibold leading-[13px]",
             meta.textClass,
           )}
         >
@@ -92,9 +99,12 @@ export function SessionTypeBadge({
  */
 export function OverdueBadge({
   iconOnly = false,
+  size = "md",
   className,
 }: {
   iconOnly?: boolean;
+  /** `lg` for the read-only session view, where it labels the deadline. */
+  size?: "md" | "lg";
   className?: string;
 }) {
   useLanguage();
@@ -105,15 +115,23 @@ export function OverdueBadge({
   return (
     <View
       className={cn(
-        "flex-row items-center gap-1 self-start rounded border border-red-500/40 bg-red-500/15",
-        iconOnly ? "px-0.5 py-0.5" : "px-1.5 py-0.5",
+        "flex-row items-center gap-1 self-start border border-red-500/40 bg-red-500/15",
+        size === "lg" ? "gap-1.5 rounded-full px-3 py-1.5" : "rounded",
+        size === "lg" ? "" : iconOnly ? "px-0.5 py-0.5" : "px-1.5 py-0.5",
         className,
       )}
     >
-      <AlertCircle size={iconOnly ? 10 : 11} color={red} />
+      <AlertCircle
+        size={size === "lg" ? 15 : iconOnly ? 10 : 11}
+        color={red}
+      />
       {!iconOnly && (
         <Text
-          className="text-[10px] font-semibold leading-[13px]"
+          className={
+            size === "lg"
+              ? "text-[13px] font-semibold"
+              : "text-[10px] font-semibold leading-[13px]"
+          }
           style={{ color: red }}
         >
           {t("Overdue")}

@@ -6,7 +6,7 @@ import { useSpotlight } from "@/hooks/use-spotlight";
 import { dateKey, isOutsideMonth } from "@/lib/month-date-math";
 import type { Session } from "@zenflow/shared";
 import { isSameDay } from "date-fns";
-import { forwardRef, memo, useEffect, useMemo, useRef } from "react";
+import { forwardRef, memo, useEffect, useMemo, useRef, useState } from "react";
 import { View, type ViewInstance } from "react-native";
 import { CELL_HEIGHT, MonthCell } from "./month-cell";
 
@@ -133,8 +133,15 @@ export const MonthGrid = memo(
       onOpenMoveDay(day, list);
     }, [moveRequested, moveDayKey, tasksByDate, days, onOpenMoveDay]);
     useLanguage();
+    // Rows share the grid's height equally, so the month always fits.
+    const [gridHeight, setGridHeight] = useState(0);
+    const weekRows = chunkIntoWeeks(days);
+    const rowHeight =
+      gridHeight > 0
+        ? Math.max(CELL_HEIGHT / 2, (gridHeight - 2) / weekRows.length)
+        : CELL_HEIGHT;
     return (
-      <View className="flex-1 px-3 pb-3.5 pt-2">
+      <View className="flex-1 px-3 pt-2">
         <View className="flex-row">
           {WEEKDAY_LABELS.map((label) => (
             <Text
@@ -148,8 +155,11 @@ export const MonthGrid = memo(
 
         <View
           ref={ref}
-          onLayout={onGridLayout}
-          className="shrink overflow-hidden rounded-xl border-l border-t border-border"
+          onLayout={(e) => {
+            setGridHeight(e.nativeEvent.layout.height);
+            onGridLayout();
+          }}
+          className="flex-1 overflow-hidden rounded-xl border-l border-t border-border"
         >
           {/* Plain rows of `View`s, NOT a `FlatList numColumns={7}`. This grid
               never scrolls (`MonthPage` sizes each page to its own row count)
@@ -159,11 +169,11 @@ export const MonthGrid = memo(
               about and which corrupts Android's view recycling when the screen
               is detached (switching tabs): "addViewAt: failed to insert view
               […] the specified child already has a parent". */}
-          {chunkIntoWeeks(days).map((week) => (
+          {weekRows.map((week) => (
             <View
               key={dateKey(week[0])}
-              style={{ height: CELL_HEIGHT }}
-              className="shrink flex-row"
+              style={{ height: rowHeight }}
+              className="flex-row"
             >
               {week.map((day) => {
                 const key = dateKey(day);

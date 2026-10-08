@@ -349,15 +349,12 @@ const BottomSheetHeader = React.forwardRef<
       {...props}
     >
       {children}
-      {/* Matches `task-form-screen.tsx`'s header close button (`h-8 w-8
-          rounded-full bg-muted`) instead of a plain ghost icon button, for a
-          consistent close-affordance look across the sheeted and full-screen
-          flows — same treatment as the native file's `BottomSheetHeader`. */}
+      {/* Bare X (no circle), same as the other sheets' close buttons. */}
       <Button
         onPress={close}
         variant="ghost"
         accessibilityLabel={t("Close")}
-        className="h-8 w-8 self-start rounded-full bg-muted p-0"
+        className="h-8 w-8 self-start p-0"
       >
         <X className="text-muted-foreground" size={16} />
       </Button>

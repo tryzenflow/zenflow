@@ -38,6 +38,8 @@
     --brand-yellow: 240 177 1;
     --brand-lime: 216 249 152;
     --success: 16 185 129;
+    --glass: 255 255 255;
+    --glass-edge: 255 142 62;
   }
 
   .dark:root {
@@ -64,11 +66,7 @@
     --brand-yellow: 246 185 21;
     --brand-lime: 203 237 134;
     --success: 52 211 153;
-  }
-}
-
-@layer components {
-  .glass-task {
-    background-color: rgb(var(--background) / 0.8);
+    --glass: 255 236 220;
+    --glass-edge: 255 170 100;
   }
 }

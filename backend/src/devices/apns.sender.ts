@@ -1,6 +1,7 @@
 import { Injectable, Logger, type OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Notification, Provider } from "@parse/node-apn";
+import { pushSoundFile } from "@zenflow/shared";
 import { toStringMap, type PushMessage, type SendResult } from "./types";
 
 /** APNs `reason` values (and the 410 status) that mean the token is dead. */
@@ -61,7 +62,7 @@ export class ApnsSender implements OnModuleDestroy {
     note.topic = this.topic;
     note.priority = 10;
     note.pushType = "alert";
-    note.sound = "default";
+    note.sound = pushSoundFile(msg.tone);
     note.alert = { title: msg.title, body: msg.body };
     note.payload = toStringMap(msg.data);
 

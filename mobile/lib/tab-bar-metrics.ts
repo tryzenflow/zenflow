@@ -13,13 +13,18 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
  */
 
 /** Height of the pill itself (the row the tab buttons live in). */
-export const BAR_HEIGHT = 58;
+export const BAR_HEIGHT = 50;
 /** Inset from each screen side edge to the pill. */
 export const BAR_MARGIN = 16;
 /** Gap between the bottom safe-area edge and the bottom of the pill. */
-export const BAR_LIFT = 12;
+export const BAR_LIFT = 14;
 /** Pill corner radius — near-stadium at this height. */
-export const BAR_RADIUS = 26;
+export const BAR_RADIUS = 25;
+/** The create button sits in the same row, right of the pill, the same height. */
+export const FAB_SIZE = BAR_HEIGHT;
+export const FAB_GAP = 10;
+/** Inset from the right screen edge to the pill: leaves room for the create button. */
+export const BAR_RIGHT_MARGIN = BAR_MARGIN + FAB_SIZE + FAB_GAP;
 
 /**
  * Distance from the very bottom of the screen to the *top* of the floating

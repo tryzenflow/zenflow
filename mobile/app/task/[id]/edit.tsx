@@ -355,13 +355,10 @@ function EditSessionForm() {
         <Pressable
           disabled={loading}
           onPress={onDelete}
-          className="flex-row items-center gap-1.5"
+          className="h-10 w-10 items-center justify-center rounded-full bg-destructive/15"
           accessibilityLabel={t("Delete session")}
         >
-          <Trash2 size={15} className="text-destructive" />
-          <Text className="text-[13px] font-semibold text-destructive">
-            {t("Delete")}
-          </Text>
+          <Trash2 size={20} className="text-destructive" />
         </Pressable>
       }
       footer={
@@ -371,7 +368,7 @@ function EditSessionForm() {
             disabled={loading}
             onPress={form.handleSubmit(onSubmit, onInvalid)}
           >
-            <Text className="text-base font-semibold text-foreground">
+            <Text className="text-base font-semibold text-primary-foreground">
               {loading ? t("Saving…") : t("Save changes")}
             </Text>
           </Button>

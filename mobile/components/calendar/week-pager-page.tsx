@@ -112,10 +112,15 @@ export function PagerPage({
           ? { borderRightWidth: 1, borderRightColor: borderColor }
           : {};
 
+    // Reset both widths explicitly: Reanimated doesn't unset a style key that
+    // simply drops out of the returned object, so a seam from an earlier swipe
+    // would stay on the page as a stray line at its edge.
     return {
       transform: [{ translateX: pos.translateX }],
       opacity: pos.opacity,
       zIndex: pos.zIndex,
+      borderLeftWidth: 0,
+      borderRightWidth: 0,
       ...seamStyle,
     };
   });

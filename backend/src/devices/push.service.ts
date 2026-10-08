@@ -1,5 +1,5 @@
 import { Injectable, Logger, type OnModuleInit } from "@nestjs/common";
-import type { PushDataPayload } from "@zenflow/shared";
+import { type PushDataPayload, pushToneFor } from "@zenflow/shared";
 import { type Notification } from "../../generated/prisma";
 import { NotificationsService } from "../notifications/notifications.service";
 import { NotificationEvent } from "../notifications/types";
@@ -98,6 +98,7 @@ export class PushService implements OnModuleInit {
       title: row.title,
       body: row.content,
       data: this.dataFor(row),
+      tone: pushToneFor(row.eventName),
     };
 
     const [fcmRes, apnsRes] = await Promise.all([

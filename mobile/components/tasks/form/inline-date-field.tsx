@@ -187,7 +187,7 @@ export function InlineDateField({
       }
       disabled={disabled}
       className={cn(
-        "h-[46px] flex-row items-center justify-between rounded-xl border border-input bg-card px-3",
+        "h-[46px] flex-row items-center justify-between rounded-xl border border-glass-edge/35 bg-glass/70 dark:border-glass-edge/25 dark:bg-glass/[0.07] px-3",
         disabled && "opacity-50",
       )}
     >
@@ -240,7 +240,10 @@ export function InlineDateField({
             </Text>
           </View>
           <View className="mt-3 items-center px-5">
-            {Platform.OS === "android" ? (
+            {/* The native iOS picker titles Vietnamese months "tháng 10 năm 2026"
+                (lowercase, long form); the app grid reads "Tháng 10/2026" like
+                every other screen. */}
+            {Platform.OS === "android" || locale() === "vi-VN" ? (
               <LocalizedDateGrid
                 value={anchor}
                 minimumDate={minimumDate}

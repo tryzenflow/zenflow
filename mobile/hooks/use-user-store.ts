@@ -1,5 +1,8 @@
 import { setLanguage } from "@/lib/i18n";
+import { useConnectivity } from "@/lib/connectivity";
 import { cacheSessionUser } from "@/lib/session";
+import { attachSessionDisk, hydrateSessionCache } from "@/lib/session-cache";
+import { sessionDisk } from "@/lib/session-store";
 import type { User } from "@zenflow/shared";
 import { create } from "zustand";
 
@@ -15,6 +18,9 @@ type Action = {
   setLoading: (loading: boolean) => void;
 };
 
+// Offline calendar: persist fetched days to disk and reload them per user.
+attachSessionDisk(sessionDisk);
+
 export const useUserStore = create<State & Action>((set) => ({
   user: null,
   // Starts true: the root layout's session-hydration effect flips it false
@@ -23,6 +29,8 @@ export const useUserStore = create<State & Action>((set) => ({
   loading: true,
   setUser: (user) => {
     if (user) setLanguage(user.lang);
+    hydrateSessionCache(user?.id ?? null);
+    if (!user) useConnectivity.getState().clearStale();
     set({ user });
   },
   updateUser: (user) => {

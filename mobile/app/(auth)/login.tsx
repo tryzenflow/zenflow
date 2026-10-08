@@ -1,4 +1,9 @@
-import { ChevronLeft, CircleUserRound, Mail } from "@/components/Icons";
+import { CircleUserRound, Mail } from "@/components/Icons";
+import { BackIcon, WaitIcon } from "@/components/brand/icons";
+import { SunriseBackdrop } from "@/components/brand/sunrise-backdrop";
+import { Glass } from "@/components/ui/glass";
+import { NAV_THEME } from "@/lib/constants";
+import { useColorScheme } from "@/lib/useColorScheme";
 import { getLanguage, t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -34,7 +39,7 @@ import { useUserStore } from "@/hooks/use-user-store";
 import { cacheSessionUser } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { hideEmail } from "@/utils/hide-email";
-import { Clock, Loader2Icon } from "lucide-react-native";
+import { Loader2Icon } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /**
@@ -66,7 +71,7 @@ function LockoutNotice({ children }: { children: ReactNode }) {
   useLanguage();
   return (
     <View className="mt-2 flex-row items-start gap-1.5">
-      <Clock size={15} className="mt-px shrink-0 text-brand-yellow" />
+      <WaitIcon size={15} color="#F0B101" />
       <Text className="flex-1 text-[13px] font-medium text-foreground">
         {children}
       </Text>
@@ -164,6 +169,9 @@ export default function LoginScreen() {
   const setUser = useUserStore((state) => state.setUser);
   const { toast } = useToast();
   const insets = useSafeAreaInsets();
+  const { isDarkColorScheme } = useColorScheme();
+  const theme = isDarkColorScheme ? NAV_THEME.dark : NAV_THEME.light;
+  const muted = theme.mutedForeground;
 
   const [stage, setStage] = useState<"email" | "otp">("email");
   const [submitting, setSubmitting] = useState(false);
@@ -269,6 +277,7 @@ export default function LoginScreen() {
 
   return (
     <View className="flex-1 bg-background px-5">
+      <SunriseBackdrop dark={isDarkColorScheme} />
       <View
         className="absolute right-5 z-10"
         style={{ top: insets.top + 8 }}
@@ -290,6 +299,18 @@ export default function LoginScreen() {
           </View>
         </View>
 
+        {/* Shadow lives outside `Glass`, which clips its children. */}
+        <View
+          style={{
+            borderRadius: 24,
+            shadowColor: isDarkColorScheme ? "#000" : "#B4540A",
+            shadowOpacity: isDarkColorScheme ? 0.4 : 0.14,
+            shadowRadius: 22,
+            shadowOffset: { width: 0, height: 10 },
+            elevation: 6,
+          }}
+        >
+        <Glass radius={24} style={{ padding: 18, borderWidth: 1 }}>
         <Form {...form}>
           {stage === "email" ? (
             <View>
@@ -309,7 +330,7 @@ export default function LoginScreen() {
                     value={field.value}
                     onBlur={field.onBlur}
                     onChange={field.onChange}
-                    className="h-[50px] rounded-xl bg-card px-4 dark:bg-input/30 web:focus-visible:border-ring web:focus-visible:ring-ring/50 web:focus-visible:ring-[3px]"
+                    className="h-[50px] rounded-xl border-glass-edge/35 bg-glass/70 px-4 dark:border-glass-edge/25 dark:bg-glass/[0.07] web:focus-visible:border-ring web:focus-visible:ring-ring/50 web:focus-visible:ring-[3px]"
                   />
                 )}
               />
@@ -338,7 +359,7 @@ export default function LoginScreen() {
                     otpLockout.active && "opacity-50",
                   )}
                 >
-                  <ChevronLeft size={15} className="text-brand-orange" />
+                  <BackIcon size={15} color={theme.primary} />
                   <Text className="text-[13px] font-semibold text-brand-orange">
                     {t("Change email")}
                   </Text>
@@ -398,7 +419,7 @@ export default function LoginScreen() {
                 </View>
               ) : requestLockout.active ? (
                 <View className="h-12 w-full flex-row items-center justify-center gap-2 rounded-xl opacity-50">
-                  <Clock size={16} className="text-muted-foreground" />
+                  <WaitIcon size={16} color={muted} />
                   <Text className="text-sm font-semibold tabular-nums text-muted-foreground">
                     {t("Try again in")}{" "}
                     {formatCountdown(requestLockout.remaining)}
@@ -406,7 +427,7 @@ export default function LoginScreen() {
                 </View>
               ) : resendCooldown.active ? (
                 <View className="h-12 w-full flex-row items-center justify-center gap-2 rounded-xl opacity-50">
-                  <Clock size={16} className="text-muted-foreground" />
+                  <WaitIcon size={16} color={muted} />
                   <Text className="text-sm font-semibold tabular-nums text-muted-foreground">
                     {t("Resend code in")}{" "}
                     {formatCountdown(resendCooldown.remaining)}
@@ -430,7 +451,7 @@ export default function LoginScreen() {
           {stage === "email" &&
             (requestLockout.active ? (
               <View className="mt-[18px] h-[52px] flex-row items-center justify-center gap-2 rounded-xl bg-muted">
-                <Clock size={18} className="text-muted-foreground" />
+                <WaitIcon size={18} color={muted} />
                 <Text className="text-base font-semibold tabular-nums text-muted-foreground">
                   {t("Try again in")}{" "}
                   {formatCountdown(requestLockout.remaining)}
@@ -460,6 +481,8 @@ export default function LoginScreen() {
               </Button>
             ))}
         </Form>
+        </Glass>
+        </View>
 
         <Text className="mt-[22px] px-2.5 text-center text-[12px] leading-normal text-muted-foreground">
           {t("By continuing, you agree to our")}{" "}

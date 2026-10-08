@@ -29,9 +29,11 @@ import { Text } from "@/components/ui/text";
 import { completeStep } from "@/hooks/use-checklist";
 import { useCalendarJump } from "@/hooks/use-calendar-jump";
 import { useSpotlight } from "@/hooks/use-spotlight";
-import { useUserStore } from "@/hooks/use-user-store";
-import { addMonths, monthLabel } from "@/lib/month-date-math";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
+import { useUserStore } from "@/hooks/use-user-store";
+import { OfflineIndicator } from "@/components/offline-indicator";
+import { format } from "@/lib/i18n";
+import { addMonths, monthLabel } from "@/lib/month-date-math";
 import { zonedNow, zonedWallClockToUtc } from "@zenflow/core";
 import type { Session, UpdateScope } from "@zenflow/shared";
 import { type Href, useFocusEffect, useRouter } from "expo-router";
@@ -68,8 +70,8 @@ export default function MonthScreen() {
   // Day View).
   const [reloadToken, setReloadToken] = useState(0);
 
-  const tabBarOverlay = useTabBarOverlayHeight();
   const insets = useSafeAreaInsets();
+  const tabBarOverlay = useTabBarOverlayHeight();
 
   const taskListSheetRef = useRef<SessionListSheetHandle>(null);
   const rescheduleSheetRef = useRef<RescheduleSheetHandle>(null);
@@ -188,6 +190,12 @@ export default function MonthScreen() {
   return (
     <View className="flex-1 bg-background">
       <NotificationBell />
+      <View
+        className="absolute right-[60px] z-20"
+        style={{ top: insets.top + 8 }}
+      >
+        <OfflineIndicator dayKey={`month:${format(monthDate, "yyyy-MM")}`} />
+      </View>
       <GettingStarted />
       <View
         className="flex-row justify-between items-center gap-3 border-b border-border bg-background px-4 pb-4"
@@ -219,8 +227,8 @@ export default function MonthScreen() {
         </View>
       </View>
 
-      {/* Pad by exactly the bar's height: the grid's rows shrink to fit what's
-          left (see `CELL_HEIGHT`), so every week stays above the bar. */}
+      {/* The grid fills the screen down to just above the floating bar, so every
+          week row is fully visible. */}
       <View className="flex-1" style={{ paddingBottom: tabBarOverlay }}>
         <MonthPager
           monthDate={monthDate}

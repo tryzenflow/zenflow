@@ -168,7 +168,7 @@ export const DeleteRecurringSheet = forwardRef<
             <Pressable
               onPress={sheet.close}
               accessibilityLabel={t("Cancel")}
-              className="h-8 w-8 items-center justify-center rounded-full bg-muted"
+              className="h-8 w-8 items-center justify-center"
             >
               <X size={16} className="text-muted-foreground" />
             </Pressable>

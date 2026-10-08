@@ -87,7 +87,7 @@ export function SessionTypeTabs({
               }}
               className={cn(
                 "flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border px-2 py-2.5",
-                !active && "border-input bg-card",
+                !active && "border-glass-edge/35 bg-glass/70 dark:border-glass-edge/25 dark:bg-glass/[0.07]",
                 disabled && "opacity-50",
               )}
               style={
@@ -130,7 +130,7 @@ export function SessionTypeTabs({
                 ]}
                 className={cn(
                   "flex-row items-center justify-center gap-1.5 rounded-md border px-2 py-2",
-                  !active && "border-input bg-card",
+                  !active && "border-glass-edge/35 bg-glass/70 dark:border-glass-edge/25 dark:bg-glass/[0.07]",
                   disabled && "opacity-50",
                 )}
               >

@@ -77,8 +77,8 @@ export function TagsRow() {
           <View className="h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl bg-muted">
             <List size={18} className="text-foreground" />
           </View>
-          <Text className="flex-1 text-[15px] font-semibold">{t("Tags")}</Text>
-          <Text className="text-[13px] text-muted-foreground">
+          <Text className="flex-1 text-[16px] font-semibold">{t("Tags")}</Text>
+          <Text className="text-[15px] font-medium text-muted-foreground">
             {saved.length}
           </Text>
           <ChevronRight size={18} className="text-muted-foreground" />

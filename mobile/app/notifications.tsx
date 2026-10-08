@@ -9,6 +9,7 @@ import {
   Trash2,
   X,
 } from "@/components/Icons";
+import { Glass } from "@/components/ui/glass";
 import { Text } from "@/components/ui/text";
 import { rescheduleConflicts } from "@/api/notifications";
 import { useToast } from "@/components/ui/toast";
@@ -29,10 +30,11 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
-  Platform,
   Pressable,
   RefreshControl,
+  StyleSheet,
   View,
+  useWindowDimensions,
 } from "react-native";
 // `react-native-gesture-handler/Swipeable` (JS-thread) was removed entirely
 // in gesture-handler v3 (bumped for SDK 58) -- only the Reanimated-driven
@@ -68,6 +70,7 @@ export default function NotificationsScreen() {
   useLanguage();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { toast } = useToast();
   const [reschedulingId, setReschedulingId] = useState<string | null>(null);
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
@@ -219,16 +222,25 @@ export default function NotificationsScreen() {
   }, [items, selectedIds.size]);
 
   return (
-    <View
-      className="flex-1 bg-background"
-      style={{
-        // iOS presents this as a page sheet already below the status bar; 14 is breathing room.
-        paddingTop: Platform.OS === "ios" ? 14 : insets.top,
-        paddingBottom: insets.bottom,
-      }}
-    >
+    <View className="flex-1 justify-end">
+      {/* Tap the dimmed area above to close. */}
+      <Pressable
+        onPress={() => router.back()}
+        accessibilityLabel={t("Close")}
+        className="absolute inset-0 bg-black/40"
+      />
+      {/* A bottom sheet at ~68% of the screen (own layout, not a native form
+          sheet, so the header can never end up hidden behind the rows). */}
+      <View
+        className="overflow-hidden rounded-t-[28px] bg-background"
+        style={{ height: windowHeight * 0.68, paddingBottom: insets.bottom }}
+      >
+      <View className="items-center pb-1 pt-2">
+        <View className="h-1 w-10 rounded-full bg-muted-foreground/30" />
+      </View>
       {/* Header — one row, one primary action per mode */}
-      <View className="h-14 flex-row items-center gap-2 border-b border-border/70 bg-background px-3">
+      <Glass radius={0} clear intensity={50} style={{ borderWidth: 0, borderBottomWidth: StyleSheet.hairlineWidth }}>
+      <View className="h-14 flex-row items-center gap-2 px-3">
         {isSelecting ? (
           <>
             <Pressable
@@ -283,8 +295,12 @@ export default function NotificationsScreen() {
                 {t("Inbox")}
               </Text>
               {unreadCount > 0 && (
-                <View className="h-[20px] min-w-[26px] rounded-full items-center justify-center bg-primary px-2">
-                  <Text className="text-sm font-bold leading-none text-primary-foreground">
+                <View className="h-[22px] min-w-[26px] items-center justify-center rounded-full bg-primary px-2">
+                  {/* Geist's ascent sits high in a tight line box: nudge it to optical centre. */}
+                  <Text
+                    style={{ marginTop: 1.5 }}
+                    className="text-[13px] font-bold leading-none text-primary-foreground"
+                  >
                     {unreadCount.toLocaleString(locale())}
                   </Text>
                 </View>
@@ -304,6 +320,7 @@ export default function NotificationsScreen() {
           </>
         )}
       </View>
+      </Glass>
 
       {/* Body */}
       {loading ? (
@@ -352,6 +369,8 @@ export default function NotificationsScreen() {
           )}
         />
       )}
+
+      </View>
 
       {/* Confirm Clear All Modal */}
       {showClearAllConfirm && (
@@ -504,7 +523,7 @@ function NotificationRowItem({
             <Text
               numberOfLines={2}
               className={cn(
-                "text-[13.5px]",
+                "text-[15px]",
                 unread
                   ? "font-semibold text-foreground"
                   : "font-medium text-foreground/85",
@@ -517,7 +536,7 @@ function NotificationRowItem({
             <View className="mt-1 flex-row items-center gap-1.5">
               <Text
                 className={cn(
-                  "shrink-0 text-[11px]",
+                  "shrink-0 text-[12.5px]",
                   unread
                     ? "font-medium text-foreground/80"
                     : "text-muted-foreground",
@@ -528,13 +547,13 @@ function NotificationRowItem({
 
               {when && (
                 <>
-                  <Text className="text-[11px] text-muted-foreground/60">
+                  <Text className="text-[12.5px] text-muted-foreground/60">
                     ·
                   </Text>
                   <Text
                     numberOfLines={1}
                     className={cn(
-                      "flex-1 text-[11px]",
+                      "flex-1 text-[12.5px]",
                       unread
                         ? "font-medium text-foreground/80"
                         : "text-muted-foreground",

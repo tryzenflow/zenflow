@@ -1,4 +1,5 @@
 import type { Session } from "@zenflow/shared";
+import type { SessionDisk } from "./session-disk";
 
 /**
  * In-memory, session-lifetime cache of each day's `listSessions("day", …)`
@@ -28,13 +29,51 @@ import type { Session } from "@zenflow/shared";
  *   - `fetchDaySessions` de-dupes concurrent requests for the same day key so
  *     three pages mounting at once (or a fast double swipe) share one promise.
  *
- * Not persisted — dropped on app restart, which is fine: cold start already
- * shows the skeleton once and that is not the jarring case.
+ * Persisted for offline viewing: when a disk layer is attached
+ * (`attachSessionDisk`), every fetched day/month is written through to it and
+ * `hydrateSessionCache(userId)` repopulates the map on launch. Hydrated
+ * entries are *stale* (`fetchedAt` 0) so they paint instantly yet still
+ * revalidate; `savedAt` keeps the real fetch time for "Saved 14:32".
  */
 
 interface DayCacheEntry {
   sessions: Session[];
   fetchedAt: number;
+  /** When the data actually came from the server; survives hydrate. */
+  savedAt: number;
+}
+
+let disk: SessionDisk | null = null;
+
+/** Bumped whenever the cache is wiped or switches account. A request records
+ * it when it starts and drops its result if it moved, so a response that
+ * lands after logout never writes into the next account's memory or disk. */
+let generation = 0;
+let hydratedUserId: string | null = null;
+
+/** Wire the disk layer once, at startup. */
+export function attachSessionDisk(d: SessionDisk | null): void {
+  disk = d;
+}
+
+/** Load `userId`'s persisted calendar into the memory cache (null = signed out: wipe disk). */
+export function hydrateSessionCache(userId: string | null): void {
+  if (userId !== hydratedUserId) generation++;
+  hydratedUserId = userId;
+  if (!disk) return;
+  for (const [key, entry] of disk.load(userId)) {
+    if (cache.has(key)) continue; // fresher in-memory data wins
+    cache.set(key, {
+      sessions: entry.sessions,
+      fetchedAt: 0,
+      savedAt: entry.savedAt,
+    });
+  }
+}
+
+/** When `dayKey` was last fetched from the server, if cached. */
+export function getCachedSavedAt(dayKey: string): number | undefined {
+  return cache.get(dayKey)?.savedAt;
 }
 
 /** How long a cached day (or month) counts as "fresh" — a page mount, or a plain screen-focus, within this
@@ -110,7 +149,9 @@ export function setCachedDaySessions(
   dayKey: string,
   sessions: Session[],
 ): void {
-  cache.set(dayKey, { sessions, fetchedAt: Date.now() });
+  const now = Date.now();
+  cache.set(dayKey, { sessions, fetchedAt: now, savedAt: now });
+  disk?.save(dayKey, sessions, now);
 }
 
 /** True when `dayKey` is cached and the cache entry is younger than
@@ -132,13 +173,14 @@ export function fetchDaySessions(
 ): Promise<Session[]> {
   const existing = inFlight.get(dayKey);
   if (existing) return existing;
+  const startedIn = generation;
   const p = loader()
     .then((sessions) => {
-      setCachedDaySessions(dayKey, sessions);
+      if (startedIn === generation) setCachedDaySessions(dayKey, sessions);
       return sessions;
     })
     .finally(() => {
-      inFlight.delete(dayKey);
+      if (inFlight.get(dayKey) === p) inFlight.delete(dayKey);
     });
   inFlight.set(dayKey, p);
   return p;
@@ -146,8 +188,10 @@ export function fetchDaySessions(
 
 /** Drop everything — e.g. on logout, so the next user never sees stale days. */
 export function clearDaySessionCache(): void {
+  generation++;
   cache.clear();
   inFlight.clear();
+  disk?.clear();
 }
 
 /**

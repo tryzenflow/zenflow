@@ -129,3 +129,45 @@ export function noteSnippet(html: string): string {
 export function isNoteEmpty(html: string): boolean {
   return noteSnippet(html) === "" && !/<(img|video|audio)\b/i.test(html);
 }
+
+/**
+ * Read-only view: a link that is the whole of its paragraph becomes a preview
+ * card; a link inside running text stays an inline link. With page metadata
+ * (`window.ZF_PREVIEWS`, fetched by the app, see `lib/link-preview.ts`) the card
+ * is an unfurl: cover image, title, description, host. Without it, a compact
+ * card with the link text and host. The transform runs in the WebView
+ * (`LINK_CARD_SCRIPT`) before the height is measured.
+ */
+export function noteLinkCardCss(selector: string, isDark: boolean) {
+  const { fg, muted, link } = noteColors(isDark);
+  const fill = isDark ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.7)";
+  const edge = isDark ? "rgba(255,150,80,0.30)" : "rgba(255,142,62,0.32)";
+  return `${selector} a.zf-card { display: block; margin: 6px 0 12px; border: 1px solid ${edge}; border-radius: 16px; background: ${fill}; color: ${fg}; text-decoration: none; overflow: hidden; } ${selector} a.zf-card .zf-img { display: block; width: 100%; aspect-ratio: 1.91 / 1; object-fit: cover; background: ${edge}; max-height: none; border-radius: 0; } ${selector} a.zf-card .zf-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; } ${selector} a.zf-card .zf-ico { flex: none; width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: ${link}; color: #fff; } ${selector} a.zf-card .zf-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; } ${selector} a.zf-card .zf-title { font-weight: 600; font-size: 15px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; } ${selector} a.zf-card .zf-desc { font-size: 13px; line-height: 1.35; color: ${muted}; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; } ${selector} a.zf-card .zf-host { font-size: 12px; color: ${muted}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } ${selector} a.zf-card .zf-go { flex: none; color: ${muted}; }`;
+}
+
+export const LINK_CARD_SCRIPT = `
+  (function() {
+    var link = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>';
+    var go = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg>';
+    var previews = window.ZF_PREVIEWS || {};
+    function esc(s) { return String(s).replace(/[&<>"]/g, function(c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+    document.querySelectorAll('#note p').forEach(function(p) {
+      var links = p.querySelectorAll('a');
+      if (links.length !== 1) return;
+      var a = links[0];
+      if (p.textContent.trim() !== a.textContent.trim()) return;
+      var host = '';
+      try { host = new URL(a.href).hostname.replace(/^www\\./, ''); } catch (e) {}
+      var text = a.textContent.trim();
+      var isUrl = /^https?:\\/\\//i.test(text);
+      var pv = previews[a.getAttribute('href')] || previews[a.href] || null;
+      var title = (pv && pv.title) || (isUrl ? host : text);
+      var desc = pv && pv.description;
+      var sub = (pv && pv.siteName) || host;
+      a.classList.add('zf-card');
+      var img = pv && pv.image ? '<img class="zf-img" src="' + esc(pv.image) + '" onerror="this.remove()" />' : '';
+      var icon = img ? '' : '<span class="zf-ico">' + link + '</span>';
+      a.innerHTML = img + '<span class="zf-row">' + icon + '<span class="zf-txt"><span class="zf-title">' + esc(title) + '</span>' + (desc ? '<span class="zf-desc">' + esc(desc) + '</span>' : '') + '<span class="zf-host">' + esc(sub) + '</span></span><span class="zf-go">' + go + '</span></span>';
+    });
+  })();
+`;

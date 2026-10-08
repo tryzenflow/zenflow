@@ -12,7 +12,13 @@ import { useUserStore } from "@/hooks/use-user-store";
 import { notificationToastVisual } from "@/lib/notification-visual";
 import { claimNotification, LOCAL_NOTIFICATION_SOURCE } from "@/lib/push";
 import { notifySessionsMutated } from "@/lib/session-cache";
-import { notificationEventKind, type NotificationDto } from "@zenflow/shared";
+import {
+  notificationEventKind,
+  type NotificationDto,
+  pushChannelId,
+  pushSoundFile,
+  pushToneFor,
+} from "@zenflow/shared";
 import * as Notifications from "expo-notifications";
 import { type Href, useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
@@ -328,6 +334,7 @@ export function useNotificationsSubscription(): void {
 
         // 2. System notification in Android notification shade / lock screen
         if (Platform.OS !== "web") {
+          const tone = pushToneFor(n.eventName);
           void Notifications.scheduleNotificationAsync({
             content: {
               title: cleanTitle,
@@ -337,9 +344,12 @@ export function useNotificationsSubscription(): void {
                 notificationId: n.id,
                 source: LOCAL_NOTIFICATION_SOURCE,
               },
-              sound: true,
+              sound: pushSoundFile(tone),
             },
-            trigger: null,
+            trigger:
+              Platform.OS === "android"
+                ? { channelId: pushChannelId(tone) }
+                : null,
           });
         }
       },

@@ -2,7 +2,7 @@
 
 For developers. Expo + React Native app (iOS, Android, web) that shares `@zenflow/shared`
 (contract) and `@zenflow/core` (logic) with the web [`frontend/`](../frontend/README.md).
-Part of the [Zenflow monorepo](../README.md). Screens are designed first in [`mockups/`](../mockups/).
+Part of the [Zenflow monorepo](../README.md). Screens are designed first in [`mockups/`](../mockups/); look and feel rules are in [`docs/mobile/design.md`](../docs/mobile/design.md).
 
 ## Run it
 
@@ -27,7 +27,8 @@ pnpm test           # vitest run (lib/**/*.test.ts only)
 pnpm format         # Biome
 ```
 
-A new native module needs a fresh dev-client build (`pnpm android` / `pnpm ios`).
+A new native module needs a fresh dev-client build (`pnpm android` / `pnpm ios`); the offline cache
+(MMKV, NetInfo) and glass blur (`expo-blur`) are such modules.
 Components have no automated coverage; Vitest covers pure RN-free `lib/` logic only.
 
 ## Environment

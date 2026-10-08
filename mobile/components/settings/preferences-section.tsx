@@ -49,8 +49,10 @@ function Row({
       <View className="h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl bg-muted">
         <Icon size={18} className="text-foreground" />
       </View>
-      <Text className="flex-1 text-[15px] font-semibold">{title}</Text>
-      <Text className="text-[13px] text-muted-foreground">{value}</Text>
+      <Text className="flex-1 text-[16px] font-semibold">{title}</Text>
+      <Text className="text-[15px] font-medium text-muted-foreground">
+        {value}
+      </Text>
       <ChevronRight size={18} className="text-muted-foreground" />
     </Pressable>
   );
@@ -155,7 +157,7 @@ export function PreferencesSection() {
             <Text className="text-[15px] font-semibold">
               {t("Allow notifications")}
             </Text>
-            <Text className="mt-0.5 text-[13px] text-muted-foreground">
+            <Text className="mt-0.5 text-[14px] text-muted-foreground">
               {t("Push alerts for reminders and schedule changes")}
             </Text>
           </View>

@@ -1,9 +1,11 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { CalendarDays } from "@/components/Icons";
+import { Glass } from "@/components/ui/glass";
 import { Text } from "@/components/ui/text";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import * as Haptics from "expo-haptics";
+import { View } from "react-native";
 import { Pressable } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 
@@ -36,18 +38,30 @@ export function TodayButton({
         zIndex: 34,
       }}
     >
-      <Pressable
-        onPress={() => {
-          Haptics.selectionAsync().catch(() => {});
-          onPress();
+      <View
+        style={{
+          borderRadius: 9999,
+          shadowColor: "#000",
+          shadowOpacity: 0.14,
+          shadowRadius: 10,
+          shadowOffset: { width: 0, height: 5 },
         }}
-        accessibilityRole="button"
-        accessibilityLabel={t("Jump to today")}
-        className="flex-row items-center gap-1.5 rounded-full border border-border bg-background/95 px-3.5 py-2 shadow-sm active:opacity-80"
       >
-        <CalendarDays size={14} className="text-foreground" />
-        <Text className="text-[12.5px] font-semibold">{t("Today")}</Text>
-      </Pressable>
+        <Glass radius={9999} clear intensity={40}>
+          <Pressable
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => {});
+              onPress();
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={t("Jump to today")}
+            className="flex-row items-center gap-1.5 px-4 py-2.5 active:opacity-80"
+          >
+            <CalendarDays size={16} className="text-foreground" />
+            <Text className="text-[13px] font-semibold">{t("Today")}</Text>
+          </Pressable>
+        </Glass>
+      </View>
     </Animated.View>
   );
 }

@@ -24,7 +24,28 @@ import {
 
 export const WEEK_STARTS_ON = 1;
 
-export const MONTH_PILL_CAP = 2;
+/** Most sessions a month cell ever shows before it rolls the rest into "+N". */
+export const MONTH_PILL_CAP = 4;
+
+// Month cell anatomy (points), mirroring `month-cell.tsx`: date badge + gaps +
+// padding above the pills, then pills of PILL_H separated by PILL_GAP; the
+// "+N" row takes the same slot as one more pill.
+const CELL_CHROME_H = 38;
+const PILL_H = 16;
+const PILL_GAP = 3;
+
+/**
+ * How many of `total` sessions fit in a cell `height` points tall. Everything
+ * is shown when it fits; otherwise one slot is reserved for the "+N" row.
+ * Never exceeds {@link MONTH_PILL_CAP}, and shows at least one pill.
+ */
+export function monthPillCap(height: number, total: number): number {
+  const slots = Math.floor(
+    (height - CELL_CHROME_H + PILL_GAP) / (PILL_H + PILL_GAP),
+  );
+  const cap = total <= slots ? total : slots - 1;
+  return Math.max(1, Math.min(MONTH_PILL_CAP, cap));
+}
 
 export const MONTH_CELL_VISIBILITY_WEIGHTS = {
   EXAM: 10,
@@ -83,9 +104,8 @@ export interface CellSessionSplit<T> {
 
 /**
  * Split a day's tasks into what a `MonthCell` renders directly vs. what
- * rolls into the "+N more" overflow pill. Fixed at `cap` (2 — the mockup /
- * issue checklist's cap; deliberately NOT responsive to cell height, see
- * GitHub issue #21's "open questions").
+ * rolls into the "+N" overflow pill. `cap` comes from {@link monthPillCap}
+ * (the measured cell height).
  */
 export function splitCellSessions<T>(
   tasks: T[],

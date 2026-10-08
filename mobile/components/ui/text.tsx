@@ -3,6 +3,7 @@ import type {
   SlottableTextProps,
   TextRef,
 } from "@/components/primitives/types";
+import { scaleType } from "@/lib/type-scale";
 import { cn } from "@/lib/utils";
 import * as React from "react";
 import { Text as RNText } from "react-native";
@@ -75,14 +76,22 @@ const Text = React.forwardRef<TextRef, SlottableTextProps>(
       [className],
     );
 
+    const mergedClassName = cn(
+      "text-base text-foreground web:select-text",
+      textClass,
+      classNameWithoutFontWeight,
+    );
+    // Readability scale (lib/type-scale.ts), applied as inline style because
+    // NativeWind can't compile a runtime-built class.
+    const { fontSize, lineHeight } = React.useMemo(
+      () => scaleType(mergedClassName),
+      [mergedClassName],
+    );
+
     return (
       <Component
-        className={cn(
-          "text-base text-foreground web:select-text",
-          textClass,
-          classNameWithoutFontWeight,
-        )}
-        style={[{ fontFamily: classNameFont }, style]}
+        className={mergedClassName}
+        style={[{ fontFamily: classNameFont, fontSize, lineHeight }, style]}
         ref={ref}
         {...props}
       />

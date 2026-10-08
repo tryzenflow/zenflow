@@ -26,6 +26,10 @@ export default {
     extend: {
       colors: {
         border: "rgb(var(--border) / <alpha-value>)",
+        glass: {
+          DEFAULT: "rgb(var(--glass) / <alpha-value>)",
+          edge: "rgb(var(--glass-edge) / <alpha-value>)",
+        },
         input: "rgb(var(--input) / <alpha-value>)",
         ring: "rgb(var(--ring) / <alpha-value>)",
         background: "rgb(var(--background) / <alpha-value>)",
