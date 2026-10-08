@@ -1,0 +1,46 @@
+appId: com.zenflow.app
+tags: [smoke]
+---
+- runFlow: ../subflows/launch-signed-in.yaml
+- tapOn:
+    id: fab.new-task
+- tapOn:
+    id: task.title
+- inputText: E2E write report
+# hideKeyboard taps outside the field and can land on the description editor;
+# Return blurs a single-line input, which drops the keyboard that otherwise
+# covers the pinned save button.
+- pressKey: Enter
+- scrollUntilVisible:
+    element:
+      id: task.deadline.noRush
+- tapOn:
+    id: task.deadline.noRush
+- tapOn:
+    id: task.save
+# (a task block's label also carries its type and time, hence the wildcards)
+- extendedWaitUntil:
+    visible: ".*E2E write report.*"
+    timeout: 20000
+# Edit: open it, switch to edit mode, rename, save.
+- tapOn: ".*E2E write report.*"
+- tapOn:
+    id: task.mode.edit
+- tapOn:
+    id: task.title
+- eraseText: 40
+- inputText: E2E report v2
+- pressKey: Enter
+- tapOn:
+    id: task.save
+- extendedWaitUntil:
+    visible: ".*E2E report v2.*"
+    timeout: 20000
+- assertNotVisible: ".*E2E write report.*"
+# Delete.
+- tapOn: ".*E2E report v2.*"
+- tapOn:
+    id: task.delete
+- extendedWaitUntil:
+    notVisible: ".*E2E report v2.*"
+    timeout: 20000

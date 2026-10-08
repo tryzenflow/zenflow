@@ -67,6 +67,7 @@ export function CreateSessionFab({ tz }: { tz: string }) {
         onPress={() => router.push(createSessionAtNowHref(tz))}
         accessibilityRole="button"
         accessibilityLabel={t("New task")}
+        testID="fab.new-task"
         style={[FAB_GLOW_INNER, { width: FAB_SIZE, height: FAB_SIZE, borderRadius: FAB_SIZE / 2 }]}
         className="items-center justify-center bg-primary"
       >

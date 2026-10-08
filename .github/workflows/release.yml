@@ -12,6 +12,9 @@ permissions:
 
 jobs:
   resolve:
+    # Beta pre-releases (release-beta.yml) ship mobile artifacts only; they must
+    # never promote images to production.
+    if: ${{ !github.event.release.prerelease }}
     runs-on: ubuntu-latest
     outputs:
       sha: ${{ steps.sha.outputs.sha }}

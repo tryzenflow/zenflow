@@ -1,0 +1,50 @@
+appId: com.zenflow.app
+tags: [smoke]
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      # An earlier flow may have denied it; reset so the OS prompt appears.
+      notifications: unset
+- runFlow: ../subflows/login.yaml
+# Advance (skip when possible, else continue) until the notifications step shows.
+# Looping on the screen state rather than tapping blind: toasts and transitions
+# make fixed-count taps land on the wrong step.
+- repeat:
+    times: 5
+    commands:
+      - runFlow:
+          when:
+            notVisible:
+              id: onboarding.notifications-switch
+          commands:
+            - runFlow:
+                when:
+                  visible:
+                    id: onboarding.secondary
+                commands:
+                  - tapOn:
+                      id: onboarding.secondary
+                      optional: true
+            - runFlow:
+                when:
+                  notVisible:
+                    id: onboarding.secondary
+                commands:
+                  - tapOn:
+                      id: onboarding.primary
+                      optional: true
+- assertVisible:
+    id: onboarding.notifications-switch
+# "Turn on notifications" raises the OS prompt (Android 13+ / iOS).
+- tapOn:
+    id: onboarding.primary
+- runFlow:
+    when:
+      visible: "(Allow|Cho phép)"
+    commands:
+      - tapOn: "(Allow|Cho phép)"
+# Granted: the app moves past the notifications step on its own.
+- assertNotVisible:
+    id: onboarding.notifications-switch

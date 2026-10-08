@@ -354,6 +354,7 @@ function EditSessionForm() {
       headerRight={
         <Pressable
           disabled={loading}
+          testID="task.delete"
           onPress={onDelete}
           className="h-10 w-10 items-center justify-center rounded-full bg-destructive/15"
           accessibilityLabel={t("Delete session")}
@@ -364,6 +365,7 @@ function EditSessionForm() {
       footer={
         editing ? (
           <Button
+            testID="task.save"
             className="h-[52px] w-full"
             disabled={loading}
             onPress={form.handleSubmit(onSubmit, onInvalid)}

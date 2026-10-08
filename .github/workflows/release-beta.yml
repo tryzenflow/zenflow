@@ -1,0 +1,106 @@
+name: Version & Release (beta)
+
+# Changesets-driven, modelled on limitkit's release.yml:
+#   1. Merging changesets to master opens/updates a "version packages" PR.
+#   2. Merging that PR bumps every package (one fixed version), so the next run
+#      of this workflow sees a version with no tag yet, builds the Android APK
+#      and iOS simulator app, and publishes a GitHub *pre-release* vX.Y.Z-beta.N
+#      with both attached.
+# Pre-releases never trigger the production deploy (release.yml skips them).
+
+on:
+  push:
+    branches: [master]
+
+concurrency:
+  group: release-beta
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  version-pr:
+    name: Version packages PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - name: Create or update the version PR
+        uses: changesets/action@v1
+        with:
+          version: pnpm version-packages
+          commit: "chore: version packages"
+          title: "chore: version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  detect:
+    name: Is there an untagged version?
+    runs-on: ubuntu-latest
+    outputs:
+      new: ${{ steps.v.outputs.new }}
+      version: ${{ steps.v.outputs.version }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: v
+        run: |
+          version="$(node -p "require('./backend/package.json').version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          case "$version" in *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;; *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;; esac
+          # 0.0.0 is the pre-first-release placeholder; never publish it.
+          if [ "$version" != "0.0.0" ] && ! git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::v$version already released (or placeholder); nothing to publish."
+          fi
+
+  build:
+    name: Build mobile artifacts
+    needs: detect
+    if: needs.detect.outputs.new == 'true'
+    uses: ./.github/workflows/mobile.yml
+    with:
+      variant: release
+      # Repository variable: the API the shipped app talks to (e.g. staging).
+      api_url: ${{ vars.MOBILE_API_URL }}
+      skip_e2e: true
+
+  release:
+    name: Publish GitHub release
+    needs: [detect, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v5
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Release notes from the changelog
+        env:
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          # The fixed group gives every package the same entry; backend's is canonical.
+          awk -v v="## $VERSION" '$0==v{f=1;next} /^## /{f=0} f' backend/CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "See the package changelogs for $VERSION." > notes.md
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.detect.outputs.version }}
+          PRERELEASE: ${{ needs.detect.outputs.prerelease }}
+        run: |
+          flags=""
+          [ "$PRERELEASE" = "true" ] && flags="--prerelease"
+          gh release create "v$VERSION" dist/zenflow-android.apk dist/zenflow-ios-simulator.zip \
+            --target "$GITHUB_SHA" --title "v$VERSION" --notes-file notes.md $flags

@@ -153,6 +153,7 @@ function OtpBoxes({
         onChangeText={(v) =>
           onChangeText(v.replace(/[^0-9]/g, "").slice(0, OTP_LENGTH))
         }
+        testID="login.otp"
         keyboardType="number-pad"
         maxLength={OTP_LENGTH}
         editable={!disabled}
@@ -322,6 +323,7 @@ export default function LoginScreen() {
                     name={field.name}
                     label={t("Email")}
                     labelClassName="text-[14px] font-semibold"
+                    testID="login.email"
                     placeholder="m@example.com"
                     keyboardType="email-address"
                     autoCapitalize="none"
@@ -343,6 +345,7 @@ export default function LoginScreen() {
           ) : (
             <View>
               <Pressable
+                testID="login.change-email"
                 disabled={otpLockout.active}
                 onPress={() => {
                   if (otpLockout.active) return;
@@ -436,6 +439,7 @@ export default function LoginScreen() {
               ) : (
                 <Button
                   variant="ghost"
+                  testID="login.resend"
                   disabled={submitting}
                   onPress={() => handleEmailRequest({ email })}
                   className="w-full rounded-xl"
@@ -460,6 +464,7 @@ export default function LoginScreen() {
             ) : (
               <Button
                 className="mt-[18px] flex-row h-[52px] rounded-xl"
+                testID="login.submit"
                 disabled={submitting}
                 onPress={handleSubmit(onSubmit)}
               >

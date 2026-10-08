@@ -48,3 +48,4 @@ expo-env.d.ts
 android
 ios
 notes.txt
+e2e/results/

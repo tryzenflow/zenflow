@@ -23,13 +23,14 @@ pnpm dev:web        # expo start -c --web -> http://localhost:8081
 pnpm ios:personal-team  # prebuild + run on a device with a free Apple team
 pnpm export         # static web export -> dist/
 pnpm typecheck      # tsc --noEmit
-pnpm test           # vitest run (lib/**/*.test.ts only)
+pnpm test           # unit + component tests (see docs/mobile/testing.md)
+pnpm e2e            # Maestro smoke flows against a booted device
 pnpm format         # Biome
 ```
 
 A new native module needs a fresh dev-client build (`pnpm android` / `pnpm ios`); the offline cache
 (MMKV, NetInfo) and glass blur (`expo-blur`) are such modules.
-Components have no automated coverage; Vitest covers pure RN-free `lib/` logic only.
+Tests are layered (unit, component with MSW, Maestro e2e); how to run each is in [`docs/mobile/testing.md`](../docs/mobile/testing.md).
 
 ## Environment
 

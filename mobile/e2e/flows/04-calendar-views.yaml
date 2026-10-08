@@ -1,0 +1,23 @@
+appId: com.zenflow.app
+tags: [smoke]
+---
+- runFlow: ../subflows/launch-signed-in.yaml
+- assertVisible:
+    id: tab.index
+- tapOn:
+    id: tab.month
+- extendedWaitUntil:
+    visible:
+      id: tab.month
+    timeout: 10000
+- tapOn:
+    id: tab.settings
+- scrollUntilVisible:
+    element:
+      id: settings.sign-out
+- assertVisible:
+    id: settings.sign-out
+- tapOn:
+    id: tab.index
+- assertVisible:
+    id: fab.new-task

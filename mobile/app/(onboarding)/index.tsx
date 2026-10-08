@@ -466,6 +466,7 @@ export default function OnboardingScreen() {
     <Button
       size="lg"
       className="rounded-xl"
+      testID="onboarding.primary"
       disabled={busy || disabled}
       onPress={onPress}
     >
@@ -473,7 +474,12 @@ export default function OnboardingScreen() {
     </Button>
   );
   const ghost = (label: string, onPress: () => void) => (
-    <Pressable onPress={onPress} disabled={busy} className="items-center py-3">
+    <Pressable
+      testID="onboarding.secondary"
+      onPress={onPress}
+      disabled={busy}
+      className="items-center py-3"
+    >
       <Text className="text-[14px] font-medium text-muted-foreground">
         {label}
       </Text>
@@ -552,6 +558,7 @@ export default function OnboardingScreen() {
                 role="switch"
                 aria-checked={notif.active}
                 accessibilityLabel={COPY.notifications.rowTitle}
+                testID="onboarding.notifications-switch"
                 className={cn(
                   "h-[26px] w-[46px] justify-center rounded-full px-[3px]",
                   notif.active
