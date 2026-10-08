@@ -8,6 +8,7 @@ import {
   isOutsideMonth,
   isWeekendColumn,
   monthLabel,
+  monthPillCap,
   splitCellSessions,
 } from "../month-date-math";
 
@@ -261,9 +262,7 @@ describe("groupSessionsByDate", () => {
       const grouped = groupSessionsByDate(tasks, tz);
 
       expect(grouped.size).toBe(1);
-      expect(grouped.get("2026-06-15")?.map((t) => t.id)).toEqual([
-        "same-day",
-      ]);
+      expect(grouped.get("2026-06-15")?.map((t) => t.id)).toEqual(["same-day"]);
       expect(isContinuationEntry(grouped.get("2026-06-15")![0])).toBe(false);
     });
 
@@ -301,5 +300,16 @@ describe("groupSessionsByDate", () => {
       expect(grouped.has("2026-06-16")).toBe(true);
       expect(isContinuationEntry(grouped.get("2026-06-16")![0])).toBe(true);
     });
+  });
+});
+
+describe("monthPillCap", () => {
+  it("shows everything that fits and reserves a slot for +N otherwise", () => {
+    expect(monthPillCap(96, 2)).toBe(2);
+    expect(monthPillCap(96, 5)).toBe(2);
+  });
+  it("never exceeds the cap and always shows at least one", () => {
+    expect(monthPillCap(400, 9)).toBe(4);
+    expect(monthPillCap(40, 5)).toBe(1);
   });
 });

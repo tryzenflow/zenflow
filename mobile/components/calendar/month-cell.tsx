@@ -11,6 +11,8 @@ import {
   isContinuationEntry,
   isOutsideMonth,
   MONTH_CELL_VISIBILITY_WEIGHTS,
+  MONTH_PILL_CAP,
+  monthPillCap,
   splitCellSessions,
 } from "@/lib/month-date-math";
 import { isSessionPastDeadline } from "@/lib/overdue";
@@ -22,7 +24,7 @@ import {
 } from "@/lib/task-card";
 import { cn } from "@/lib/utils";
 import type { Session } from "@zenflow/shared";
-import { memo, useEffect, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { sessionTypeIcon } from "./session-type-badge";
@@ -161,7 +163,15 @@ export const MonthCell = memo(function MonthCell({
       ),
     [sessions],
   );
-  const { visible, overflowCount } = splitCellSessions(bySeverity);
+  // Measured height decides how many pills fit; the fixed cap is only the
+  // first-frame fallback.
+  const [cellHeight, setCellHeight] = useState<number | null>(null);
+  const { visible, overflowCount } = splitCellSessions(
+    bySeverity,
+    cellHeight == null
+      ? MONTH_PILL_CAP
+      : monthPillCap(cellHeight, bySeverity.length),
+  );
   // Pills that replace placeholders fade in; pills present from the start
   // (a cached month) just render.
   const hadSkeletonRef = useRef(loading);
@@ -171,6 +181,7 @@ export const MonthCell = memo(function MonthCell({
   return (
     <Pressable
       onPress={handlePress}
+      onLayout={(e) => setCellHeight(e.nativeEvent.layout.height)}
       style={{ width: `${100 / 7}%` }}
       className={cn(
         "overflow-hidden border-b border-r border-border p-[5px] pb-[6px]",
@@ -213,29 +224,29 @@ export const MonthCell = memo(function MonthCell({
           )}
         </View>
       ) : (
-      <Animated.View
-        entering={hadSkeletonRef.current ? FadeIn.duration(200) : undefined}
-        className={cn("mt-1 gap-[3px]", outside && "opacity-60")}
-      >
-        {visible.map((task) => (
-          <MonthPill
-            key={task.id}
-            session={task}
-            hidden={draggingSessionId === task.id}
-          />
-        ))}
-        {overflowCount > 0 && (
-          <Pressable
-            onPress={() => onPressOverflow(day, sessions)}
-            hitSlop={6}
-            className="rounded-[5px] px-1 py-0.5"
-          >
-            <Text className="text-[9.5px] font-bold leading-tight text-muted-foreground">
-              +{overflowCount}
-            </Text>
-          </Pressable>
-        )}
-      </Animated.View>
+        <Animated.View
+          entering={hadSkeletonRef.current ? FadeIn.duration(200) : undefined}
+          className={cn("mt-1 gap-[3px]", outside && "opacity-60")}
+        >
+          {visible.map((task) => (
+            <MonthPill
+              key={task.id}
+              session={task}
+              hidden={draggingSessionId === task.id}
+            />
+          ))}
+          {overflowCount > 0 && (
+            <Pressable
+              onPress={() => onPressOverflow(day, sessions)}
+              hitSlop={6}
+              className="rounded-[5px] px-1 py-0.5"
+            >
+              <Text className="text-[9.5px] font-bold leading-tight text-muted-foreground">
+                +{overflowCount}
+              </Text>
+            </Pressable>
+          )}
+        </Animated.View>
       )}
     </Pressable>
   );
