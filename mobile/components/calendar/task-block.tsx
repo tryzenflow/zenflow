@@ -162,10 +162,11 @@ function LocationChip({ location }: { location: string }) {
   const online = isOnlineLocation(location);
   const Icon = online ? Globe : MapPin;
   return (
-    <View className="min-w-0 flex-row items-center gap-1 rounded bg-white/40 px-1.5 py-0.5 dark:bg-white/10">
-      <Icon size={11} className="shrink-0 text-muted-foreground" />
+    <View className="min-w-0 flex-row items-center gap-1 self-start rounded-full border border-foreground/10 bg-white/50 px-2 py-[3px] dark:bg-white/10">
+      <Icon size={13} className="shrink-0 text-muted-foreground" />
       <Text
-        className="shrink text-[10.5px] font-medium leading-none text-muted-foreground"
+        className="shrink text-[11px] font-medium leading-[14px] text-muted-foreground"
+        style={COMPACT_TEXT_STYLE}
         numberOfLines={1}
         ellipsizeMode="tail"
       >
@@ -966,7 +967,7 @@ function SessionBlockImpl({
                 </View>
               )}
               <Text
-                className={cn("shrink-0 text-[9px] leading-[12px]", timeClass)}
+                className={cn("shrink-0 text-[11.5px] font-medium leading-[14px]", timeClass)}
                 style={COMPACT_TEXT_STYLE}
               >
                 {segment.continued
@@ -998,7 +999,7 @@ function SessionBlockImpl({
               </View>
               <View className="flex-row flex-wrap items-center gap-1">
                 <Text
-                  className={cn("text-[10px] font-medium leading-[12px]", timeClass)}
+                  className={cn("text-[12px] font-medium leading-[15px]", timeClass)}
                 >
                   {segment.continued
                     ? t("cont. → {time}", { time: fmt(segment.taskEnd, tz) })
