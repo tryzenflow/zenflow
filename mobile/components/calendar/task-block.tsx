@@ -738,16 +738,16 @@ function SessionBlockImpl({
   // mitred, uneven outline); the coloured accent is a separate rounded bar
   // inset inside the block, like Apple Calendar.
   const stateClasses = overdue
-    ? `${flashRing} bg-red-500/12 dark:bg-red-500/18`
+    ? `${flashRing} bg-red-500/[0.12] dark:bg-red-500/[0.22]`
     : state === "dnd"
-      ? `${flashRing} bg-slate-500/[0.06] dark:bg-slate-400/[0.08]`
+      ? `${flashRing} bg-slate-500/[0.07] dark:bg-slate-400/[0.14]`
       : state === "assignment"
-        ? `${flashRing} bg-teal-400/12`
+        ? `${flashRing} bg-teal-400/[0.12] dark:bg-teal-400/[0.16]`
         : state === "exam"
-          ? `${flashRing} bg-rose-400/12`
+          ? `${flashRing} bg-rose-400/[0.12] dark:bg-rose-400/[0.16]`
           : state === "lecture"
-            ? `${flashRing} bg-sky-400/12`
-            : `${flashRing} bg-primary/[0.11] dark:bg-primary/[0.12]`;
+            ? `${flashRing} bg-sky-400/[0.12] dark:bg-sky-400/[0.16]`
+            : `${flashRing} bg-primary/[0.11] dark:bg-primary/[0.16]`;
   // Solid single-colour rim, drawn as its own overlay ABOVE the blur: a border on
   // the blurred container itself came out jagged (the blur mask isn't anti-aliased).
   const edgeColor = isDarkColorScheme
