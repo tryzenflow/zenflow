@@ -42,7 +42,7 @@ export function DurationStepper({
         onPress={() => step(-SLOT_MINUTES)}
         accessibilityLabel={t("Decrease duration by 15 minutes")}
         className={cn(
-          "h-11 w-11 items-center justify-center rounded-xl border border-input bg-card",
+          "h-11 w-11 items-center justify-center rounded-xl border border-glass-edge/35 bg-glass/70 dark:border-glass-edge/25 dark:bg-glass/[0.07]",
           !canDecrement && "opacity-40",
         )}
       >
@@ -60,7 +60,7 @@ export function DurationStepper({
         onPress={() => step(SLOT_MINUTES)}
         accessibilityLabel={t("Increase duration by 15 minutes")}
         className={cn(
-          "h-11 w-11 items-center justify-center rounded-xl border border-input bg-card",
+          "h-11 w-11 items-center justify-center rounded-xl border border-glass-edge/35 bg-glass/70 dark:border-glass-edge/25 dark:bg-glass/[0.07]",
           !canIncrement && "opacity-40",
         )}
       >

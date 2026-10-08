@@ -60,7 +60,7 @@ export function RecurrenceField({
                 "flex-1 items-center rounded-lg border px-2 py-2",
                 active
                   ? "border-primary bg-primary/10"
-                  : "border-input bg-card",
+                  : "border-glass-edge/35 bg-glass/70 dark:border-glass-edge/25 dark:bg-glass/[0.07]",
                 disabled && "opacity-50",
               )}
             >
@@ -100,7 +100,7 @@ export function RecurrenceField({
                   "h-9 w-9 items-center justify-center rounded-full border",
                   active
                     ? "border-primary bg-primary/10"
-                    : "border-input bg-card",
+                    : "border-glass-edge/35 bg-glass/70 dark:border-glass-edge/25 dark:bg-glass/[0.07]",
                   disabled && "opacity-50",
                 )}
               >
@@ -142,7 +142,7 @@ export function RecurrenceField({
                 onPress={() => set({ until: undefined })}
                 accessibilityLabel={t("Clear end date")}
                 className={cn(
-                  "h-[46px] items-center justify-center rounded-xl border border-input bg-card px-3",
+                  "h-[46px] items-center justify-center rounded-xl border border-glass-edge/35 bg-glass/70 dark:border-glass-edge/25 dark:bg-glass/[0.07] px-3",
                   disabled && "opacity-50",
                 )}
               >

@@ -1,8 +1,12 @@
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
-import { Pencil, X } from "@/components/Icons";
-import { Switch } from "@/components/ui/switch";
+import { Eye, Pencil, X } from "@/components/Icons";
+import { SunriseBackdrop } from "@/components/brand/sunrise-backdrop";
+import { useColorScheme } from "@/lib/useColorScheme";
+import { Glass } from "@/components/ui/glass";
 import { Text } from "@/components/ui/text";
+import { cn } from "@/lib/utils";
+import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { type ReactNode, createContext, useContext, useRef } from "react";
 import {
@@ -11,6 +15,7 @@ import {
   Pressable,
   ScrollView,
   type ScrollViewInstance,
+  StyleSheet,
   View,
   type ViewInstance,
   findNodeHandle,
@@ -30,6 +35,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
  * resizes the *window*; it doesn't scroll this ScrollView's content to
  * reveal whatever's now supposed to be visible in the shrunk viewport).
  */
+/** Scroll padding that keeps the last field clear of the glass footer (52 button + padding). */
+const FOOTER_CLEARANCE = 96;
+
 const SessionFormScrollContext =
   createContext<React.RefObject<ScrollViewInstance | null> | null>(null);
 
@@ -83,6 +91,59 @@ export function useScrollIntoViewOnFocus() {
 }
 
 /**
+ * View | Edit segmented control for the header. Two labelled-by-icon segments
+ * (eye, pencil) with the active one filled, so it cannot be mistaken for the
+ * delete or close buttons beside it.
+ */
+function ModeToggle({
+  value,
+  onValueChange,
+}: {
+  value: boolean;
+  onValueChange: (value: boolean) => void;
+}) {
+  const Segment = ({
+    editing,
+    Icon,
+    label,
+  }: {
+    editing: boolean;
+    Icon: typeof Eye;
+    label: string;
+  }) => {
+    const active = value === editing;
+    return (
+      <Pressable
+        onPress={() => {
+          if (active) return;
+          Haptics.selectionAsync().catch(() => {});
+          onValueChange(editing);
+        }}
+        accessibilityRole="button"
+        accessibilityState={{ selected: active }}
+        accessibilityLabel={label}
+        hitSlop={4}
+        className={cn(
+          "h-9 w-11 items-center justify-center rounded-full",
+          active && "bg-primary",
+        )}
+      >
+        <Icon
+          size={20}
+          className={active ? "text-primary-foreground" : "text-muted-foreground"}
+        />
+      </Pressable>
+    );
+  };
+  return (
+    <Glass radius={22} intensity={30} style={{ padding: 3, flexDirection: "row" }}>
+      <Segment editing={false} Icon={Eye} label={t("View")} />
+      <Segment editing Icon={Pencil} label={t("Edit")} />
+    </Glass>
+  );
+}
+
+/**
  * Shared chrome for the task create/edit screens (`app/task/new.tsx`,
  * `app/task/[id]/edit.tsx`) — was previously each sheet's own hand-rolled
  * header + `BottomSheetScrollView` + `BottomSheetFooter` before the task
@@ -118,6 +179,7 @@ export function SessionFormScreen({
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const scrollViewRef = useRef<ScrollViewInstance | null>(null);
+  const { isDarkColorScheme } = useColorScheme();
 
   return (
     <View
@@ -125,9 +187,12 @@ export function SessionFormScreen({
       style={{
         // iOS modal page sheet already sits below the status bar.
         paddingTop: Platform.OS === "ios" ? 14 : insets.top,
-        paddingBottom: insets.bottom,
+        // No bottom padding: the glass footer runs to the screen's bottom edge
+        // and the scroll content pads itself clear of it.
       }}
     >
+      {/* A faint wash of the logo gradient: the glass fields need something to frost. */}
+      <SunriseBackdrop dark={isDarkColorScheme} intensity={0.6} />
       <View className="flex-row items-center justify-between gap-3 border-b border-border px-5 pb-3.5 pt-2">
         <View className="flex-1">
           <Text className="text-[19px] font-bold tracking-tight">{title}</Text>
@@ -137,24 +202,15 @@ export function SessionFormScreen({
             </Text>
           )}
         </View>
-        <View className="flex-row items-center gap-3.5">
+        <View className="flex-row items-center gap-2.5">
           {headerRight}
-          {editSwitch && (
-            <View className="flex-row items-center gap-1.5">
-              <Pencil size={14} className="text-muted-foreground" />
-              <Switch
-                checked={editSwitch.value}
-                onCheckedChange={editSwitch.onValueChange}
-                accessibilityLabel={t("Edit")}
-              />
-            </View>
-          )}
+          {editSwitch && <ModeToggle {...editSwitch} />}
           <Pressable
             onPress={() => router.back()}
             accessibilityLabel={t("Close")}
-            className="h-8 w-8 items-center justify-center rounded-full bg-muted"
+            className="h-10 w-10 items-center justify-center rounded-full bg-muted"
           >
-            <X size={16} className="text-muted-foreground" />
+            <X size={20} className="text-muted-foreground" />
           </Pressable>
         </View>
       </View>
@@ -175,7 +231,10 @@ export function SessionFormScreen({
         <ScrollView
           ref={scrollViewRef}
           className="flex-1 px-5 pt-4"
-          contentContainerStyle={{ paddingBottom: 32 }}
+          contentContainerStyle={{
+            paddingBottom:
+              footer != null ? FOOTER_CLEARANCE + insets.bottom : 32 + insets.bottom,
+          }}
           keyboardShouldPersistTaps="handled"
         >
           <SessionFormScrollContext.Provider value={scrollViewRef}>
@@ -184,8 +243,25 @@ export function SessionFormScreen({
         </ScrollView>
 
         {footer != null && (
-          <View className="border-t border-border bg-background px-5 py-3 shadow-lg shadow-primary/10">
-            {footer}
+          // Glass over the scrolling form, pinned to the bottom edge.
+          <View
+            pointerEvents="box-none"
+            style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}
+          >
+            <Glass
+              radius={0}
+              clear
+              intensity={60}
+              style={{
+                borderWidth: 0,
+                borderTopWidth: StyleSheet.hairlineWidth,
+                paddingHorizontal: 20,
+                paddingTop: 12,
+                paddingBottom: insets.bottom + 12,
+              }}
+            >
+              {footer}
+            </Glass>
           </View>
         )}
       </KeyboardAvoidingView>

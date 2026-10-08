@@ -87,7 +87,7 @@ export function SessionSheetFields({
                 value={field.value}
                 onChangeText={field.onChange}
                 placeholder={t("What needs doing?")}
-                className="h-[50px] rounded-xl border border-input bg-card px-4 text-base text-foreground"
+                className="h-[50px] rounded-xl border border-glass-edge/35 bg-glass/70 dark:border-glass-edge/25 dark:bg-glass/[0.07] px-4 text-base text-foreground"
               />
               <Text
                 className={cn(
@@ -138,7 +138,7 @@ export function SessionSheetFields({
               numberOfLines={1}
               autoCapitalize="none"
               autoCorrect={false}
-              className="h-[50px] rounded-xl border border-input bg-card px-4 text-base text-foreground"
+              className="h-[50px] rounded-xl border border-glass-edge/35 bg-glass/70 dark:border-glass-edge/25 dark:bg-glass/[0.07] px-4 text-base text-foreground"
             />
           </Field>
         )}

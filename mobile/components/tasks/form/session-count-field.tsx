@@ -166,7 +166,7 @@ export function SessionCountField({
             }}
           >
             <View
-              className="rounded-full bg-muted"
+              className="rounded-full bg-foreground/15"
               style={{ height: TRACK_HEIGHT }}
             />
             <View

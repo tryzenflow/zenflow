@@ -175,7 +175,7 @@ export function DescriptionField({
         accessibilityRole="button"
         accessibilityLabel={t("Description")}
         className={cn(
-          "min-h-[96px] flex-row items-start gap-3 rounded-[13px] border border-input bg-card px-3.5 py-3 active:bg-muted/40",
+          "min-h-[96px] flex-row items-start gap-3 rounded-[13px] border border-glass-edge/35 bg-glass/70 dark:border-glass-edge/25 dark:bg-glass/[0.07] px-3.5 py-3 active:bg-muted/40",
           disabled && "opacity-50",
         )}
       >
@@ -246,6 +246,9 @@ function DescriptionFieldEditor({
   const bootContentRef = useRef(initialValue);
   const [linkOpen, setLinkOpen] = useState(false);
   const [isEmpty, setIsEmpty] = useState(() => isNoteEmpty(initialValue));
+  // "selection": a text range is selected (or sits in a link) -> URL only, applied to that
+  // text. "insert": nothing selected -> title + URL inserted as a new link at the end.
+  const [linkMode, setLinkMode] = useState<"selection" | "insert">("insert");
   const [linkTitle, setLinkTitle] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [fontDataUri, setFontDataUri] = useState<string | null>(null);
@@ -374,32 +377,34 @@ function DescriptionFieldEditor({
   }, [disabled]);
 
   function openLink() {
-    // `LinkBridge`'s `onBridgeMessage`/`extendEditorState` run inside
-    // `@10play/tentap-editor`'s statically-bundled WebView HTML, not this RN
-    // module — there's no way to patch its `extendMarkRange('link')`-on-a-
-    // collapsed-selection no-op from here (confirmed empirically: a custom
-    // `BridgeExtension` with a fixed `onBridgeMessage` typechecks and
-    // constructs fine, but the WebView only ever runs its own pre-compiled
-    // handler for a given extension name). `editor.setLink()` therefore
-    // can't reliably apply a link mark to a text selection from RN at all —
-    // so this skips the select-text-first flow entirely and just inserts a
-    // brand-new `<a>` (title + link) at the end of the content instead, the
-    // same way file uploads already do it. No dependency on
-    // `state.canSetLink`/`isLinkActive`/selection.
+    // With text selected, `editor.setLink(url)` marks exactly that text (tentap's
+    // LinkBridge runs `extendMarkRange('link').setLink(...)` on the selection).
+    // Only a collapsed cursor can't take a link, so that case inserts a new
+    // titled `<a>` at the end, the same way file uploads do.
+    const onText = !!state.canSetLink || !!state.isLinkActive;
+    setLinkMode(onText ? "selection" : "insert");
     setLinkTitle("");
-    setLinkUrl("");
+    setLinkUrl(state.activeLink ?? "");
     setLinkOpen(true);
   }
 
   async function confirmLink() {
-    const url = linkUrl.trim();
+    let url = linkUrl.trim();
+    if (linkMode === "selection") {
+      // Empty URL on a selection removes the link; otherwise apply it.
+      if (url && !/^[a-z][a-z0-9+.-]*:/i.test(url)) url = `https://${url}`;
+      editor.setLink(url);
+      setLinkOpen(false);
+      return;
+    }
     if (!url) {
       setLinkOpen(false);
       return;
     }
-    const title = linkTitle.trim() || url;
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = `https://${url}`;
+    const title = escapeHtml(linkTitle.trim() || url);
     const html = await editor.getHTML();
-    const fullHtml = `${html} <a href="${url}">${title}</a>`;
+    const fullHtml = `${html} <a href="${escapeHtml(url)}">${title}</a>`;
     valueRef.current = fullHtml;
     editor.setContent(fullHtml);
     onChange(fullHtml);
@@ -594,7 +599,7 @@ function DescriptionFieldEditor({
                   onPress={() => applyTemplate(tpl.sections)}
                   accessibilityRole="button"
                   accessibilityLabel={t(tpl.title)}
-                  className="w-[48%] gap-2 rounded-2xl border border-input bg-card p-3.5 active:bg-muted/50"
+                  className="w-[48%] gap-2 rounded-2xl border border-glass-edge/35 bg-glass/70 dark:border-glass-edge/25 dark:bg-glass/[0.07] p-3.5 active:bg-muted/50"
                 >
                   <View className="h-9 w-9 items-center justify-center rounded-full bg-muted">
                     <tpl.icon size={18} className="text-foreground" />
@@ -621,18 +626,21 @@ function DescriptionFieldEditor({
         style={{ position: "absolute", left: 28, right: 28, bottom: barBottom }}
       >
         {linkOpen && (
-          <View className="mb-2 gap-1.5 rounded-2xl border border-input bg-card p-2.5">
-            <Input
-              autoFocus
-              editable={!disabled}
-              value={linkTitle}
-              onChangeText={setLinkTitle}
-              placeholder={t("Title (optional)")}
-              returnKeyType="next"
-              className="h-10 rounded-full border border-input bg-background px-3.5 text-[13px] text-foreground"
-            />
+          <View className="mb-2 gap-1.5 rounded-2xl border border-glass-edge/35 bg-glass/70 dark:border-glass-edge/25 dark:bg-glass/[0.07] p-2.5">
+            {linkMode === "insert" && (
+              <Input
+                autoFocus
+                editable={!disabled}
+                value={linkTitle}
+                onChangeText={setLinkTitle}
+                placeholder={t("Title (optional)")}
+                returnKeyType="next"
+                className="h-10 rounded-full border border-input bg-background px-3.5 text-[13px] text-foreground"
+              />
+            )}
             <View className="flex-row items-center gap-1.5">
               <Input
+                autoFocus={linkMode === "selection"}
                 editable={!disabled}
                 value={linkUrl}
                 onChangeText={setLinkUrl}

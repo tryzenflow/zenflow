@@ -187,7 +187,7 @@ export function InlineDateField({
       }
       disabled={disabled}
       className={cn(
-        "h-[46px] flex-row items-center justify-between rounded-xl border border-input bg-card px-3",
+        "h-[46px] flex-row items-center justify-between rounded-xl border border-glass-edge/35 bg-glass/70 dark:border-glass-edge/25 dark:bg-glass/[0.07] px-3",
         disabled && "opacity-50",
       )}
     >

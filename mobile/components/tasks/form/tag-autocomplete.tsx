@@ -258,7 +258,7 @@ export function TagAutocomplete({
         <BottomSheetOpenTrigger asChild disabled={disabled}>
           <Pressable
             className={cn(
-              "h-[46px] flex-row items-center gap-2 rounded-[13px] border border-input bg-card px-[13px]",
+              "h-[46px] flex-row items-center gap-2 rounded-[13px] border border-glass-edge/35 bg-glass/70 dark:border-glass-edge/25 dark:bg-glass/[0.07] px-[13px]",
               disabled && "opacity-50",
             )}
           >
