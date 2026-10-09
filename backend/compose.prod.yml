@@ -434,6 +434,7 @@ services:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./observability/prometheus/scrape.d/redis-exporter.yml:/etc/prometheus/scrape.d/redis-exporter.yml:ro
       - ./observability/prometheus/rules.d/redis-sessions.yml:/etc/prometheus/rules.d/redis-sessions.yml:ro
+      - ./observability/prometheus/rules.d/session-event-partitions.yml:/etc/prometheus/rules.d/session-event-partitions.yml:ro
       - prometheus_data:/prometheus
     expose:
       - "9090"
