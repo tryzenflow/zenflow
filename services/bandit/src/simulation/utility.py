@@ -61,8 +61,8 @@ def slot_utility(
     field = np.exp(-0.5 * z * z * (1.0 + duration_minutes / 240.0))
     # damp on busy days and pull toward the evening (field x load interaction)
     load = min(ctx.fixed_hours / 6.0, 1.0)
-    evening = np.exp(-0.5 * (_circ(h, 20.0) / 2.0) ** 2)
-    u = field * (1.0 - 0.35 * load) + 0.35 * load * evening
+    evening = np.exp(-0.5 * (_circ(h, p.evening_hour) / 2.0) ** 2)
+    u = field * (1.0 - p.load_sensitivity * load) + p.load_sensitivity * load * evening
     if p.daytime_strength and ctx.daytime_pull:
         # daytime obligations: damp the late-night peak and lift the afternoon,
         # in proportion to the pull (a day x task context term, not a table cell)
@@ -70,7 +70,7 @@ def slot_utility(
         day = np.exp(-0.5 * (_circ(h, 14.0) / 3.0) ** 2)
         u = u * (1.0 - 0.5 * k) + 0.9 * k * day
     # the hours opposite the peak (sleep) are bad for everyone
-    u = u - 0.45 * np.exp(-0.5 * (_circ(h, peak + 12.0) / 2.0) ** 2)
+    u = u - p.sleep_penalty * np.exp(-0.5 * (_circ(h, peak + 12.0) / 2.0) ** 2)
     if p.weekend_weight:
         u = u * (1.0 - 0.6 * p.weekend_weight / 0.7 * (1.0 - weekend))
         u = u + p.weekend_weight * weekend
