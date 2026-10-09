@@ -84,6 +84,29 @@ export class KillSwitchService implements OnModuleInit, OnModuleDestroy {
     this.redis = redis as KillSwitchRedis | null;
   }
 
+  /**
+   * Operator read: the stored values, with no fallback. Throws when the URL is
+   * unset or Redis cannot be read, so an operator never mistakes a default for
+   * saved state during an incident. Flags never toggled report their normal
+   * value.
+   */
+  async readStrict(): Promise<Record<KillSwitchFlag, boolean>> {
+    if (!this.redis) throw new Error("REDIS_KILLSWITCH_URL is not configured");
+    await this.whenReady(this.redis);
+    const raw = await this.redis.ksReadAll(
+      String(KILLSWITCH_FLAG_NAMES.length),
+      ...KILLSWITCH_FLAG_NAMES.map((f) => KILLSWITCH_KEY_PREFIX + f),
+    );
+    return Object.fromEntries(
+      KILLSWITCH_FLAG_NAMES.map((f, i) => [
+        f,
+        raw[i] === null || raw[i] === undefined
+          ? KILLSWITCH_FLAGS[f].normal
+          : raw[i] === "1",
+      ]),
+    ) as Record<KillSwitchFlag, boolean>;
+  }
+
   /** Publishes each flag's current state as a gauge, read from the cache. */
   onModuleInit(): void {
     killSwitchFlag.addCallback(async (result) => {
@@ -169,10 +192,6 @@ export class KillSwitchService implements OnModuleInit, OnModuleDestroy {
    * after construction would be rejected before the socket is up. Operator
    * paths (`set`, `history`) wait for the connection; request-path reads do not.
    */
-  async waitUntilReady(): Promise<void> {
-    if (this.redis) await this.whenReady(this.redis);
-  }
-
   private whenReady(redis: Redis, timeoutMs = 2000): Promise<void> {
     if (redis.status === "ready") return Promise.resolve();
     return new Promise((resolve, reject) => {

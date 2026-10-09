@@ -185,6 +185,29 @@ describe("IngestionFetchService", () => {
       expect(m.schedule.recordOutcome).not.toHaveBeenCalled();
     });
 
+    it("parks a claimed scheduled job while ingestion is off instead of completing it", async () => {
+      const m = await make({ INGESTION_ENABLED: false });
+      const j = job(data());
+
+      await expect(m.service.handle(j, "tok")).rejects.toBeInstanceOf(
+        DelayedError,
+      );
+
+      expect(j.moveToDelayed).toHaveBeenCalledWith(expect.any(Number), "tok");
+      expect(m.timetable.syncOne).not.toHaveBeenCalled();
+      expect(m.schedule.recordOutcome).not.toHaveBeenCalled();
+    });
+
+    it("completes a manual job as skipped while ingestion is off", async () => {
+      const m = await make({ INGESTION_ENABLED: false });
+      const j = job(data({ manual: true }));
+
+      await expect(m.service.handle(j, "tok")).resolves.toMatchObject({
+        skipped: true,
+      });
+      expect(j.moveToDelayed).not.toHaveBeenCalled();
+    });
+
     it("rethrows a failure for backoff while attempts remain, recording nothing", async () => {
       const m = await make();
       m.timetable.syncOne.mockRejectedValue(new Error("db gone"));

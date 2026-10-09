@@ -115,4 +115,33 @@ describe("KillSwitchService", () => {
     await ks.isEnabled("bandit");
     expect(redis.ksReadAll).toHaveBeenCalledTimes(1);
   });
+
+  describe("readStrict", () => {
+    it("returns stored values and the normal state for never-set flags", async () => {
+      const redis = fakeRedis();
+      redis.ksReadAll.mockResolvedValue(["0", null, null, "0", null]);
+      const flags = await (await build(redis)).readStrict();
+      expect(flags).toEqual({
+        ingestion: false,
+        notifications: true,
+        bandit: true,
+        signups: false,
+        maintenance: false,
+      });
+    });
+
+    it("rejects instead of falling back when Redis cannot be read", async () => {
+      const redis = fakeRedis();
+      redis.ksReadAll.mockRejectedValue(new Error("timeout"));
+      await expect((await build(redis)).readStrict()).rejects.toThrow(
+        "timeout",
+      );
+    });
+
+    it("rejects when REDIS_KILLSWITCH_URL is unset", async () => {
+      await expect((await build(null)).readStrict()).rejects.toThrow(
+        "REDIS_KILLSWITCH_URL",
+      );
+    });
+  });
 });

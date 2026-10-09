@@ -40,12 +40,10 @@ async function main(): Promise<number> {
   });
   try {
     const ks = app.get(KillSwitchService);
-    // `list` must show real state, not fail-safe defaults from a cold socket.
-    await ks.waitUntilReady();
     switch (command) {
       case "status":
       case "list": {
-        const flags = await ks.all();
+        const flags = await ks.readStrict();
         for (const f of KILLSWITCH_FLAG_NAMES) {
           console.log(`${f.padEnd(14)} ${flags[f] ? "on" : "off"}`);
         }
