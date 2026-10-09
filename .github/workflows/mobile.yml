@@ -135,7 +135,18 @@ jobs:
           fi
       - name: Prebuild (ios/ is gitignored)
         working-directory: mobile
-        run: pnpm exec expo prebuild --platform ios --clean
+        run: pnpm exec expo prebuild --platform ios --clean --no-install
+      # prebuild exits 0 even when its own pod install fails, so install here
+      # where a failure is visible, and retry runner I/O blips.
+      - name: Install pods
+        working-directory: mobile/ios
+        run: |
+          for attempt in 1 2 3; do
+            pod install && exit 0
+            echo "::warning::pod install failed (attempt $attempt)"
+            sleep 15
+          done
+          exit 1
       - uses: actions/cache@v4
         with:
           path: mobile/ios/Pods
