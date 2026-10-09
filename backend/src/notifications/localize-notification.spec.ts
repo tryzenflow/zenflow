@@ -7,6 +7,13 @@ import { FcmSender } from "../devices/fcm.sender";
 import { ApnsSender } from "../devices/apns.sender";
 import type { PushMessage, SendResult } from "../devices/types";
 import type { User } from "../../generated/prisma";
+import { ConfigService } from "@nestjs/config";
+import { NotificationPubSub } from "./notification-pubsub.service";
+import type { QueueService } from "../queue/queue.service";
+
+const pubsub = () => new NotificationPubSub(new ConfigService({}));
+const queue = () =>
+  ({ enqueueBestEffort: jest.fn() }) as unknown as QueueService;
 
 describe("Vietnamese notification delivery", () => {
   it("renders legacy canonical inbox rows in the current language after switching back to English", async () => {
@@ -28,7 +35,7 @@ describe("Vietnamese notification delivery", () => {
         count: jest.fn().mockResolvedValue(1),
       },
     } as unknown as PrismaService;
-    const service = new NotificationsService(prisma);
+    const service = new NotificationsService(prisma, pubsub(), queue());
     const vi = await service.list({ id: "u", lang: "VI_VN" } as User, {});
     expect(vi.notifications[0].title).toBe("Lịch thi mới: Algorithms");
     const en = await service.list({ id: "u", lang: "EN_US" } as User, {});
@@ -62,7 +69,7 @@ describe("Vietnamese notification delivery", () => {
           ]),
         },
       } as unknown as PrismaService;
-      const service = new NotificationsService(prisma);
+      const service = new NotificationsService(prisma, pubsub(), queue());
       const row = await service.create("u", {
         eventName: "assignment.group_created",
         title: "You have a new assignment from LMS",
@@ -90,7 +97,6 @@ describe("Vietnamese notification delivery", () => {
       };
       const push = new PushService(
         prisma,
-        service,
         sender as unknown as FcmSender,
         sender as unknown as ApnsSender,
       );

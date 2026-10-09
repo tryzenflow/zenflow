@@ -1,11 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  Logger,
-  Optional,
-  type OnApplicationBootstrap,
-} from "@nestjs/common";
-import { Cron, CronExpression, SchedulerRegistry } from "@nestjs/schedule";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { MAX_REMINDER_MINUTES } from "@zenflow/shared";
 import type { Prisma } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
@@ -18,11 +11,13 @@ import {
   planReminder,
 } from "../scheduler/core/reminder";
 import { expandRrule } from "../scheduler/core/recurrence";
+import { QueueService } from "../queue/queue.service";
+import { NOTIFY_QUEUE } from "../queue/queues";
+import { idempotencyKey } from "../queue/queue.types";
 
 /**
- * Timers are only armed for reminders firing within this window. It keeps
- * every delay far below the 32-bit `setTimeout` limit (~24.8 days); the sweep
- * re-arms the rest as they come into range.
+ * Jobs are only armed for reminders firing within this window; the sweep arms
+ * the rest as they come into range, which also picks up sessions that moved.
  */
 export const ARM_HORIZON_MS = 24 * 60 * 60 * 1000;
 const LOOKAHEAD_MS = ARM_HORIZON_MS + MAX_REMINDER_MINUTES * 60_000;
@@ -34,7 +29,9 @@ export const REMINDER_JITTER_MAX_MS = 10_000;
 /** Injection token for the jitter RNG (`() => [0, 1)`); defaults to `Math.random`. */
 export const REMINDER_RANDOM = Symbol("REMINDER_RANDOM");
 
-export const reminderJobName = (id: string): string => `reminder:${id}`;
+/** Job id of the delayed `notify:reminder` job for one reminder occurrence. */
+export const reminderJobId = (id: string, startsAtMs: number): string =>
+  idempotencyKey("reminder", id, startsAtMs);
 
 const WITH_SESSION = {
   session: { include: { series: true, user: true } },
@@ -43,47 +40,38 @@ type ReminderRow = Prisma.SessionReminderGetPayload<{
   include: typeof WITH_SESSION;
 }>;
 
-interface Armed {
-  userId: string;
-  startsAt: number;
-}
-
 /**
- * Worker-only (ADR-0011): arms and fires session reminders.
+ * Arms and fires session reminders on the `notify` queue (ADR-0007).
  *
- * Each reminder becomes a one-shot `SchedulerRegistry` timeout named
- * `reminder:<id>`. Timers are in-memory, so {@link sweep} (bootstrap + every 5
- * minutes) re-registers everything due within {@link ARM_HORIZON_MS} and drops
- * timers whose reminder is gone. API edits are picked up by the next sweep.
- * When a timer fires it re-reads the DB and only delivers if the plan is still
- * valid, and claims the occurrence with `updateMany` on `firedForStart`, so a
- * second worker (a deploy overlap) cannot double-send.
+ * Arming enqueues one delayed `reminder` job per reminder occurrence, job id
+ * `reminder_<id>_<startMs>`, so arming again (the 5-minute sweep, a
+ * `syncUser`) is a no-op. Nothing is cancelled: a deleted reminder, a moved
+ * session or a stale job is dropped when it fires, because {@link fire}
+ * re-reads the DB and only delivers if the plan is still valid for the start
+ * it was armed for. A moved session is re-armed for its new start.
  *
- * Delivery reuses `NotificationsService` (row + `NEW_SESSION` emit -> SSE and
- * push). A recurring fixed series keeps its reminders on the representative
- * row and fires once per occurrence (`firedForStart`).
+ * {@link fire} claims the occurrence in the same transaction that writes the
+ * notification row (`firedForStart`), so a retry or a second worker cannot
+ * double-send; the push/SSE announce goes through `NotificationsService.notify`.
+ * A recurring fixed series keeps its reminders on the representative row and
+ * fires once per occurrence.
  */
 @Injectable()
-export class ReminderSchedulerService implements OnApplicationBootstrap {
+export class ReminderSchedulerService {
   private readonly logger = new Logger(ReminderSchedulerService.name);
-  private readonly armed = new Map<string, Armed>();
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly registry: SchedulerRegistry,
     private readonly notifications: NotificationsService,
+    private readonly queue: QueueService,
     @Optional()
     @Inject(REMINDER_RANDOM)
     private readonly random: () => number = Math.random,
   ) {}
 
-  async onApplicationBootstrap(): Promise<void> {
-    await this.sweep();
-  }
-
   // ---- arming -------------------------------------------------------------
 
-  @Cron(CronExpression.EVERY_5_MINUTES)
+  /** Arm everything due within {@link ARM_HORIZON_MS} (watcher: bootstrap + every 5 min). */
   async sweep(): Promise<void> {
     try {
       await this.syncScope();
@@ -92,7 +80,7 @@ export class ReminderSchedulerService implements OnApplicationBootstrap {
     }
   }
 
-  /** Re-arm/cancel one user's timers now (called after any session mutation). */
+  /** Arm one user's reminders now (called after any session mutation). */
   async syncUser(userId: string): Promise<void> {
     try {
       await this.syncScope(userId);
@@ -122,17 +110,12 @@ export class ReminderSchedulerService implements OnApplicationBootstrap {
       include: WITH_SESSION,
     });
 
-    const wanted = new Set<string>();
     for (const row of rows) {
       const plan = this.planFor(row, now);
       if (!plan || plan.fireAt.getTime() - now.getTime() > ARM_HORIZON_MS) {
         continue;
       }
-      wanted.add(row.id);
-      this.arm(row.id, row.session.userId, plan.startsAt, plan.fireAt, now);
-    }
-    for (const [id, a] of [...this.armed]) {
-      if (!wanted.has(id) && (!userId || a.userId === userId)) this.cancel(id);
+      await this.arm(row.id, plan.startsAt, plan.fireAt, now);
     }
   }
 
@@ -168,27 +151,24 @@ export class ReminderSchedulerService implements OnApplicationBootstrap {
       : null;
   }
 
-  private arm(
+  private async arm(
     id: string,
-    userId: string,
     startsAt: Date,
     fireAt: Date,
     now: Date,
-  ): void {
-    const existing = this.armed.get(id);
-    if (existing && existing.startsAt === startsAt.getTime()) return;
-    this.cancel(id);
-    const timer = setTimeout(
-      () => void this.fire(id, startsAt.getTime()),
-      this.delayMs(startsAt, fireAt, now),
+  ): Promise<void> {
+    await this.queue.enqueueBestEffort(
+      NOTIFY_QUEUE,
+      { type: "reminder", reminderId: id, startsAt: startsAt.toISOString() },
+      {
+        jobId: reminderJobId(id, startsAt.getTime()),
+        delayMs: this.delayMs(startsAt, fireAt, now),
+      },
     );
-    timer.unref?.();
-    this.registry.addTimeout(reminderJobName(id), timer);
-    this.armed.set(id, { userId, startsAt: startsAt.getTime() });
   }
 
   /**
-   * Timer delay: the time until `fireAt` plus a uniform 5-10 s jitter (spreads
+   * Job delay: the time until `fireAt` plus a uniform 5-10 s jitter (spreads
    * push bursts), capped so delivery never lands after the session starts.
    */
   private delayMs(startsAt: Date, fireAt: Date, now: Date): number {
@@ -201,44 +181,47 @@ export class ReminderSchedulerService implements OnApplicationBootstrap {
     return Math.min(base + jitter, untilStart);
   }
 
-  /** Remove the timer for one reminder (no-op if absent). */
-  cancel(id: string): void {
-    const name = reminderJobName(id);
-    if (this.registry.doesExist("timeout", name)) {
-      this.registry.deleteTimeout(name);
-    }
-    this.armed.delete(id);
-  }
-
   // ---- firing -------------------------------------------------------------
 
-  /** Timer callback; exposed for tests. */
+  /**
+   * The `notify:reminder` job body. Returns normally for every "nothing to
+   * send" outcome; throws only on a real failure (DB), which BullMQ retries.
+   */
   async fire(id: string, armedStart: number): Promise<void> {
-    this.cancel(id);
-    try {
-      const now = new Date();
-      const row = await this.prisma.sessionReminder.findUnique({
-        where: { id },
-        include: WITH_SESSION,
-      });
-      if (!row) return;
-      // Allow for the arming jitter on top of the catch-up window.
-      const plan = this.planFor(
-        row,
-        now,
-        REMINDER_CATCH_UP_MS + REMINDER_JITTER_MAX_MS,
-      );
-      if (!plan) return; // moved into the past / deleted occurrence / DND
-      if (plan.startsAt.getTime() !== armedStart) {
-        // Session moved since arming: re-arm for the new start, don't fire.
-        if (plan.fireAt.getTime() - now.getTime() <= ARM_HORIZON_MS) {
-          this.arm(id, row.session.userId, plan.startsAt, plan.fireAt, now);
-        }
-        return;
+    const now = new Date();
+    const row = await this.prisma.sessionReminder.findUnique({
+      where: { id },
+      include: WITH_SESSION,
+    });
+    if (!row) return;
+    // Allow for the arming jitter on top of the catch-up window.
+    const plan = this.planFor(
+      row,
+      now,
+      REMINDER_CATCH_UP_MS + REMINDER_JITTER_MAX_MS,
+    );
+    if (!plan) return; // moved into the past / deleted occurrence / DND
+    if (plan.startsAt.getTime() !== armedStart) {
+      // Session moved since arming: arm the new start, don't fire.
+      if (plan.fireAt.getTime() - now.getTime() <= ARM_HORIZON_MS) {
+        await this.arm(id, plan.startsAt, plan.fireAt, now);
       }
+      return;
+    }
 
-      // Claim this occurrence so a racing re-arm / restart can't double-send.
-      const claimed = await this.prisma.sessionReminder.updateMany({
+    const s = row.session;
+    const text = buildReminderText({
+      sessionTitle: s.title,
+      startsAt: plan.startsAt,
+      now,
+      timezone: s.user.timezone,
+      location: s.location,
+      type: s.type,
+    });
+    // Claim and row in one transaction: a failure after the claim cannot lose
+    // the reminder, and a retry that sees the claim knows it was delivered.
+    const notification = await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.sessionReminder.updateMany({
         where: {
           id,
           OR: [
@@ -248,32 +231,30 @@ export class ReminderSchedulerService implements OnApplicationBootstrap {
         },
         data: { firedForStart: plan.startsAt },
       });
-      if (claimed.count === 0) return;
+      if (claimed.count === 0) return null;
+      return this.notifications.create(
+        s.userId,
+        {
+          eventName: "reminder.fired",
+          title: text.title,
+          content: text.content,
+          sessionId: s.id,
+          eventEndsAt: new Date(
+            plan.startsAt.getTime() + s.durationMinutes * 60_000,
+          ),
+        },
+        tx,
+      );
+    });
+    if (!notification) return;
+    // Awaited (with a short retry) so a transient queue blip does not lose
+    // the push; a drop is repaired by `NotificationsService.reconcileRecent`.
+    await this.notifications.announce(
+      NotificationEvent.NEW_SESSION,
+      notification,
+    );
 
-      const s = row.session;
-      const text = buildReminderText({
-        sessionTitle: s.title,
-        startsAt: plan.startsAt,
-        now,
-        timezone: s.user.timezone,
-        location: s.location,
-        type: s.type,
-      });
-      const notification = await this.notifications.create(s.userId, {
-        eventName: "reminder.fired",
-        title: text.title,
-        content: text.content,
-        sessionId: s.id,
-        eventEndsAt: new Date(
-          plan.startsAt.getTime() + s.durationMinutes * 60_000,
-        ),
-      });
-      this.notifications.notify(NotificationEvent.NEW_SESSION, notification);
-
-      // A recurring series: line up the next occurrence.
-      if (s.series?.rrule) await this.syncUser(s.userId);
-    } catch (err) {
-      this.logger.warn(`reminder ${id} failed: ${(err as Error).message}`);
-    }
+    // A recurring series: line up the next occurrence.
+    if (s.series?.rrule) await this.syncUser(s.userId);
   }
 }

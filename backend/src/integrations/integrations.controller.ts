@@ -3,12 +3,15 @@ import {
   Controller,
   Delete,
   Get,
+  HttpStatus,
   Param,
   ParseEnumPipe,
   Post,
   Patch,
+  Res,
   UseGuards,
 } from "@nestjs/common";
+import type { Response } from "express";
 import type { IntegrationProvider } from "@zenflow/shared";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
@@ -55,15 +58,25 @@ export class IntegrationsController {
    * `lastSyncStatus` describe the run just performed.
    *
    * Cooldown: 429 + `Retry-After` while the provider's last run (manual or
-   * background) is under `SYNC_MANUAL_COOLDOWN_SEC` old. A failed pass is a 502.
+   * background) is under `SYNC_MANUAL_COOLDOWN_SEC` old. A failed pass is a 502;
+   * a sync still running after `SYNC_MANUAL_WAIT_MS` is a 202 with `syncPending`.
    */
   @Post(":provider/sync")
   async sync(
     @CurrentUser() user: User,
     @Param("provider", new ParseEnumPipe(IntegrationProviderEnum))
     provider: IntegrationProvider,
+    @Res({ passthrough: true }) res: Response,
   ) {
     const status = await this.integrations.sync(user, provider);
+    if (status.syncPending) {
+      res.status(HttpStatus.ACCEPTED);
+      return {
+        success: true,
+        message: `${provider} sync queued`,
+        data: status,
+      };
+    }
     return {
       success: true,
       message: `${provider} sync finished`,

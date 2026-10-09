@@ -1,13 +1,16 @@
 import { Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Cron, CronExpression } from "@nestjs/schedule";
-import { UpstreamUnavailableError } from "../common/outbound-breaker";
 import { LMSService } from "../lms/lms.service";
 import { PortalAPIService } from "../portal/portal-api.service";
 import { runCronJob } from "../observability/cron";
-import { EnrollmentDiscoveryService } from "./enrollment-discovery.service";
-import { ExamWatcherService } from "./exam-watcher.service";
-import { LmsWatcherService } from "./lms-watcher.service";
+import { QueueService } from "../queue/queue.service";
+import {
+  LMS_FETCH_QUEUE,
+  PORTAL_FETCH_QUEUE,
+  type FetchJobData,
+} from "../queue/queues";
+import { idempotencyKey } from "../queue/queue.types";
 import { resolveSemester } from "./core/semester";
 import {
   batchSizeFor,
@@ -20,35 +23,33 @@ import {
   IngestionScheduleService,
   type ClaimedTarget,
 } from "./ingestion-schedule.service";
-import { TimetableWatcherService } from "./timetable-watcher.service";
-import {
-  errorMessage,
-  isIngestionEnabled,
-  type PassOutcome,
-} from "./watcher-support";
+import { errorMessage, isIngestionEnabled } from "./watcher-support";
 
 /** What one tick did, per kind — returned for tests and logged when non-empty. */
 export interface TickSummary {
+  /** Targets claimed and handed to a fetch queue. */
   claimed: number;
-  ok: number;
-  failed: number;
-  servedFromCache: number;
   byKind: Partial<Record<SyncKindName, number>>;
-  /** Claims handed back unrun because their upstream's breaker was open. */
+  /** Claims handed back un-enqueued because the queue refused the job. */
   released: number;
-  /** Providers whose work was cut short this tick by an open breaker. */
+  /** Providers skipped this tick because their breaker is open. */
   pausedProviders: ("LMS" | "PORTAL")[];
+  /** Kinds whose claim was skipped or trimmed because their queue is backed up. */
+  backpressured: SyncKindName[];
+  /** True when the queue Redis was unreachable and the tick stopped early. */
+  queueUnavailable: boolean;
 }
 
 const EMPTY_TICK: TickSummary = {
   claimed: 0,
-  ok: 0,
-  failed: 0,
-  servedFromCache: 0,
   byKind: {},
   released: 0,
   pausedProviders: [],
+  backpressured: [],
+  queueUnavailable: false,
 };
+
+const DEFAULT_MAX_BACKLOG = 500;
 
 /**
  * The single heartbeat that drives all DLU ingestion (issue #56).
@@ -97,6 +98,7 @@ export class IngestionTickerService implements OnModuleInit {
   private readonly logger = new Logger(IngestionTickerService.name);
   private readonly maxBatch: number;
   private readonly budgetMs: number;
+  private readonly maxBacklog: number;
   private readonly dluTimezone: string;
   /** Kinds already warned about for an undersized batch cap (once per boot). */
   private readonly warnedUndersized = new Set<string>();
@@ -106,15 +108,16 @@ export class IngestionTickerService implements OnModuleInit {
   constructor(
     private readonly config: ConfigService,
     private readonly schedule: IngestionScheduleService,
-    private readonly timetable: TimetableWatcherService,
-    private readonly exam: ExamWatcherService,
-    private readonly lms: LmsWatcherService,
-    private readonly discovery: EnrollmentDiscoveryService,
+    private readonly queue: QueueService,
     private readonly lmsClient: LMSService,
     private readonly portalClient: PortalAPIService,
   ) {
     this.dluTimezone = this.config.get<string>("DLU_TZ") ?? "Asia/Ho_Chi_Minh";
     this.maxBatch = this.positiveConfig("INGESTION_TICK_MAX_BATCH", 20);
+    this.maxBacklog = this.positiveConfig(
+      "INGESTION_QUEUE_MAX_BACKLOG",
+      DEFAULT_MAX_BACKLOG,
+    );
     this.budgetMs = this.positiveConfig(
       "INGESTION_TICK_BUDGET_MS",
       // Comfortably inside one tick, so a long tick cannot overlap the next.
@@ -148,16 +151,15 @@ export class IngestionTickerService implements OnModuleInit {
       const summary = await this.tick();
       if (summary.claimed > 0) {
         this.logger.log(
-          `Ingestion tick: ${summary.claimed} claimed ` +
-            `(${summary.ok} ok, ${summary.failed} failed, ` +
-            `${summary.servedFromCache} from cache)`,
+          `Ingestion tick: ${summary.claimed} enqueued, ` +
+            `${summary.released} released`,
         );
       }
     });
   }
 
   /**
-   * One tick: claim and process the most-overdue targets of each kind.
+   * One tick: claim the most-overdue targets of each kind and enqueue a fetch job for each.
    *
    * `now` is a parameter so a test can drive the clock, matching the house shape
    * for every other scheduled job in the repo.
@@ -184,13 +186,15 @@ export class IngestionTickerService implements OnModuleInit {
 
     const summary: TickSummary = {
       claimed: 0,
-      ok: 0,
-      failed: 0,
-      servedFromCache: 0,
       byKind: {},
       released: 0,
       pausedProviders: [],
+      backpressured: [],
+      queueUnavailable: false,
     };
+    // Waiting + delayed jobs per queue, read once per tick (a claim only adds
+    // to it by the batch we are about to enqueue, tracked below).
+    const backlog = new Map<string, number>();
     // Providers whose breaker is open (or tripped mid-tick). Checked before any
     // claim so a down upstream is never claimed for, and other providers carry on.
     const paused = new Set<"LMS" | "PORTAL">();
@@ -201,6 +205,8 @@ export class IngestionTickerService implements OnModuleInit {
       await this.schedule.ensureAllRows(now);
 
       for (const plan of orderedPlans(this.schedule.allPlans())) {
+        // Queue Redis is down: every further claim would only be handed back.
+        if (summary.queueUnavailable) break;
         if (Date.now() - startedAt > this.budgetMs) {
           // Not an error: an unclaimed target simply stays overdue and is
           // first in line next tick.
@@ -245,30 +251,71 @@ export class IngestionTickerService implements OnModuleInit {
           );
         }
 
-        const targets = await this.schedule.claimDue(plan.kind, now, batchSize);
+        // Backpressure: never claim more than the queue has room for. A claim
+        // moves `nextDueAt` a full period out, so claiming rows that will sit
+        // in a backed-up queue would silently stretch their cadence.
+        const def =
+          plan.provider === "LMS" ? LMS_FETCH_QUEUE : PORTAL_FETCH_QUEUE;
+        let pending = backlog.get(def.name);
+        if (pending === undefined) {
+          try {
+            const counts = await this.queue.counts(def);
+            pending = counts.waiting + counts.delayed;
+            backlog.set(def.name, pending);
+          } catch (error) {
+            this.logger.warn(
+              `Queue unavailable, stopping the tick: ${errorMessage(error)}`,
+            );
+            summary.queueUnavailable = true;
+            break;
+          }
+        }
+        const room = this.maxBacklog - pending;
+        if (room <= 0) {
+          summary.backpressured.push(plan.kind);
+          this.logger.warn(
+            `${def.name} backlog ${pending} >= INGESTION_QUEUE_MAX_BACKLOG=` +
+              `${this.maxBacklog}; not claiming ${plan.kind} this tick`,
+          );
+          continue;
+        }
+        if (room < batchSize) summary.backpressured.push(plan.kind);
+
+        const targets = await this.schedule.claimDue(
+          plan.kind,
+          now,
+          Math.min(batchSize, room),
+        );
         if (targets.length === 0) continue;
         summary.byKind[plan.kind] = targets.length;
+        backlog.set(def.name, pending + targets.length);
 
-        // Sequentially, always. Sequential outbound requests are the entirety
-        // of the politeness policy (see `watcher-support.ts`), and fanning out
-        // here is exactly what would turn a tick back into a burst.
-        for (let i = 0; i < targets.length; i++) {
-          const target = targets[i];
-          if (paused.has(plan.provider)) {
-            // The breaker opened mid-batch: hand the rest back, still due.
+        // Enqueue, never run: the fetch workers do the (sequential) upstream
+        // work. The claim above is the at-most-once guard; the job id makes a
+        // re-enqueue of the same slot a no-op.
+        for (const target of targets) {
+          if (summary.queueUnavailable) {
+            // One bounded failure is enough: do not pay the timeout per row.
             await this.release(plan, target, summary);
             continue;
           }
-          const outcome = await this.runOne(plan, target, now);
-          if (outcome.upstreamDown) {
-            paused.add(plan.provider);
+          try {
+            await this.queue.enqueue(def, this.jobData(plan, target), {
+              jobId: idempotencyKey(
+                target.scheduleId,
+                target.dueAt.toISOString(),
+              ),
+            });
+            summary.claimed += 1;
+          } catch (error) {
+            // Queue Redis down or slow: hand the claim back so the row stays due.
+            this.logger.warn(
+              `Could not enqueue ${plan.kind} for schedule ` +
+                `${target.scheduleId}: ${errorMessage(error)}`,
+            );
+            summary.queueUnavailable = true;
             await this.release(plan, target, summary);
-            continue;
           }
-          summary.claimed += 1;
-          if (outcome.ok) summary.ok += 1;
-          else summary.failed += 1;
-          if (outcome.servedFromCache) summary.servedFromCache += 1;
         }
       }
     } finally {
@@ -277,54 +324,6 @@ export class IngestionTickerService implements OnModuleInit {
 
     summary.pausedProviders = [...paused];
     return summary;
-  }
-
-  /**
-   * Run one claimed target's pass and record what happened.
-   *
-   * Never throws. A pass that blows up must not abort the tick — the other
-   * students in the batch have nothing to do with it — so the failure is
-   * recorded on the schedule row (`consecutiveFailures`) and the loop continues.
-   */
-  private async runOne(
-    plan: SyncKindPlan,
-    target: ClaimedTarget,
-    now: Date,
-  ): Promise<PassOutcome> {
-    let outcome: PassOutcome = { ok: false, servedFromCache: false };
-    try {
-      outcome = await this.dispatch(plan.kind, target, now);
-    } catch (error) {
-      if (error instanceof UpstreamUnavailableError) {
-        // Not this student's failure: skip the bookkeeping (no
-        // `consecutiveFailures` bump) and let the caller release the claim.
-        this.logger.debug(
-          `${plan.kind} deferred for integration ${target.integrationId}: ${error.message}`,
-        );
-        return { ok: false, servedFromCache: false, upstreamDown: error };
-      }
-      this.logger.warn(
-        `${plan.kind} pass failed for integration ${target.integrationId}: ` +
-          errorMessage(error),
-      );
-    }
-    // A partial walk cut short by an open breaker: keep its writes, but it is
-    // neither a success nor a student failure.
-    if (outcome.upstreamDown) return outcome;
-    try {
-      await this.schedule.recordOutcome(target.scheduleId, {
-        ...outcome,
-        now,
-      });
-    } catch (error) {
-      // Losing the bookkeeping is bad but not worth failing the tick over: the
-      // claim already moved `nextDueAt`, so nothing loops.
-      this.logger.warn(
-        `Could not record the ${plan.kind} outcome for schedule ` +
-          `${target.scheduleId}: ${errorMessage(error)}`,
-      );
-    }
-    return outcome;
   }
 
   /** True (and remembered in `paused`) when `provider`'s breaker is open. */
@@ -363,24 +362,16 @@ export class IngestionTickerService implements OnModuleInit {
     }
   }
 
-  /** Map a kind onto the service that performs it. */
-  private async dispatch(
-    kind: SyncKindName,
-    target: ClaimedTarget,
-    now: Date,
-  ): Promise<PassOutcome> {
-    switch (kind) {
-      case "PORTAL_TIMETABLE":
-        return this.timetable.syncOne(target, now);
-      case "PORTAL_EXAM":
-        return this.exam.syncOne(target, now);
-      case "LMS_CALENDAR":
-        return this.lms.syncOne(target, now);
-      case "PORTAL_DISCOVERY":
-        return this.discovery.syncPortal(target, now);
-      case "LMS_DISCOVERY":
-        return this.discovery.syncLms(target, now);
-    }
+  private jobData(plan: SyncKindPlan, target: ClaimedTarget): FetchJobData {
+    return {
+      scheduleId: target.scheduleId,
+      userId: target.userId,
+      integrationId: target.integrationId,
+      kind: plan.kind,
+      dueAt: target.dueAt.toISOString(),
+      claimedAt: target.claimedAt.toISOString(),
+      cacheHitStreak: target.cacheHitStreak,
+    };
   }
 
   /** A positive number from config, tolerating the string a `.env` file gives. */

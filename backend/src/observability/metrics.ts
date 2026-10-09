@@ -149,10 +149,65 @@ export const pushDevicesPruned = meter.createCounter("push.devices_pruned", {
   description: "UserDevice rows deleted after a dead-token response",
 });
 
+// --- Job queues (queue/, BullMQ) -------------------------------------------------
+// Labels: `queue` (portal-fetch | lms-fetch | notify), never a job id or user.
+export const queueJobs = meter.createCounter("queue.jobs", {
+  description:
+    "Queue job outcomes by queue + result (completed|failed|dead_lettered|delayed)",
+});
+export const queueJobDuration = meter.createHistogram("queue.job.duration", {
+  unit: "s",
+  description: "Processor wall-clock time of one attempt, by queue + result",
+  advice: { explicitBucketBoundaries: LATENCY_BUCKETS },
+});
+export const queueJobWait = meter.createHistogram("queue.job.wait", {
+  unit: "s",
+  description:
+    "Time from enqueue (or due time) until an attempt started, by queue",
+  advice: {
+    explicitBucketBoundaries: [0.01, 0.1, 0.5, 1, 5, 30, 60, 300, 900, 3600],
+  },
+});
+export const queueJobAttempts = meter.createHistogram("queue.job.attempts", {
+  description: "Attempts a job needed when it finished (ok or dead), by queue",
+  advice: { explicitBucketBoundaries: [1, 2, 3, 4, 5, 8, 12] },
+});
+export const queueEnqueueDropped = meter.createCounter(
+  "queue.enqueue.dropped",
+  {
+    description:
+      "Enqueues given up on after retries (queue Redis down), by queue + type; the reconciliation sweep re-enqueues rows it finds without a job",
+  },
+);
+export const queueNotifyReconciled = meter.createCounter(
+  "queue.notify.reconciled",
+  {
+    description:
+      "Push jobs re-enqueued by the notification reconciliation sweep (a lost enqueue was repaired)",
+  },
+);
+export const queueDepth = meter.createGauge("queue.depth", {
+  description:
+    "Jobs per queue + state (waiting|delayed|active|failed|dlq); polled by the watcher",
+});
+
 // --- SSE ----------------------------------------------------------------------
 export const sseActiveConnections = meter.createUpDownCounter(
   "sse.active_connections",
   { description: "Currently-open /notifications/stream subscriptions" },
+);
+
+export const ssePubsubPublished = meter.createCounter("sse.pubsub.published", {
+  description: "Notification events published to Redis pub/sub, by result",
+});
+export const ssePubsubDelivered = meter.createCounter("sse.pubsub.delivered", {
+  description: "Pub/sub messages received and re-emitted to local SSE streams",
+});
+export const ssePubsubSubscribers = meter.createGauge(
+  "sse.pubsub.subscribers",
+  {
+    description: "1 while this process holds its pub/sub subscription, else 0",
+  },
 );
 
 /** Bucket a raw status code to a low-cardinality class label. */

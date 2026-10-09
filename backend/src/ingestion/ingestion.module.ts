@@ -1,4 +1,5 @@
 import { forwardRef, Module } from "@nestjs/common";
+import { QueueModule } from "../queue/queue.module";
 import { IntegrationsModule } from "../integrations/integrations.module";
 import { LMSModule } from "../lms/lms.module";
 import { NotificationsModule } from "../notifications/notifications.module";
@@ -7,6 +8,7 @@ import { PrismaModule } from "../prisma/prisma.module";
 import { TagsModule } from "../tags/tags.module";
 import { EnrollmentDiscoveryService } from "./enrollment-discovery.service";
 import { ExamWatcherService } from "./exam-watcher.service";
+import { IngestionFetchService } from "./ingestion-fetch.service";
 import { IngestionJobsService } from "./ingestion-jobs.service";
 import { IngestionScheduleService } from "./ingestion-schedule.service";
 import { IngestionSyncService } from "./ingestion-sync.service";
@@ -47,6 +49,7 @@ import { TimetableWatcherService } from "./timetable-watcher.service";
     PortalAPIModule,
     TagsModule,
     NotificationsModule,
+    QueueModule,
     forwardRef(() => IntegrationsModule),
   ],
   providers: [
@@ -57,6 +60,7 @@ import { TimetableWatcherService } from "./timetable-watcher.service";
     TimetableWatcherService,
     ExamWatcherService,
     IngestionSyncService,
+    IngestionFetchService,
     IngestionScheduleService,
     EnrollmentDiscoveryService,
     OccurrenceCacheService,
@@ -65,6 +69,7 @@ import { TimetableWatcherService } from "./timetable-watcher.service";
   // The watchers and discovery are exported for IngestionWorkerModule's ticker.
   exports: [
     IngestionSyncService,
+    IngestionFetchService,
     IngestionScheduleService,
     TimetableWatcherService,
     ExamWatcherService,

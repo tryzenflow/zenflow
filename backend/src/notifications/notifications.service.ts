@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import {
   notificationCategory,
   type NotificationDto,
@@ -15,8 +15,27 @@ import { PostgresErrorCode } from "../prisma/error-codes";
 import { PrismaService } from "../prisma/prisma.service";
 import { ListNotificationsDto } from "./dto/list-notifications.dto";
 import { NotificationEvent } from "./types";
-import { EventEmitter2 } from "@nestjs/event-emitter";
+import type { EventEmitter2 } from "@nestjs/event-emitter";
 import { localizeNotification } from "./localize-notification";
+import { NotificationPubSub } from "./notification-pubsub.service";
+import {
+  queueEnqueueDropped,
+  queueNotifyReconciled,
+} from "../observability/metrics";
+import { QueueService } from "../queue/queue.service";
+import { NOTIFY_QUEUE, type PushProvider } from "../queue/queues";
+import { idempotencyKey } from "../queue/queue.types";
+
+const PUSH_PROVIDERS: readonly PushProvider[] = ["fcm", "apns"];
+
+/** Delay before each enqueue attempt of {@link NotificationsService.announce}. */
+const ENQUEUE_RETRY_DELAYS_MS = [0, 250, 1_000];
+/** {@link NotificationsService.reconcileRecent}: rows from this window ... */
+export const RECONCILE_WINDOW_MS = 2 * 60 * 60 * 1000;
+/** ... that are at least this old ... */
+export const RECONCILE_MIN_AGE_MS = 60_000;
+/** ... at most this many per sweep. */
+const RECONCILE_BATCH = 500;
 
 /**
  * One of each inbox row style, cycled by {@link NotificationsService.raiseSamples}
@@ -140,12 +159,112 @@ function toNotificationDto(row: Notification): NotificationDto {
  */
 @Injectable()
 export class NotificationsService {
-  readonly notificationEmitter: EventEmitter2 = new EventEmitter2();
+  private readonly logger = new Logger(NotificationsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pubsub: NotificationPubSub,
+    private readonly queue: QueueService,
+  ) {}
 
-  notify(event: string, payload: Notification) {
-    this.notificationEmitter.emit(event, payload);
+  /**
+   * The process-local emitter `GET /notifications/stream` reads. Fed by
+   * Redis pub/sub in every HTTP process (ADR-0018), so it also carries rows
+   * raised by workers and other replicas.
+   */
+  get notificationEmitter(): EventEmitter2 {
+    return this.pubsub.emitter;
+  }
+
+  /**
+   * Announce a freshly created row, fire-and-forget: see {@link announce}.
+   * Never fails the caller, whose row is already stored.
+   */
+  notify(event: string, payload: Notification): void {
+    void this.announce(event, payload);
+  }
+
+  /**
+   * Publish the row to every SSE-serving process and enqueue its push jobs
+   * (one per provider, job id derived from the row id, so a repeat call or a
+   * retry sends nothing twice). Each enqueue is retried briefly; one that
+   * still fails is counted (`queue.enqueue.dropped`) and left for
+   * {@link reconcileRecent}. Never rejects.
+   *
+   * Residual window: the row commits before the enqueue, so a process crash
+   * between the two (or a queue outage longer than the sweep's
+   * {@link RECONCILE_WINDOW_MS}) loses the push; closing it fully needs an
+   * outbox column (a schema change). The sweep covers everything else.
+   */
+  async announce(event: string, payload: Notification): Promise<void> {
+    await Promise.all([
+      this.pubsub.publish(event, payload),
+      ...PUSH_PROVIDERS.map((provider) =>
+        this.enqueuePush(payload.id, provider),
+      ),
+    ]);
+  }
+
+  private async enqueuePush(
+    notificationId: string,
+    provider: PushProvider,
+  ): Promise<boolean> {
+    for (let attempt = 0; attempt < ENQUEUE_RETRY_DELAYS_MS.length; attempt++) {
+      const wait = ENQUEUE_RETRY_DELAYS_MS[attempt];
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      const job = await this.queue.enqueueBestEffort(
+        NOTIFY_QUEUE,
+        { type: "push", notificationId, provider },
+        { jobId: idempotencyKey("push", notificationId, provider) },
+      );
+      if (job) return true;
+    }
+    queueEnqueueDropped.add(1, { queue: NOTIFY_QUEUE.name, type: "push" });
+    this.logger.warn(
+      `push enqueue dropped for ${notificationId}/${provider}; the reconciliation sweep will retry`,
+    );
+    return false;
+  }
+
+  /**
+   * Re-enqueue push jobs for recent rows that have none (their enqueue was
+   * dropped). Job ids are deterministic, so an existing job (any state) is
+   * left alone and a race with the normal path is a no-op. Run by the
+   * watcher every few minutes. Rows younger than a minute are skipped (the
+   * normal path is still running). Caveat: a finished job evicted by queue
+   * retention (count cap) inside the window would be pushed again.
+   * Returns how many jobs it re-enqueued.
+   */
+  async reconcileRecent(now = new Date()): Promise<number> {
+    const rows = await this.prisma.notification.findMany({
+      where: {
+        sentAt: {
+          gte: new Date(now.getTime() - RECONCILE_WINDOW_MS),
+          lte: new Date(now.getTime() - RECONCILE_MIN_AGE_MS),
+        },
+      },
+      select: { id: true },
+      orderBy: { sentAt: "desc" },
+      take: RECONCILE_BATCH,
+    });
+    let repaired = 0;
+    for (const { id } of rows) {
+      for (const provider of PUSH_PROVIDERS) {
+        const jobId = idempotencyKey("push", id, provider);
+        // Throws when the queue Redis is down: stop, the next sweep retries.
+        if (await this.queue.getJob(NOTIFY_QUEUE, jobId)) continue;
+        const job = await this.queue.enqueueBestEffort(
+          NOTIFY_QUEUE,
+          { type: "push", notificationId: id, provider },
+          { jobId },
+        );
+        if (job) {
+          repaired++;
+          queueNotifyReconciled.add(1, { provider });
+        }
+      }
+    }
+    return repaired;
   }
 
   toNotificationDto(payload: Notification): NotificationDto {
@@ -238,7 +357,7 @@ export class NotificationsService {
   /**
    * Dev-only: write `count` fake rows (cycling {@link DEV_SAMPLES}) and emit
    * `NEW_SESSION` for each — exactly what the materializer does, so they reach
-   * the SSE stream and `PushService`. Called from `POST /notifications/dev/raise`
+   * the SSE stream and the push queue. Called from `POST /notifications/dev/raise`
    * so the emit runs in the API process; a standalone script has its own
    * in-memory emitter with no listeners.
    */

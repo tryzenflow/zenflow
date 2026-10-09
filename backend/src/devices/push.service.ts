@@ -1,54 +1,84 @@
-import { Injectable, Logger, type OnModuleInit } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { type PushDataPayload, pushToneFor } from "@zenflow/shared";
 import { type Notification } from "../../generated/prisma";
-import { NotificationsService } from "../notifications/notifications.service";
-import { NotificationEvent } from "../notifications/types";
 import { PrismaService } from "../prisma/prisma.service";
 import { ApnsSender } from "./apns.sender";
 import { FcmSender } from "./fcm.sender";
-import type { PushMessage } from "./types";
+import type { PushMessage, SendResult } from "./types";
 import { pushDevicesPruned, pushSend } from "../observability/metrics";
 import { withSpan } from "../observability/otel";
 import { localizeNotification } from "../notifications/localize-notification";
+import type { PushProvider } from "../queue/queues";
 
 /**
- * Fans every raised {@link Notification} out to the user's registered devices.
+ * Wraps one provider call, e.g. with that provider's circuit breaker
+ * (`fcm` / `apns`). The default runs it as is.
+ */
+export type ProviderGuard = <T>(
+  provider: PushProvider,
+  fn: () => Promise<T>,
+) => Promise<T>;
+
+const unguarded: ProviderGuard = (_provider, fn) => fn();
+
+export interface SendOptions {
+  /** Only this provider (a per-provider job); omitted = both. */
+  provider?: PushProvider;
+  /**
+   * With a guard that can park the job (breaker), `provider` must be set:
+   * parking a both-provider job would re-send to the provider that succeeded.
+   */
+  guard?: ProviderGuard;
+}
+
+/** Options of a queue job: always one provider. */
+export type DeliverOptions = SendOptions & { provider: PushProvider };
+
+/** Every token of a provider failed transiently: worth a retry, and a breaker failure. */
+export class PushProviderError extends Error {
+  constructor(
+    readonly provider: PushProvider,
+    attempted: number,
+  ) {
+    super(`${provider}: all ${attempted} send(s) failed`);
+    this.name = "PushProviderError";
+  }
+}
+
+/**
+ * Delivers one {@link Notification} to the user's registered devices. It is the
+ * body of the `notify` queue's `push` job (`NotifyProcessor`); nothing
+ * subscribes to the in-process emitter any more, so delivery is retried,
+ * rate-limited and deduplicated by BullMQ rather than fired inline.
  *
- * A second subscriber to `NotificationsService.notificationEmitter`, alongside
- * the SSE stream in `NotificationsController` — ingestion never learns about
- * delivery channels. Best-effort throughout: a failed send is swallowed, and
- * tokens the providers report as dead are pruned.
+ * A provider that answers nothing useful for every token throws
+ * {@link PushProviderError} so the job retries with backoff and the
+ * `fcm`/`apns` breaker counts it; a partial success is a success. Tokens the
+ * providers report dead are pruned.
  */
 @Injectable()
-export class PushService implements OnModuleInit {
+export class PushService {
   private readonly logger = new Logger(PushService.name);
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notifications: NotificationsService,
     private readonly fcm: FcmSender,
     private readonly apns: ApnsSender,
   ) {}
 
-  onModuleInit(): void {
-    this.notifications.notificationEmitter.on(
-      NotificationEvent.NEW_SESSION,
-      (row: Notification) => void this.handleNewSession(row),
-    );
-  }
-
-  private async handleNewSession(row: Notification): Promise<void> {
-    // Fired from the notification EventEmitter via `void ...`, so there is no
-    // ambient async context — open a fresh root span (a full parent/child link
-    // back to the materializer trace would need context capture at `notify()`).
-    await withSpan("push.handleNewSession", async () => {
-      try {
-        await this.sendToUser(row.userId, row);
-      } catch (err) {
-        this.logger.warn(
-          `push for notification ${row.id} failed: ${(err as Error).message}`,
-        );
-      }
+  /**
+   * Load the notification and push it. Throws when the row is missing (the
+   * producer may have enqueued before its transaction committed; the retry
+   * finds it).
+   */
+  async deliver(notificationId: string, opts: DeliverOptions): Promise<void> {
+    // A queue worker has no ambient async context: open a fresh root span.
+    await withSpan("push.deliver", async () => {
+      const row = await this.prisma.notification.findUnique({
+        where: { id: notificationId },
+      });
+      if (!row) throw new Error(`notification ${notificationId} not found`);
+      await this.sendToUser(row.userId, row, opts);
     });
   }
 
@@ -56,10 +86,17 @@ export class PushService implements OnModuleInit {
    * Deliver one notification to every device `userId` has registered. A no-op
    * when neither provider is configured or the user has no devices.
    */
-  async sendToUser(userId: string, row: Notification): Promise<void> {
-    if (!this.fcm.enabled && !this.apns.enabled) {
+  async sendToUser(
+    userId: string,
+    row: Notification,
+    opts: SendOptions = {},
+  ): Promise<void> {
+    const guard = opts.guard ?? unguarded;
+    const wantFcm = !opts.provider || opts.provider === "fcm";
+    const wantApns = !opts.provider || opts.provider === "apns";
+    if ((!wantFcm || !this.fcm.enabled) && (!wantApns || !this.apns.enabled)) {
       this.logger.warn(
-        `sendToUser(${userId}): both senders disabled — set FCM_SERVICE_ACCOUNT and/or the APNS_* vars`,
+        `sendToUser(${userId}): sender disabled — set FCM_SERVICE_ACCOUNT and/or the APNS_* vars`,
       );
       return;
     }
@@ -82,12 +119,12 @@ export class PushService implements OnModuleInit {
       return;
     }
 
-    const android = devices
-      .filter((d) => d.platform === "ANDROID")
-      .map((d) => d.pushToken);
-    const ios = devices
-      .filter((d) => d.platform === "IOS")
-      .map((d) => d.pushToken);
+    const android = wantFcm
+      ? devices.filter((d) => d.platform === "ANDROID").map((d) => d.pushToken)
+      : [];
+    const ios = wantApns
+      ? devices.filter((d) => d.platform === "IOS").map((d) => d.pushToken)
+      : [];
     this.logger.log(
       `sendToUser(${userId}): ${android.length} android + ${ios.length} ios device(s)` +
         `${!this.fcm.enabled && android.length ? " [FCM disabled]" : ""}` +
@@ -101,17 +138,13 @@ export class PushService implements OnModuleInit {
       tone: pushToneFor(row.eventName),
     };
 
-    const [fcmRes, apnsRes] = await Promise.all([
-      this.fcm.send(android, msg),
-      this.apns.send(ios, msg),
+    const settled = await Promise.allSettled([
+      this.sendVia("fcm", this.fcm, android, msg, guard),
+      this.sendVia("apns", this.apns, ios, msg, guard),
     ]);
-    this.logger.log(
-      `sendToUser(${userId}): fcm ${fcmRes.sent}/${android.length} ok, apns ${apnsRes.sent}/${ios.length} ok`,
+    const stale = settled.flatMap((r) =>
+      r.status === "fulfilled" ? r.value.invalidTokens : [],
     );
-    recordPushResult("fcm", android.length, fcmRes);
-    recordPushResult("apns", ios.length, apnsRes);
-
-    const stale = [...fcmRes.invalidTokens, ...apnsRes.invalidTokens];
     if (stale.length > 0) {
       const { count } = await this.prisma.userDevice.deleteMany({
         where: { pushToken: { in: stale } },
@@ -119,6 +152,38 @@ export class PushService implements OnModuleInit {
       this.logger.log(`pruned ${count} dead device token(s)`);
       pushDevicesPruned.add(count);
     }
+    // Both providers have been tried (and dead tokens pruned) before a failure
+    // surfaces, so a retry never re-sends to the one that succeeded unless the
+    // job was provider-less.
+    const failed = settled.find((r) => r.status === "rejected");
+    if (failed) throw failed.reason;
+  }
+
+  private async sendVia(
+    provider: PushProvider,
+    sender: {
+      enabled: boolean;
+      send(t: string[], m: PushMessage): Promise<SendResult>;
+    },
+    tokens: string[],
+    msg: PushMessage,
+    guard: ProviderGuard,
+  ): Promise<SendResult> {
+    if (tokens.length === 0 || !sender.enabled) {
+      return { sent: 0, invalidTokens: [] };
+    }
+    const res = await guard(provider, async () => {
+      const r = await sender.send(tokens, msg);
+      recordPushResult(provider, tokens.length, r);
+      this.logger.log(
+        `${provider}: ${r.sent}/${tokens.length} ok, ${r.invalidTokens.length} dead`,
+      );
+      if (r.sent === 0 && r.invalidTokens.length === 0) {
+        throw new PushProviderError(provider, tokens.length);
+      }
+      return r;
+    });
+    return res;
   }
 
   private dataFor(row: Notification): PushDataPayload {

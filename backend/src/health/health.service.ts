@@ -1,7 +1,8 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { Redis } from "ioredis";
 import { PrismaService } from "../prisma/prisma.service";
+import { QUEUE_REDIS } from "../queue/queue.constants";
 import {
   RATE_LIMIT_REDIS_CLIENT,
   REDIS_CLIENT,
@@ -26,6 +27,7 @@ export class HealthService {
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     @Inject(RATE_LIMIT_REDIS_CLIENT) private readonly rateLimitRedis: Redis,
     private readonly config: ConfigService,
+    @Optional() @Inject(QUEUE_REDIS) private readonly queueRedis?: Redis | null,
   ) {}
 
   /** Postgres + the session/OTP Redis: what a request needs to be served. */
@@ -43,6 +45,8 @@ export class HealthService {
       postgres: () => this.prisma.$queryRaw`SELECT 1`,
       redis: () => this.redis.ping(),
       redisRateLimit: () => this.rateLimitRedis.ping(),
+      // Absent in the test fallback (jobs are recorded in memory).
+      ...(this.queueRedis ? { redisQueue: () => this.queueRedis!.ping() } : {}),
       // Absent in dev/test (placement degrades to the frozen heuristic).
       ...(banditUrl
         ? {
