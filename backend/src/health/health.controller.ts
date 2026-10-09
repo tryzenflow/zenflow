@@ -11,24 +11,35 @@ export class HealthController {
 
   /** All dependencies: Postgres, both Redis instances, bandit when configured. */
   @Get()
-  async all(): Promise<HealthReport> {
-    return this.orThrow(await this.health.all());
+  async all() {
+    return this.wrap(await this.health.all());
   }
 
   /** Process is up; touches no dependency. */
   @Get("live")
-  live(): { status: "ok" } {
-    return { status: "ok" };
+  live() {
+    return {
+      success: true,
+      message: "Service is live",
+      data: { status: "ok" },
+    };
   }
 
   /** Ready to serve: Postgres + Redis. */
   @Get("ready")
-  async ready(): Promise<HealthReport> {
-    return this.orThrow(await this.health.ready());
+  async ready() {
+    return this.wrap(await this.health.ready());
   }
 
-  private orThrow(report: HealthReport): HealthReport {
-    if (report.status !== "ok") throw new ServiceUnavailableException(report);
-    return report;
+  /** `{ success, message, data }` on both outcomes; failures stay HTTP 503. */
+  private wrap(report: HealthReport) {
+    const ok = report.status === "ok";
+    const body = {
+      success: ok,
+      message: ok ? "All checks passed" : "One or more checks failed",
+      data: report,
+    };
+    if (!ok) throw new ServiceUnavailableException(body);
+    return body;
   }
 }

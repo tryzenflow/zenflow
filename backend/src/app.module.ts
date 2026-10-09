@@ -28,13 +28,13 @@ import { NotificationsModule } from "./notifications/notifications.module";
 import { RemindersModule } from "./reminders/reminders.module";
 import { DevicesModule } from "./devices/devices.module";
 import { ObservabilityModule } from "./observability/observability.module";
-import { getRole, runsHttp, runsJobs } from "./common/config/role";
+import { envFilePath, getRole, runsHttp, runsJobs } from "./common/config/role";
 import { IngestionWorkerModule } from "./ingestion/ingestion-worker.module";
 import { SchedulerWorkerModule } from "./scheduler/scheduler-worker.module";
 import { RemindersWorkerModule } from "./reminders/reminders-worker.module";
 import { HealthModule } from "./health/health.module";
 
-// Process role (ADR-0011), fixed at module-evaluation time like `envFilePath`.
+// Process role (ADR-0011), fixed at module-evaluation time (reads the env file).
 const role = getRole();
 // Only the worker (and the all-in-one dev/test role) registers schedulers; an
 // API replica must not, or every cron would fire once per replica.
@@ -51,8 +51,7 @@ const jobModules = runsJobs(role)
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath:
-        process.env.NODE_ENV === "production" ? ".env.prod" : ".env.dev",
+      envFilePath: envFilePath(),
       validationSchema: Joi.object({
         DATABASE_URL: Joi.string().required(),
         SESSION_SECRET: Joi.string().required(),

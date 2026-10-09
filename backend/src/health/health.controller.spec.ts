@@ -31,24 +31,33 @@ function build(over: { pg?: boolean; redis?: boolean; rl?: boolean } = {}) {
 
 describe("HealthController", () => {
   it("live never touches dependencies", () => {
-    expect(build({ pg: false }).live()).toEqual({ status: "ok" });
+    expect(build({ pg: false }).live()).toMatchObject({
+      success: true,
+      data: { status: "ok" },
+    });
   });
 
   it("ready is ok with postgres and redis up", async () => {
     const res = await build().ready();
-    expect(res.status).toBe("ok");
-    expect(Object.keys(res.checks)).toEqual(["postgres", "redis"]);
+    expect(res.success).toBe(true);
+    expect(res.data.status).toBe("ok");
+    expect(Object.keys(res.data.checks)).toEqual(["postgres", "redis"]);
   });
 
-  it("ready is 503 when postgres is down", async () => {
-    await expect(build({ pg: false }).ready()).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
-    );
+  it("ready is 503 with the wrapper when postgres is down", async () => {
+    const err = await build({ pg: false })
+      .ready()
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ServiceUnavailableException);
+    expect((err as ServiceUnavailableException).getResponse()).toMatchObject({
+      success: false,
+      data: { status: "error" },
+    });
   });
 
   it("ready ignores the rate-limit redis; /health does not", async () => {
     const c = build({ rl: false });
-    await expect(c.ready()).resolves.toMatchObject({ status: "ok" });
+    await expect(c.ready()).resolves.toMatchObject({ success: true });
     await expect(c.all()).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 });
