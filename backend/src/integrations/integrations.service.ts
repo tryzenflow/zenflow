@@ -28,7 +28,11 @@ import { UpstreamUnavailableHttpException } from "../common/upstream-unavailable
 import { SyncCooldownException } from "./sync-cooldown.exception";
 import { SyncInflightGuard } from "./sync-inflight.service";
 import { IntegrationAuthService } from "./integration-auth.service";
-import { IngestionSyncService } from "../ingestion/ingestion-sync.service";
+import {
+  IngestionSyncService,
+  ManualSyncUnavailableError,
+  type ManualSyncOutcome,
+} from "../ingestion/ingestion-sync.service";
 import {
   DATA_KINDS_BY_PROVIDER,
   IngestionScheduleService,
@@ -236,8 +240,11 @@ export class IntegrationsService {
    * `lastSyncStatus` — which this reads back *after* awaiting the run, so they
    * describe the sync just performed rather than the previous one.
    *
-   * `PORTAL` covers two upstream endpoints (timetable and exams), so it runs
-   * two watchers and the status reflects whichever job row finished last.
+   * `PORTAL` covers two upstream endpoints (timetable and exams), so it queues
+   * two jobs and the status reflects whichever job row finished last. The sync
+   * runs on the fetch workers; if it has not finished after
+   * `SYNC_MANUAL_WAIT_MS` the reply carries `syncPending: true` (HTTP 202) with
+   * the current status.
    */
   async sync(
     user: User,
@@ -280,41 +287,39 @@ export class IntegrationsService {
     }
 
     // An in-flight duplicate is a 409 here.
-    const outcome = await this.syncInflight.run(user.id, provider, () =>
-      this.ingestionSync.syncNow(user.id, provider),
-    );
-
-    // The student just got fresh data by hand, so push the kinds that came back
-    // clean out by a full period — re-walking them minutes later would be pure
-    // waste against DLU. A failed kind stays due so the ticker retries it.
-    // Best-effort: a failure here only costs one redundant pass.
+    let outcome: ManualSyncOutcome;
     try {
-      await this.ingestionSchedule.deferAfterManualSync(
-        connected.id,
-        outcome.synced,
+      outcome = await this.syncInflight.run(user.id, provider, () =>
+        this.ingestionSync.syncNow(user.id, provider),
       );
-    } catch {
-      // Deliberately swallowed; see above.
+    } catch (err) {
+      // The breaker lives in the workers, so the peek above rarely trips: this
+      // is where a parked job or an unreachable queue becomes a 503.
+      if (err instanceof ManualSyncUnavailableError) {
+        throw new UpstreamUnavailableHttpException(
+          err.reason === "upstream"
+            ? `DLU ${this.label(provider)} is temporarily unavailable. Your data is safe and will sync automatically; please try again later.`
+            : "Sync is temporarily unavailable. Please try again in a moment.",
+          err.retryAfterMs,
+        );
+      }
+      throw err;
     }
+
+    // The jobs defer the schedule rows that came back clean (or count the
+    // failure) themselves, so it also happens when we stop waiting.
 
     // A pass that failed (no token, rejected login, upstream error) is an error
     // the student must see, not a 201 that another pass's success papers over.
     // The job rows still say what happened; the controller charges no quota.
-    if (!outcome.complete) {
-      try {
-        await this.ingestionSchedule.markManualFailure(
-          connected.id,
-          provider,
-          outcome.synced,
-        );
-      } catch {
-        // Best-effort, like the deferral above.
-      }
+    if (!outcome.complete && !outcome.pending) {
       throw new BadGatewayException(
         `DLU ${this.label(provider)} sync did not complete. Check your account details and try again.`,
       );
     }
-    return this.statusOf(user.id, provider);
+    const status = await this.statusOf(user.id, provider);
+    // Still running in the background: the controller answers 202.
+    return outcome.pending ? { ...status, syncPending: true } : status;
   }
 
   /** One provider's status, re-read from the DB (job rows included). */

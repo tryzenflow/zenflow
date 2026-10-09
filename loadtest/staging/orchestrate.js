@@ -151,7 +151,7 @@ function promSnapshot(w, atMs) {
 }
 
 // Compose service names, not container names: `api` runs several replicas with generated names.
-const WATCHED_SERVICES = ["api", "worker", "postgres", "bandit", "fake-dlu"];
+const WATCHED_SERVICES = ["api", "watcher", "worker-portal", "worker-lms", "worker-notify", "postgres", "bandit", "fake-dlu"];
 // Running staging containers of the watched services, as { name: service }.
 function watchedContainers() {
   const out = {};
@@ -244,7 +244,7 @@ async function run(profile, flags) {
       const sum = (k) => +xs.reduce((a, x) => a + x[k], 0).toFixed(2);
       return `${sum("cpuCoresAvg")}/${sum("cpuCoresMax")} cores, ${sum("memMiBMax")} MiB${xs.length > 1 ? ` (x${xs.length})` : ""}`;
     };
-    console.log(`${name.padEnd(6)} api ${cpu("api")} | worker ${cpu("worker")} | db ${cpu("postgres")} | bandit ${cpu("bandit")}`);
+    console.log(`${name.padEnd(6)} api ${cpu("api")} | watcher ${cpu("watcher")} | workers ${cpu("worker-portal")} ${cpu("worker-lms")} ${cpu("worker-notify")} | db ${cpu("postgres")} | bandit ${cpu("bandit")}`);
   }
   console.log(`\nresults: ${out}\nk6 exit codes${withSync ? " (sync, workload)" : ""}: ${codes.join(",")}  (99 = an SLO threshold failed)`);
   // every k6 process must have passed (a failed sync must not hide behind a green workload)

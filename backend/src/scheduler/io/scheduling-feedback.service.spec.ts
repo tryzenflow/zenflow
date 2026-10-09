@@ -4,6 +4,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { BanditArmStateRepository } from "../../bandit/bandit-arm-state.repository";
 import { BanditService } from "../../bandit/bandit.service";
 import { SchedulingFeedbackService } from "./scheduling-feedback.service";
+import { ARM_LAYOUT, BANDIT_MODEL_VERSION } from "../constants";
 
 /**
  * `SchedulingFeedbackService.onFirstMove` — the delayed graded LinUCB penalty
@@ -20,13 +21,14 @@ async function makeSvc(over: { proposal?: unknown; updateResult?: unknown }) {
           id: "p1",
           selectedArm: "MORNING",
           featureVector: X,
+          modelVersion: `py-${ARM_LAYOUT}-0123456789ab`,
         }
       : over.proposal,
   );
   const eventUpdate = jest.fn().mockResolvedValue({});
   const prisma = {
     slotProposal: { findFirst: slotFindFirst },
-    sessionEvent: { update: eventUpdate },
+    sessionEvent: { updateMany: eventUpdate },
   };
   const bandit = {
     update: jest
@@ -86,6 +88,40 @@ describe("SchedulingFeedbackService.onFirstMove", () => {
     await svc.onFirstMove("u1", "s1", 1n, 60);
     expect(bandit.update).not.toHaveBeenCalled();
     expect(eventUpdate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["an older Python build without the arm layout", "py-0123456789ab"],
+    ["another arm layout", "py-arms8-v1-0123456789ab"],
+    ["no model version", null],
+  ])(
+    "drops the reward for a proposal stamped with %s",
+    async (_name, modelVersion) => {
+      const { svc, bandit, eventUpdate } = await makeSvc({
+        proposal: {
+          id: "p1",
+          selectedArm: "MORNING",
+          featureVector: X,
+          modelVersion,
+        },
+      });
+      await svc.onFirstMove("u1", "s1", 1n, 60);
+      expect(bandit.update).not.toHaveBeenCalled();
+      expect(eventUpdate).not.toHaveBeenCalled();
+    },
+  );
+
+  it("accepts a proposal from the TypeScript fallback model", async () => {
+    const { svc, bandit } = await makeSvc({
+      proposal: {
+        id: "p1",
+        selectedArm: "MORNING",
+        featureVector: X,
+        modelVersion: BANDIT_MODEL_VERSION,
+      },
+    });
+    await svc.onFirstMove("u1", "s1", 1n, 60);
+    expect(bandit.update).toHaveBeenCalledTimes(1);
   });
 
   it("does nothing when there is no LinUCB proposal for the session", async () => {

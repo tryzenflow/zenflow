@@ -13,7 +13,7 @@ import type { Redis } from "ioredis";
 import passport from "passport";
 import { buildSessionOptions } from "./auth/session.config";
 import { REDIS_CLIENT } from "./common/redis/redis.constants";
-import { getRole } from "./common/config/role";
+import { getRole, runsHttp } from "./common/config/role";
 import { WorkerOnlyHealthGuard } from "./health/worker-only-health.guard";
 import { IoredisSessionStore } from "./common/redis/ioredis-session.store";
 
@@ -21,8 +21,10 @@ import { IoredisSessionStore } from "./common/redis/ioredis-session.store";
 // actively-used session keeps getting extended on every request.
 const DEFAULT_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-// Worker (ADR-0011): same module graph, but no session/CORS/Swagger; it only
-// answers `/health*` (every other route 404s) while its crons and timers run.
+// Non-HTTP roles (ADR-0011: watcher, worker-*, worker): same module graph, but
+// no session/CORS/Swagger; it only answers `/health*` (every other route 404s)
+// while its crons and queue consumers run. Shutdown hooks drain the BullMQ
+// workers before the process exits.
 async function bootstrapWorker() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
@@ -40,6 +42,8 @@ async function bootstrap() {
     bufferLogs: true,
   });
   app.useLogger(app.get(Logger));
+  // SIGTERM -> close queue producers/pub-sub clients cleanly (rolling deploys).
+  app.enableShutdownHooks();
   // TLS is terminated by the nginx reverse proxy, which forwards plain HTTP to
   // this app with the real scheme in `X-Forwarded-Proto`. Trusting the first
   // proxy hop makes `req.secure` reflect that header, so express-session will
@@ -122,4 +126,4 @@ async function bootstrap() {
   app.use(passport.session());
   await app.listen(process.env.PORT ?? 8000);
 }
-void (getRole() === "worker" ? bootstrapWorker() : bootstrap());
+void (runsHttp(getRole()) ? bootstrap() : bootstrapWorker());

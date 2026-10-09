@@ -133,7 +133,7 @@ describe("ApnsSender", () => {
 
   it("shuts the provider down on module destroy", async () => {
     const sender = await make(FULL);
-    await sender.onModuleDestroy();
+    await sender.onApplicationShutdown();
     expect(shutdown).toHaveBeenCalled();
   });
 });

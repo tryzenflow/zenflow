@@ -61,6 +61,7 @@ def cross_midnight(policy: str) -> PlaceRequest:
         days=make_days(2),
         maxScanDays=60,
         bandit=bandit(warm_state(3)),
+        user={"preferenceMatrix": [0.0] * 168, "observationCount": 0},
     )
 
 

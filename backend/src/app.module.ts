@@ -17,6 +17,7 @@ import { TagsModule } from "./tags/tags.module";
 import { FilesModule } from "./files/files.module";
 import { SchedulerModule } from "./scheduler/scheduler.module";
 import { ScheduleModule } from "@nestjs/schedule";
+import { KillSwitchModule } from "./common/killswitch/killswitch.module";
 import { RedisModule } from "./common/redis/redis.module";
 import { RateLimitModule } from "./common/rate-limit";
 import { CryptoModule } from "./crypto/crypto.module";
@@ -28,24 +29,43 @@ import { NotificationsModule } from "./notifications/notifications.module";
 import { RemindersModule } from "./reminders/reminders.module";
 import { DevicesModule } from "./devices/devices.module";
 import { ObservabilityModule } from "./observability/observability.module";
-import { envFilePath, getRole, runsHttp, runsJobs } from "./common/config/role";
+import {
+  ROLE_VALUES,
+  consumesQueue,
+  envFilePath,
+  getRole,
+  runsHttp,
+  runsWatcher,
+} from "./common/config/role";
+import { QueueModule } from "./queue/queue.module";
+import { NotifyWorkerModule } from "./notifications/notify-worker.module";
 import { IngestionWorkerModule } from "./ingestion/ingestion-worker.module";
+import {
+  LmsFetchWorkerModule,
+  PortalFetchWorkerModule,
+} from "./ingestion/fetch-worker.module";
 import { SchedulerWorkerModule } from "./scheduler/scheduler-worker.module";
 import { RemindersWorkerModule } from "./reminders/reminders-worker.module";
 import { HealthModule } from "./health/health.module";
 
 // Process role (ADR-0011), fixed at module-evaluation time (reads the env file).
 const role = getRole();
-// Only the worker (and the all-in-one dev/test role) registers schedulers; an
-// API replica must not, or every cron would fire once per replica.
-const jobModules = runsJobs(role)
-  ? [
-      ScheduleModule.forRoot(),
-      IngestionWorkerModule,
-      SchedulerWorkerModule,
-      RemindersWorkerModule,
-    ]
-  : [];
+// The watcher (cron heartbeat that enqueues) and each queue consumer register
+// only in their own role; an API replica must register none, or every cron
+// would fire once per replica (ADR-0011, ADR-0007).
+const jobModules = [
+  ...(runsWatcher(role)
+    ? [
+        ScheduleModule.forRoot(),
+        IngestionWorkerModule,
+        SchedulerWorkerModule,
+        RemindersWorkerModule,
+      ]
+    : []),
+  ...(consumesQueue(role, "notify") ? [NotifyWorkerModule] : []),
+  ...(consumesQueue(role, "portal-fetch") ? [PortalFetchWorkerModule] : []),
+  ...(consumesQueue(role, "lms-fetch") ? [LmsFetchWorkerModule] : []),
+];
 
 @Module({
   imports: [
@@ -88,6 +108,12 @@ const jobModules = runsJobs(role)
         // counters (see common/rate-limit/) — kept off the session/OTP
         // Redis (CACHE_URL) so counter churn can't evict that data.
         RATE_LIMIT_CACHE_URL: Joi.string().uri().required(),
+        // Dedicated noeviction + AOF Redis for runtime kill-switch flags
+        // (ADR-0008). Unset outside production = fail-safe defaults only.
+        REDIS_KILLSWITCH_URL: Joi.string()
+          .uri()
+          .when("NODE_ENV", { is: "production", then: Joi.required() }),
+        KILLSWITCH_CACHE_TTL_MS: Joi.number().integer().min(0).optional(),
         MAIL_TRANSPORT: Joi.string().uri().required(),
         MAIL_FROM: Joi.string().email().required(),
         // Idle session lifetime in ms; with rolling sessions, active use keeps
@@ -125,6 +151,9 @@ const jobModules = runsJobs(role)
           .integer()
           .positive()
           .default(900), // 15 min
+        // How long `POST /integrations/:provider/sync` waits for its fetch jobs
+        // before answering 202 (the jobs keep running).
+        SYNC_MANUAL_WAIT_MS: Joi.number().integer().positive().default(25_000),
         OTP_REQUEST_EMAIL_LIMIT: Joi.number().integer().positive().default(3),
         OTP_VERIFY_IP_WINDOW_SEC: Joi.number().integer().positive().default(60),
         OTP_VERIFY_IP_LIMIT: Joi.number().integer().positive().default(20),
@@ -224,6 +253,12 @@ const jobModules = runsJobs(role)
         // rather than of whoever last edited this file. A measurement run lifts
         // it on purpose, together with 60s periods, to replay the pre-#56 burst.
         INGESTION_TICK_MAX_BATCH: Joi.number().integer().positive().default(5),
+        // Ticker stops claiming for a fetch queue once waiting+delayed jobs
+        // reach this, so nextDueAt is not advanced for rows that cannot run.
+        INGESTION_QUEUE_MAX_BACKLOG: Joi.number()
+          .integer()
+          .positive()
+          .default(500),
         // Stop claiming further kinds once a tick has spent this long, so one
         // slow kind cannot push a tick past the next heartbeat. A deferred
         // target simply stays overdue and leads the next tick.
@@ -331,7 +366,72 @@ const jobModules = runsJobs(role)
         // a deployment sees them documented + defaulted.
         // Process role (ADR-0011): "api" = HTTP only, "worker" = crons, ingestion
         // ticker and reminder timers only, "all" = both (local dev, test stack).
-        ROLE: Joi.string().valid("api", "worker", "all").default("all"),
+        // Queue roles (ADR-0007): "watcher" = crons that enqueue, "worker-portal"
+        // / "worker-lms" / "worker-notify" = one queue consumer each, "worker" =
+        // watcher + every consumer.
+        ROLE: Joi.string()
+          .valid(...ROLE_VALUES)
+          .default("all"),
+        // --- Job queues (queue/, BullMQ; ADR-0007) -------------------------
+        // Dedicated Redis with noeviction + AOF (compose `redis-queue`): the
+        // LRU instances would evict jobs. Required in production; elsewhere it
+        // defaults to redis://localhost:6381, and with NODE_ENV=test and no
+        // value jobs are recorded in memory and never consumed.
+        QUEUE_REDIS_URL: Joi.string().uri().when(Joi.ref("NODE_ENV"), {
+          is: "production",
+          then: Joi.required(),
+          otherwise: Joi.optional(),
+        }),
+        // Attempts per job (first run included) and the base of the exponential
+        // backoff between them; the last failure moves the job to `<queue>.dlq`.
+        QUEUE_JOB_ATTEMPTS: Joi.number().integer().min(1).default(5),
+        QUEUE_BACKOFF_MS: Joi.number().integer().positive().default(5000),
+        // Every producer call (enqueue, getJob, remove, counts) gives up after this long.
+        QUEUE_ENQUEUE_TIMEOUT_MS: Joi.number()
+          .integer()
+          .positive()
+          .default(2000),
+        // Worker drain budget on shutdown before a forced close.
+        QUEUE_SHUTDOWN_TIMEOUT_MS: Joi.number()
+          .integer()
+          .positive()
+          .default(25000),
+        // Per queue and replica; fetch queues stay at 1 to keep the upstream
+        // politeness of INGESTION_REQUEST_DELAY_MS.
+        QUEUE_PORTAL_FETCH_CONCURRENCY: Joi.number()
+          .integer()
+          .positive()
+          .optional(),
+        QUEUE_LMS_FETCH_CONCURRENCY: Joi.number()
+          .integer()
+          .positive()
+          .optional(),
+        QUEUE_NOTIFY_CONCURRENCY: Joi.number().integer().positive().optional(),
+        // Rate limit shared by all replicas: at most RATE_MAX jobs per
+        // RATE_DURATION_MS. Unset = the queue's built-in default (notify: 50/s).
+        QUEUE_PORTAL_FETCH_RATE_MAX: Joi.number()
+          .integer()
+          .positive()
+          .optional(),
+        QUEUE_PORTAL_FETCH_RATE_DURATION_MS: Joi.number()
+          .integer()
+          .positive()
+          .optional(),
+        QUEUE_LMS_FETCH_RATE_MAX: Joi.number().integer().positive().optional(),
+        QUEUE_LMS_FETCH_RATE_DURATION_MS: Joi.number()
+          .integer()
+          .positive()
+          .optional(),
+        QUEUE_NOTIFY_RATE_MAX: Joi.number().integer().positive().optional(),
+        QUEUE_NOTIFY_RATE_DURATION_MS: Joi.number()
+          .integer()
+          .positive()
+          .optional(),
+        // --- SSE fan-out (notifications/notification-pubsub.service.ts; ADR-0018)
+        // Pub/sub Redis with no persistence. Unset = events stay in-process
+        // (tests, single-process dev). Publishes fail open after the timeout.
+        REDIS_PUBSUB_URL: Joi.string().uri().optional(),
+        REDIS_PUBSUB_TIMEOUT_MS: Joi.number().integer().positive().default(250),
         NODE_ENV: Joi.string()
           .valid("development", "production", "test")
           .default("development"),
@@ -376,6 +476,8 @@ const jobModules = runsJobs(role)
       },
     }),
     RedisModule,
+    KillSwitchModule,
+    QueueModule,
     RateLimitModule,
     UsersModule,
     PrismaModule,

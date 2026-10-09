@@ -6,6 +6,8 @@ import { SyncDigest } from "./core/sync-digest";
 import { MaterializerService } from "./materializer.service";
 import { SyncConflictsService } from "./sync-conflicts.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { NotificationPubSub } from "../notifications/notification-pubsub.service";
+import { QueueService } from "../queue/queue.service";
 import { TagsService } from "../tags/tags.service";
 import type {
   ParsedBlock,
@@ -294,6 +296,8 @@ async function makeService(
       MaterializerService,
       TagsService,
       NotificationsService,
+      NotificationPubSub,
+      { provide: QueueService, useValue: { enqueueBestEffort: jest.fn() } },
       { provide: PrismaService, useValue: prisma },
       { provide: ConfigService, useValue: config },
       ...(syncConflicts

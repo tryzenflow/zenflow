@@ -1,3 +1,4 @@
+import { KillSwitchModule } from "../src/common/killswitch/killswitch.module";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { CacheModule } from "@nestjs/cache-manager";
@@ -56,6 +57,7 @@ describe("OTP rate limiting (e2e)", () => {
       imports: [
         ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }),
         ScheduleModule.forRoot(),
+        KillSwitchModule,
         CacheModule.register({ isGlobal: true }),
         RateLimitModule,
         AuthModule,

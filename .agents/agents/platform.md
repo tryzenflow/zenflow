@@ -10,7 +10,10 @@ owns:
   - backend/docker-entrypoint.sh
   - backend/observability/**
   - backend/src/observability/**
+  - backend/src/queue/**
   - backend/ops/**
+  - backend/killswitch
+  - backend/src/killswitch/**
   - build_images.sh
   - .github/**
   - loadtest/**
@@ -28,6 +31,7 @@ You own how Zenflow is built, shipped, watched and load-tested.
 - `backend/compose.{dev,test,staging,prod}.yml`; staging carries the observability stack (Prometheus, Grafana, postgres-exporter, cAdvisor); `backend/ops/vault`; `scripts/deploy`.
 - `.github/workflows/` (`ci`, `deploy`, `images`, `release`, `audit`), `.github/scripts/write-test-env.sh`, issue and PR templates.
 - `backend/src/observability/` (metrics, exception filter) and `backend/observability/` (dashboards, scrape config).
+- `backend/src/queue/` BullMQ plumbing (queue service, workers, DLQ, breaker parking, queue metrics); processors stay with their domain (`ingestion/`, `notifications/`).
 - `loadtest/` k6 scripts, `loadtest/staging/` harness; results go in `docs/benchmarks/`.
 
 ## Rules

@@ -1,3 +1,4 @@
+import { KillSwitchService } from "../../common/killswitch/killswitch.service";
 import { Test, TestingModule } from "@nestjs/testing";
 import { ConfigService } from "@nestjs/config";
 import {
@@ -46,8 +47,13 @@ async function make(
   let t = 0;
   const sleep = jest.fn().mockResolvedValue(undefined);
   const config = { get: (k: string) => cfg[k] };
+  const killSwitch = { isEnabled: jest.fn().mockResolvedValue(true) };
   const module: TestingModule = await Test.createTestingModule({
     providers: [
+      {
+        provide: KillSwitchService,
+        useValue: killSwitch,
+      },
       PlacementClient,
       { provide: ConfigService, useValue: config },
       {
@@ -62,7 +68,7 @@ async function make(
     ],
   }).compile();
   const client = module.get<PlacementClient>(PlacementClient);
-  return { client, sleep, advance: (ms: number) => (t += ms) };
+  return { client, killSwitch, sleep, advance: (ms: number) => (t += ms) };
 }
 
 const timeoutErr = () => {
@@ -77,6 +83,15 @@ describe("PlacementClient", () => {
     const { client } = await make(f, {});
     expect(client.enabled).toBe(false);
     expect(await client.place(req)).toEqual({ ok: false, reason: "disabled" });
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("reports `disabled` without calling fetch while the bandit flag is off", async () => {
+    const f = jest.fn();
+    const { client, killSwitch } = await make(f);
+    killSwitch.isEnabled.mockResolvedValue(false);
+    expect(await client.place(req)).toEqual({ ok: false, reason: "disabled" });
+    expect(killSwitch.isEnabled).toHaveBeenCalledWith("bandit");
     expect(f).not.toHaveBeenCalled();
   });
 

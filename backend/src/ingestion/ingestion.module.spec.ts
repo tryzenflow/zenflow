@@ -1,3 +1,5 @@
+import { KillSwitchModule } from "../common/killswitch/killswitch.module";
+import { KillSwitchService } from "../common/killswitch/killswitch.service";
 import { ConfigModule } from "@nestjs/config";
 import { ScheduleModule } from "@nestjs/schedule";
 import { Test } from "@nestjs/testing";
@@ -5,6 +7,11 @@ import { IntegrationsModule } from "../integrations/integrations.module";
 import { IntegrationsService } from "../integrations/integrations.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { ExamWatcherService } from "./exam-watcher.service";
+import {
+  LmsFetchWorkerModule,
+  PortalFetchWorkerModule,
+} from "./fetch-worker.module";
+import { LmsFetchProcessor, PortalFetchProcessor } from "./fetch.processor";
 import { IngestionModule } from "./ingestion.module";
 import { IngestionWorkerModule } from "./ingestion-worker.module";
 import { IngestionScheduleService } from "./ingestion-schedule.service";
@@ -38,11 +45,16 @@ describe("IngestionModule ↔ IntegrationsModule", () => {
       imports: [
         ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }),
         ScheduleModule.forRoot(),
+        KillSwitchModule,
         IngestionModule,
         IngestionWorkerModule,
+        PortalFetchWorkerModule,
+        LmsFetchWorkerModule,
         IntegrationsModule,
       ],
     })
+      .overrideProvider(KillSwitchService)
+      .useValue({ isEnabled: jest.fn().mockResolvedValue(true) })
       .overrideProvider(PrismaService)
       .useValue({})
       .compile();
@@ -57,6 +69,8 @@ describe("IngestionModule ↔ IntegrationsModule", () => {
     }
     // ...and IntegrationsService got its way back to them.
     expect(moduleRef.get(IngestionSyncService)).toBeDefined();
+    expect(moduleRef.get(PortalFetchProcessor)).toBeDefined();
+    expect(moduleRef.get(LmsFetchProcessor)).toBeDefined();
     expect(moduleRef.get(IntegrationsService)).toBeDefined();
 
     // Issue #56's rolling scheduler, including the handle IntegrationsService
@@ -83,10 +97,13 @@ describe("IngestionModule ↔ IntegrationsModule", () => {
       imports: [
         ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }),
         ScheduleModule.forRoot(),
+        KillSwitchModule,
         IngestionModule,
         IntegrationsModule,
       ],
     })
+      .overrideProvider(KillSwitchService)
+      .useValue({ isEnabled: jest.fn().mockResolvedValue(true) })
       .overrideProvider(PrismaService)
       .useValue({})
       .compile();

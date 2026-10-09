@@ -1,10 +1,14 @@
-import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
+import {
+  Injectable,
+  OnModuleInit,
+  OnApplicationShutdown,
+} from "@nestjs/common";
 import { PrismaClient } from "../../generated/prisma/client";
 
 @Injectable()
 export class PrismaService
   extends PrismaClient
-  implements OnModuleInit, OnModuleDestroy
+  implements OnModuleInit, OnApplicationShutdown
 {
   constructor() {
     // Prisma's defaults (2s maxWait / 5s timeout) are tuned for a fast local
@@ -22,7 +26,9 @@ export class PrismaService
     await this.$connect();
   }
 
-  async onModuleDestroy() {
+  // Not onModuleDestroy: queue workers drain in beforeApplicationShutdown and
+  // their in-flight jobs still need the database.
+  async onApplicationShutdown() {
     await this.$disconnect();
   }
 }

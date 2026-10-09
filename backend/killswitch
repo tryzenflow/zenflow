@@ -1,0 +1,10 @@
+#!/bin/sh
+# Emergency shorthand, run ON the prod/staging host from backend/:
+#   ./killswitch off ingestion DLU is rate limiting
+# From your laptop: ssh <host> 'cd <deploy-dir>/backend && ./killswitch status'
+# ZENFLOW_ENV=staging selects compose.staging.yml (default: prod).
+cd "$(dirname "$0")" || exit 1
+# Runs in the active blue-green colour (state/active, written by scripts/deploy/deploy.sh).
+colour="$(cat state/active 2>/dev/null || echo blue)"
+exec docker compose -f "compose.${ZENFLOW_ENV:-prod}.yml" exec -T "api-${colour}" \
+  node dist/killswitch/killswitch.cli.js "$@"

@@ -5,7 +5,7 @@
 **Issue:** #133
 
 ## Context
-- `GET /notifications/stream` (`@Sse`) reads `NotificationsService.notificationEmitter`, an in-process `EventEmitter2`. With several API replicas, or with notifications created in the `worker` ([ADR-0011](0011-separate-api-worker-processes.md)), the event is emitted in a process that does not hold the client's connection, so it is lost.
+- `GET /notifications/stream` (`@Sse`) reads `NotificationsService.notificationEmitter`, an in-process `EventEmitter2`. With several API replicas, or with notifications created in the `watcher` or `worker-*` processes ([ADR-0011](0011-separate-api-worker-processes.md)), the event is emitted in a process that does not hold the client's connection, so it is lost.
 - Pub/sub messages are ephemeral; they need no persistence or eviction policy, and a burst must not disturb sessions, flags or the cache.
 
 ## Decision
@@ -17,4 +17,4 @@
 ## Consequences
 - Delivery is at-most-once; clients refetch the inbox on reconnect.
 - A restart of this instance drops live subscriptions; processes resubscribe automatically.
-- Removes the main blocker for API replicas, the worker and blue-green ([ADR-0013](0013-blue-green-deploy.md)), where two colours briefly coexist.
+- Removes the main blocker for API replicas, the background roles and blue-green ([ADR-0013](0013-blue-green-deploy.md)), where two colours briefly coexist.

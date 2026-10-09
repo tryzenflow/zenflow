@@ -6,6 +6,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { BanditService } from "../../bandit/bandit.service";
 import { BanditArmStateRepository } from "../../bandit/bandit-arm-state.repository";
 import { RETAINED_GRACE_MS } from "../../common/constants";
+import { BANDIT_MODEL_VERSION } from "../constants";
 
 interface Row {
   id: string;
@@ -207,6 +208,7 @@ describe("RetainedSessionsService.sweep", () => {
           id: "prop-1",
           selectedArm: "MORNING",
           featureVector: [0.1, 0.2, 0.3, -1, 0, 0.25, 1],
+          modelVersion: BANDIT_MODEL_VERSION,
         },
       },
     );
@@ -252,7 +254,7 @@ describe("RetainedSessionsService.sweep", () => {
     expect(userUpdates[0].id).toBe("user-1");
     const written = userUpdates[0].data.preferenceMatrix as number[];
     // Monday (wd=1), hour 9 → matrixIndex(1, 9) = 9.
-    expect(written[9]).toBeCloseTo(0.025); // PREFERENCE_LEARNING_RATE · PREFERENCE_RETAINED_WEIGHT
+    expect(written[9]).toBeCloseTo(0.05); // PREFERENCE_LEARNING_RATE · PREFERENCE_RETAINED_WEIGHT
   });
 
   it("reinforces the preference matrix even when there is no LinUCB proposal for the session", async () => {

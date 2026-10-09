@@ -132,7 +132,7 @@ function stopHostGuards() {
 
 // ---- variant lifecycle -------------------------------------------------------------------------------------
 async function bringUp(V, restore) {
-  await compose(V, "up", "-d", "postgres", "redis", "redis-ratelimit", "mail", "bandit");
+  await compose(V, "up", "-d", "postgres", "session-redis", "redis-ratelimit", "mail", "bandit");
   await waitFor(async () => { try { await psql(V, "select 1"); return true; } catch { return false; } }, "postgres", 60);
   if (restore) {
     // every variant-pass starts from the identical seeded snapshot (no drift/bloat/matrix reinforcement carried over)
@@ -244,7 +244,7 @@ async function runScenario(V, pass, sc, attempt) {
   await psql(V, "SELECT pg_stat_statements_reset()").catch(() => {});
 
   // docker stats stream
-  const names = ["api", "bandit", "postgres", "redis", "redis-ratelimit"].map((s) => cname(V, s));
+  const names = ["api", "bandit", "postgres", "session-redis", "redis-ratelimit"].map((s) => cname(V, s));
   const samples = [];
   const stats = spawn("docker", ["stats", "--format", "{{json .}}", ...names], { windowsHide: true });
   let buf = "";

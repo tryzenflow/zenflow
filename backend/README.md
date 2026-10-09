@@ -33,7 +33,8 @@ Env: copy `.env.example` to `.env.dev` (and `.env.test`, `.env.staging`, `.env.p
 pnpm typecheck           # tsc --noEmit
 pnpm lint                # eslint --fix
 pnpm test                # unit tests
-pnpm test:e2e            # e2e (needs the .env.test DB)
+pnpm test:e2e            # all e2e (builds first); needs `docker compose --profile queue -f compose.test.yml up -d` and the .env.test DB
+                         # one suite: pnpm exec jest --config ./test/jest-e2e.json backup  (queue | backup | app ...)
 pnpm prisma:dev:studio   # browse the DB
 pnpm prisma:gen:dev      # regenerate the client into generated/prisma
 ```
@@ -57,7 +58,7 @@ Config and rationale: [ADR-0010](../docs/adr/0010-nginx-replaces-caddy.md); file
 
 - First issuance, once per host, before the first `up`: `LE_EMAIL=you@example.com ./nginx/init-cert.sh`.
 - Renewal is the `certbot` service (twice daily, webroot); `nginx` reloads every 12 h to pick the new certificate up. Alert on certificate expiry.
-- Upstreams live in `nginx/upstream.api.conf`; edit and `docker compose exec nginx nginx -s reload`.
+- The API upstream is `state/upstream.api.conf` on the host, written by `scripts/deploy/deploy.sh` (blue-green, [ci-cd.md](../docs/ops/ci-cd.md)); do not edit it by hand.
 
 ## Layout
 

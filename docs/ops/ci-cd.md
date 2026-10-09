@@ -7,7 +7,7 @@ For maintainers (issue #75). Workflows live in `.github/workflows/`.
 | `ci.yml` | every PR, merge queue | See "CI jobs" below. Final job **`CI ok`** is the only required check. |
 | `images.yml` | push to `master` | Builds `zenflow-api` and `zenflow-bandit` (`build_images.sh`), pushes `ghcr.io/<owner>/<image>:<git-sha>` and `:latest`, deploys that SHA to **staging**. |
 | `release.yml` | GitHub Release published (tag `vX.Y.Z`) | Resolves the tag to its commit (must be on `master`), deploys the **already built** images for that SHA to **production**. Gated by `production` required reviewers. No rebuild. |
-| `deploy.yml` | called by the two above, or manual | Single deploy entry point (see Deploy target). Manual run = rollback. |
+| `deploy.yml` | called by the two above, or manual | Single deploy entry point (see Deploy target). Manual run = rollback (`mode=flip` or an older SHA). |
 | `audit.yml` | weekly, and PRs touching the lockfile | `pnpm audit`; informational, never required. |
 | `.github/dependabot.yml` | weekly | npm, GitHub Actions, Docker, uv. |
 
@@ -17,7 +17,7 @@ For maintainers (issue #75). Workflows live in `.github/workflows/`.
 - Unit tests: backend Jest, mobile Vitest, bandit pytest/ruff.
 - Prisma drift, backend e2e (`compose.test.yml`), frontend Playwright e2e.
 - API image build smoke test, gitleaks.
-- Vault: `docker compose config` for every compose file; Vault absent from dev/staging/test and loopback-only in prod; `render-secrets.sh` against a throwaway `vault server -dev`; prod Vault config boots.
+- Vault: `docker compose config` for every compose file; Vault absent from dev/test and loopback-only in staging/prod; the `backup` service in staging/prod mounts `vault_data` read-only; `render-secrets.sh` against a throwaway `vault server -dev`; prod Vault config boots.
 - Agents: `.claude/` and `.codex/` match `.agents/` (`node scripts/sync-agents.mjs --check`), hook tests, ownership check.
 
 Prisma check, against a throwaway shadow Postgres:
@@ -28,6 +28,8 @@ prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel pr
 
 It fails on schema changes without a migration, or a migration history that does not apply cleanly.
 
+The multi-process queue e2e (`backend-e2e-queue`, compose profile `queue`) runs on every PR, like the other e2e jobs.
+
 Backend e2e and Playwright generate a throwaway `backend/.env.test` with random secrets (`.github/scripts/write-test-env.sh`). Nothing secret-shaped is committed.
 
 ## Deploy target
@@ -35,6 +37,35 @@ Backend e2e and Playwright generate a throwaway `backend/.env.test` with random 
 - `scripts/deploy/deploy.sh` assumes docker compose on a Linux host over SSH (`backend/compose.{staging,prod}.yml`, images from GHCR).
 - Nothing about the host is hard-coded; for ECS/Fly/K8s replace its `REMOTE STEPS` block.
 - The frontend deploys separately through Netlify (`frontend/netlify.toml`).
+
+### Blue-green flow ([ADR-0013](../adr/0013-blue-green-deploy.md))
+
+The app tier runs as two colours, `api-{blue,green}` (x N) + `bandit-{blue,green}`. Postgres, Redis, the queue roles (`watcher`, `worker-*`), nginx and observability are shared. Host state is in `$DEPLOY_PATH/backend/state/` (`active`, `upstream.api.conf`, `images.env`, `reaper.pid`); never edit it by hand.
+
+`deploy.sh` on the host:
+
+1. Read the active colour; pull the new tag; run `migrations` once.
+2. Start the idle colour at 1 replica; gate on its healthcheck (`GET /api/v1/health/ready`: Postgres + Redis) and a smoke `GET /api/v1/health` (all dependencies, including its bandit). A failure stops the idle colour and leaves the active one untouched.
+3. Memory guard: abort if the host cannot fit the full overlap plus `MIN_FREE_MB`.
+4. Point nginx at the new colour (`nginx -t`, reload), scale it to full size, reload again.
+5. Recreate `watcher` / `worker-*` on the new tag.
+6. Stop the old colour after `OLD_COLOUR_TTL`.
+
+| Var (per Environment, optional) | Default | Purpose |
+| --- | --- | --- |
+| `OLD_COLOUR_TTL` | `600` | Seconds the previous colour stays up for a flip back; `0` stops it at once |
+| `MIN_FREE_MB` | `512` | Available memory that must remain after the new colour is at full size |
+
+- Migrations must be backward compatible with the previous release (expand, then contract): both colours share the database.
+- The first deploy on this layout replaces the old single `api` / `bandit` services and has a short outage. Later deploys do not.
+- `./killswitch` and `docker compose exec` need the colour: `cat backend/state/active`.
+- The queue roles follow the active colour's bandit; do not `up` them by hand without `ZENFLOW_ACTIVE_COLOUR`.
+
+### Rehearsal on staging (acceptance for #136)
+
+1. Run the 1x k6 scenario ([loadtest/README.md](../../loadtest/README.md)) against staging and deploy during it: `http_req_failed` must stay 0 across the flip.
+2. Run **Deploy** with `mode=flip` inside the TTL: instant, no errors.
+3. During the overlap watch the deploy log's `docker stats` and `free -m`: peak stays inside the [ADR-0015](../adr/0015-launch-capacity-estimate.md) budget.
 
 - Deploys are off until `DEPLOY_ENABLED` is set; unset, the job warns and skips.
 - Compose files read `ZENFLOW_API_IMAGE` / `ZENFLOW_BANDIT_IMAGE`; defaults keep the local `build:` behaviour.
@@ -101,9 +132,12 @@ Result: PR required, up to date, `CI ok` green, linear history.
 2. Create a GitHub Release with tag `vX.Y.Z` on that commit (`gh release create vX.Y.Z --target <sha> --generate-notes`).
 3. `release.yml` pauses at the `production` Environment; a reviewer approves; `deploy.yml` rolls out the SHA's images.
 
-## Rollback runbook (redeploy the previous SHA)
+## Rollback runbook
 
-Rollback is a deploy of an older, already-built SHA. It restores the matching compose and proxy config too.
+- **Old colour still up** (within `OLD_COLOUR_TTL`): Actions, **Deploy**, `mode=flip`, pick the environment (`gh workflow run deploy.yml -f environment=production -f mode=flip`). It checks the old colour is healthy, repoints nginx and the queue roles, and keeps the bad colour up for another TTL. Production still needs reviewer approval.
+- **Otherwise**: redeploy the previous SHA, below. It restores the matching compose and proxy config too.
+
+### Redeploy the previous SHA
 
 1. Find the last good SHA: previous green `Images & staging deploy` / `Release (production)` run, `git log master`, or on the host `tail -n 5 $DEPLOY_PATH/.deploy-history` (lines: `timestamp sha prev=<previous sha>`).
 2. Run it: Actions, **Deploy**, Run workflow, pick the environment, paste the full SHA. Or `gh workflow run deploy.yml -f environment=production -f image_tag=<sha>`. Production still needs reviewer approval.

@@ -1,7 +1,11 @@
 import { Global, Logger, Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import Redis from "ioredis";
-import { RATE_LIMIT_REDIS_CLIENT, REDIS_CLIENT } from "./redis.constants";
+import {
+  KILLSWITCH_REDIS_CLIENT,
+  RATE_LIMIT_REDIS_CLIENT,
+  REDIS_CLIENT,
+} from "./redis.constants";
 
 const logger = new Logger("RedisModule");
 
@@ -77,7 +81,15 @@ function createRedisClient(
       useFactory: (configService: ConfigService) =>
         createRedisClient(configService, "RATE_LIMIT_CACHE_URL", true),
     },
+    {
+      provide: KILLSWITCH_REDIS_CLIENT,
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) =>
+        configService.get<string>("REDIS_KILLSWITCH_URL")
+          ? createRedisClient(configService, "REDIS_KILLSWITCH_URL", true)
+          : null,
+    },
   ],
-  exports: [REDIS_CLIENT, RATE_LIMIT_REDIS_CLIENT],
+  exports: [REDIS_CLIENT, RATE_LIMIT_REDIS_CLIENT, KILLSWITCH_REDIS_CLIENT],
 })
 export class RedisModule {}

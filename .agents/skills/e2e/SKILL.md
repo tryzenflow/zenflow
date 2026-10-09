@@ -11,7 +11,7 @@ A surface (`api` or `ui`) plus the issue or acceptance criteria it must satisfy.
 ## Steps
 1. Delegate to `zenflow-qa`; with no agents, follow `.agents/agents/zenflow-qa.md`.
 2. Start the test stack: `backend/compose.test.yml` with `.env.test` (`.github/scripts/write-test-env.sh`).
-3. API: add `backend/test/<feature>.e2e-spec.ts`, then `pnpm --filter backend test:e2e`. UI: add specs under `frontend/e2e/`, then `pnpm --filter frontend test:e2e`.
+3. API: add `backend/test/<feature>.e2e-spec.ts`, boot Nest with `Test.createTestingModule` and `.overrideProvider` for externals (AGENTS.md → Tests), then `pnpm --filter backend test:e2e`. UI: add specs under `frontend/e2e/`, then `pnpm --filter frontend test:e2e`.
 4. Tear the stack down.
 5. Report failures that are product bugs to the owner (`node .agents/scripts/owner.mjs <path>`).
 

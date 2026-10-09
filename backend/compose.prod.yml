@@ -1,8 +1,14 @@
 name: zenflow-prod
 services:
   # HTTP only (ADR-0011): no crons, ticker or reminder timers, so replicas can be
-  # scaled freely. All scheduled work runs in `worker`.
+  # scaled freely. All scheduled work runs in `watcher`, queue consumers in `worker-*`.
+  #
+  # Blue-green (ADR-0013): `api` and `bandit` are templates only (never started;
+  # the `template` profile is never enabled). The app tier runs as api-blue/api-green
+  # and bandit-blue/bandit-green, driven by scripts/deploy/deploy.sh. Queue roles and
+  # `migrations` use the newest tag (ZENFLOW_API_IMAGE).
   api:
+    profiles: ["template"]
     build:
       context: ..
       dockerfile: backend/Dockerfile
@@ -14,6 +20,8 @@ services:
       - db
       - cache
       - ratelimit
+      - queue
+      - pubsub
       - bandit
       - mail
       - o11y
@@ -27,9 +35,15 @@ services:
         condition: service_started
       postgres:
         condition: service_healthy
-      redis:
+      session-redis:
         condition: service_healthy
       redis-ratelimit:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
+      redis-killswitch:
+        condition: service_healthy
+      redis-pubsub:
         condition: service_healthy
       migrations:
         condition: service_completed_successfully
@@ -45,15 +59,59 @@ services:
     deploy:
       replicas: 2
 
-  # Crons, ingestion ticker/watchers, retained-sessions, matrix decay, reminder
-  # timers (ADR-0011). Exactly one replica; serves only GET /health on :5001.
-  worker:
+  api-blue:
     extends:
       service: api
-    container_name: zenflow-worker-prod
+    profiles: !reset []
+    image: ${ZENFLOW_API_IMAGE_BLUE:-${ZENFLOW_API_IMAGE:-zenflow-api:0.1.0-beta.0}}
+    mem_limit: 1g
+    environment:
+      BANDIT_SERVICE_URL: http://bandit-blue:8000
+    depends_on:
+      bandit-blue:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8000/api/v1/health/ready').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  api-green:
+    extends:
+      service: api
+    profiles: !reset []
+    image: ${ZENFLOW_API_IMAGE_GREEN:-${ZENFLOW_API_IMAGE:-zenflow-api:0.1.0-beta.0}}
+    mem_limit: 1g
+    environment:
+      BANDIT_SERVICE_URL: http://bandit-green:8000
+    depends_on:
+      bandit-green:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8000/api/v1/health/ready').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Queue roles (ADR-0007, ADR-0011). Each serves only GET /health on :5001.
+  # `watcher` is the only cron runner (ingestion ticker, reminder sweep,
+  # retained-sessions, matrix decay): exactly one replica. The consumers scale
+  # independently (`replicas`), except that fetch concurrency is kept low to be
+  # polite to DLU.
+  # Enqueues work; consumes nothing.
+  watcher:
+    extends:
+      service: api
+    profiles: !reset []
+    container_name: zenflow-watcher-prod
     restart: unless-stopped
     environment:
-      ROLE: worker
+      ROLE: watcher
+      BANDIT_SERVICE_URL: http://bandit-${ZENFLOW_ACTIVE_COLOUR:-blue}:8000
+      QUEUE_SHUTDOWN_TIMEOUT_MS: "50000"
+    stop_grace_period: 60s
     deploy:
       replicas: 1
     cpus: 2
@@ -65,7 +123,77 @@ services:
       retries: 3
       start_period: 30s
 
+  # Consumes `portal-fetch`.
+  worker-portal:
+    extends:
+      service: api
+    profiles: !reset []
+    container_name: zenflow-worker-portal-prod
+    restart: unless-stopped
+    environment:
+      ROLE: worker-portal
+      BANDIT_SERVICE_URL: http://bandit-${ZENFLOW_ACTIVE_COLOUR:-blue}:8000
+      QUEUE_SHUTDOWN_TIMEOUT_MS: "50000"
+    stop_grace_period: 60s
+    deploy:
+      replicas: 1
+    cpus: 1
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5001/health/live').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Consumes `lms-fetch`.
+  worker-lms:
+    extends:
+      service: api
+    profiles: !reset []
+    container_name: zenflow-worker-lms-prod
+    restart: unless-stopped
+    environment:
+      ROLE: worker-lms
+      BANDIT_SERVICE_URL: http://bandit-${ZENFLOW_ACTIVE_COLOUR:-blue}:8000
+      QUEUE_SHUTDOWN_TIMEOUT_MS: "50000"
+    stop_grace_period: 60s
+    deploy:
+      replicas: 1
+    cpus: 1
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5001/health/live').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Consumes `notify`: push, email, reminders.
+  worker-notify:
+    extends:
+      service: api
+    profiles: !reset []
+    container_name: zenflow-worker-notify-prod
+    restart: unless-stopped
+    environment:
+      ROLE: worker-notify
+      BANDIT_SERVICE_URL: http://bandit-${ZENFLOW_ACTIVE_COLOUR:-blue}:8000
+      QUEUE_SHUTDOWN_TIMEOUT_MS: "50000"
+    stop_grace_period: 60s
+    deploy:
+      replicas: 1
+    cpus: 1
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5001/health/live').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
   bandit:
+    profiles: ["template"]
     container_name: zenflow-bandit-prod
     build: ../services/bandit
     image: ${ZENFLOW_BANDIT_IMAGE:-zenflow-bandit:latest}
@@ -86,6 +214,20 @@ services:
     networks:
       - bandit
       - o11y
+
+  bandit-blue:
+    extends:
+      service: bandit
+    profiles: !reset []
+    container_name: zenflow-bandit-prod-blue
+    image: ${ZENFLOW_BANDIT_IMAGE_BLUE:-${ZENFLOW_BANDIT_IMAGE:-zenflow-bandit:latest}}
+
+  bandit-green:
+    extends:
+      service: bandit
+    profiles: !reset []
+    container_name: zenflow-bandit-prod-green
+    image: ${ZENFLOW_BANDIT_IMAGE_GREEN:-${ZENFLOW_BANDIT_IMAGE:-zenflow-bandit:latest}}
 
   migrations:
     container_name: zenflow-db-migration-prod
@@ -126,8 +268,42 @@ services:
       timeout: 5s
       retries: 5
 
-  # Sessions + OTP. Must NOT evict: losing keys logs users out. AOF keeps them across restarts.
-  redis:
+  # Separate cron process (busybox crond): encrypted pg_dump to S3 plus a restore test.
+  # Prod: every 3 h, real S3 (leave BACKUP_S3_ENDPOINT unset); also snapshots Vault file storage.
+  # Keys come from .env.prod: BACKUP_S3_*, BACKUP_AGE_RECIPIENT, BACKUP_AGE_IDENTITY. See docs/ops/backups.md.
+  backup:
+    container_name: zenflow-backup-prod
+    image: postgres:18.4-alpine
+    restart: unless-stopped
+    entrypoint: ["sh", "/opt/backup/entrypoint.sh"]
+    env_file:
+      - .env.prod
+    environment:
+      BACKUP_ENV: prod
+      BACKUP_CRON: ${BACKUP_CRON:-0 */3 * * *}
+      RESTORE_TEST_CRON: ${RESTORE_TEST_CRON:-0 4 * * 0}
+      BACKUP_VAULT_DIR: /vault-data
+    volumes:
+      - ./ops/backup:/opt/backup:ro
+      - backup_metrics:/metrics
+      - vault_data:/vault-data:ro
+    networks:
+      - db
+      - egress
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Healthy once the tools are installed, the crontab is rendered and crond is running.
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /run/backup.env && pgrep crond >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+
+  # Sessions + OTP. Every key carries a TTL, so volatile-lru can only ever drop expiring keys.
+  # AOF everysec plus an RDB snapshot keep sessions across restarts (ADR-0017).
+  session-redis:
     container_name: zenflow-cache-prod
     image: redis:8.8.0-alpine
     restart: unless-stopped
@@ -136,11 +312,13 @@ services:
       - --maxmemory
       - 192mb
       - --maxmemory-policy
-      - noeviction
+      - volatile-lru
       - --appendonly
       - "yes"
       - --appendfsync
       - everysec
+      - --save
+      - "1800 1"
     volumes:
       - redis_data:/data
     expose:
@@ -155,7 +333,7 @@ services:
       retries: 5
 
   # Rate-limit counters only (ADR-0005): disposable, so LRU eviction + RDB snapshot
-  # (every 15 s when >= 1 key changed) and no AOF. Keep separate from `redis`.
+  # (every 15 s when >= 1 key changed) and no AOF. Keep separate from `session-redis`.
   redis-ratelimit:
     container_name: zenflow-cache-ratelimit-prod
     image: redis:8.8.0-alpine
@@ -177,6 +355,89 @@ services:
     networks:
       - ratelimit
     mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Job queues (ADR-0007, BullMQ). Must NOT evict or lose jobs: noeviction + AOF on
+  # its own volume. Keep separate from `session-redis` and `redis-ratelimit`.
+  redis-queue:
+    container_name: zenflow-cache-queue-prod
+    image: redis:8.8.0-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --maxmemory
+      - 192mb
+      - --maxmemory-policy
+      - noeviction
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+    volumes:
+      - redis_queue_data:/data
+    expose:
+      - "6379"
+    networks:
+      - queue
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Runtime kill switch (ADR-0008): flags + audit stream. noeviction + AOF so a
+  # restart keeps every flag; its own volume. Shares the `queue` network (same
+  # consumers: api, watcher, workers). Keep separate from every other Redis.
+  redis-killswitch:
+    container_name: zenflow-cache-killswitch-prod
+    image: redis:8.8.0-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --maxmemory
+      - 32mb
+      - --maxmemory-policy
+      - noeviction
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+    volumes:
+      - redis_killswitch_data:/data
+    expose:
+      - "6379"
+    networks:
+      - queue
+    mem_limit: 64m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # SSE fan-out (ADR-0018): ephemeral pub/sub only, no persistence.
+  redis-pubsub:
+    container_name: zenflow-cache-pubsub-prod
+    image: redis:8.8.0-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --maxmemory
+      - 32mb
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+    expose:
+      - "6379"
+    networks:
+      - pubsub
+    mem_limit: 64m
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -269,11 +530,31 @@ services:
       - --enable-feature=exemplar-storage,native-histograms
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/scrape.d/redis-exporter.yml:/etc/prometheus/scrape.d/redis-exporter.yml:ro
+      - ./observability/prometheus/rules.d/redis-sessions.yml:/etc/prometheus/rules.d/redis-sessions.yml:ro
+      - ./observability/prometheus/rules.d/session-event-partitions.yml:/etc/prometheus/rules.d/session-event-partitions.yml:ro
       - prometheus_data:/prometheus
     expose:
       - "9090"
     networks:
       - o11y
+
+  # Sessions Redis memory and evictions (Prometheus job `redis-exporter`, rules in
+  # observability/prometheus/rules.d/redis-sessions.yml).
+  redis-exporter:
+    container_name: zenflow-redis-exporter-prod
+    image: oliver006/redis_exporter:v1.67.0-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: redis://session-redis:6379
+    expose:
+      - "9121"
+    networks:
+      - cache
+      - o11y
+    depends_on:
+      session-redis:
+        condition: service_healthy
 
   node-exporter:
     container_name: zenflow-node-exporter-prod
@@ -281,8 +562,10 @@ services:
     restart: unless-stopped
     command:
       - --path.rootfs=/host
+      - --collector.textfile.directory=/textfile
     volumes:
       - /:/host:ro,rslave
+      - backup_metrics:/textfile:ro
     expose:
       - "9100"
     networks:
@@ -312,19 +595,33 @@ services:
     image: grafana/grafana:11.4.0
     restart: unless-stopped
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
-      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
+      # Internet-facing through nginx, so no default password.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD}
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-https://grafana.alphatrann.com}
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_USERS_ALLOW_SIGN_UP: "false"
       GF_FEATURE_TOGGLES_ENABLE: traceqlEditor traceToMetrics
       GF_LOG_LEVEL: warn
       # Server-side PNG rendering (panel/report exports, alert images).
       GF_RENDERING_SERVER_URL: http://grafana-renderer:8081/render
       GF_RENDERING_CALLBACK_URL: http://grafana:3000/
+      # Alert email (provisioning/alerting/contact-points.yml) through Mailgun SMTP for the
+      # alerts.alphatrann.com sending domain. Only GRAFANA_SMTP_PASSWORD (the domain's SMTP
+      # credential) is required; EU region: GRAFANA_SMTP_HOST=smtp.eu.mailgun.org:587.
+      GF_SMTP_ENABLED: ${GRAFANA_SMTP_ENABLED:-true}
+      GF_SMTP_HOST: ${GRAFANA_SMTP_HOST:-smtp.mailgun.org:587}
+      GF_SMTP_USER: ${GRAFANA_SMTP_USER:-postmaster@alerts.alphatrann.com}
+      GF_SMTP_PASSWORD: ${GRAFANA_SMTP_PASSWORD:-}
+      GF_SMTP_FROM_ADDRESS: ${GRAFANA_SMTP_FROM:-alerts@alerts.alphatrann.com}
+      GF_SMTP_FROM_NAME: Zenflow alerts
+      GF_SMTP_STARTTLS_POLICY: MandatoryStartTLS
     volumes:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./observability/grafana/dashboards:/etc/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
-    ports:
-      - "3000:3000"
+    # No published port: reached through nginx at https://grafana.alphatrann.com.
+    expose:
+      - "3000"
     networks:
       - o11y
     depends_on:
@@ -354,15 +651,18 @@ services:
       - "443:443"
     volumes:
       - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/upstream.api.conf:/etc/nginx/zenflow/upstream.api.conf:ro
+      # Written by deploy.sh (active colour); a directory mount survives file replacement.
+      - ./state:/etc/nginx/zenflow/state:ro
       - ./nginx/snippets-proxy.conf:/etc/nginx/zenflow/snippets-proxy.conf:ro
       - ./nginx/sse.conf:/etc/nginx/zenflow/sse.conf:ro
+      - ./nginx/grafana.conf:/etc/nginx/zenflow/grafana.conf:ro
       - letsencrypt:/etc/letsencrypt:ro
       - certbot_webroot:/var/www/certbot:ro
     depends_on:
-      - api
+      - grafana
     networks:
       - edge
+      - o11y
 
   # Renews the certificate over the nginx webroot. First issuance: nginx/init-cert.sh.
   certbot:
@@ -442,6 +742,12 @@ networks:
   ratelimit:
     driver: bridge
     internal: true
+  queue:
+    driver: bridge
+    internal: true
+  pubsub:
+    driver: bridge
+    internal: true
   bandit:
     driver: bridge
   o11y:
@@ -468,3 +774,6 @@ volumes:
   vault_data:
   redis_data:
   redis_ratelimit_data:
+  redis_queue_data:
+  backup_metrics:
+  redis_killswitch_data:

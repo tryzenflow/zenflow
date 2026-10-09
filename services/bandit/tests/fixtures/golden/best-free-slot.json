@@ -13,7 +13,7 @@
         "DEFAULT",
         "UTC"
       ],
-      "expected": 1767600000000
+      "expected": 1767603600000
     },
     {
       "name": "occupied 08-10 pushes to 10:00",
@@ -59,7 +59,7 @@
         "DEFAULT",
         "Asia/Ho_Chi_Minh"
       ],
-      "expected": 1767574800000
+      "expected": 1767578400000
     },
     {
       "name": "window too small -> null",

@@ -16,6 +16,10 @@ global:
 scrape_config_files:
   - /etc/prometheus/scrape.d/*.yml
 
+# Alert rules, mounted per stack like scrape.d (no match is fine).
+rule_files:
+  - /etc/prometheus/rules.d/*.yml
+
 scrape_configs:
   # --- application signals (OTLP -> collector -> here) ---------------------
   - job_name: otel-collector-app

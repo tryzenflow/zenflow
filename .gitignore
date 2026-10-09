@@ -21,3 +21,4 @@ backend/.vault-dev/
 
 # Local agent settings
 .claude/settings.local.json
+.DS_Store

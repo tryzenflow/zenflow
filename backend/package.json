@@ -17,6 +17,7 @@
     "test": "jest",
     "golden:export": "ts-node scripts/export-golden-fixtures.ts",
     "backfill:unplaced": "dotenv -e .env.dev -- ts-node scripts/backfill-unplaced-tasks.ts",
+    "killswitch": "dotenv -e .env.dev -- ts-node src/killswitch/killswitch.cli.ts",
     "migrate:files-to-s3": "dotenv -e .env.dev -- ts-node src/files/migrate-to-s3.cli.ts",
     "dlu:fake": "ts-node scripts/fake-dlu-server.ts",
     "prisma:migrate:deploy": "prisma migrate deploy",
@@ -28,8 +29,8 @@
     "prisma:test:push": "dotenv -e .env.test -- npx prisma db push --force-reset",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "dotenv -e .env.test -- npx jest --config ./test/jest-e2e.json"
+    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand --forceExit",
+    "test:e2e": "nest build && dotenv -e .env.test -- npx jest --config ./test/jest-e2e.json --runInBand --forceExit"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1000.0",
@@ -64,6 +65,7 @@
     "@prisma/instrumentation": "^6.19.3",
     "@zenflow/shared": "workspace:*",
     "axios": "^1.11.0",
+    "bullmq": "^6.3.11",
     "cache-manager": "^7.1.1",
     "cacheable": "^1.10.3",
     "class-transformer": "^0.5.1",

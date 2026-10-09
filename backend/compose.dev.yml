@@ -12,7 +12,7 @@ services:
     networks:
       - db
 
-  redis:
+  session-redis:
     container_name: zenflow-cache
     image: redis:8.8.0-alpine
     ports:
@@ -25,6 +25,40 @@ services:
     image: redis:8.8.0-alpine
     ports:
       - 6380:6379
+    networks:
+      - cache
+
+  # Job queues (ADR-0007): noeviction + AOF so a restart keeps queued jobs.
+  redis-queue:
+    container_name: zenflow-cache-queue
+    image: redis:8.8.0-alpine
+    command: ["redis-server", "--maxmemory-policy", "noeviction", "--appendonly", "yes"]
+    ports:
+      - 6381:6379
+    volumes:
+      - redis_queue_data:/data
+    networks:
+      - cache
+
+  # Runtime kill switch (ADR-0008): noeviction + AOF so flags survive restarts.
+  redis-killswitch:
+    container_name: zenflow-cache-killswitch
+    image: redis:8.8.0-alpine
+    command: ["redis-server", "--maxmemory-policy", "noeviction", "--appendonly", "yes", "--appendfsync", "everysec"]
+    ports:
+      - 6383:6379
+    volumes:
+      - redis_killswitch_data:/data
+    networks:
+      - cache
+
+  # SSE fan-out (ADR-0018): no persistence.
+  redis-pubsub:
+    container_name: zenflow-cache-pubsub
+    image: redis:8.8.0-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - 6382:6379
     networks:
       - cache
 
@@ -83,4 +117,6 @@ networks:
 
 volumes:
   postgres_data:
+  redis_killswitch_data:
+  redis_queue_data:
   storage_data:

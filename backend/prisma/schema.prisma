@@ -440,8 +440,9 @@ enum SessionEventType {
   SYSTEM_MOVE // scheduler-initiated move (displacement / conflict reschedule): reward 0, no preference update
 }
 
+/// Range-partitioned by month on `occurredAt` (hand-written migration, ADR-0016); children are `SessionEvent_YYYY_MM`.
 model SessionEvent {
-  id                  BigInt           @id @default(autoincrement())
+  id                  BigInt           @default(autoincrement())
   eventType           SessionEventType
   oldSnapshot         Json? // { scheduledStartTime, durationMinutes, tags[], type }; null on CREATE/RETAINED
   newSnapshot         Json
@@ -468,6 +469,7 @@ model SessionEvent {
   userId String // denormalized for partition/range queries
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@id([id, occurredAt])
   @@index([userId, occurredAt(sort: Desc)])
   @@index([sessionId])
   @@index([slotProposalId])

@@ -1,4 +1,4 @@
-import { Injectable, Logger, type OnModuleDestroy } from "@nestjs/common";
+import { Injectable, Logger, type OnApplicationShutdown } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { cert, deleteApp, initializeApp, type App } from "firebase-admin/app";
 import { getMessaging, type Messaging } from "firebase-admin/messaging";
@@ -23,7 +23,7 @@ const FCM_DEAD_TOKEN_CODES = new Set<string>([
  * never throws; the return value only reports which tokens to prune.
  */
 @Injectable()
-export class FcmSender implements OnModuleDestroy {
+export class FcmSender implements OnApplicationShutdown {
   private readonly logger = new Logger(FcmSender.name);
   private readonly app?: App;
   private readonly messaging?: Messaging;
@@ -92,7 +92,8 @@ export class FcmSender implements OnModuleDestroy {
     return { sent, invalidTokens };
   }
 
-  async onModuleDestroy(): Promise<void> {
+  /** After the queue workers drained: a running push job may still send. */
+  async onApplicationShutdown(): Promise<void> {
     if (this.app) await deleteApp(this.app);
   }
 }

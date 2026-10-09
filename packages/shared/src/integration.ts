@@ -58,6 +58,12 @@ export interface IntegrationStatus {
    * data call failed still ends `COMPLETED`.
    */
   failing: boolean;
+  /**
+   * Only on a `202` reply to `POST /integrations/:provider/sync`: the sync was
+   * queued but had not finished when the server stopped waiting. The other
+   * fields are the current (pre-sync) status; poll `GET /integrations`.
+   */
+  syncPending?: boolean;
 }
 
 /** `data` payload for `GET /integrations` — one entry per known provider. */

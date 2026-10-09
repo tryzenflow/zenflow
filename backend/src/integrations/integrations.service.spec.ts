@@ -20,7 +20,10 @@ import { ENCRYPTION_ALGORITHM } from "../common/constants";
 import { IntegrationAuthService } from "./integration-auth.service";
 import { IntegrationsService } from "./integrations.service";
 import { SyncInflightGuard } from "./sync-inflight.service";
-import { IngestionSyncService } from "../ingestion/ingestion-sync.service";
+import {
+  IngestionSyncService,
+  ManualSyncUnavailableError,
+} from "../ingestion/ingestion-sync.service";
 import { IngestionScheduleService } from "../ingestion/ingestion-schedule.service";
 
 // ── in-memory Prisma double ────────────────────────────────────────────────
@@ -211,23 +214,21 @@ describe("IntegrationsService", () => {
   // Issue #56's rolling schedule: connecting seeds a student's schedule rows,
   // and a manual sync pushes them out so the ticker does not re-walk at once.
   let ensureRows: jest.Mock;
-  let deferAfterManualSync: jest.Mock;
   let lastRunAt: jest.Mock;
-  let markManualFailure: jest.Mock;
   let inflightRun: jest.Mock;
   let db: ReturnType<typeof makePrismaDouble>;
 
   beforeEach(async () => {
     db = makePrismaDouble();
     verifyCredentials = jest.fn().mockResolvedValue(true);
-    syncNow = jest
-      .fn()
-      .mockResolvedValue({ synced: ["LMS_CALENDAR"], complete: true });
+    syncNow = jest.fn().mockResolvedValue({
+      synced: ["LMS_CALENDAR"],
+      complete: true,
+      pending: false,
+    });
     upstreamUnavailableFor = jest.fn().mockReturnValue(null);
     ensureRows = jest.fn().mockResolvedValue(3);
-    deferAfterManualSync = jest.fn().mockResolvedValue(undefined);
     lastRunAt = jest.fn().mockResolvedValue(null);
-    markManualFailure = jest.fn().mockResolvedValue(undefined);
     inflightRun = jest.fn(
       (_u: string, _p: string, fn: () => Promise<unknown>) => fn(),
     );
@@ -248,9 +249,7 @@ describe("IntegrationsService", () => {
           provide: IngestionScheduleService,
           useValue: {
             ensureRows,
-            deferAfterManualSync,
             lastRunAt,
-            markManualFailure,
           },
         },
         {
@@ -290,42 +289,6 @@ describe("IntegrationsService", () => {
       // existing cadence — asserted in ingestion-schedule.service.spec.ts.
       expect(ensureRows).toHaveBeenCalledTimes(2);
       expect(db.integrations).toHaveLength(1);
-    });
-
-    it("pushes the schedule out after a manual sync", async () => {
-      await service.connect(USER, creds);
-
-      await service.sync(USER, "LMS");
-
-      expect(deferAfterManualSync).toHaveBeenCalledWith(db.integrations[0].id, [
-        "LMS_CALENDAR",
-      ]);
-    });
-
-    it("defers only the kinds that succeeded, and none after a failed run", async () => {
-      await service.connect(USER, creds);
-      syncNow.mockResolvedValue({ synced: [], complete: false });
-
-      await expect(service.sync(USER, "LMS")).rejects.toBeInstanceOf(
-        BadGatewayException,
-      );
-
-      expect(deferAfterManualSync).toHaveBeenCalledWith(
-        db.integrations[0].id,
-        [],
-      );
-    });
-
-    it("still reports the sync when deferring the schedule fails", async () => {
-      // Best-effort by design: the sync already happened, and a failure here
-      // costs at most one redundant background pass.
-      await service.connect(USER, creds);
-      deferAfterManualSync.mockRejectedValue(new Error("db gone"));
-
-      await expect(service.sync(USER, "LMS")).resolves.toMatchObject({
-        provider: "LMS",
-        connected: true,
-      });
     });
   });
 
@@ -615,7 +578,11 @@ describe("IntegrationsService", () => {
           status: "COMPLETED",
           createdAt: new Date("2026-09-06T04:00:00.000Z"),
         });
-        return Promise.resolve({ synced: ["LMS_CALENDAR"], complete: true });
+        return Promise.resolve({
+          synced: ["LMS_CALENDAR"],
+          complete: true,
+          pending: false,
+        });
       });
 
       const status = await service.sync(USER, "LMS");
@@ -642,21 +609,26 @@ describe("IntegrationsService", () => {
     it("fails with 502 when any pass failed, even if another succeeded", async () => {
       // e.g. exams worked but the portal timetable had no token.
       await service.connect(USER, { ...creds, provider: "PORTAL" });
-      syncNow.mockResolvedValue({ synced: ["PORTAL_EXAM"], complete: false });
+      syncNow.mockResolvedValue({
+        synced: ["PORTAL_EXAM"],
+        complete: false,
+        pending: false,
+      });
 
       await expect(service.sync(USER, "PORTAL")).rejects.toBeInstanceOf(
         BadGatewayException,
       );
-      // The failed kinds are counted, so the status reports the account failing.
-      expect(markManualFailure).toHaveBeenCalledWith(
-        expect.any(String),
-        "PORTAL",
-        ["PORTAL_EXAM"],
-      );
-      // What did succeed is still deferred; the failed kinds stay due.
-      expect(deferAfterManualSync).toHaveBeenCalledWith(expect.any(String), [
-        "PORTAL_EXAM",
-      ]);
+    });
+
+    it("answers with the current status and syncPending when the wait expires", async () => {
+      await service.connect(USER, creds);
+      syncNow.mockResolvedValue({ synced: [], complete: false, pending: true });
+
+      await expect(service.sync(USER, "LMS")).resolves.toMatchObject({
+        provider: "LMS",
+        connected: true,
+        syncPending: true,
+      });
     });
 
     it("refuses with 429 inside the cooldown, whoever ran last", async () => {
@@ -712,6 +684,20 @@ describe("IntegrationsService", () => {
       expect(upstreamUnavailableFor).toHaveBeenCalledWith("LMS");
       expect(inflightRun).not.toHaveBeenCalled();
       expect(syncNow).not.toHaveBeenCalled();
+    });
+
+    it("503s with Retry-After when manual sync reports a parked job or dead queue", async () => {
+      await service.connect(USER, creds);
+      inflightRun.mockRejectedValue(
+        new ManualSyncUnavailableError("upstream", 12_000),
+      );
+
+      const err = await service.sync(USER, "LMS").catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(UpstreamUnavailableHttpException);
+      expect((err as UpstreamUnavailableHttpException).retryAfterSeconds).toBe(
+        12,
+      );
     });
 
     it("404s when the provider is not connected, and runs nothing", async () => {
