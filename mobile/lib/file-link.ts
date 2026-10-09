@@ -21,6 +21,26 @@ export function buildFileUrl(baseURL: string, id: string): string {
 }
 
 /**
+ * The API returns file references in notes as origin-relative
+ * `/api/v1/files/:id?sig=…` (the stored form carries no origin or sig). The
+ * editor and note WebView have no base URL, so resolve them against the API
+ * origin before rendering. Already-absolute and non-file URLs are untouched.
+ */
+export function resolveNoteFileUrls(
+  html: string,
+  baseURL: string | undefined,
+): string {
+  if (!baseURL || !html.includes("/files/")) return html;
+  let origin: string;
+  try {
+    origin = new URL(baseURL).origin;
+  } catch {
+    return html;
+  }
+  return html.replace(/(["'])(\/api\/v1\/files\/)/g, `$1${origin}$2`);
+}
+
+/**
  * Returns the file id when `href` is one of our own `/files/:id` URLs (same
  * origin and path prefix as the API base), otherwise `null`. Matching the
  * origin keeps unrelated external links on the normal `Linking` path.

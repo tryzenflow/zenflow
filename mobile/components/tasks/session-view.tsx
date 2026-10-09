@@ -14,6 +14,8 @@ import { isSessionPastDeadline } from "@/lib/overdue";
 import { localizedReminderLabel } from "@/components/tasks/form/reminder-field";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
+import { getBaseURL } from "@/lib/api-client";
+import { resolveNoteFileUrls } from "@/lib/file-link";
 import { loadGeistWebviewFontDataUri } from "@/lib/geist-webview-font";
 import { type LinkPreview, fetchLinkPreview } from "@/lib/link-preview";
 import {
@@ -277,7 +279,7 @@ export function SessionView({
       <View className="h-px bg-border" />
 
       {note.trim() ? (
-        <NoteHtml html={note} />
+        <NoteHtml html={resolveNoteFileUrls(note, getBaseURL())} />
       ) : (
         <Text className="text-[14px] text-muted-foreground">
           {t("No notes")}
