@@ -9,7 +9,7 @@ import { MS_PER_MINUTE, overlapsAny } from "../scheduler/core/slot";
 import { SchedulingFeedbackService } from "../scheduler/io/scheduling-feedback.service";
 import { WITH_TAGS_AND_SERIES } from "./types/session-row";
 import { toSessionDto } from "./session-mapper";
-import { moveEventData } from "./session-events";
+import { moveEventData, recordUserMove } from "./session-events";
 import { SlotPickDto } from "./dto/slot-pick.dto";
 import { SlotTakenException } from "./slot-taken.exception";
 
@@ -206,6 +206,7 @@ export class SlotPickService {
         }),
         select: { id: true },
       });
+      recordUserMove(dragDistanceMinutes);
       const updated = await tx.session.update({
         where: { id: sessionId },
         data: { scheduledStartTime: newStart, lastMovedAt: new Date() },

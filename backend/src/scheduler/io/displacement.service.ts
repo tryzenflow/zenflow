@@ -3,6 +3,7 @@ import { SessionEventType } from "../../../generated/prisma";
 import { PrismaService } from "../../prisma/prisma.service";
 import { SESSION_SYSTEM_MOVE_REWARD } from "../constants";
 import { MS_PER_MINUTE } from "../core/slot";
+import { schedulerSessionEvents } from "../../observability/metrics";
 import type { ScheduleItem } from "./day-load";
 
 /** A moved flexible task, ready for the wire / a `SYSTEM_MOVE` event. */
@@ -77,6 +78,9 @@ export class DisplacementService {
         }),
       ]),
     );
+    schedulerSessionEvents.add(moves.length, {
+      type: SessionEventType.SYSTEM_MOVE,
+    });
     return moves.map((m) => ({
       id: m.id,
       from: new Date(m.fromMs),

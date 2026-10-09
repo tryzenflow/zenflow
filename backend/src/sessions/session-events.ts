@@ -2,11 +2,31 @@ import { Prisma, SessionEventType } from "../../generated/prisma";
 import type { SessionRow } from "./types/session-row";
 import { toSessionSnapshot } from "./session-mapper";
 import { SESSION_MOVE_REWARD } from "../scheduler/constants";
+import {
+  schedulerMoveDragMinutes,
+  schedulerSessionEvents,
+} from "../observability/metrics";
 
 /**
  * `SessionEvent` payload builders (`docs/adr/0002-scheduling-simplification.md`).
  * Pure — they return the `data` object; the caller does the `tx.sessionEvent.create`.
  */
+
+/** Count `count` written `SessionEvent` rows of `type`. Call right after the insert. */
+export function recordSessionEvent(type: SessionEventType, count = 1): void {
+  schedulerSessionEvents.add(count, { type });
+}
+
+/** A `CREATE` event was written. */
+export function recordCreateEvent(): void {
+  recordSessionEvent(SessionEventType.CREATE);
+}
+
+/** A user `MOVE` event: counts it and records its absolute drag distance. */
+export function recordUserMove(dragDistanceMinutes: number): void {
+  recordSessionEvent(SessionEventType.MOVE);
+  schedulerMoveDragMinutes.record(Math.abs(dragDistanceMinutes));
+}
 
 /** A `CREATE` event for a freshly-inserted row. `seriesId` groups a `sessionCount`
  * batch so `DELETE /sessions/series/:id` can revert it (issue #32). */

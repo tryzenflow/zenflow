@@ -15,6 +15,7 @@ import {
 } from "../core/preference";
 import { withLockedPreferenceMatrix } from "./preference-matrix-lock";
 import { FEATURE_DIM } from "@zenflow/shared";
+import { schedulerRewardUpdates } from "../../observability/metrics";
 
 /** The one `SlotProposal` fields this service ever reads/writes. */
 type LinucbProposal = {
@@ -82,27 +83,36 @@ export class SchedulingFeedbackService {
     reward: number,
     modificationType: SessionEventType | null,
   ): Promise<void> {
+    const source = modificationType ? "move" : "retained";
+    const count = (result: string): void =>
+      schedulerRewardUpdates.add(1, { source, result });
     try {
       const proposal = await this.loadLinucbProposal(sessionId);
-      if (!proposal?.selectedArm) return;
+      if (!proposal?.selectedArm) return count("no_proposal");
       // Placed under an older context-vector layout: its vector no longer
       // matches the arm state's dimension, so the reward is dropped.
-      if (proposal.featureVector.length !== FEATURE_DIM) return;
+      if (proposal.featureVector.length !== FEATURE_DIM) {
+        return count("stale_layout");
+      }
       // Placed under another arm layout: same vector width, but its arm now
       // covers different hours, so the reward would train the wrong arm.
-      if (!isCurrentModelVersion(proposal.modelVersion)) return;
+      if (!isCurrentModelVersion(proposal.modelVersion)) {
+        return count("stale_layout");
+      }
 
-      await this.pushBanditUpdate(
+      const applied = await this.pushBanditUpdate(
         userId,
         proposal.selectedArm,
         proposal.featureVector,
         reward,
       );
+      count(applied ? "applied" : "bandit_unavailable");
       await this.linkEvent(eventId, proposal.id);
       if (modificationType) {
         await this.markAcceptanceOnModification(proposal, modificationType);
       }
     } catch (err) {
+      count("error");
       this.logger.warn(
         `bandit feedback failed for session ${sessionId}: ${
           (err as Error).message
@@ -136,15 +146,15 @@ export class SchedulingFeedbackService {
     arm: SchedulingArm,
     featureVector: number[],
     reward: number,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const state = (await this.armStates.loadAll(userId))[arm];
     const res = await this.bandit.update(arm, featureVector, reward, {
       A: state.A,
       b: state.b,
     });
-    if (res) {
-      await this.armStates.save(userId, arm, res.A, res.b, state.version);
-    }
+    if (!res) return false;
+    await this.armStates.save(userId, arm, res.A, res.b, state.version);
+    return true;
   }
 
   /**

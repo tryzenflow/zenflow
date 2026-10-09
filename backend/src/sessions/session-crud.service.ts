@@ -34,7 +34,7 @@ import {
   toCreateSessionResponse,
   toSessionDto,
 } from "./session-mapper";
-import { createEventData } from "./session-events";
+import { createEventData, recordCreateEvent } from "./session-events";
 import { insertFixedSession } from "./fixed-session-writer";
 import { mapSessionPrismaError } from "./prisma-error";
 import { placeOrDiscard } from "./placement-compensation";
@@ -142,6 +142,7 @@ export class SessionCrudService {
         include: WITH_TAGS_AND_SERIES,
       });
       await tx.sessionEvent.create({ data: createEventData(s, user.id) });
+      recordCreateEvent();
       return s;
     });
 

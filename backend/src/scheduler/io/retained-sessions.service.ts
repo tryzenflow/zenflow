@@ -14,6 +14,7 @@ import {
 } from "../constants";
 import { SchedulingFeedbackService } from "./scheduling-feedback.service";
 import { runCronJob } from "../../observability/cron";
+import { schedulerSessionEvents } from "../../observability/metrics";
 
 type RetainedCandidate = Prisma.SessionGetPayload<{
   select: {
@@ -164,6 +165,7 @@ export class RetainedSessionsService {
           },
           select: { id: true },
         });
+        schedulerSessionEvents.add(1, { type: SessionEventType.RETAINED });
         rewarded.push({
           sessionId: session.id,
           userId: session.userId,
