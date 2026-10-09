@@ -1,6 +1,7 @@
 // Imported first: the IntegrationsModule <-> IngestionModule cycle makes the
 // import order matter for `design:paramtypes` (see ingestion-sync.service.spec).
 import "./ingestion-sync.service";
+import { KillSwitchService } from "../common/killswitch/killswitch.service";
 import { ConfigService } from "@nestjs/config";
 import { Test } from "@nestjs/testing";
 import { LMSService } from "../lms/lms.service";
@@ -66,6 +67,10 @@ async function make(
   };
   const module = await Test.createTestingModule({
     providers: [
+      {
+        provide: KillSwitchService,
+        useValue: { isEnabled: jest.fn().mockResolvedValue(true) },
+      },
       IngestionFetchService,
       {
         provide: ConfigService,

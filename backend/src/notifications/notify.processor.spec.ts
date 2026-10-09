@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
+import { KillSwitchService } from "../common/killswitch/killswitch.service";
 import { ConfigService } from "@nestjs/config";
 import { Test } from "@nestjs/testing";
 import { DelayedError, UnrecoverableError, type Job } from "bullmq";
@@ -12,9 +13,14 @@ import { NotifyProcessor } from "./notify.processor";
 async function setup() {
   const workers = { register: jest.fn() };
   const push = { deliver: jest.fn().mockResolvedValue(undefined) };
+  const killSwitch = { isEnabled: jest.fn().mockResolvedValue(true) };
   const reminders = { fire: jest.fn().mockResolvedValue(undefined) };
   const moduleRef = await Test.createTestingModule({
     providers: [
+      {
+        provide: KillSwitchService,
+        useValue: killSwitch,
+      },
       {
         provide: ConfigService,
         useValue: new ConfigService({ INGESTION_BREAKER_FAILURES: 1 }),
@@ -37,7 +43,7 @@ async function setup() {
       attemptsMade: 0,
       moveToDelayed: jest.fn().mockResolvedValue(undefined),
     }) as unknown as Job<NotifyJobData> & { moveToDelayed: jest.Mock };
-  return { processor, workers, push, reminders, breakers, job };
+  return { processor, workers, push, reminders, breakers, killSwitch, job };
 }
 
 describe("NotifyProcessor", () => {
@@ -48,6 +54,24 @@ describe("NotifyProcessor", () => {
       NOTIFY_QUEUE,
       expect.any(Function),
     );
+  });
+
+  it("drops push and reminder jobs while the notifications flag is off", async () => {
+    const { processor, push, reminders, killSwitch, job } = await setup();
+    killSwitch.isEnabled.mockResolvedValue(false);
+    await processor.process(
+      job({ type: "push", notificationId: "n1", provider: "fcm" }),
+    );
+    await processor.process(
+      job({
+        type: "reminder",
+        reminderId: "r1",
+        startsAt: new Date().toISOString(),
+      }),
+    );
+    expect(killSwitch.isEnabled).toHaveBeenCalledWith("notifications");
+    expect(push.deliver).not.toHaveBeenCalled();
+    expect(reminders.fire).not.toHaveBeenCalled();
   });
 
   it("push: delivers the notification for the job's provider", async () => {

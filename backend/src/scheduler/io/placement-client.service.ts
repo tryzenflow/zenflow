@@ -1,3 +1,4 @@
+import { KillSwitchService } from "../../common/killswitch/killswitch.service";
 import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
@@ -59,6 +60,7 @@ export class PlacementClient {
 
   constructor(
     config: ConfigService,
+    private readonly killSwitch: KillSwitchService,
     @Optional()
     @Inject(PLACEMENT_CLIENT_DEPS)
     deps?: Partial<PlacementClientDeps>,
@@ -88,6 +90,10 @@ export class PlacementClient {
 
   async place(req: PlaceRequest): Promise<PlaceResult> {
     if (!this.baseUrl) return { ok: false, reason: "disabled" };
+    // Kill switch: off = the frozen TS heuristic serves placement.
+    if (!(await this.killSwitch.isEnabled("bandit"))) {
+      return { ok: false, reason: "disabled" };
+    }
     if (!this.breaker.tryAcquire()) {
       this.publishBreaker();
       return { ok: false, reason: "breaker_open" };

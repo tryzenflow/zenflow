@@ -1,3 +1,4 @@
+import { KillSwitchService } from "../common/killswitch/killswitch.service";
 import { Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Cron, CronExpression } from "@nestjs/schedule";
@@ -111,6 +112,7 @@ export class IngestionTickerService implements OnModuleInit {
     private readonly queue: QueueService,
     private readonly lmsClient: LMSService,
     private readonly portalClient: PortalAPIService,
+    private readonly killSwitch: KillSwitchService,
   ) {
     this.dluTimezone = this.config.get<string>("DLU_TZ") ?? "Asia/Ho_Chi_Minh";
     this.maxBatch = this.positiveConfig("INGESTION_TICK_MAX_BATCH", 20);
@@ -170,7 +172,12 @@ export class IngestionTickerService implements OnModuleInit {
     // ingestion is off, so flipping the switch back on would leave every student
     // "not due" for up to a day — a kill switch that silently costs a day of
     // freshness is not a kill switch.
-    if (!isIngestionEnabled(this.config)) return EMPTY_TICK;
+    if (
+      !isIngestionEnabled(this.config) ||
+      !(await this.killSwitch.isEnabled("ingestion"))
+    ) {
+      return EMPTY_TICK;
+    }
 
     // A pass can outlive its tick (a 22-week walk at a 750ms delay takes
     // ~17s, and a slow upstream makes that worse). The claim's compare-and-set

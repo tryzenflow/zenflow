@@ -1,3 +1,4 @@
+import { KillSwitchService } from "../common/killswitch/killswitch.service";
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { Job } from "bullmq";
@@ -64,6 +65,7 @@ export class IngestionFetchService {
     private readonly discovery: EnrollmentDiscoveryService,
     private readonly lmsClient: LMSService,
     private readonly portalClient: PortalAPIService,
+    private readonly killSwitch: KillSwitchService,
   ) {}
 
   /**
@@ -96,7 +98,10 @@ export class IngestionFetchService {
    * the upstream breaker is open (nothing is recorded: not the student's fault).
    */
   async execute(data: FetchJobData, now = new Date()): Promise<FetchResult> {
-    if (!isIngestionEnabled(this.config)) {
+    if (
+      !isIngestionEnabled(this.config) ||
+      !(await this.killSwitch.isEnabled("ingestion"))
+    ) {
       return { ok: false, servedFromCache: false, skipped: true };
     }
     const kind = data.kind as SyncKindName;
