@@ -122,7 +122,7 @@ frontend `dev | build | typecheck | lint | test:e2e`.
 
 ## Where things run
 
-- API → `http://localhost:5000`; Swagger UI → `http://localhost:5000/api`.
+- API → `http://localhost:8000`; Swagger UI → `http://localhost:8000/api`.
 - Frontend dev → `http://localhost:5173` (`VITE_API_URL` points at the API).
 - Mobile dev → `http://localhost:8081` (Expo/Metro, web target only —
   `EXPO_PUBLIC_API_URL` points at the API; native iOS/Android isn't

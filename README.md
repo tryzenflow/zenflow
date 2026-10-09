@@ -22,7 +22,7 @@ pnpm install && pnpm shared:build
 cd backend
 docker compose -f compose.dev.yml up -d   # Postgres, Redis, mail catcher
 pnpm prisma:dev:migrate
-pnpm start:dev                            # API http://localhost:5000, Swagger /api
+pnpm start:dev                            # API http://localhost:8000, Swagger /api
 
 cd ../frontend && pnpm dev                # http://localhost:5173
 ```

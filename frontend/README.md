@@ -21,7 +21,7 @@ pnpm test:e2e:ui    # Playwright UI mode
 
 | Env var         | Used by                | Notes                                                                   |
 | --------------- | ---------------------- | ----------------------------------------------------------------------- |
-| `VITE_API_URL`  | app, Playwright        | API base, e.g. `http://localhost:5000/api/v1`                           |
+| `VITE_API_URL`  | app, Playwright        | API base, e.g. `http://localhost:8000/api/v1`                           |
 | `MAILHOG_URL`   | Playwright             | Default `http://localhost:8025`; e2e logs in by reading the OTP from it |
 | `E2E_BASE_URL`  | Playwright             | Default `http://localhost:5173`                                         |
 | `E2E_NO_SERVER` | Playwright             | Set to skip starting `pnpm dev`                                         |

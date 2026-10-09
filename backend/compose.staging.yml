@@ -10,7 +10,7 @@ services:
       dockerfile: backend/Dockerfile
     image: ${ZENFLOW_API_IMAGE:-zenflow-api:0.1.0-beta.0}
     expose:
-      - "5000"
+      - "8000"
     networks:
       - edge
       - db
@@ -325,7 +325,7 @@ services:
       - o11y
 
   # Dashboards + Explore. Bound to loopback only — reach it with an SSH tunnel
-  # or put it behind Caddy with auth. Anonymous access is OFF.
+  # or put it behind nginx with auth. Anonymous access is OFF.
   grafana:
     container_name: zenflow-grafana-staging
     image: grafana/grafana:11.4.0
@@ -380,14 +380,17 @@ services:
       postgres:
         condition: service_healthy
 
-  caddy:
-    image: caddy:2.11.4
-    container_name: caddy-staging
+  nginx:
+    image: nginx:1.28-alpine
+    container_name: nginx-staging
     restart: unless-stopped
     ports:
       - "80:80"
     volumes:
-      - ./Caddyfile.staging:/etc/caddy/Caddyfile
+      - ./nginx/nginx.staging.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/upstream.api.conf:/etc/nginx/zenflow/upstream.api.conf:ro
+      - ./nginx/snippets-proxy.conf:/etc/nginx/zenflow/snippets-proxy.conf:ro
+      - ./nginx/sse.conf:/etc/nginx/zenflow/sse.conf:ro
     depends_on:
       - api
     networks:
@@ -444,8 +447,6 @@ networks:
 
 volumes:
   storage_data:
-  caddy_data:
-  caddy_config:
   postgres_data:
   uploads:
   tempo_data:

@@ -204,8 +204,8 @@ jobs:
           for i in $(seq 1 30); do docker exec zenflow-test-db pg_isready -U ci -d zenflow-test && break; sleep 2; done
           pnpm exec dotenv -e .env.test -- prisma migrate deploy
           pnpm build
-          (pnpm exec dotenv -e .env.test -- env PORT=5000 node dist/main > ../api.log 2>&1 &)
-          for i in $(seq 1 60); do curl -fs http://localhost:5000/api >/dev/null && exit 0; sleep 2; done
+          (pnpm exec dotenv -e .env.test -- env PORT=8000 node dist/main > ../api.log 2>&1 &)
+          for i in $(seq 1 60); do curl -fs http://localhost:8000/api >/dev/null && exit 0; sleep 2; done
           cat ../api.log; exit 1
       - name: Install Playwright browser
         if: steps.specs.outputs.present == 'true'
@@ -213,7 +213,7 @@ jobs:
       - name: Playwright
         if: steps.specs.outputs.present == 'true'
         env:
-          VITE_API_URL: http://localhost:5000/api/v1
+          VITE_API_URL: http://localhost:8000/api/v1
           MAILHOG_URL: http://localhost:8025
         run: pnpm --filter frontend test:e2e
       - name: Upload report

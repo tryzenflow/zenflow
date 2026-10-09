@@ -64,9 +64,10 @@ esac
 # 2. Ship compose + proxy/observability config from this exact commit, so a
 #    rollback also restores the config that matched that release.
 rsync -az -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes" \
-  "backend/compose.${DEPLOY_ENV}.yml" "backend/Caddyfile.${DEPLOY_ENV}" \
-  backend/docker-entrypoint.sh \
+  "backend/compose.${DEPLOY_ENV}.yml" backend/docker-entrypoint.sh \
   "${SSH_TARGET}:${DEPLOY_PATH}/backend/"
+[ -d backend/nginx ] && rsync -az -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes" \
+  backend/nginx "${SSH_TARGET}:${DEPLOY_PATH}/backend/"
 [ -d backend/ops/vault ] && rsync -az -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes" \
   backend/ops "${SSH_TARGET}:${DEPLOY_PATH}/backend/"
 [ -d backend/observability ] && rsync -az -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes" \

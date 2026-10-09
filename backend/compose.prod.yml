@@ -7,7 +7,7 @@ services:
       dockerfile: backend/Dockerfile
     image: ${ZENFLOW_API_IMAGE:-zenflow-api:0.1.0-beta.0}
     expose:
-      - "5000"
+      - "8000"
     networks:
       - edge
       - db
@@ -281,7 +281,7 @@ services:
       - o11y
 
   # Dashboards + Explore. Bound to loopback only — reach it with an SSH tunnel
-  # or put it behind Caddy with auth. Anonymous access is OFF.
+  # or put it behind nginx with auth. Anonymous access is OFF.
   grafana:
     container_name: zenflow-grafana-prod
     image: grafana/grafana:11.4.0
@@ -318,20 +318,36 @@ services:
     networks:
       - o11y
 
-  caddy:
-    image: caddy:2.11.4
-    container_name: caddy
+  nginx:
+    image: nginx:1.28-alpine
+    container_name: nginx
     restart: unless-stopped
+    # Reload periodically so renewed certificates are picked up (graceful).
+    command: ["/bin/sh", "-c", "(while :; do sleep 12h; nginx -s reload; done) & exec nginx -g 'daemon off;'"]
     ports:
       - "80:80"
       - "443:443"
-      - "443:443/udp"
     volumes:
-      - ./Caddyfile.prod:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/upstream.api.conf:/etc/nginx/zenflow/upstream.api.conf:ro
+      - ./nginx/snippets-proxy.conf:/etc/nginx/zenflow/snippets-proxy.conf:ro
+      - ./nginx/sse.conf:/etc/nginx/zenflow/sse.conf:ro
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot_webroot:/var/www/certbot:ro
     depends_on:
       - api
+    networks:
+      - edge
+
+  # Renews the certificate over the nginx webroot. First issuance: nginx/init-cert.sh.
+  certbot:
+    image: certbot/certbot:v3.0.1
+    container_name: certbot
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c", "trap exit TERM; while :; do certbot renew --authenticator webroot --webroot-path /var/www/certbot --quiet; sleep 12h & wait $${!}; done"]
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot_webroot:/var/www/certbot
     networks:
       - edge
 
@@ -416,8 +432,8 @@ networks:
 volumes:
   storage_data:
   postgres_data:
-  caddy_data:
-  caddy_config:
+  letsencrypt:
+  certbot_webroot:
   uploads:
   tempo_data:
   loki_data:

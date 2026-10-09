@@ -24,8 +24,8 @@ For: developers and operators setting up the API. Source of truth: the Joi schem
 | `S3_REGION` | `us-east-1` | |
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` / `S3_BUCKET` | none | Required. Bucket must exist (compose creates it). |
 | `UPLOAD_TMP_DIR` | none | Optional upload buffer dir. |
-| `PORT` | 5000 | |
-| `NODE_ENV` | `development` | `production` makes `BANDIT_SERVICE_URL` required. |
+| `PORT` | 8000 | |
+| `NODE_ENV` | `development` | `production` makes `BANDIT_SERVICE_URL` required |
 
 ## Rate limits
 

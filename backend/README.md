@@ -24,7 +24,7 @@ Prerequisites: Node 20+, pnpm 10.32.1, Docker with Compose.
 pnpm install && pnpm shared:build            # repo root, once
 docker compose -f compose.dev.yml up -d      # from backend/: Postgres, 2x Redis, bandit, S3 storage, Mailpit
 pnpm prisma:dev:migrate
-pnpm start:dev                               # http://localhost:5000, Swagger at /api
+pnpm start:dev                               # http://localhost:8000, Swagger at /api
 ```
 
 Env: copy `.env.example` to `.env.dev` (and `.env.test`, `.env.staging`, `.env.prod`). Vars: [config.md](../docs/backend/config.md).
@@ -40,16 +40,24 @@ pnpm prisma:gen:dev      # regenerate the client into generated/prisma
 
 ### Staging
 
-`compose.staging.yml` is the fully containerized stack: `api`, one-shot `migrations`, `postgres`, `redis` (sessions/OTP), `redis-ratelimit` ([ADR-0005](../docs/adr/0005-rate-limit-store-lru-rdb.md)), `bandit`, `storage`, `mail` (Mailpit), `caddy` on `:80` and the Grafana stack. `compose.prod.yml` is the same shape without `mail`.
+`compose.staging.yml` is the fully containerized stack: `api`, one-shot `migrations`, `postgres`, `redis` (sessions/OTP), `redis-ratelimit` ([ADR-0005](../docs/adr/0005-rate-limit-store-lru-rdb.md)), `bandit`, `storage`, `mail` (Mailpit), `nginx` on `:80` and the Grafana stack. `compose.prod.yml` is the same shape without `mail`.
 
 ```bash
 sh ../build_images.sh                                                  # build context is the repo root
-docker compose --env-file .env.staging -f compose.staging.yml up -d    # API via Caddy :80, Swagger :80/api
+docker compose --env-file .env.staging -f compose.staging.yml up -d    # API via nginx :80, Swagger :80/api
 ```
 
 - `.env.staging` needs `GRAFANA_ADMIN_PASSWORD`; Grafana binds `127.0.0.1:3000`. Stack details: [observability/README.md](observability/README.md).
 - Migrations run in the `migrations` service (`pnpm prisma:migrate:deploy`) before the API starts.
 - CI/CD and rollback: [docs/ops/ci-cd.md](../docs/ops/ci-cd.md).
+
+### Production TLS (nginx + certbot)
+
+Config and rationale: [ADR-0010](../docs/adr/0010-nginx-replaces-caddy.md); files in [`nginx/`](nginx/).
+
+- First issuance, once per host, before the first `up`: `LE_EMAIL=you@example.com ./nginx/init-cert.sh`.
+- Renewal is the `certbot` service (twice daily, webroot); `nginx` reloads every 12 h to pick the new certificate up. Alert on certificate expiry.
+- Upstreams live in `nginx/upstream.api.conf`; edit and `docker compose exec nginx nginx -s reload`.
 
 ## Layout
 
@@ -72,7 +80,7 @@ backend/
 │   ├── observability/     # metrics, tracing helpers (see tracing.ts)
 │   ├── prisma/            # PrismaService + error-code map
 │   └── common/            # constants, utils, dto, redis/, rate-limit/, circuit breakers
-├── compose.{dev,staging,prod,test}.yml, Caddyfile.{staging,prod}, Dockerfile
+├── compose.{dev,staging,prod,test}.yml, nginx/, Dockerfile
 ├── observability/         # Grafana stack config and dashboards
 └── scripts/               # golden export, backfill, fake DLU server (pnpm dlu:fake)
 ```

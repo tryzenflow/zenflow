@@ -50,10 +50,10 @@ services:
     memswap_limit: 2g
     restart: "no"          # a crash must stay visible: the supervisor invalidates the scenario
     depends_on: [postgres, redis, redis-ratelimit, mail, bandit]
-    ports: ["5641:5000"]
+    ports: ["5641:8000"]
     environment:
       NODE_ENV: production
-      PORT: "5000"
+      PORT: "8000"
       DATABASE_URL: postgres://admin:admin@postgres:5432/zenflow-test?sslmode=disable&schema=public
       CACHE_URL: redis://redis:6379
       RATE_LIMIT_CACHE_URL: redis://redis-ratelimit:6379

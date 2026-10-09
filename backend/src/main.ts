@@ -26,7 +26,7 @@ async function bootstrap() {
     bufferLogs: true,
   });
   app.useLogger(app.get(Logger));
-  // TLS is terminated by the Caddy reverse proxy, which forwards plain HTTP to
+  // TLS is terminated by the nginx reverse proxy, which forwards plain HTTP to
   // this app with the real scheme in `X-Forwarded-Proto`. Trusting the first
   // proxy hop makes `req.secure` reflect that header, so express-session will
   // emit the `Secure` session cookie instead of silently dropping it. This must
@@ -99,6 +99,6 @@ async function bootstrap() {
   );
   app.use(passport.initialize());
   app.use(passport.session());
-  await app.listen(process.env.PORT ?? 5000);
+  await app.listen(process.env.PORT ?? 8000);
 }
 void bootstrap();
