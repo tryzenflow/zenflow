@@ -84,7 +84,7 @@ Stores a student's LMS/portal login for ingestion. Credentials are never returne
 | GET | `/integrations` | `[{ provider, connected, lastVerifiedAt, lastSyncedAt, lastSyncStatus, lastSuccessAt, failing }]`. `lastSyncedAt` is the newest run of any outcome; `lastSuccessAt` is when every data pass last came back clean (oldest of them), the time to show as "last synced"; `failing` is true while a data pass has consecutive failures. |
 | PATCH | `/integrations/:provider` | Update credentials (same probe-then-write). |
 | DELETE | `/integrations/:provider` | Disconnect. Idempotent; keeps the encryption key. |
-| POST | `/integrations/:provider/sync` | Run this student's watchers now. `404` not connected, `409` already running, `429` + `Retry-After` inside the cooldown, `502` if a pass failed, `503 UPSTREAM_UNAVAILABLE` + `Retry-After` while the breaker is open. |
+| POST | `/integrations/:provider/sync` | Queue this student's fetch jobs and wait up to `SYNC_MANUAL_WAIT_MS`. `200`/`201` with the new status; `202` with the current status and `syncPending: true` if still running. `404` not connected, `409` already running, `429` + `Retry-After` inside the cooldown, `502` if a pass failed, `503 UPSTREAM_UNAVAILABLE` + `Retry-After` while the breaker is open. |
 
 Limits and breaker: [ingestion.md](ingestion.md#manual-sync).
 
@@ -105,13 +105,14 @@ The ingestion inbox, written by the materializer, never by a client. `eventName`
 - Copy follows `User.lang` (`VI_VN` or `EN_US`) for inbox, SSE and push. Rows keep canonical English; known framing is translated on delivery and read.
 - Reminder dates and lead times use Vietnamese wording for `VI_VN`. User and upstream titles and locations stay intact.
 - OTP emails follow the saved language (new addresses get English). Templates: [`localize-notification.ts`](../../backend/src/notifications/localize-notification.ts).
-- `notificationEmitter` is an in-process `EventEmitter2`; a separate Node process cannot reach SSE clients.
+- SSE crosses processes over Redis pub/sub (`REDIS_PUBSUB_URL`, [ADR-0018](../adr/0018-redis-pubsub-instance.md)): a row raised by a worker reaches clients on any API replica. Delivery is at-most-once; clients refetch the inbox on reconnect.
+- `NotificationsService.notify()` publishes to SSE and enqueues one `push` job per provider on the `notify` queue (job id from the row id, so repeats send once; the enqueue is retried and a watcher sweep re-enqueues rows that still have no job). SSE events carry the notification id; clients dedupe by it.
 - Exercise inbox, stream and push without a sync: `pnpm --filter backend exec ts-node scripts/send-test-notification.ts <userId> [count]`.
 
 ## Devices (`/devices`)
 
 - `POST /devices` registers or refreshes (upsert on `pushToken`). `DELETE /devices` unregisters.
-- `PushService` fans out via FCM/APNs. Each provider self-disables when its env is unset. Dead tokens are pruned on send.
+- Push runs as `notify:push` jobs in `worker-notify` (retried with backoff, then `notify.dlq`; `fcm`/`apns` circuit breakers). Each provider self-disables when its env is unset. Dead tokens are pruned on send.
 
 ## Rate limits
 

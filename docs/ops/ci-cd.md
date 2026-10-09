@@ -28,6 +28,8 @@ prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel pr
 
 It fails on schema changes without a migration, or a migration history that does not apply cleanly.
 
+The multi-process queue e2e (`backend-e2e-queue`, compose profile `queue`) runs on PRs only when labelled `e2e-queue`, and always on merge queue and manual runs.
+
 Backend e2e and Playwright generate a throwaway `backend/.env.test` with random secrets (`.github/scripts/write-test-env.sh`). Nothing secret-shaped is committed.
 
 ## Deploy target

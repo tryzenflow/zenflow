@@ -25,9 +25,22 @@ For: developers and operators setting up the API. Source of truth: the Joi schem
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` / `S3_BUCKET` | none | Required. Bucket must exist (compose creates it). |
 | `UPLOAD_TMP_DIR` | none | Optional upload buffer dir. |
 | `PORT` | 8000 | |
-| `ROLE` | `all` | `api` = HTTP only, no crons/ticker/reminder timers; `worker` = scheduled work only, serves `GET /health/live` on `WORKER_PORT` (5001); `all` = both (dev, test). Prod/staging run `api` replicas + one `worker` ([ADR-0011](../adr/0011-separate-api-worker-processes.md)). |
+| `ROLE` | `all` | `api` = HTTP only; `watcher` = crons that enqueue; `worker-portal` / `worker-lms` / `worker-notify` = one queue consumer each; `worker` = watcher + all consumers; `all` = everything (dev, test). Non-HTTP roles serve `GET /health/live` on `WORKER_PORT` (5001). Prod/staging: `api` replicas + `watcher` (1) + `worker-*` ([ADR-0007](../adr/0007-bullmq-for-notification-queue.md), [ADR-0011](../adr/0011-separate-api-worker-processes.md)). |
 | `NODE_ENV` | `development` | `production` makes `BANDIT_SERVICE_URL` required and turns Swagger (`/api`) off. |
 | `SWAGGER_ENABLED` | unset | `true` keeps Swagger on under `NODE_ENV=production` (staging only). |
+
+## Queues and SSE fan-out
+
+| Var | Default | Notes |
+| --- | --- | --- |
+| `QUEUE_REDIS_URL` | `redis://localhost:6381` | Required in production. BullMQ's dedicated Redis (`noeviction` + AOF, [ADR-0007](../adr/0007-bullmq-for-notification-queue.md)). With `NODE_ENV=test` and no value, jobs are recorded in memory and never consumed. |
+| `QUEUE_JOB_ATTEMPTS` / `QUEUE_BACKOFF_MS` | 5 / 5000 | Attempts per job and exponential backoff base; the last failure lands in `<queue>.dlq`. |
+| `QUEUE_ENQUEUE_TIMEOUT_MS` | 2000 | Every producer call (enqueue, getJob, remove, counts) rejects after this when the queue Redis is down. |
+| `QUEUE_SHUTDOWN_TIMEOUT_MS` | 25000 | Workers get this long to finish in-flight jobs on shutdown, then are force-closed. Keep below the stop grace period. |
+| `QUEUE_<Q>_CONCURRENCY` | queue default | `Q` = `PORTAL_FETCH`, `LMS_FETCH`, `NOTIFY`; per replica. |
+| `QUEUE_<Q>_RATE_MAX` / `_RATE_DURATION_MS` | notify 50 per 1000; `portal-fetch` / `lms-fetch` 1 per `INGESTION_REQUEST_DELAY_MS` (none if 0) | At most MAX jobs per DURATION across replicas. |
+| `REDIS_PUBSUB_URL` | none | Pub/sub Redis for SSE fan-out ([ADR-0018](../adr/0018-redis-pubsub-instance.md)). Unset = events stay in-process. |
+| `REDIS_PUBSUB_TIMEOUT_MS` | 250 | Publish gives up (and emits locally) after this. |
 
 ## Rate limits
 
@@ -42,6 +55,7 @@ Sliding windows; `*_WINDOW_SEC` in seconds, `*_LIMIT` max requests per window. R
 | `OTP_VERIFY_EMAIL_WINDOW_SEC` / `_LIMIT` | 600 / 10 |
 | `RATE_LIMIT_STORE_TIMEOUT_MS` | 250 |
 | `SYNC_MANUAL_COOLDOWN_SEC` | 900 | Minimum gap between two syncs of one provider (manual or background). |
+| `SYNC_MANUAL_WAIT_MS` | 25000 | How long a manual sync waits for its fetch jobs before answering `202`. |
 
 ## DLU ingestion
 
@@ -64,6 +78,7 @@ Behaviour: [ingestion.md](ingestion.md).
 | `INGESTION_LMS_CALENDAR_PERIOD_MS` | 3600000 | |
 | `INGESTION_TICK_MAX_BATCH` | 5 in schema; 20 in `ingestion-ticker.service.ts` | Max students one tick claims per kind. |
 | `INGESTION_TICK_BUDGET_MS` | 48000 | Stop starting further kinds once a tick has run this long. |
+| `INGESTION_QUEUE_MAX_BACKLOG` | 500 | Ticker skips (or trims) claiming for a fetch queue once `waiting+delayed` reaches this. |
 | `INGESTION_BREAKER_FAILURES` / `_OPEN_MS` / `_MAX_OPEN_MS` | 5 / 60000 / 600000 | Breakers for all upstreams. |
 | `INGESTION_OCCURRENCE_CACHE_ENABLED` | `false` | Gate for cache-served walks and fan-out. Discovery is always on. |
 | `INGESTION_CACHE_TTL_MS` | 604800000 (7 d) | Past it, a live walk refreshes the cache. |
