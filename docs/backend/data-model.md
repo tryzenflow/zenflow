@@ -8,7 +8,7 @@ For: developers changing the schema or reading Session data. Source of truth: [`
 | `Session` | Every calendar item | See below. |
 | `SessionSeries` | Recurring or `TASK` series | A recurring fixed session is one series plus one representative row, fanned to occurrences at read time. |
 | `SessionReminder` | Up to 2 per session | Fired by in-memory `SchedulerRegistry` timers; see [scheduler.md](scheduler.md#session-reminders). |
-| `SessionEvent` | Append-only audit trail (ML input) | `eventType`: `CREATE`, `MOVE`, `RESIZE`, `RETAINED`, `SYSTEM_MOVE` (scheduler-initiated, reward 0). `rewardScore` feeds LinUCB. |
+| `SessionEvent` | Append-only audit trail (ML input) | `eventType`: `CREATE`, `MOVE`, `RESIZE`, `RETAINED`, `SYSTEM_MOVE` (scheduler-initiated, reward 0). `rewardScore` feeds LinUCB. Monthly range partitions on `occurredAt`, 12 months kept ([ADR-0016](../adr/0016-telemetry-retention-and-partitioning.md)); PK is `(id, occurredAt)`. |
 | `Tag` | Per-user label | Wire format is `Session.tags: string[]`; unknown names are upserted per user. |
 | `File`, `UserDevice` | Uploads, push registrations | `UserDevice.pushToken` is unique (upsert key). |
 | `Integration`, `UserEncryptionKey` | Encrypted DLU credentials | Master keys are env-only, never in the DB. |

@@ -141,6 +141,14 @@ export const cronDuration = meter.createHistogram("scheduler.cron.duration", {
   },
 });
 
+export const sessionEventPartitionsAhead = meter.createGauge(
+  "session.event.partitions.ahead",
+  {
+    description:
+      "Consecutive monthly SessionEvent partitions that exist after the current month (ADR-0016); below 2 means the upkeep job is failing",
+  },
+);
+
 // --- Push -----------------------------------------------------------------------
 export const pushSend = meter.createCounter("push.send", {
   description: "Native push sends, by provider + result",

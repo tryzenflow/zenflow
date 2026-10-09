@@ -1,0 +1,17 @@
+groups:
+  - name: session-event-partitions
+    rules:
+      - alert: SessionEventPartitionMissing
+        expr: min(session_event_partitions_ahead) < 2
+        for: 30m
+        labels:
+          severity: critical
+        annotations:
+          summary: A future SessionEvent partition is missing, so event inserts will fail when it is needed (ADR-0016)
+      - alert: SessionEventPartitionJobSilent
+        expr: absent(session_event_partitions_ahead)
+        for: 2d
+        labels:
+          severity: warning
+        annotations:
+          summary: The SessionEvent partition upkeep job has not reported in two days
