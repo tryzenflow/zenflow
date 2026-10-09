@@ -203,7 +203,8 @@ services:
       timeout: 5s
       retries: 5
 
-  # Sessions + OTP. Must NOT evict: losing keys logs users out. AOF keeps them across restarts.
+  # Sessions + OTP. Every key carries a TTL, so volatile-lru can only ever drop expiring keys.
+  # AOF everysec plus an RDB snapshot keep sessions across restarts (ADR-0017).
   redis:
     container_name: zenflow-cache-prod
     image: redis:8.8.0-alpine
@@ -213,11 +214,13 @@ services:
       - --maxmemory
       - 192mb
       - --maxmemory-policy
-      - noeviction
+      - volatile-lru
       - --appendonly
       - "yes"
       - --appendfsync
       - everysec
+      - --save
+      - "1800 1"
     volumes:
       - redis_data:/data
     expose:
@@ -429,11 +432,30 @@ services:
       - --enable-feature=exemplar-storage,native-histograms
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/scrape.d/redis-exporter.yml:/etc/prometheus/scrape.d/redis-exporter.yml:ro
+      - ./observability/prometheus/rules.d/redis-sessions.yml:/etc/prometheus/rules.d/redis-sessions.yml:ro
       - prometheus_data:/prometheus
     expose:
       - "9090"
     networks:
       - o11y
+
+  # Sessions Redis memory and evictions (Prometheus job `redis-exporter`, rules in
+  # observability/prometheus/rules.d/redis-sessions.yml).
+  redis-exporter:
+    container_name: zenflow-redis-exporter-prod
+    image: oliver006/redis_exporter:v1.67.0-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    expose:
+      - "9121"
+    networks:
+      - cache
+      - o11y
+    depends_on:
+      redis:
+        condition: service_healthy
 
   node-exporter:
     container_name: zenflow-node-exporter-prod

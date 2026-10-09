@@ -1,0 +1,17 @@
+groups:
+  - name: redis-sessions
+    rules:
+      - alert: SessionsRedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.7
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Sessions Redis is above 70% of maxmemory
+
+      - alert: SessionsRedisEvictingKeys
+        expr: increase(redis_evicted_keys_total[5m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: Sessions Redis is evicting keys, so users are being logged out
