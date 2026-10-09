@@ -20,7 +20,7 @@ Values are never listed. `backend/.env.example` shows the shape.
 | `BANDIT_SERVICE_TOKEN` | bearer for `POST /v1/place`; bandit also accepts `BANDIT_SERVICE_TOKEN_PREVIOUS` | store (both services) | zero-downtime: new on bandit with old as `_PREVIOUS`, then API, then drop `_PREVIOUS` |
 | `FCM_SERVICE_ACCOUNT`, `APNS_KEY` (+ `APNS_KEY_ID`, `APNS_TEAM_ID`) | push notifications | store | Firebase / Apple developer portal |
 | `GRAFANA_ADMIN_PASSWORD` | Grafana (staging, prod) | store | change and redeploy |
-| `CACHE_URL`, `RATE_LIMIT_CACHE_URL`, `QUEUE_REDIS_URL`, `REDIS_PUBSUB_URL` | Redis ([ADR-0005](../adr/0005-rate-limit-store-lru-rdb.md), [ADR-0007](../adr/0007-bullmq-for-notification-queue.md), [ADR-0018](../adr/0018-redis-pubsub-instance.md)); unauthenticated on internal-only Docker networks | n/a | add a password if the network assumption changes |
+| `CACHE_URL`, `RATE_LIMIT_CACHE_URL`, `QUEUE_REDIS_URL`, `REDIS_PUBSUB_URL`, `REDIS_KILLSWITCH_URL` | Redis ([ADR-0005](../adr/0005-rate-limit-store-lru-rdb.md), [ADR-0007](../adr/0007-bullmq-for-notification-queue.md), [ADR-0018](../adr/0018-redis-pubsub-instance.md)); unauthenticated on internal-only Docker networks | n/a | add a password if the network assumption changes |
 | Per-user DLU/LMS credentials | `Integration` rows in Postgres, encrypted under per-user DEKs | DB (ciphertext only) | by the user |
 | `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`, `SOPS_AGE_KEY`, `SECRETS_COMMAND` | CI deploy | GitHub Environment secrets | yearly or on offboarding |
 | `GITHUB_TOKEN` | image push/pull | per workflow run | automatic |
