@@ -113,6 +113,7 @@ frontend `dev | build | typecheck | lint | test:e2e`.
 - Backend unit tests are `*.spec.ts` (Jest) next to the code — pure functions like the
   scheduler are the priority to cover. E2e is `backend/test/jest-e2e.json` (needs the test
   DB). Frontend e2e is Playwright (`testDir` is `frontend/e2e/`; no specs checked in yet; needs the backend stack + Mailpit). Mobile has unit, component (MSW) and Maestro e2e layers: see `docs/mobile/testing.md`.
+- **Backend tests use NestJS DI.** Build the unit under test with `Test.createTestingModule({ providers: [Svc, { provide: Dep, useValue: mock }] })`, fetch it with `module.get(Svc)`, and replace real providers with `.overrideProvider(Dep).useValue(...)`; `useMocker` for broad auto-mocks. No `new Svc(mockA, mockB)`, no `as any` casts to satisfy constructors, no reaching into private fields. Inject tokens (`@Inject(TOKEN)`) are provided by token. E2E boots `AppModule` the same way and overrides externals. Exempt: pure functions and classes with no Nest deps (`scheduler/core/*`). Apply to new and touched specs; do not mass-rewrite old ones.
 - Run `pnpm --filter <app> typecheck` and `lint` before finishing. After editing shared
   types, `pnpm shared:build` first.
 - **Formatting:** ESLint (+ Prettier on the backend), 2-space indentation (`.editorconfig`);

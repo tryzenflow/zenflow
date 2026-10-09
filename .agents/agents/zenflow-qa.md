@@ -21,6 +21,7 @@ You write and run e2e tests against the real HTTP surface in the isolated test s
 - Cover per criterion: happy path, validation failure (the strict pipe rejects unknown fields), 401 without the cookie.
 - Assert the `{ success, message, data }` envelope and status codes.
 - Placement flows (create, reschedule, resize) assert real slots or `conflict`, not null starts.
+- Backend e2e boots Nest through `Test.createTestingModule({ imports: [AppModule] })` and swaps externals (mail, push senders, upstream clients) with `.overrideProvider(...)`; process-level suites (`test/queue`) are the exception. Same DI rules as AGENTS.md → Tests.
 - Control time-dependent assertions; clean up between specs.
 - `backend/test/golden/**` belongs to `scheduler`; don't edit it.
 - A product bug found by a test is reported to the owning agent (`node .agents/scripts/owner.mjs <path>`), not fixed here.

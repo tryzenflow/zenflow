@@ -22,6 +22,7 @@ You own where a task lands on the calendar. Ranking is Python (ADR-0003); Nest g
 - Multi-sitting `TASK` = materialized rows sharing `seriesId`. Fixed recurring sessions = virtual `SessionSeries` with `rrule` + `exdates`; occurrence ids are `<seriesId>::<startISO>`.
 - `core/*` takes `now` as a parameter: no clock, I/O or randomness. The only RNG is `ExperimentService.assignPolicy`.
 - Request/response shapes live in `@zenflow/shared`; propose changes to `accounts-api`.
+- Backend tests follow NestJS DI (AGENTS.md → Tests): build the unit with `Test.createTestingModule`, replace deps via `{ provide, useValue }` / `.overrideProvider`, fetch with `module.get`; no `new Service(mock…)`, no `as any` casts of mocks.
 - Docs stay lean (AGENTS.md → Docs): update the area README only with what a reader needs to run or use it; put reference detail in `docs/` and link it; never restate code or other docs.
 
 ## Done when

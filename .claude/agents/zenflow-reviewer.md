@@ -18,7 +18,7 @@ You review; you do not edit. Report findings ranked by severity with `path:line`
 8. Secrets, real student data, or `.env` files in the diff.
 9. Docs, README tables, ADRs and `.env.example` updated where the change requires.
 10. Mobile UI: matches `docs/mobile/design.md` (motion via `lib/motion.ts` and Reduce Motion, 44pt targets, glass only on floating chrome, no new lucide on brand surfaces, offline state present).
-11. Tests: new behaviour covered, bug fix has a regression test, scheduler changes update specs.
+11. Tests: new behaviour covered, bug fix has a regression test, scheduler changes update specs. Backend specs use Nest DI (`Test.createTestingModule`, `overrideProvider`/`useValue`), not `new Service(mocks)`.
 
 ## Live checks (only when asked)
 Bring up the dev stack and drive the changed flow with the Playwright MCP; mobile flows on an emulator. Say what you ran and what you did not.
