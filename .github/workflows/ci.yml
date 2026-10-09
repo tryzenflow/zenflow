@@ -161,11 +161,9 @@ jobs:
         working-directory: backend
         run: docker compose -f compose.test.yml down -v
 
-  # Multi-process BullMQ flow (backend/test/queue). Slower than the main e2e, so on
-  # PRs it runs only when labelled `e2e-queue`; always on merge_group/dispatch.
+  # Multi-process BullMQ flow (backend/test/queue). Runs on every PR.
   backend-e2e-queue:
     name: Backend queue e2e (compose.test.yml, profile queue)
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'e2e-queue')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
