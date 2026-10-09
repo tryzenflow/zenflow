@@ -252,7 +252,7 @@ describe("RetainedSessionsService.sweep", () => {
     expect(userUpdates[0].id).toBe("user-1");
     const written = userUpdates[0].data.preferenceMatrix as number[];
     // Monday (wd=1), hour 9 → matrixIndex(1, 9) = 9.
-    expect(written[9]).toBeCloseTo(0.025); // PREFERENCE_LEARNING_RATE · PREFERENCE_RETAINED_WEIGHT
+    expect(written[9]).toBeCloseTo(0.05); // PREFERENCE_LEARNING_RATE · PREFERENCE_RETAINED_WEIGHT
   });
 
   it("reinforces the preference matrix even when there is no LinUCB proposal for the session", async () => {

@@ -291,6 +291,7 @@ class _Placer:
             self.next15,
             self.req.deadline_ms,
             seeded_tie_break_order(f"{self.req.request_id}|{m.id}"),
+            self.matrix,
         )
         self.t.scan += time.perf_counter() - t0
         return pick

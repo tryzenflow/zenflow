@@ -7,7 +7,7 @@ HOUR_MS = 60 * MS_PER_MINUTE
 DAY_MS = 24 * 60 * MS_PER_MINUTE
 
 MAX_SCAN_DAYS = 60
-PREFERENCE_LEARNING_RATE = 0.1
+PREFERENCE_LEARNING_RATE = 0.2
 PREFERENCE_RETAINED_WEIGHT = 0.25
 STABILITY_WEIGHT = 0.1
 STABILITY_SATURATION_HOURS = 4
@@ -33,6 +33,12 @@ STABILITY_WEIGHT_FAR = 0.05
 STABILITY_NEAR_HOURS = 24
 STABILITY_FAR_HOURS = 168
 
+# Weight of the (hour-averaged) preference matrix in the LinUCB slot score. It
+# decides the hour *inside* the chosen band, where the arm term is flat, and so
+# lets a user who keeps moving tasks to 10:00 pull the pick off the band centre.
+# Sits between the stability weights and the LinUCB arm spread.
+LINUCB_PREF_WEIGHT = 1.0
+
 # Displacement (issue #62 B).
 MAX_DISPLACED_TASKS = 6
 
@@ -40,7 +46,3 @@ MAX_DISPLACED_TASKS = 6
 SCAN_CAP_DAYS = 30
 MAX_SERIES_PER_DAY = 1
 INFEASIBLE_HORIZON_DAYS = 30
-
-# LinUCB warm-start prior (issue #60): total pseudo-observations each cold arm is
-# seeded with from the default preference matrix. 0 = the old (ridge * I, 0) start.
-LINUCB_PRIOR_N0 = 5.0

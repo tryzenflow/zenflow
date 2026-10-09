@@ -8,12 +8,12 @@ import math
 from .slot import utc_to_minutes
 
 ARM_BANDS: tuple[tuple[str, int, int], ...] = (
-    ("EARLY_MORNING", 0, 360),
-    ("MORNING", 360, 660),
-    ("MIDDAY", 660, 840),
-    ("AFTERNOON", 840, 1020),
-    ("EVENING", 1020, 1200),
-    ("NIGHT", 1200, 1440),
+    ("EARLY_MORNING", 0, 480),
+    ("MORNING", 480, 720),
+    ("MIDDAY", 720, 840),
+    ("AFTERNOON", 840, 1080),
+    ("EVENING", 1080, 1320),
+    ("NIGHT", 1320, 1440),
 )
 
 
@@ -63,7 +63,7 @@ def seeded_tie_break_order(seed: str) -> tuple[str, ...]:
     Cold start (every arm tied) would otherwise always land in MORNING; a
     per-request shuffle of the waking bands (MORNING..NIGHT) spreads that
     exploration across the day while keeping placement a pure function of
-    the request (ADR-0003). EARLY_MORNING (00:00-06:00) is always last, so a
+    the request (ADR-0003). EARLY_MORNING (00:00-08:00) is always last, so a
     tie never lands a task in the small hours.
     """
     waking = [a for a in TIE_BREAK_ARM_ORDER if a != "EARLY_MORNING"]

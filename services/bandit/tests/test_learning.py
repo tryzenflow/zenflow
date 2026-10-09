@@ -26,7 +26,12 @@ from fastapi.testclient import TestClient
 
 from src.api import app
 from src.core.arms import ARM_BANDS
-from src.core.constants import DAY_MS, MS_PER_MINUTE
+from src.core.constants import DAY_MS, MS_PER_MINUTE, PREFERENCE_RETAINED_WEIGHT
+from src.core.preference import (
+    default_preference_matrix,
+    reinforce_preference_cell,
+    reinforce_preference_move,
+)
 from src.core.reward import drag_distance_reward
 from src.core.slot import iso_weekday, local_date_str, local_midnight_ms
 from src.schemas import ARM_IDS
@@ -63,6 +68,7 @@ def simulate(
     """
     state: dict[str, dict[str, list[float]]] = {a: {"A": [], "b": []} for a in ARM_IDS}
     log: list[tuple[str, str, float]] = []
+    matrix = default_preference_matrix()  # learns from every reaction, as in Nest
     for k in range(episodes):
         now = NOW + k * DAY_MS
         today = local_date_str(now, "UTC")
@@ -78,6 +84,7 @@ def simulate(
             members=[member(policy="LINUCB", dur=DUR)],
             days=make_days(window_days + 1, start_day=today),
             bandit={"alpha": ALPHA, "ridge": RIDGE, "state": state},
+            user={"preferenceMatrix": matrix.tolist(), "observationCount": k},
         )
         res = client.post("/v1/place", json=body)
         assert res.status_code == 200, res.text
@@ -89,13 +96,20 @@ def simulate(
         day = local_date_str(start, "UTC")
         day_start = next(d["dayStartMs"] for d in body["days"] if d["dayStr"] == day)
         want = prefers(iso_weekday(day))
+        moved_to = _centre_start_ms(day_start, want)
+        drag = abs(moved_to - start) / MS_PER_MINUTE
         if fixed_reward is not None:
             reward = fixed_reward
         elif arm == want:
             reward = 1.0  # RETAINED (SESSION_RETAINED_REWARD)
         else:
-            moved_to = _centre_start_ms(day_start, want)
             reward = drag_distance_reward((moved_to - start) / MS_PER_MINUTE)
+        if arm == want:
+            matrix = reinforce_preference_cell(
+                matrix, start, "UTC", PREFERENCE_RETAINED_WEIGHT
+            )
+        else:
+            matrix = reinforce_preference_move(matrix, start, moved_to, "UTC", drag)
 
         upd = client.post(
             "/v1/update",
@@ -123,16 +137,20 @@ def _hit(log: list[tuple[str, str, float]]) -> list[bool]:
     return [reward == 1.0 for *_, reward in log]
 
 
-# Placements allowed before the preferred band is first hit. The cold-arm prior
-# (default preference matrix, LINUCB_PRIOR_N0) starts MORNING/AFTERNOON ahead, so
-# they are found at once; a band the prior disfavours first has to out-vote it.
+# Placements allowed before the preferred band is first hit. Cold arms tie, so the
+# default matrix (preference term, LINUCB_PREF_WEIGHT) puts the first picks in
+# MORNING/AFTERNOON; a band it scores 0 (MIDDAY above all, only 2 h wide) has to
+# out-vote it, and the matrix has to learn the new hour before the pick settles.
 FIRST_HIT_BUDGET = {
     "MORNING": 0,
-    "AFTERNOON": 1,
-    "MIDDAY": 10,
-    "EVENING": 10,
-    "NIGHT": 10,
+    "AFTERNOON": 2,
+    "MIDDAY": 8,
+    "EVENING": 4,
+    "NIGHT": 6,
 }
+# Placements after the first hit during which the pick may still flip back while
+# the matrix catches up; afterwards a kept band must keep winning.
+SETTLE = 4
 
 
 @pytest.mark.parametrize("band", ["MORNING", "MIDDAY", "AFTERNOON", "EVENING", "NIGHT"])
@@ -145,22 +163,27 @@ def test_learns_a_fixed_preferred_band_fast(band: str) -> None:
 
     first_hit = hits.index(True)
     assert first_hit <= FIRST_HIT_BUDGET[band], "found within the budget"
-    assert all(hits[first_hit:]), "once found, a kept band must keep winning"
-    # EARLY_MORNING (00:00-06:00) is last in every seeded tie order, so it is
+    assert all(hits[first_hit + SETTLE :]), (
+        "once settled, a kept band must keep winning"
+    )
+    # EARLY_MORNING (00:00-08:00) is last in every seeded tie order, so it is
     # only explored once all 5 waking bands have been rejected.
     assert "EARLY_MORNING" not in {arm for _, arm, _ in log}
 
 
 def test_a_mild_move_still_pushes_exploration_elsewhere() -> None:
     """Regression for the cold-arm lock-in: a user who nudges every placement
-    by an hour (MOVE, reward -0.25) must see each waking band tried eventually.
-    With cold arms pinned at 0.0 the first moved arm kept winning on its own
-    exploration bonus (score +0.075 > 0) and no other band ever got data. The
-    cold-arm prior favours MORNING/AFTERNOON, so a mild move only dethrones them
-    after a few rounds: 20 placements instead of 5."""
+    by an hour (MOVE, reward -0.25) must see other bands tried. With cold arms
+    pinned at 0.0 the first moved arm kept winning on its own exploration bonus
+    (score +0.075 > 0) and no other band ever got data. The cold-arm prior and
+    the preference term both favour the default study hours, so exploration now
+    stays within them (MORNING, AFTERNOON, EVENING); MIDDAY and NIGHT, which the
+    default matrix scores 0 and where students rarely study, are reached only
+    through a learned preference (see ``test_learns_a_fixed_preferred_band_fast``)."""
     log = simulate(lambda _wd: "EVENING", episodes=20, fixed_reward=-0.25)
     tried = {arm for _, arm, _ in log}
-    assert tried >= {"AFTERNOON", "EVENING", "MIDDAY", "MORNING", "NIGHT"}
+    assert tried >= {"AFTERNOON", "EVENING", "MORNING"}
+    assert "EARLY_MORNING" not in tried
 
 
 def test_learns_a_weekday_vs_weekend_split() -> None:

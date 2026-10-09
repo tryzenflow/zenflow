@@ -703,7 +703,7 @@
   "response": {
     "contractVersion": 1,
     "requestId": "00000000-0000-4000-8000-000000000002-3",
-    "paramsVersion": "py-1ce2e99ca66e",
+    "paramsVersion": "py-fe8383b68ad0",
     "results": [
       {
         "id": "s0",
@@ -714,9 +714,9 @@
           "score": 1.0
         },
         "linucb": {
-          "startMs": 1790002800000,
-          "score": 0.5554455404253981,
-          "selectedArm": "AFTERNOON",
+          "startMs": 1789983000000,
+          "score": 1.2862147711946288,
+          "selectedArm": "MORNING",
           "featureVector": [
             -0.9,
             -0.75,
@@ -745,9 +745,9 @@
           "score": 1.0
         },
         "linucb": {
-          "startMs": 1790089200000,
-          "score": 0.5538376412501469,
-          "selectedArm": "AFTERNOON",
+          "startMs": 1790069400000,
+          "score": 1.2846068720193777,
+          "selectedArm": "MORNING",
           "featureVector": [
             -0.9,
             -0.75,
@@ -776,9 +776,9 @@
           "score": 1.0
         },
         "linucb": {
-          "startMs": 1790175600000,
-          "score": 0.5522723350695059,
-          "selectedArm": "AFTERNOON",
+          "startMs": 1790155800000,
+          "score": 1.2830415658387366,
+          "selectedArm": "MORNING",
           "featureVector": [
             -0.9,
             -0.75,
@@ -800,12 +800,12 @@
       }
     ],
     "timingsMs": {
-      "decode": 0.208,
-      "context": 0.042,
-      "predict": 0.277,
-      "scan": 1.236,
+      "decode": 0.197,
+      "context": 0.025,
+      "predict": 0.125,
+      "scan": 0.653,
       "displace": 0.0,
-      "total": 2.204
+      "total": 1.173
     }
   }
 }

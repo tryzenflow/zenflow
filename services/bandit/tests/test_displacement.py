@@ -80,6 +80,7 @@ from src.core.displacement import (  # noqa: E402
     plan_displacement,
 )
 from src.core.linucb_best_slot import LinucbCandidateDay, best_linucb_slot  # noqa: E402
+from src.core.preference import default_preference_matrix, matrix_index  # noqa: E402
 from src.core.slot_score import stability_weight  # noqa: E402
 
 HORIZON_END = NOW + 40 * DAY_MS
@@ -206,42 +207,52 @@ def test_near_task_stays_far_task_follows_linucb() -> None:
     assert far.stability_weight == pytest.approx(0.05)
 
 
-def test_preference_matrix_never_changes_the_linucb_pick() -> None:
-    """LinUCB ignores the preference matrix entirely (independent A/B arm):
-    flipping it changes neither the band, the score nor the start."""
-    cold: dict[str, dict[str, list[float]]] = {
-        a: {"A": [], "b": []} for a, *_ in ARM_BANDS
-    }
-    base = make_req(
-        members=[
-            {
-                "id": "t1",
-                "durationMinutes": 60,
-                "primaryPolicy": "LINUCB",
-                "computeBoth": False,
-            }
-        ],
-        bandit={"alpha": 0.15, "ridge": 1.0, "state": cold},
-    )
-    flipped = make_req(**{k: v for k, v in base.items() if k != "user"})
-    flipped["user"] = {"preferenceMatrix": [-1.0] * 168, "observationCount": 0}
-    a = ok(base)["results"][0]["linucb"]
-    b = ok(flipped)["results"][0]["linucb"]
-    assert (a["selectedArm"], a["score"], a["startMs"]) == (
-        b["selectedArm"],
-        b["score"],
-        b["startMs"],
-    )
+def test_preference_matrix_picks_the_hour_inside_the_winning_band() -> None:
+    """The arm term is flat inside a band, so the matrix (weight wP) decides the
+    hour: a user who keeps moving tasks to 11:00 gets 11:00, not the band centre,
+    while the band LinUCB chose stays the same."""
+    scores = {a: 0.0 for a, *_ in ARM_BANDS} | {"MORNING": 0.5}
+    day = MIDNIGHT + DAY_MS  # Tue (ISO weekday 2)
+    days = [_one_day(day, scores)]
+    plain = best_linucb_slot(days, 60, "UTC", NOW, day + DAY_MS)
+    learned = [0.0] * 168
+    learned[matrix_index(2, 11)] = 1.0
+    biased = best_linucb_slot(days, 60, "UTC", NOW, day + DAY_MS, pref_matrix=learned)
+    assert plain is not None and biased is not None
+    assert plain.arm == biased.arm == "MORNING"
+    assert plain.start_ms == day + (9 * 60 + 30) * 60_000
+    assert biased.start_ms == day + 11 * HOUR
+
+
+def test_default_matrix_keeps_a_cold_pick_in_waking_study_hours() -> None:
+    """With every arm tied (cold start) and the default matrix, the pick is 09:00
+    or later and outside the 12-14 and 17-19 meal gaps, whatever the seed."""
+    cold = {a: 0.0 for a, *_ in ARM_BANDS}
+    day = MIDNIGHT + DAY_MS
+    default = default_preference_matrix()
+    for i in range(50):
+        pick = best_linucb_slot(
+            [_one_day(day, cold)],
+            60,
+            "UTC",
+            NOW,
+            day + DAY_MS,
+            tie_break_order=seeded_tie_break_order(f"req-{i}|t1"),
+            pref_matrix=default,
+        )
+        assert pick is not None
+        hour = (pick.start_ms - day) / HOUR
+        assert hour >= 9 and not 12 <= hour < 14 and not 17 <= hour < 19
 
 
 @pytest.mark.parametrize(
     ("arm", "dur", "want_start_min"),
     [
-        ("MORNING", 60, 8 * 60),  # [06:00, 11:00) centre 08:30 -> 08:00-09:00
-        ("MIDDAY", 60, 12 * 60),  # [11:00, 14:00) centre 12:30
-        ("AFTERNOON", 60, 15 * 60),  # [14:00, 17:00) centre 15:30
-        ("EVENING", 90, 17 * 60 + 45),  # [17:00, 20:00) centre 18:30
-        ("NIGHT", 120, 21 * 60),  # [20:00, 24:00) centre 22:00
+        ("MORNING", 60, 9 * 60 + 30),  # [08:00, 12:00) centre 10:00 -> 09:30-10:30
+        ("MIDDAY", 60, 12 * 60 + 30),  # [12:00, 14:00) centre 13:00
+        ("AFTERNOON", 60, 15 * 60 + 30),  # [14:00, 18:00) centre 16:00
+        ("EVENING", 90, 19 * 60 + 15),  # [18:00, 22:00) centre 20:00
+        ("NIGHT", 120, 22 * 60),  # [22:00, 24:00) centre 23:00
     ],
 )
 def test_winning_band_places_the_task_at_its_centre(

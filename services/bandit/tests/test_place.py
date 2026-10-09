@@ -23,6 +23,7 @@ from src.core.preference import default_preference_matrix
 from src.core.slot import add_days_str, local_date_str, local_midnight_ms
 from src.models.linucb import score as linucb_score
 from src.schemas import ARM_IDS, ArmState
+from src.schemas_place import PLACEMENT_CONTRACT_VERSION
 from src.serialization import hydrate_arms
 
 client = TestClient(app)
@@ -79,7 +80,7 @@ def member(
 
 def make_req(**kw: Any) -> dict[str, Any]:
     req: dict[str, Any] = {
-        "contractVersion": 1,
+        "contractVersion": PLACEMENT_CONTRACT_VERSION,
         "requestId": "test-1",
         "mode": "PLACE",
         "nowMs": NOW,
@@ -129,9 +130,9 @@ def test_single_heuristic_prefers_the_default_morning_hour() -> None:
     assert r["outcome"] == "PLACED" and r["appliedPolicy"] == "HEURISTIC"
     assert r["linucb"] is None and r["moves"] == []
     assert r["startMs"] == r["heuristic"]["startMs"]
-    # default matrix: 08-11 (+1) is the best window; 08:00 today is already past
-    # 'now' boundaries -> earliest full-score start is 08:00 (now == 08:00 UTC).
-    assert r["startMs"] == NOW
+    # default matrix: 09-12 (+1) is the best window -> earliest full-score start is
+    # 09:00 (now == 08:00 UTC).
+    assert r["startMs"] == NOW + HOUR
     assert res["paramsVersion"].startswith("py-")
     assert set(res["timingsMs"]) == {
         "decode",
@@ -251,6 +252,7 @@ def test_in_process_arm_scores_match_the_core() -> None:
         None,
         None,
         seeded_tie_break_order(f"{body['requestId']}|t1"),
+        default_preference_matrix(),
     )
     assert core is not None
     assert core.start_ms == start and core.arm == r["linucb"]["selectedArm"]
@@ -477,9 +479,9 @@ def test_deterministic() -> None:
 
 
 def test_contract_version_mismatch_is_422_with_code() -> None:
-    r = post(make_req(contractVersion=2))
+    r = post(make_req(contractVersion=PLACEMENT_CONTRACT_VERSION + 1))
     assert r.status_code == 422 and r.json()["code"] == "CONTRACT_VERSION"
-    r = post(make_req(contractVersion=2, brandNewField=1))
+    r = post(make_req(contractVersion=PLACEMENT_CONTRACT_VERSION + 1, brandNewField=1))
     assert r.status_code == 422 and r.json()["code"] == "CONTRACT_VERSION"
 
 

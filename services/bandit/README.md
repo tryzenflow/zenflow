@@ -60,7 +60,7 @@ uv run python -m src.main                         # offline demo: LinUCB vs rand
 ## Where the maths lives
 
 - Model, rewards, hyperparameters (`λ = 1.0`, `α = 0.15`): [ADR-0001](../../docs/adr/0001-linucb-model-design.md).
-- Context vector (`d = 7`), arms, warm-start prior (`LINUCB_PRIOR_N0 = 5.0`), tie-breaks, benchmarks: [docs/bandit/core.md](../../docs/bandit/core.md).
+- Context vector (`d = 7`), arms, tie-breaks, benchmarks: [docs/bandit/core.md](../../docs/bandit/core.md).
 - Arm to timestamp mapping: [docs/scheduler/reranking.md](../../docs/scheduler/reranking.md).
 - A/B experiment: [docs/scheduler/ab-testing.md](../../docs/scheduler/ab-testing.md); results: [heuristic-vs-linucb-report.md](../../docs/scheduler/heuristic-vs-linucb-report.md).
 
