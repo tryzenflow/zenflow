@@ -13,11 +13,23 @@ import type { Redis } from "ioredis";
 import passport from "passport";
 import { buildSessionOptions } from "./auth/session.config";
 import { REDIS_CLIENT } from "./common/redis/redis.constants";
+import { getRole } from "./common/config/role";
 import { IoredisSessionStore } from "./common/redis/ioredis-session.store";
 
 // 7 days. Default lifetime of an idle session; with rolling sessions an
 // actively-used session keeps getting extended on every request.
 const DEFAULT_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Worker (ADR-0011): same module graph, but no session/CORS/Swagger; it only
+// answers `GET /health` while its crons and timers run.
+async function bootstrapWorker() {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: true,
+  });
+  app.useLogger(app.get(Logger));
+  app.enableShutdownHooks();
+  await app.listen(process.env.WORKER_PORT ?? 5001);
+}
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -101,4 +113,4 @@ async function bootstrap() {
   app.use(passport.session());
   await app.listen(process.env.PORT ?? 5000);
 }
-void bootstrap();
+void (getRole() === "worker" ? bootstrapWorker() : bootstrap());

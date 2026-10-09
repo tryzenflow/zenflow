@@ -28,6 +28,24 @@ import { NotificationsModule } from "./notifications/notifications.module";
 import { RemindersModule } from "./reminders/reminders.module";
 import { DevicesModule } from "./devices/devices.module";
 import { ObservabilityModule } from "./observability/observability.module";
+import { getRole, runsHttp, runsJobs } from "./common/config/role";
+import { IngestionWorkerModule } from "./ingestion/ingestion-worker.module";
+import { SchedulerWorkerModule } from "./scheduler/scheduler-worker.module";
+import { RemindersWorkerModule } from "./reminders/reminders-worker.module";
+import { HealthModule } from "./health/health.module";
+
+// Process role (ADR-0011), fixed at module-evaluation time like `envFilePath`.
+const role = getRole();
+// Only the worker (and the all-in-one dev/test role) registers schedulers; an
+// API replica must not, or every cron would fire once per replica.
+const jobModules = runsJobs(role)
+  ? [
+      ScheduleModule.forRoot(),
+      IngestionWorkerModule,
+      SchedulerWorkerModule,
+      RemindersWorkerModule,
+    ]
+  : [];
 
 @Module({
   imports: [
@@ -312,6 +330,9 @@ import { ObservabilityModule } from "./observability/observability.module";
         // has one validated default. `tracing.ts` reads the OTEL_* vars
         // itself (it is preloaded before Nest), they are listed here only so
         // a deployment sees them documented + defaulted.
+        // Process role (ADR-0011): "api" = HTTP only, "worker" = crons, ingestion
+        // ticker and reminder timers only, "all" = both (local dev, test stack).
+        ROLE: Joi.string().valid("api", "worker", "all").default("all"),
         NODE_ENV: Joi.string()
           .valid("development", "production", "test")
           .default("development"),
@@ -340,7 +361,6 @@ import { ObservabilityModule } from "./observability/observability.module";
     // Logging + CLS correlation + the global exception filter / HTTP metrics
     // interceptor. First so its Nest logger and filter cover everything below.
     ObservabilityModule,
-    ScheduleModule.forRoot(),
     CacheModule.registerAsync({
       isGlobal: true,
       imports: [ConfigModule],
@@ -384,8 +404,10 @@ import { ObservabilityModule } from "./observability/observability.module";
     DevicesModule,
     // Per-session reminders: SchedulerRegistry one-shot timers -> notifications.
     RemindersModule,
+    HealthModule,
+    ...jobModules,
   ],
   providers: [AppService, MailService],
-  controllers: [AppController],
+  controllers: runsHttp(role) ? [AppController] : [],
 })
 export class AppModule {}

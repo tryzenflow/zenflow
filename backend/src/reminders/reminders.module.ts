@@ -1,15 +1,13 @@
 import { Module } from "@nestjs/common";
 import { PrismaModule } from "../prisma/prisma.module";
-import { NotificationsModule } from "../notifications/notifications.module";
 import { RemindersService } from "./reminders.service";
 
 /**
- * Per-session reminders: persistence, the in-memory one-shot timers
- * (`SchedulerRegistry`) and delivery through `NotificationsService`.
- * `SchedulerRegistry` comes from the global `ScheduleModule.forRoot()`.
+ * Per-session reminder persistence and validation, used by the API. Timers and
+ * delivery live in {@link RemindersWorkerModule}.
  */
 @Module({
-  imports: [PrismaModule, NotificationsModule],
+  imports: [PrismaModule],
   providers: [RemindersService],
   exports: [RemindersService],
 })
