@@ -1,6 +1,7 @@
+import { KillSwitchService } from "../common/killswitch/killswitch.service";
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import type { Job } from "bullmq";
+import { DelayedError, type Job } from "bullmq";
 import type { IntegrationProvider } from "@zenflow/shared";
 import { UpstreamUnavailableError } from "../common/outbound-breaker";
 import { LMSService } from "../lms/lms.service";
@@ -25,6 +26,9 @@ import {
   type IntegrationTarget,
   type PassOutcome,
 } from "./watcher-support";
+
+/** How long a job parked by the kill switch waits before checking the flag again. */
+const PAUSED_RECHECK_MS = 60_000;
 
 /** What a finished fetch job returns (stored on the job; read by manual sync). */
 export interface FetchResult {
@@ -64,6 +68,7 @@ export class IngestionFetchService {
     private readonly discovery: EnrollmentDiscoveryService,
     private readonly lmsClient: LMSService,
     private readonly portalClient: PortalAPIService,
+    private readonly killSwitch: KillSwitchService,
   ) {}
 
   /**
@@ -72,8 +77,19 @@ export class IngestionFetchService {
    */
   async handle(job: Job<FetchJobData>, token?: string): Promise<FetchResult> {
     try {
-      return await this.execute(job.data);
+      const result = await this.execute(job.data);
+      if (result.skipped && !job.data.manual && token) {
+        // Ingestion is switched off but the ticker already claimed this slot
+        // (`nextDueAt` is a period ahead). Completing the job would strand the
+        // student until the next period, and its stable job id would swallow a
+        // re-enqueue. Park it instead (no attempt used): it runs once the
+        // switch is back on.
+        await job.moveToDelayed(Date.now() + PAUSED_RECHECK_MS, token);
+        throw new DelayedError("ingestion paused");
+      }
+      return result;
     } catch (err) {
+      if (err instanceof DelayedError) throw err;
       if (err instanceof UpstreamUnavailableError) {
         // Throws DelayedError, or `err` itself once parked too often.
         try {
@@ -96,7 +112,10 @@ export class IngestionFetchService {
    * the upstream breaker is open (nothing is recorded: not the student's fault).
    */
   async execute(data: FetchJobData, now = new Date()): Promise<FetchResult> {
-    if (!isIngestionEnabled(this.config)) {
+    if (
+      !isIngestionEnabled(this.config) ||
+      !(await this.killSwitch.isEnabled("ingestion"))
+    ) {
       return { ok: false, servedFromCache: false, skipped: true };
     }
     const kind = data.kind as SyncKindName;

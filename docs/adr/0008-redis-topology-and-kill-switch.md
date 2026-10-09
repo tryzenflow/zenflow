@@ -16,12 +16,17 @@ One Redis instance per workload, all in the compose files. Kill-switch flags get
 | --- | --- | --- | --- |
 | `redis` | sessions, OTP | `volatile-lru` (all keys carry a TTL) | AOF `everysec` + `--save 1800 1` |
 | `redis-ratelimit` | rate-limit counters ([ADR-0005](0005-rate-limit-store-lru-rdb.md)) | `allkeys-lru` | RDB |
-| `redis-killswitch` (new) | feature flags | `noeviction` | AOF `everysec` |
+| `redis-killswitch` | feature flags | `noeviction` | AOF `everysec` |
 | `redis-cache` (new) | cached reads ([ADR-0017](0017-redis-cache-instance.md)) | `allkeys-lru` | none |
-| `redis-pubsub` (new) | SSE fan-out ([ADR-0018](0018-redis-pubsub-instance.md)) | n/a | none |
-| BullMQ Redis (later) | jobs ([ADR-0007](0007-bullmq-for-notification-queue.md)) | `noeviction` | AOF |
+| `redis-pubsub` | SSE fan-out ([ADR-0018](0018-redis-pubsub-instance.md)) | n/a | none |
+| `redis-queue` | jobs ([ADR-0007](0007-bullmq-for-notification-queue.md)) | `noeviction` | AOF |
 
-Kill switch: flags `ingestion`, `notifications`, `bandit` (off = heuristic placement), `signups`, `maintenance`; env `REDIS_KILLSWITCH_URL`; short-TTL in-process cache; a per-flag fail-safe default when Redis is unreachable; admin-only toggle (CLI or guarded endpoint) with an audit record per change; runbook in `docs/ops/`. etcd is not adopted; revisit only if multi-service watch or leader election becomes necessary.
+Kill switch: flags `ingestion`, `notifications`, `bandit` (off = heuristic placement), `signups`, `maintenance`, stored as `killswitch:<flag>` on `redis-killswitch` (`REDIS_KILLSWITCH_URL`).
+- **Reads:** one Lua call refreshes every flag into a 5 s in-process snapshot; an unset URL, outage or timeout resolves to the per-flag fail-safe default (see the [runbook](../ops/kill-switch.md)).
+- **Writes:** admin-only CLI. One Lua call does `SET` + `XADD killswitch:audit`, so a flag and its audit record cannot diverge. No HTTP endpoint, so no new admin auth surface.
+- **Visibility:** `killswitch_flag_enabled{flag}` gauge and a Grafana dashboard.
+
+etcd is not adopted; revisit only if multi-service watch or leader election becomes necessary.
 
 Sessions `redis` moves from `noeviction` to `volatile-lru` so memory pressure can only drop TTL-bearing sessions, never a TTL-less key. Sessions are about 15 MB at 15k users against a 192 MB cap, so eviction should never trigger; alert at about 70% of `maxmemory` and on any `evicted_keys` increase.
 

@@ -17,6 +17,7 @@ import { TagsModule } from "./tags/tags.module";
 import { FilesModule } from "./files/files.module";
 import { SchedulerModule } from "./scheduler/scheduler.module";
 import { ScheduleModule } from "@nestjs/schedule";
+import { KillSwitchModule } from "./common/killswitch/killswitch.module";
 import { RedisModule } from "./common/redis/redis.module";
 import { RateLimitModule } from "./common/rate-limit";
 import { CryptoModule } from "./crypto/crypto.module";
@@ -107,6 +108,12 @@ const jobModules = [
         // counters (see common/rate-limit/) — kept off the session/OTP
         // Redis (CACHE_URL) so counter churn can't evict that data.
         RATE_LIMIT_CACHE_URL: Joi.string().uri().required(),
+        // Dedicated noeviction + AOF Redis for runtime kill-switch flags
+        // (ADR-0008). Unset outside production = fail-safe defaults only.
+        REDIS_KILLSWITCH_URL: Joi.string()
+          .uri()
+          .when("NODE_ENV", { is: "production", then: Joi.required() }),
+        KILLSWITCH_CACHE_TTL_MS: Joi.number().integer().min(0).optional(),
         MAIL_TRANSPORT: Joi.string().uri().required(),
         MAIL_FROM: Joi.string().email().required(),
         // Idle session lifetime in ms; with rolling sessions, active use keeps
@@ -469,6 +476,7 @@ const jobModules = [
       },
     }),
     RedisModule,
+    KillSwitchModule,
     QueueModule,
     RateLimitModule,
     UsersModule,

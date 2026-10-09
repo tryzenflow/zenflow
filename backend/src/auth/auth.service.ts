@@ -8,8 +8,10 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import type { Lang } from "@zenflow/shared";
+import { KillSwitchService } from "../common/killswitch/killswitch.service";
 import { generateOTP } from "./utils";
 import { UsersService } from "../users/users.service";
 import { MailService } from "../mail/mail.service";
@@ -22,6 +24,7 @@ export class AuthService {
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private usersService: UsersService,
     private mailService: MailService,
+    private killSwitch: KillSwitchService,
   ) {}
 
   async requestOTPCode(email: string, lang?: Lang) {
@@ -48,6 +51,12 @@ export class AuthService {
   async createUserIfNotExists(email: string, timezone: string) {
     const user = await this.usersService.findByEmail(email);
     if (!user) {
+      if (!(await this.killSwitch.isEnabled("signups"))) {
+        throw new ServiceUnavailableException({
+          success: false,
+          message: "Sign-ups are temporarily disabled",
+        });
+      }
       const created = await this.usersService.create({ email, timezone });
       return created;
     }

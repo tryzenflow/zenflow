@@ -60,6 +60,14 @@ services:
     ports:
       - "7381:6379"
 
+  redis-killswitch:
+    container_name: zenflow-test-cache-killswitch
+    profiles: ["queue"]
+    image: redis:8.8.0-alpine
+    command: ["redis-server", "--maxmemory-policy", "noeviction", "--appendonly", "no"]
+    ports:
+      - "7383:6379"
+
   redis-pubsub:
     container_name: zenflow-test-cache-pubsub
     profiles: ["queue"]

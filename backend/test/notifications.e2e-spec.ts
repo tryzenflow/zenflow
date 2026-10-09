@@ -1,3 +1,4 @@
+import { KillSwitchModule } from "../src/common/killswitch/killswitch.module";
 import {
   INestApplication,
   ValidationPipe,
@@ -146,6 +147,7 @@ describe("Notifications (e2e)", () => {
       // Global ConfigService, as AppModule provides it (BanditService needs it).
       imports: [
         ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }),
+        KillSwitchModule,
         NotificationsModule,
       ],
     })

@@ -35,6 +35,8 @@ services:
         condition: service_healthy
       redis-queue:
         condition: service_healthy
+      redis-killswitch:
+        condition: service_healthy
       redis-pubsub:
         condition: service_healthy
       migrations:
@@ -281,6 +283,36 @@ services:
     networks:
       - queue
     mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Runtime kill switch (ADR-0008): flags + audit stream. noeviction + AOF so a
+  # restart keeps every flag; its own volume. Shares the `queue` network (same
+  # consumers: api, watcher, workers). Keep separate from every other Redis.
+  redis-killswitch:
+    container_name: zenflow-cache-killswitch-prod
+    image: redis:8.8.0-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --maxmemory
+      - 32mb
+      - --maxmemory-policy
+      - noeviction
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+    volumes:
+      - redis_killswitch_data:/data
+    expose:
+      - "6379"
+    networks:
+      - queue
+    mem_limit: 64m
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -603,3 +635,4 @@ volumes:
   redis_data:
   redis_ratelimit_data:
   redis_queue_data:
+  redis_killswitch_data:

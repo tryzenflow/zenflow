@@ -265,3 +265,11 @@ export const rateLimitStoreFailOpen = meter.createCounter(
       "Requests allowed because the rate-limit store was down/slow, by reason (breaker_open|timeout|error)",
   },
 );
+
+// --- Kill switch (ADR-0008) -------------------------------------------------
+export const killSwitchFlag = meter.createObservableGauge(
+  "killswitch.flag_enabled",
+  {
+    description: "Runtime kill-switch flag state by flag: 1 = on, 0 = off",
+  },
+);
