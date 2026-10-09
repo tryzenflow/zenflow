@@ -1,3 +1,4 @@
+import { KillSwitchService } from "../common/killswitch/killswitch.service";
 import {
   Inject,
   Injectable,
@@ -120,6 +121,7 @@ export class IngestionSyncService implements OnModuleDestroy {
     @Inject(QUEUE_REDIS) private readonly redis: Redis | null,
     private readonly lmsClient: LMSService,
     private readonly portalClient: PortalAPIService,
+    private readonly killSwitch: KillSwitchService,
   ) {}
 
   /**
@@ -153,7 +155,12 @@ export class IngestionSyncService implements OnModuleDestroy {
       complete: false,
       pending: false,
     };
-    if (!isIngestionEnabled(this.config)) return failed;
+    if (
+      !isIngestionEnabled(this.config) ||
+      !(await this.killSwitch.isEnabled("ingestion"))
+    ) {
+      return failed;
+    }
     const integration = await this.prisma.integration.findUnique({
       where: { userId_provider: { userId, provider } },
       select: { id: true },

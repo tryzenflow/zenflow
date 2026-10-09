@@ -12,8 +12,6 @@ from collections.abc import Iterable, Mapping
 import numpy as np
 from fastapi import HTTPException
 
-from src.core import constants as consts
-from src.core.prior import seeded_arm_params
 from src.models.schemas import ArmParams
 from src.schemas import ARM_IDS, ArmId, ArmState
 
@@ -34,27 +32,12 @@ def require_422(ok: bool, message: str) -> None:
         raise HTTPException(status_code=422, detail=message)
 
 
-def cold_params(arm: str | None, d: int, ridge: float) -> ArmParams:
-    """A cold arm's starting state: the warm-start prior, or the plain ridge prior.
+def hydrate(st: ArmState, d: int, ridge: float) -> tuple[np.ndarray, np.ndarray]:
+    """Materialize an arm's ``(A, b)`` numpy arrays, falling back to the ridge prior.
 
-    The prior (:mod:`src.core.prior`) applies when the arm is known, ``d`` is the
-    production feature width and ``LINUCB_PRIOR_N0 > 0``; otherwise it is
-    ``ArmParams.cold`` (``A = ridge * I, b = 0``).
-    """
-    if arm is None or d != consts.FEATURE_DIM or consts.LINUCB_PRIOR_N0 <= 0:
-        return ArmParams.cold(d, ridge)
-    return seeded_arm_params(arm, ridge)
-
-
-def hydrate(
-    st: ArmState, d: int, ridge: float, arm: str | None = None
-) -> tuple[np.ndarray, np.ndarray]:
-    """Materialize an arm's ``(A, b)`` numpy arrays, falling back to the prior.
-
-    A fully empty state (no ``A`` and no ``b``) is seeded by :func:`cold_params`:
-    the warm-start prior for ``arm`` (``A = ridge * I, b = 0`` without ``arm``).
-    A partially empty state (only one of the two missing) is anomalous and fills
-    just that half at the plain ridge prior, without the warm-start.
+    A fully empty state (no ``A`` and no ``b``) is the cold arm
+    (``A = ridge * I, b = 0``). A partially empty state (only one of the two
+    missing) is anomalous and fills just that half at the ridge prior.
 
     Parameters
     ----------
@@ -64,16 +47,13 @@ def hydrate(
         Feature dimension.
     ridge : float
         Regularization ``lambda``.
-    arm : str, optional
-        The arm this state belongs to; enables the warm-start prior.
-
     Returns
     -------
     tuple of (ndarray of shape (d, d), ndarray of shape (d,))
         ``(A, b)``.
     """
     if not st.A and not st.b:
-        cold = cold_params(arm, d, ridge)
+        cold = ArmParams.cold(d, ridge)
         return cold.A, cold.b
     a: np.ndarray = (
         np.asarray(st.A, dtype=np.float64).reshape(d, d)
@@ -94,12 +74,11 @@ def hydrate_arms(
 ) -> dict[ArmId, ArmParams]:
     """Hydrate every one of the 5 canonical arms into :class:`ArmParams`.
 
-    A cold arm (missing, or no ``A`` and no ``b``) is seeded by
-    :func:`cold_params`: ridge prior plus the default-preference pseudo
-    observations (``LINUCB_PRIOR_N0`` per arm; ``A = ridge * I, b = 0`` at 0), so
-    it keeps an exploration bonus -- standard LinUCB optimism. (It used to be
-    pinned at ``0.0``, which let the first rewarded arm win forever: a warm arm's
-    bonus kept it above 0 even after the user moved its placements.)
+    A cold arm (missing, or no ``A`` and no ``b``) is the ridge prior
+    (``A = ridge * I, b = 0``), so it keeps an exploration bonus -- standard
+    LinUCB optimism. (It used to be pinned at ``0.0``, which let the first
+    rewarded arm win forever: a warm arm's bonus kept it above 0 even after the
+    user moved its placements.)
 
     Parameters
     ----------
@@ -118,9 +97,9 @@ def hydrate_arms(
     for arm in ARM_IDS:
         st = state.get(arm)
         if is_cold(st):
-            out[arm] = cold_params(arm, d, ridge)
+            out[arm] = ArmParams.cold(d, ridge)
             continue
         assert st is not None
-        a, b = hydrate(st, d, ridge, arm)
+        a, b = hydrate(st, d, ridge)
         out[arm] = ArmParams(a, b)
     return out

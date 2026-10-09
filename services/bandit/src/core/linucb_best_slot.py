@@ -3,7 +3,13 @@
 Every feasible 15-min start on every candidate day is scored
 
     score = sum_arm overlapRate(slot, arm) * armScore[day][arm]
+          + wP * preference(slot)
           + wS * stability(prevStart, slot)
+
+``preference`` is the preference matrix averaged over the slot's hours and
+``wP`` = ``LINUCB_PREF_WEIGHT``: it picks the hour inside a band where the arm
+term is flat, and learns from the user's drags (a user who keeps moving tasks to
+10:00 is no longer pinned to the band centre).
 
 where ``wS`` = :func:`~.slot_score.stability_weight` (strong for a task about
 to start, fading for distant ones), and ranked across days. LinUCB alone
@@ -13,8 +19,8 @@ decides *which band*; exact ties (within 1e-9) are broken by, in order:
    the caller) -- decides the band when every arm ties (cold start);
 2. the slot's distance from the band's centre -- picks the hour *inside* the
    band, where the arm term is flat, with a fixed rule that learns nothing
-   (e.g. 08:00-09:00 for a 60 min MORNING task, not 06:00). The preference
-   matrix is deliberately not used, so LinUCB is A/B-tested on its own;
+   (e.g. 09:00-10:00 for a 60 min MORNING task, not 08:00), when the
+   preference term does not already separate them;
 3. the earlier start.
 
 Vectorized per day.
@@ -27,14 +33,15 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
-from numpy.typing import NDArray
+from numpy.typing import ArrayLike, NDArray
 
 from .arms import ARM_BANDS, TIE_BREAK_ARM_ORDER, overlap_rate
-from .constants import MS_PER_MINUTE, SLOT_MS
+from .constants import LINUCB_PREF_WEIGHT, MS_PER_MINUTE, SLOT_MS
 from .slot import Intervals, ceil_to_slot, utc_to_minutes
 from .slot_score import (
     free_start_mask,
     proximity_stability_scores,
+    slot_preference_scores,
     stability_weight,
 )
 
@@ -86,6 +93,8 @@ def best_linucb_slot(
     extra_occupied: Intervals | None = None,
     prev_start_ms: int | None = None,
     tie_break_order: Sequence[str] = TIE_BREAK_ARM_ORDER,
+    pref_matrix: ArrayLike | None = None,
+    pref_weight: float = LINUCB_PREF_WEIGHT,
 ) -> BestLinucbSlot | None:
     tie_rank = {a: i for i, a in enumerate(tie_break_order)}
     rank_by_band = np.array([tie_rank[a] for a in _ARM_NAMES], dtype=np.int64)
@@ -131,6 +140,12 @@ def best_linucb_slot(
             )
         band = np.searchsorted(_BAND_STARTS, local_min.astype(np.int64), "right") - 1
         total = rates @ arm_vec
+        if pref_matrix is not None and pref_weight:
+            hours = duration_minutes / 60
+            total = total + pref_weight * (
+                slot_preference_scores(pref_matrix, starts, duration_minutes, timezone)
+                / hours
+            )
         if prev_start_ms is not None:
             total = total + proximity_stability_scores(prev_start_ms, starts, next_ms)
         scores.append(total)

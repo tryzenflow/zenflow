@@ -16,7 +16,7 @@ services:
     command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all", "-c", "pg_stat_statements.max=10000"]
     ports: ["5541:5432"]
     environment: { POSTGRES_USER: admin, POSTGRES_PASSWORD: admin, POSTGRES_DB: zenflow-test }
-  redis:
+  session-redis:
     image: redis:8.8.0-alpine
     <<: *log
     cpus: 0.5
@@ -49,13 +49,13 @@ services:
     mem_limit: 2g
     memswap_limit: 2g
     restart: "no"          # a crash must stay visible: the supervisor invalidates the scenario
-    depends_on: [postgres, redis, redis-ratelimit, mail, bandit]
+    depends_on: [postgres, session-redis, redis-ratelimit, mail, bandit]
     ports: ["5641:8000"]
     environment:
       NODE_ENV: production
       PORT: "8000"
       DATABASE_URL: postgres://admin:admin@postgres:5432/zenflow-test?sslmode=disable&schema=public
-      CACHE_URL: redis://redis:6379
+      CACHE_URL: redis://session-redis:6379
       RATE_LIMIT_CACHE_URL: redis://redis-ratelimit:6379
       MAIL_TRANSPORT: smtp://mail:1025
       MAIL_FROM: zenflow@example.com

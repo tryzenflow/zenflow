@@ -1,9 +1,11 @@
+import { KillSwitchService } from "../common/killswitch/killswitch.service";
 import { Test, TestingModule } from "@nestjs/testing";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import {
   BadRequestException,
   InternalServerErrorException,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import type { User } from "../../generated/prisma";
 import { AuthService } from "./auth.service";
@@ -27,6 +29,7 @@ describe("AuthService", () => {
   let cacheManager: { get: jest.Mock; set: jest.Mock; del: jest.Mock };
   let usersService: { findByEmail: jest.Mock; create: jest.Mock };
   let mailService: { sendLoginEmail: jest.Mock };
+  let killSwitch: { isEnabled: jest.Mock };
 
   beforeEach(async () => {
     cacheManager = { get: jest.fn(), set: jest.fn(), del: jest.fn() };
@@ -34,10 +37,15 @@ describe("AuthService", () => {
       findByEmail: jest.fn().mockResolvedValue(null),
       create: jest.fn().mockResolvedValue(existingUser),
     };
+    killSwitch = { isEnabled: jest.fn().mockResolvedValue(true) };
     mailService = { sendLoginEmail: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        {
+          provide: KillSwitchService,
+          useValue: killSwitch,
+        },
         AuthService,
         { provide: CACHE_MANAGER, useValue: cacheManager },
         { provide: UsersService, useValue: usersService },
@@ -108,6 +116,27 @@ describe("AuthService", () => {
 
       expect(result).toBe(existingUser);
       expect(usersService.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("createUserIfNotExists with signups disabled", () => {
+    it("refuses to create a new user", async () => {
+      killSwitch.isEnabled.mockResolvedValue(false);
+
+      await expect(
+        service.createUserIfNotExists("new@example.com", "UTC"),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(killSwitch.isEnabled).toHaveBeenCalledWith("signups");
+      expect(usersService.create).not.toHaveBeenCalled();
+    });
+
+    it("still logs an existing user in", async () => {
+      killSwitch.isEnabled.mockResolvedValue(false);
+      usersService.findByEmail.mockResolvedValue(existingUser);
+
+      await expect(
+        service.createUserIfNotExists("existing@example.com", "UTC"),
+      ).resolves.toBe(existingUser);
     });
   });
 

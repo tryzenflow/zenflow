@@ -1,3 +1,4 @@
+import { KillSwitchService } from "../common/killswitch/killswitch.service";
 import { ConfigService } from "@nestjs/config";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { IngestionScheduleService } from "./ingestion-schedule.service";
@@ -151,6 +152,10 @@ async function makeTicker(
   const breakers = opts.breakers ?? { LMS: null, PORTAL: null };
   const module: TestingModule = await Test.createTestingModule({
     providers: [
+      {
+        provide: KillSwitchService,
+        useValue: { isEnabled: jest.fn().mockResolvedValue(true) },
+      },
       IngestionTickerService,
       {
         provide: ConfigService,

@@ -12,3 +12,11 @@ export const REDIS_CLIENT = Symbol("REDIS_CLIENT");
  * short-TTL counter keys can't evict or contend with session/OTP data.
  */
 export const RATE_LIMIT_REDIS_CLIENT = Symbol("RATE_LIMIT_REDIS_CLIENT");
+
+/**
+ * DI token for the `ioredis` client connected to `REDIS_KILLSWITCH_URL`, or
+ * `null` when that URL is unset (flags then resolve to their fail-safe
+ * defaults). A dedicated `noeviction` + AOF instance so a flush or restart of
+ * any other Redis can't lose or evict a flag (ADR-0008).
+ */
+export const KILLSWITCH_REDIS_CLIENT = Symbol("KILLSWITCH_REDIS_CLIENT");

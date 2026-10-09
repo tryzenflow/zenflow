@@ -8,6 +8,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { BanditArmStateRepository } from "../../bandit/bandit-arm-state.repository";
 import { BanditService } from "../../bandit/bandit.service";
 import { dragDistanceReward } from "../core/reward";
+import { isCurrentModelVersion } from "../constants";
 import {
   reinforcePreferenceCell,
   reinforcePreferenceMove,
@@ -20,6 +21,7 @@ type LinucbProposal = {
   id: string;
   selectedArm: SchedulingArm | null;
   featureVector: number[];
+  modelVersion: string | null;
   firstModifiedAt: Date | null;
 };
 
@@ -86,6 +88,9 @@ export class SchedulingFeedbackService {
       // Placed under an older context-vector layout: its vector no longer
       // matches the arm state's dimension, so the reward is dropped.
       if (proposal.featureVector.length !== FEATURE_DIM) return;
+      // Placed under another arm layout: same vector width, but its arm now
+      // covers different hours, so the reward would train the wrong arm.
+      if (!isCurrentModelVersion(proposal.modelVersion)) return;
 
       await this.pushBanditUpdate(
         userId,
@@ -120,6 +125,7 @@ export class SchedulingFeedbackService {
         id: true,
         selectedArm: true,
         featureVector: true,
+        modelVersion: true,
         firstModifiedAt: true,
       },
     });

@@ -22,7 +22,7 @@ Values are never listed. `backend/.env.example` shows the shape.
 | `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY`, `BACKUP_AGE_RECIPIENT`, `BACKUP_AGE_IDENTITY` | backup container; IAM user is put + list only. `BACKUP_AGE_RECIPIENT` is public; `BACKUP_AGE_IDENTITY` is the restore-test key, never the offline master key | store, injected into `.env.<env>` | [runbook](backups.md#rotation) |
 | `GRAFANA_ADMIN_PASSWORD` | Grafana (staging, prod; prod refuses to start without it) | store | change and redeploy |
 | `GRAFANA_SMTP_PASSWORD` | Grafana alert mail: Mailgun SMTP credential for `postmaster@alerts.alphatrann.com` (prod) | store, `.env.prod` | reset in Mailgun, redeploy |
-| `CACHE_URL`, `RATE_LIMIT_CACHE_URL`, `QUEUE_REDIS_URL`, `REDIS_PUBSUB_URL` | Redis ([ADR-0005](../adr/0005-rate-limit-store-lru-rdb.md), [ADR-0007](../adr/0007-bullmq-for-notification-queue.md), [ADR-0018](../adr/0018-redis-pubsub-instance.md)); unauthenticated on internal-only Docker networks | n/a | add a password if the network assumption changes |
+| `CACHE_URL`, `RATE_LIMIT_CACHE_URL`, `QUEUE_REDIS_URL`, `REDIS_PUBSUB_URL`, `REDIS_KILLSWITCH_URL` | Redis ([ADR-0005](../adr/0005-rate-limit-store-lru-rdb.md), [ADR-0007](../adr/0007-bullmq-for-notification-queue.md), [ADR-0018](../adr/0018-redis-pubsub-instance.md)); unauthenticated on internal-only Docker networks | n/a | add a password if the network assumption changes |
 | Per-user DLU/LMS credentials | `Integration` rows in Postgres, encrypted under per-user DEKs | DB (ciphertext only) | by the user |
 | `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`, `SOPS_AGE_KEY`, `SECRETS_COMMAND` | CI deploy | GitHub Environment secrets | yearly or on offboarding |
 | `GITHUB_TOKEN` | image push/pull | per workflow run | automatic |

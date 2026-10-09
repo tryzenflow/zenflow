@@ -1,5 +1,6 @@
 import { Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import { UnrecoverableError, type Job } from "bullmq";
+import { KillSwitchService } from "../common/killswitch/killswitch.service";
 import { OutboundBreakers } from "../common/outbound-breaker";
 import { PushService } from "../devices/push.service";
 import { QueueWorkers } from "../queue/queue-workers.service";
@@ -24,6 +25,7 @@ export class NotifyProcessor implements OnModuleInit {
     private readonly push: PushService,
     private readonly reminders: ReminderSchedulerService,
     private readonly breakers: OutboundBreakers,
+    private readonly killSwitch: KillSwitchService,
   ) {}
 
   onModuleInit(): void {
@@ -34,6 +36,12 @@ export class NotifyProcessor implements OnModuleInit {
 
   async process(job: Job<NotifyJobData>, token?: string): Promise<void> {
     const data = job.data;
+    // Kill switch: drop the job (no retry). The reminder sweep and
+    // `reconcileRecent` re-arm anything still due once the flag is back on.
+    if (!(await this.killSwitch.isEnabled("notifications"))) {
+      this.logger.warn(`notifications disabled, dropping job ${job.id}`);
+      return;
+    }
     switch (data.type) {
       case "push":
         // One job per provider: a breaker park re-runs only that provider.

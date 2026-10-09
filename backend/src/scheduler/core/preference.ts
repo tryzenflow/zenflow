@@ -26,13 +26,13 @@ export function matrixIndex(isoWeekdayNum: number, hour: number): number {
 /**
  * Cold-start default population, used whenever a user's stored
  * `preferenceMatrix` is empty/unset (length !== {@link PREFERENCE_MATRIX_LENGTH}):
- * morning 8–11AM → 1 (high), afternoon 2–5PM → 0.5 (medium), evening 7–10PM →
+ * morning 9AM–12PM → 1 (high), afternoon 2–5PM → 0.5 (medium), evening 7–10PM →
  * 0.2 (low), everything else → 0 (neutral, never negative).
  */
 export function defaultPreferenceMatrix(): number[] {
   const matrix = new Array<number>(PREFERENCE_MATRIX_LENGTH).fill(0);
   for (let wd = 1; wd <= 7; wd++) {
-    for (let hour = 8; hour < 11; hour++) matrix[matrixIndex(wd, hour)] = 1;
+    for (let hour = 9; hour < 12; hour++) matrix[matrixIndex(wd, hour)] = 1;
     for (let hour = 14; hour < 17; hour++) matrix[matrixIndex(wd, hour)] = 0.5;
     for (let hour = 19; hour < 22; hour++) matrix[matrixIndex(wd, hour)] = 0.2;
   }

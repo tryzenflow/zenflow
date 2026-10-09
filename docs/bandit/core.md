@@ -8,16 +8,13 @@ For developers changing `services/bandit/src/core/*`, the LinUCB model or the of
   - `A = λI + Σ xxᵀ`, `b = Σ r·x`; `λ = 1.0`, `α = 0.15` (`BANDIT_RIDGE`, `BANDIT_ALPHA` in `backend/src/scheduler/constants.ts`, sent per request).
   - `A⁻¹` is cached per arm and invalidated on update.
   - `LinUCB` is arm-agnostic: arms are created lazily by string key at the ridge prior.
-- **Arms** (`SchedulingArm` in `@zenflow/shared`), half-open, lower-inclusive: `EARLY_MORNING [00:00,06:00)`, `MORNING [06:00,11:00)`, `MIDDAY [11:00,14:00)`, `AFTERNOON [14:00,17:00)`, `EVENING [17:00,20:00)`, `NIGHT [20:00,24:00)`.
+- **Arms** (`SchedulingArm` in `@zenflow/shared`), half-open, lower-inclusive: `EARLY_MORNING [00:00,08:00)`, `MORNING [08:00,12:00)`, `MIDDAY [12:00,14:00)`, `AFTERNOON [14:00,18:00)`, `EVENING [18:00,22:00)`, `NIGHT [22:00,24:00)`. No waking band starts before 08:00 ([ADR-0012](../adr/0012-linucb-time-of-day-arms.md)).
 - **Cold arm** = ridge prior. It scores `α·√(xᵀx/λ)`, not `0`.
-- **Warm-start prior (#60)**: a new arm is seeded from the default preference matrix.
-  - Each of the 7x24 cells is one pseudo-observation for its band (typical-day context, cell value as reward).
-  - Scaled so each arm holds `LINUCB_PRIOR_N0 = 5.0` pseudo-observations (`src/core/constants.py`); `0` restores `(λI, 0)`.
-  - Evidence: [heuristic-vs-linucb-report.md](../scheduler/heuristic-vs-linucb-report.md).
+- **No warm start.** A cold arm is the plain ridge prior. All cold arms tie, so the preference term of the slot score (below) puts a new user's first picks at 09:00-12:00 ([ADR-0012](../adr/0012-linucb-time-of-day-arms.md); evidence in [heuristic-vs-linucb-report.md](../scheduler/heuristic-vs-linucb-report.md)).
 
 ## Context vector (`d = 7`, `src/core/context_vector.py`)
 
-One vector per candidate day, shared by all 6 arms. The arm is never part of the vector, and the preference matrix is never an input.
+One vector per candidate day, shared by all 6 arms. The arm is never part of the vector, and the preference matrix is never an input to the arm models (it only enters the slot score below).
 
 | # | Feature | Encoding |
 | - | --- | --- |
@@ -37,18 +34,19 @@ Constants: `MAX_SCAN_DAYS = 60`, `DURATION_DIVISOR = 480`, `WORKLOAD_HOURS_DIVIS
 
 ## Scheduler core (`src/core/`)
 
-- Pure numpy: `slot`, `arms`, `context_vector`, `reward`, `series_spread`, `preference`, `slot_score`, `linucb_best_slot`, `displacement`, `sync_conflicts`, `prior`, `constants`.
+- Pure numpy: `slot`, `arms`, `context_vector`, `reward`, `series_spread`, `preference`, `slot_score`, `linucb_best_slot`, `displacement`, `sync_conflicts`, `constants`.
 - No I/O, clock or randomness; instants are epoch-ms ints. The 7x24 matrix is 168 floats.
 - Python is the sole ranking implementation. `linucb_best_slot`, `context_vector`, `arms` and `displacement` have no TS counterpart.
 - A ranking change goes in `src/core/*` with pytest coverage and updated `packages/shared/contract/place/*.json` fixtures, never a TS port.
 
 ### `linucb_best_slot`
 
-- Scores every feasible 15-min start on all days as `armTerm + wS * stability`. No preference-matrix term.
+- Scores every feasible 15-min start on all days as `armTerm + wP * preference + wS * stability`.
+  - `preference` is the user's matrix averaged over the hours the slot covers; `wP = LINUCB_PREF_WEIGHT` (`constants.py`). It picks the hour inside a band, where the arm term is flat, and follows the user's drags (learning rate `PREFERENCE_LEARNING_RATE = 0.2`).
 - `wS = stability_weight(prevStart, now)`: `1.0` while the old start is <= 24h away, fading linearly to `0.05` at 7 days (`STABILITY_*` in `constants.py`).
 - Exact ties (within 1e-9) break in order:
   1. seeded band order per request (`seeded_tie_break_order`, `EARLY_MORNING` last);
-  2. distance from the band's centre;
+  2. distance from the band's centre (only matters when the preference term ties, e.g. a flat matrix);
   3. the earlier start.
 - The scan is vectorized: per-tz UTC offset chunks (DST, fractional offsets like Asia/Kolkata), a prefix-sum for window scores, a difference-array occupancy mask, and `argmax` on scores rounded to 1e-9.
 
@@ -79,4 +77,4 @@ Constants: `MAX_SCAN_DAYS = 60`, `DURATION_DIVISOR = 480`, `WORKLOAD_HOURS_DIVIS
 - `uv run pytest tests/test_learning.py -s`: prints simulated learning curves.
 - `src/simulation/`: seeded synthetic-student simulator, heuristic vs LinUCB. It validates mechanics, not real-world superiority.
   - `uv run python -m src.simulation.run` with `--seed`, `--students`, `--events`, `--workers`, `--alpha-sweep`, `--alphas`, `--scenarios`, `--no-cache`.
-  - Scripts in `scripts/`: `bench_simulation.py`, `bench_warmstart.py`, `run_seeds.py`.
+  - Scripts in `scripts/`: `bench_simulation.py`, `bench_policies.py`, `run_seeds.py`.

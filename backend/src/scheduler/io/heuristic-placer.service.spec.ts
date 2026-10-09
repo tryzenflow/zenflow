@@ -108,7 +108,7 @@ describe("HeuristicPlacer.scheduleTask", () => {
   it("places an empty-calendar task at the earliest highest-preference slot", async () => {
     const svc = await makeService(makePrisma());
     const start = await svc.placeTask("u1", task, TZ, MATRIX, now);
-    expect(start?.toISOString()).toBe("2026-06-15T08:00:00.000Z");
+    expect(start?.toISOString()).toBe("2026-06-15T09:00:00.000Z");
   });
 
   it("returns null when the only candidate day is fully occupied", async () => {

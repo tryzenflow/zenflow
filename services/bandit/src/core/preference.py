@@ -25,7 +25,7 @@ def matrix_index(iso_weekday_num: int, hour: int) -> int:
 def default_preference_matrix() -> NDArray[np.float64]:
     m = np.zeros(PREFERENCE_MATRIX_LENGTH)
     for wd in range(1, 8):
-        m[matrix_index(wd, 8) : matrix_index(wd, 11)] = 1.0
+        m[matrix_index(wd, 9) : matrix_index(wd, 12)] = 1.0
         m[matrix_index(wd, 14) : matrix_index(wd, 17)] = 0.5
         m[matrix_index(wd, 19) : matrix_index(wd, 22)] = 0.2
     return m

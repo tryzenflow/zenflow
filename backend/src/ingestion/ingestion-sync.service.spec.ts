@@ -1,3 +1,4 @@
+import { KillSwitchService } from "../common/killswitch/killswitch.service";
 import { Test, TestingModule } from "@nestjs/testing";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service";
@@ -85,6 +86,10 @@ async function makeService(
 
   const module: TestingModule = await Test.createTestingModule({
     providers: [
+      {
+        provide: KillSwitchService,
+        useValue: { isEnabled: jest.fn().mockResolvedValue(true) },
+      },
       IngestionSyncService,
       { provide: PrismaService, useValue: { integration: { findUnique } } },
       {

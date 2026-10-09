@@ -73,7 +73,7 @@ class ArmParams:
         payoff : float
         weight : float, default 1.0
             Observation weight ``w``: ``A += w x xᵀ``, ``b += w payoff x``
-            (fractional weights seed the warm-start prior).
+
         """
         self.A += weight * np.outer(x, x)
         self.b += weight * payoff * x

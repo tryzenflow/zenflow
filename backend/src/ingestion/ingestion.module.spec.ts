@@ -1,3 +1,5 @@
+import { KillSwitchModule } from "../common/killswitch/killswitch.module";
+import { KillSwitchService } from "../common/killswitch/killswitch.service";
 import { ConfigModule } from "@nestjs/config";
 import { ScheduleModule } from "@nestjs/schedule";
 import { Test } from "@nestjs/testing";
@@ -43,6 +45,7 @@ describe("IngestionModule ↔ IntegrationsModule", () => {
       imports: [
         ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }),
         ScheduleModule.forRoot(),
+        KillSwitchModule,
         IngestionModule,
         IngestionWorkerModule,
         PortalFetchWorkerModule,
@@ -50,6 +53,8 @@ describe("IngestionModule ↔ IntegrationsModule", () => {
         IntegrationsModule,
       ],
     })
+      .overrideProvider(KillSwitchService)
+      .useValue({ isEnabled: jest.fn().mockResolvedValue(true) })
       .overrideProvider(PrismaService)
       .useValue({})
       .compile();
@@ -92,10 +97,13 @@ describe("IngestionModule ↔ IntegrationsModule", () => {
       imports: [
         ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }),
         ScheduleModule.forRoot(),
+        KillSwitchModule,
         IngestionModule,
         IntegrationsModule,
       ],
     })
+      .overrideProvider(KillSwitchService)
+      .useValue({ isEnabled: jest.fn().mockResolvedValue(true) })
       .overrideProvider(PrismaService)
       .useValue({})
       .compile();
