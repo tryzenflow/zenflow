@@ -1,7 +1,7 @@
 name: zenflow-prod
 services:
   # HTTP only (ADR-0011): no crons, ticker or reminder timers, so replicas can be
-  # scaled freely. All scheduled work runs in `worker`.
+  # scaled freely. All scheduled work runs in `watcher`, queue consumers in `worker-*`.
   api:
     build:
       context: ..
@@ -14,6 +14,8 @@ services:
       - db
       - cache
       - ratelimit
+      - queue
+      - pubsub
       - bandit
       - mail
       - o11y
@@ -31,6 +33,10 @@ services:
         condition: service_healthy
       redis-ratelimit:
         condition: service_healthy
+      redis-queue:
+        condition: service_healthy
+      redis-pubsub:
+        condition: service_healthy
       migrations:
         condition: service_completed_successfully
       otel-collector:
@@ -45,19 +51,88 @@ services:
     deploy:
       replicas: 2
 
-  # Crons, ingestion ticker/watchers, retained-sessions, matrix decay, reminder
-  # timers (ADR-0011). Exactly one replica; serves only GET /health on :5001.
-  worker:
+  # Queue roles (ADR-0007, ADR-0011). Each serves only GET /health on :5001.
+  # `watcher` is the only cron runner (ingestion ticker, reminder sweep,
+  # retained-sessions, matrix decay): exactly one replica. The consumers scale
+  # independently (`replicas`), except that fetch concurrency is kept low to be
+  # polite to DLU.
+  # Enqueues work; consumes nothing.
+  watcher:
     extends:
       service: api
-    container_name: zenflow-worker-prod
+    container_name: zenflow-watcher-prod
     restart: unless-stopped
     environment:
-      ROLE: worker
+      ROLE: watcher
+      QUEUE_SHUTDOWN_TIMEOUT_MS: "50000"
+    stop_grace_period: 60s
     deploy:
       replicas: 1
     cpus: 2
     mem_limit: 2g
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5001/health/live').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Consumes `portal-fetch`.
+  worker-portal:
+    extends:
+      service: api
+    container_name: zenflow-worker-portal-prod
+    restart: unless-stopped
+    environment:
+      ROLE: worker-portal
+      QUEUE_SHUTDOWN_TIMEOUT_MS: "50000"
+    stop_grace_period: 60s
+    deploy:
+      replicas: 1
+    cpus: 1
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5001/health/live').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Consumes `lms-fetch`.
+  worker-lms:
+    extends:
+      service: api
+    container_name: zenflow-worker-lms-prod
+    restart: unless-stopped
+    environment:
+      ROLE: worker-lms
+      QUEUE_SHUTDOWN_TIMEOUT_MS: "50000"
+    stop_grace_period: 60s
+    deploy:
+      replicas: 1
+    cpus: 1
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5001/health/live').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Consumes `notify`: push, email, reminders.
+  worker-notify:
+    extends:
+      service: api
+    container_name: zenflow-worker-notify-prod
+    restart: unless-stopped
+    environment:
+      ROLE: worker-notify
+      QUEUE_SHUTDOWN_TIMEOUT_MS: "50000"
+    stop_grace_period: 60s
+    deploy:
+      replicas: 1
+    cpus: 1
+    mem_limit: 1g
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5001/health/live').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
       interval: 15s
@@ -177,6 +252,59 @@ services:
     networks:
       - ratelimit
     mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Job queues (ADR-0007, BullMQ). Must NOT evict or lose jobs: noeviction + AOF on
+  # its own volume. Keep separate from `redis` and `redis-ratelimit`.
+  redis-queue:
+    container_name: zenflow-cache-queue-prod
+    image: redis:8.8.0-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --maxmemory
+      - 192mb
+      - --maxmemory-policy
+      - noeviction
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+    volumes:
+      - redis_queue_data:/data
+    expose:
+      - "6379"
+    networks:
+      - queue
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # SSE fan-out (ADR-0018): ephemeral pub/sub only, no persistence.
+  redis-pubsub:
+    container_name: zenflow-cache-pubsub-prod
+    image: redis:8.8.0-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --maxmemory
+      - 32mb
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+    expose:
+      - "6379"
+    networks:
+      - pubsub
+    mem_limit: 64m
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -442,6 +570,12 @@ networks:
   ratelimit:
     driver: bridge
     internal: true
+  queue:
+    driver: bridge
+    internal: true
+  pubsub:
+    driver: bridge
+    internal: true
   bandit:
     driver: bridge
   o11y:
@@ -468,3 +602,4 @@ volumes:
   vault_data:
   redis_data:
   redis_ratelimit_data:
+  redis_queue_data:

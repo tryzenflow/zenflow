@@ -34,6 +34,47 @@ services:
     networks:
       - storage
 
+  # Queue e2e stack (test/queue-flow.e2e-spec.ts): `docker compose --profile queue
+  # -f compose.test.yml up -d`. Cache ports match .env.test (stop the dev stack first); queue/pubsub use
+  # 7381/7382 so they cannot clash with dev's 6381/6382.
+  redis:
+    container_name: zenflow-test-cache
+    profiles: ["queue"]
+    image: redis:8.8.0-alpine
+    ports:
+      - "7379:6379"
+
+  redis-ratelimit:
+    container_name: zenflow-test-cache-ratelimit
+    profiles: ["queue"]
+    image: redis:8.8.0-alpine
+    ports:
+      - "7380:6379"
+
+  redis-queue:
+    container_name: zenflow-test-cache-queue
+    profiles: ["queue"]
+    image: redis:8.8.0-alpine
+    command: ["redis-server", "--maxmemory-policy", "noeviction", "--appendonly", "no"]
+    ports:
+      - "7381:6379"
+
+  redis-pubsub:
+    container_name: zenflow-test-cache-pubsub
+    profiles: ["queue"]
+    image: redis:8.8.0-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "7382:6379"
+
+  mail:
+    container_name: zenflow-test-mail
+    profiles: ["queue"]
+    image: axllent/mailpit:v1.31.4
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
 networks:
   db:
     driver: bridge

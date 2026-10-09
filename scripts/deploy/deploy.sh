@@ -91,7 +91,7 @@ cd "$path/backend"
 export ZENFLOW_API_IMAGE="$api" ZENFLOW_BANDIT_IMAGE="$bandit"
 prev="$(tail -n1 "$path/.deploy-history" 2>/dev/null | awk '{print $2}' || true)"
 compose="docker compose -f compose.${env_name}.yml"
-$compose pull api worker migrations bandit
+$compose pull api watcher worker-portal worker-lms worker-notify migrations bandit
 force=""
 if [ "$provider" = "vault" ]; then
   # AppRole creds are root-only and /run/zenflow is a root-owned 700 dir that
@@ -119,7 +119,7 @@ if [ "$provider" = "vault" ]; then
   done
   # Containers read *_FILE only at boot, so always restart them after a render.
   force="--force-recreate"
-  svcs="api worker migrations bandit"
+  svcs="api watcher worker-portal worker-lms worker-notify migrations bandit"
 fi
 # `migrations` (prisma migrate deploy) runs to completion before `api` starts.
 if [ -n "$force" ]; then

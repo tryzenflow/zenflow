@@ -28,6 +28,28 @@ services:
     networks:
       - cache
 
+  # Job queues (ADR-0007): noeviction + AOF so a restart keeps queued jobs.
+  redis-queue:
+    container_name: zenflow-cache-queue
+    image: redis:8.8.0-alpine
+    command: ["redis-server", "--maxmemory-policy", "noeviction", "--appendonly", "yes"]
+    ports:
+      - 6381:6379
+    volumes:
+      - redis_queue_data:/data
+    networks:
+      - cache
+
+  # SSE fan-out (ADR-0018): no persistence.
+  redis-pubsub:
+    container_name: zenflow-cache-pubsub
+    image: redis:8.8.0-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - 6382:6379
+    networks:
+      - cache
+
   bandit:
     container_name: zenflow-bandit
     build: ../services/bandit
@@ -83,4 +105,5 @@ networks:
 
 volumes:
   postgres_data:
+  redis_queue_data:
   storage_data:
