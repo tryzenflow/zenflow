@@ -1,6 +1,6 @@
 # ADR-0001: Disjoint LinUCB Model Design for Zenflow Scheduling
 
-**Status:** Accepted
+**Status:** Accepted; the arm table is superseded by [ADR-0012](0012-linucb-time-of-day-arms.md)
 **Date:** 2026-08-29 · **Last updated:** 2026-09-23
 **Decision:** Per-student Disjoint LinUCB with reusable time-of-day arms.
 
