@@ -284,8 +284,8 @@ export class QueueService implements OnApplicationShutdown {
   }
 
   /**
-   * Runs after every `onModuleDestroy`, i.e. after `QueueWorkers` has drained
-   * its workers, so the shared connection outlives in-flight jobs.
+   * Runs after `QueueWorkers` has drained its workers in
+   * `beforeApplicationShutdown`, so the shared connection outlives in-flight jobs.
    */
   async onApplicationShutdown(): Promise<void> {
     await Promise.allSettled([...this.queues.values()].map((q) => q.close()));

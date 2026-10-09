@@ -36,8 +36,12 @@ function job(d: FetchJobData, over: Partial<Job> = {}) {
     attemptsMade: 0,
     opts: { attempts: 5 },
     moveToDelayed: jest.fn().mockResolvedValue(undefined),
+    remove: jest.fn().mockResolvedValue(undefined),
     ...over,
-  } as unknown as Job<FetchJobData> & { moveToDelayed: jest.Mock };
+  } as unknown as Job<FetchJobData> & {
+    moveToDelayed: jest.Mock;
+    remove: jest.Mock;
+  };
 }
 
 async function make(
@@ -276,6 +280,29 @@ describe("IngestionFetchService", () => {
         claimedAt: new Date("2026-10-26T03:00:00.000Z"),
       });
       expect(m.schedule.recordOutcome).not.toHaveBeenCalled();
+    });
+
+    it("removes the failed job first so its id cannot swallow the retry", async () => {
+      const m = await make();
+      const j = job(data());
+
+      await m.service.onFinalFailure(j, stalled);
+
+      expect(j.remove).toHaveBeenCalledTimes(1);
+      expect(j.remove.mock.invocationCallOrder[0]).toBeLessThan(
+        m.schedule.releaseClaim.mock.invocationCallOrder[0],
+      );
+    });
+
+    it("still hands the claim back when the job cannot be removed", async () => {
+      const m = await make();
+      const j = job(data(), {
+        remove: jest.fn().mockRejectedValue(new Error("x")),
+      });
+
+      await m.service.onFinalFailure(j, stalled);
+
+      expect(m.schedule.releaseClaim).toHaveBeenCalled();
     });
 
     it("ignores failures handle() already recorded, and manual jobs", async () => {

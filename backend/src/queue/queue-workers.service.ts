@@ -106,8 +106,9 @@ export class QueueWorkers implements BeforeApplicationShutdown {
   }
 
   /**
-   * Drain in-flight jobs before Prisma/Redis close (`beforeApplicationShutdown`
-   * runs ahead of every `onApplicationShutdown`). Waits up to
+   * Drain in-flight jobs before Prisma, Redis, pub/sub and the push senders
+   * close. They all close in `onApplicationShutdown`, which runs after
+   * `beforeApplicationShutdown` (unlike `onModuleDestroy`, which runs first). Waits up to
    * `QUEUE_SHUTDOWN_TIMEOUT_MS`, then force-closes; an interrupted job is
    * retried via the stalled check.
    */

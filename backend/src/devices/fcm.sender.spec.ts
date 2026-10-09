@@ -142,7 +142,7 @@ describe("FcmSender", () => {
 
   it("deletes the firebase app on module destroy", async () => {
     const sender = await make(FAKE_SA);
-    await sender.onModuleDestroy();
+    await sender.onApplicationShutdown();
     expect(deleteApp).toHaveBeenCalled();
   });
 });

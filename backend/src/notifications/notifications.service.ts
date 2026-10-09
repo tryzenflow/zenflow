@@ -35,6 +35,7 @@ export const RECONCILE_WINDOW_MS = 2 * 60 * 60 * 1000;
 /** ... that are at least this old ... */
 export const RECONCILE_MIN_AGE_MS = 60_000;
 /** ... at most this many per sweep. */
+/** Rows checked per query; the sweep pages through the window in these. */
 const RECONCILE_BATCH = 500;
 
 /**
@@ -236,35 +237,43 @@ export class NotificationsService {
    * Returns how many jobs it re-enqueued.
    */
   async reconcileRecent(now = new Date()): Promise<number> {
-    const rows = await this.prisma.notification.findMany({
-      where: {
-        sentAt: {
-          gte: new Date(now.getTime() - RECONCILE_WINDOW_MS),
-          lte: new Date(now.getTime() - RECONCILE_MIN_AGE_MS),
-        },
+    const where = {
+      sentAt: {
+        gte: new Date(now.getTime() - RECONCILE_WINDOW_MS),
+        lte: new Date(now.getTime() - RECONCILE_MIN_AGE_MS),
       },
-      select: { id: true },
-      orderBy: { sentAt: "desc" },
-      take: RECONCILE_BATCH,
-    });
+    };
     let repaired = 0;
-    for (const { id } of rows) {
-      for (const provider of PUSH_PROVIDERS) {
-        const jobId = idempotencyKey("push", id, provider);
-        // Throws when the queue Redis is down: stop, the next sweep retries.
-        if (await this.queue.getJob(NOTIFY_QUEUE, jobId)) continue;
-        const job = await this.queue.enqueueBestEffort(
-          NOTIFY_QUEUE,
-          { type: "push", notificationId: id, provider },
-          { jobId },
-        );
-        if (job) {
-          repaired++;
-          queueNotifyReconciled.add(1, { provider });
+    let cursor: string | undefined;
+    // Page the whole window, newest first, so a burst larger than one batch
+    // does not leave its older rows unchecked until they age out.
+    for (;;) {
+      const rows = await this.prisma.notification.findMany({
+        where,
+        select: { id: true },
+        orderBy: [{ sentAt: "desc" }, { id: "desc" }],
+        take: RECONCILE_BATCH,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      });
+      for (const { id } of rows) {
+        for (const provider of PUSH_PROVIDERS) {
+          const jobId = idempotencyKey("push", id, provider);
+          // Throws when the queue Redis is down: stop, the next sweep retries.
+          if (await this.queue.getJob(NOTIFY_QUEUE, jobId)) continue;
+          const job = await this.queue.enqueueBestEffort(
+            NOTIFY_QUEUE,
+            { type: "push", notificationId: id, provider },
+            { jobId },
+          );
+          if (job) {
+            repaired++;
+            queueNotifyReconciled.add(1, { provider });
+          }
         }
       }
+      if (rows.length < RECONCILE_BATCH) return repaired;
+      cursor = rows[rows.length - 1].id;
     }
-    return repaired;
   }
 
   toNotificationDto(payload: Notification): NotificationDto {

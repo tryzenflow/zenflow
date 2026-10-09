@@ -10,8 +10,8 @@ import type { QueueDefinition } from "../queue/queue.types";
 import { IngestionFetchService } from "./ingestion-fetch.service";
 
 /**
- * Concurrency 1 per replica keeps one request stream per worker; the per-request
- * delay lives in the watchers. Replicas are NOT sequential with each other, so
+ * Concurrency defaults to 1 per replica (one request stream per worker, tunable
+ * with `QUEUE_<X>_CONCURRENCY`); the per-request delay lives in the watchers. Replicas are NOT sequential with each other, so
  * unless `QUEUE_<X>_RATE_MAX` is set the queue gets a default limiter: one job
  * start per `INGESTION_REQUEST_DELAY_MS` across all replicas (none when the
  * delay is 0). A start is a whole pass, so this spaces logins and bursts; it
@@ -37,7 +37,6 @@ function register(
   def: QueueDefinition<FetchJobData>,
 ): void {
   workers.register(def, (job, token) => fetch.handle(job, token), {
-    concurrency: 1,
     limiter: defaultFetchLimiter(config, def),
     onFinalFailure: (job, err) => fetch.onFinalFailure(job, err),
   });

@@ -37,6 +37,8 @@ export const PORTS: Record<Role | "fake", number> = {
 
 export const API_URL = `http://127.0.0.1:${PORTS.api}`;
 export const FAKE_URL = `http://127.0.0.1:${PORTS.fake}`;
+export const CACHE_REDIS_URL = "redis://127.0.0.1:7379";
+export const RATE_LIMIT_REDIS_URL = "redis://127.0.0.1:7380";
 export const QUEUE_REDIS_URL =
   process.env.QUEUE_REDIS_URL ?? "redis://127.0.0.1:7381";
 export const PUBSUB_REDIS_URL =
@@ -74,6 +76,10 @@ function childEnv(role: Role): NodeJS.ProcessEnv {
     ROLE: role,
     PORT: String(PORTS[role]),
     WORKER_PORT: String(PORTS[role]),
+    // The compose queue profile publishes cache/rate-limit on 7379/7380; the
+    // inherited .env.test values point at the main e2e stack's 6379/6380.
+    CACHE_URL: CACHE_REDIS_URL,
+    RATE_LIMIT_CACHE_URL: RATE_LIMIT_REDIS_URL,
     QUEUE_REDIS_URL,
     REDIS_PUBSUB_URL: PUBSUB_REDIS_URL,
     MAIL_TRANSPORT: MAIL_SMTP,

@@ -163,13 +163,23 @@ export class IngestionFetchService {
    * limit needs work here: `handle` already closes out every other final
    * failure (recording it again would double-count). A stalled scheduled job
    * gets its claim handed back so the row is due again at once rather than a
-   * full period later. That is a compare-and-set on the claim, so running on
+   * full period later; the failed job is removed first so its id does not block
+   * that re-enqueue. The claim hand-back is a compare-and-set on the claim, so running on
    * several replicas, or twice, is harmless. Manual jobs hold no claim.
    */
   async onFinalFailure(job: Job<FetchJobData>, err: Error): Promise<void> {
     if (!STALLED_REASON.test(err.message)) return;
     const { data } = job;
     if (data.manual || !data.claimedAt || !data.scheduleId) return;
+    // The failed job is retained (and its id is the slot's idempotency key), so
+    // it would swallow the re-enqueue of this very slot on the next tick.
+    try {
+      await job.remove();
+    } catch (error) {
+      this.logger.warn(
+        `Could not remove the stalled ${data.kind} job ${job.id}: ${errorMessage(error)}`,
+      );
+    }
     await this.schedule.releaseClaim({
       scheduleId: data.scheduleId,
       userId: data.userId,

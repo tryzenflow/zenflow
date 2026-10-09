@@ -1,7 +1,7 @@
 import {
   Injectable,
   Logger,
-  type OnModuleDestroy,
+  type OnApplicationShutdown,
   type OnModuleInit,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -58,7 +58,7 @@ export function reviveNotification(raw: Record<string, unknown>): Notification {
  * locally and nothing connects.
  */
 @Injectable()
-export class NotificationPubSub implements OnModuleInit, OnModuleDestroy {
+export class NotificationPubSub implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(NotificationPubSub.name);
   readonly emitter = new EventEmitter2();
   private publisher?: Redis;
@@ -146,7 +146,8 @@ export class NotificationPubSub implements OnModuleInit, OnModuleDestroy {
     return client;
   }
 
-  onModuleDestroy(): void {
+  /** After the queue workers drained: a running job may still publish. */
+  onApplicationShutdown(): void {
     ssePubsubSubscribers.record(0);
     this.subscriber?.disconnect();
     this.publisher?.disconnect();

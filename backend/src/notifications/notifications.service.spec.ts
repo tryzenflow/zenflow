@@ -230,6 +230,30 @@ describe("NotificationsService", () => {
       expect(ids).toEqual(["push_n1_apns", "push_n2_fcm", "push_n2_apns"]);
     });
 
+    it("pages past the first batch so older rows are still checked", async () => {
+      const { service, queue, db } = await makeService([]);
+      const page = (from: number, n: number) =>
+        Array.from({ length: n }, (_, i) => ({ id: `n${from + i}` }));
+      const findMany = jest
+        .fn()
+        .mockResolvedValueOnce(page(0, 500))
+        .mockResolvedValueOnce(page(500, 2));
+      (db.client.notification as { findMany: unknown }).findMany = findMany;
+      queue.getJob.mockResolvedValue({ id: "exists" });
+
+      await expect(service.reconcileRecent()).resolves.toBe(0);
+
+      expect(findMany).toHaveBeenCalledTimes(2);
+      expect(findMany).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ cursor: { id: "n499" }, skip: 1 }),
+      );
+      expect(queue.getJob).toHaveBeenCalledWith(
+        expect.anything(),
+        "push_n501_fcm",
+      );
+    });
+
     it("propagates a queue outage so the sweep stops and retries later", async () => {
       const { service, queue, db } = await makeService([]);
       (db.client.notification as { findMany: unknown }).findMany = jest

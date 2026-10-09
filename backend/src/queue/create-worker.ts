@@ -192,7 +192,10 @@ export function createWorker<T, R = unknown>(
 
   worker.on("active", (job) => {
     if (job.processedOn) {
-      queueJobWait.record(Math.max(0, job.processedOn - job.timestamp) / 1000, {
+      // A deliberately delayed job (a reminder) waits its delay by design;
+      // only the time past the due moment is queue wait.
+      const due = job.timestamp + (job.opts?.delay ?? 0);
+      queueJobWait.record(Math.max(0, job.processedOn - due) / 1000, {
         queue: def.name,
       });
     }

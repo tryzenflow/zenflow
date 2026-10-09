@@ -145,7 +145,7 @@ describe("NotificationPubSub", () => {
   it("closes both connections on destroy", async () => {
     const ps = await make({ REDIS_PUBSUB_URL: "redis://x", ROLE: "api" });
     ps.onModuleInit();
-    ps.onModuleDestroy();
+    ps.onApplicationShutdown();
     expect(instances.every((i) => i.disconnect.mock.calls.length === 1)).toBe(
       true,
     );
