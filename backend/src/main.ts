@@ -76,13 +76,20 @@ async function bootstrap() {
     ttlSec: Math.ceil(sessionTtlMs / 1000),
   });
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle("Zenflow API")
-    .setDescription("Documentation for Zenflow API")
-    .setVersion("1.0")
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup("api", app, document); // available at <API_URL>/api
+  // Off in production unless SWAGGER_ENABLED=true (staging sets it); the
+  // staging image also runs with NODE_ENV=production.
+  const swaggerEnabled =
+    process.env.NODE_ENV !== "production" ||
+    process.env.SWAGGER_ENABLED === "true";
+  if (swaggerEnabled) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle("Zenflow API")
+      .setDescription("Documentation for Zenflow API")
+      .setVersion("1.0")
+      .build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup("api", app, document); // available at <API_URL>/api
+  }
 
   app.use(
     session(

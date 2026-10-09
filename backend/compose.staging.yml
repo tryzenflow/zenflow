@@ -42,6 +42,7 @@ services:
     env_file:
       - .env.staging
     environment:
+      SWAGGER_ENABLED: "true"
       OTEL_SDK_DISABLED: "false"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       # Pinned here, not left to .env.staging: a missing value would fall back to the REAL DLU hosts, and the load
