@@ -4,7 +4,7 @@ import type {
   SessionType,
 } from "../../generated/prisma";
 import { WITH_TAGS_AND_SERIES, type SessionRow } from "./types/session-row";
-import { createEventData } from "./session-events";
+import { createEventData, recordCreateEvent } from "./session-events";
 
 /**
  * The one place a **fixed** (already-scheduled, never placed by the engine)
@@ -82,5 +82,6 @@ export async function insertFixedSession(
     include: WITH_TAGS_AND_SERIES,
   });
   await tx.sessionEvent.create({ data: createEventData(row, input.userId) });
+  recordCreateEvent();
   return row;
 }

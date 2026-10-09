@@ -213,12 +213,14 @@ services:
   fake-dlu:
     container_name: zenflow-fake-dlu-staging
     image: node:24-alpine
-    # Node 24 strips TypeScript types natively; the script has no dependencies.
-    command: ["node", "/app/fake-dlu-server.ts"]
+    # The server imports fake-dlu-fixtures (CJS __dirname, extensionless import), which Node's native type stripping
+    # cannot run, so use the workspace's ts-node from a read-only repo mount.
+    working_dir: /repo/backend
+    command: ["node", "/repo/node_modules/ts-node/dist/bin.js", "--transpile-only", "scripts/fake-dlu-server.ts"]
     environment:
       FAKE_DLU_PORT: "4100"
     volumes:
-      - ./scripts/fake-dlu-server.ts:/app/fake-dlu-server.ts:ro
+      - ..:/repo:ro
     expose:
       - "4100"
     networks:

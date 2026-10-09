@@ -45,6 +45,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const k6Env = (extra = {}) => Object.entries({ BASE, MAIL, MAIL_KIND: "mailpit", ...extra }).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
 
 async function up() {
+  // nginx reads its upstream from backend/state (written by scripts/deploy/deploy.sh); pin it to the blue colour.
+  fs.mkdirSync(path.join(BACKEND, "state"), { recursive: true });
+  fs.writeFileSync(path.join(BACKEND, "state/upstream.api.conf"), "server api-blue:8000;\n");
   compose("up", "-d", "--build");
   await waitApi();
 }
@@ -94,7 +97,7 @@ function snapshot() {
 async function restore() {
   const { user, db } = pgEnv();
   console.log("restoring seed snapshot (api stopped)...");
-  compose("stop", "api");
+  compose("stop", "api-blue");
   sh("docker", ["exec", PG, "psql", "-U", user, "-d", "postgres", "-c", `DROP DATABASE IF EXISTS "${db}" WITH (FORCE)`]);
   sh("docker", ["exec", PG, "psql", "-U", user, "-d", "postgres", "-c", `CREATE DATABASE "${db}"`]);
   // Strict: a partial restore must stop the run, not benchmark an incomplete seed. The dump creates pg_stat_statements
@@ -103,7 +106,7 @@ async function restore() {
   const seeded = Object.keys(JSON.parse(fs.readFileSync(COOKIES, "utf8"))).length;
   const users = +sh("docker", ["exec", PG, "psql", "-U", user, "-d", db, "-At", "-c", 'SELECT count(*) FROM "User"'], { capture: true }).stdout.trim();
   if (!(users >= seeded)) throw new Error(`restore incomplete: ${users} users in the database, expected at least ${seeded}`);
-  compose("up", "-d", "api");
+  compose("up", "-d", "api-blue");
   await up();
 }
 
@@ -150,8 +153,8 @@ function promSnapshot(w, atMs) {
   };
 }
 
-// Compose service names, not container names: `api` runs several replicas with generated names.
-const WATCHED_SERVICES = ["api", "watcher", "worker-portal", "worker-lms", "worker-notify", "postgres", "bandit", "fake-dlu"];
+// Compose service names, not container names: `api-blue` runs a single replica with generated names.
+const WATCHED_SERVICES = ["api-blue", "watcher", "worker-portal", "worker-lms", "worker-notify", "postgres", "bandit-blue", "fake-dlu"];
 // Running staging containers of the watched services, as { name: service }.
 function watchedContainers() {
   const out = {};
@@ -244,7 +247,7 @@ async function run(profile, flags) {
       const sum = (k) => +xs.reduce((a, x) => a + x[k], 0).toFixed(2);
       return `${sum("cpuCoresAvg")}/${sum("cpuCoresMax")} cores, ${sum("memMiBMax")} MiB${xs.length > 1 ? ` (x${xs.length})` : ""}`;
     };
-    console.log(`${name.padEnd(6)} api ${cpu("api")} | watcher ${cpu("watcher")} | workers ${cpu("worker-portal")} ${cpu("worker-lms")} ${cpu("worker-notify")} | db ${cpu("postgres")} | bandit ${cpu("bandit")}`);
+    console.log(`${name.padEnd(6)} api ${cpu("api-blue")} | watcher ${cpu("watcher")} | workers ${cpu("worker-portal")} ${cpu("worker-lms")} ${cpu("worker-notify")} | db ${cpu("postgres")} | bandit ${cpu("bandit-blue")}`);
   }
   console.log(`\nresults: ${out}\nk6 exit codes${withSync ? " (sync, workload)" : ""}: ${codes.join(",")}  (99 = an SLO threshold failed)`);
   // every k6 process must have passed (a failed sync must not hide behind a green workload)

@@ -130,6 +130,7 @@ export async function loadDayLoad(
     },
     include: {
       sessions: {
+        where: { userId },
         select: { scheduledStartTime: true, durationMinutes: true },
         orderBy: { createdAt: "asc" },
         take: 1,
@@ -233,6 +234,7 @@ export async function loadScheduleItems(
       },
       include: {
         sessions: {
+          where: { userId },
           select: { scheduledStartTime: true, durationMinutes: true },
           orderBy: { createdAt: "asc" },
           take: 1,

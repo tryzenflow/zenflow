@@ -80,7 +80,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.95, sum by (le, job) (rate({__name__=~\"scheduler_cron_duration_seconds_bucket\", job=~\".*(watcher|watch).*\"}[$__rate_interval])))", "legendFormat": "{{job}}" } ]
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.95, sum by (le, cron_job) (rate(scheduler_cron_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "{{cron_job}}" } ]
     },
 
     { "id": 30, "type": "row", "title": "Ingestion logs", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 } },
@@ -89,7 +89,7 @@
       "gridPos": { "h": 12, "w": 24, "x": 0, "y": 33 },
       "datasource": { "type": "loki", "uid": "loki" },
       "options": { "showTime": true, "wrapLogMessage": true, "prettifyLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" },
-      "targets": [ { "refId": "A", "datasource": { "type": "loki", "uid": "loki" }, "expr": "{service=\"api\"} | json | component =~ `(?i).*(watcher|ingestion|materializer|portal|lms).*`" } ]
+      "targets": [ { "refId": "A", "datasource": { "type": "loki", "uid": "loki" }, "expr": "{service=~\"api.*|watcher|worker.*\"} | json | context =~ `(?i).*(watcher|ingestion|materializer|portal|lms).*`" } ]
     }
   ]
 }

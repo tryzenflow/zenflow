@@ -313,6 +313,7 @@ model Session {
   @@index([userId, deadline])
   @@index([userId, scheduledStartTime])
   @@index([userId, seriesId, createdAt(sort: Asc)])
+  @@index([seriesId, createdAt])
   @@index([userId, scheduleStudyUnitId])
   @@index([userId, lmsCourseId])
 }

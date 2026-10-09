@@ -31,7 +31,7 @@ import {
   toSeriesSessionDto,
   toSessionDto,
 } from "./session-mapper";
-import { createEventData } from "./session-events";
+import { createEventData, recordCreateEvent } from "./session-events";
 import { placeOrDiscard } from "./placement-compensation";
 
 /**
@@ -109,6 +109,7 @@ export class SeriesService {
         await tx.sessionEvent.create({
           data: createEventData(s, user.id, series.id),
         });
+        recordCreateEvent();
         created.push(s);
       }
       return created;
@@ -324,6 +325,7 @@ export class SeriesService {
         await tx.sessionEvent.create({
           data: createEventData(s, user.id, series.id),
         });
+        recordCreateEvent();
         rows.push(s);
       }
       return rows;
@@ -639,6 +641,7 @@ export class SeriesService {
       where: { id: seriesId, userId: user.id },
       include: {
         sessions: {
+          where: { userId: user.id },
           orderBy: { createdAt: "asc" },
           take: 1,
           include: WITH_TAGS_AND_SERIES,
@@ -678,6 +681,7 @@ export class SeriesService {
       await tx.sessionEvent.create({
         data: createEventData(s, user.id, series.id),
       });
+      recordCreateEvent();
       return s;
     });
 

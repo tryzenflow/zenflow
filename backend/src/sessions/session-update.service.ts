@@ -27,7 +27,7 @@ import {
   slotProposalFieldsOf,
   toUpdateSessionResponse,
 } from "./session-mapper";
-import { moveEventData } from "./session-events";
+import { moveEventData, recordUserMove } from "./session-events";
 import { mapSessionPrismaError } from "./prisma-error";
 import { SeriesService } from "./series.service";
 
@@ -439,6 +439,7 @@ export class SessionUpdateService {
           }),
           select: { id: true },
         });
+        recordUserMove(move.dragDistanceMinutes);
         // "First move" = the session had never been moved before this call.
         if (existing.lastMovedAt == null) {
           firstMove = {
