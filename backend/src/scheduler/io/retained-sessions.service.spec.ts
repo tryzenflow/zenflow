@@ -50,7 +50,8 @@ async function makeService(
       // Claim semantics: only the first updateMany per id wins.
       updateMany: jest.fn(
         (args: { where: { id: string }; data: Record<string, unknown> }) => {
-          if (claimedIds.has(args.where.id)) return Promise.resolve({ count: 0 });
+          if (claimedIds.has(args.where.id))
+            return Promise.resolve({ count: 0 });
           claimedIds.add(args.where.id);
           updates.push({ id: args.where.id, data: args.data });
           return Promise.resolve({ count: 1 });
