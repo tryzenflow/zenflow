@@ -16,6 +16,7 @@ the repo is in prerelease mode (`beta`, see `.changeset/pre.json`), so versions 
    - `zenflow-ios-simulator.zip` (simulator `.app`; a device `.ipa` needs an Apple Developer account, see
      [`docs/mobile/testing.md`](../mobile/testing.md#ios-artifact-app-vs-ipa))
    - notes taken from `backend/CHANGELOG.md`.
+   - The app files are built only if `mobile/` or `packages/` changed since the previous release tag (version bumps and changelogs don't count); otherwise the release has just the notes and the previous release keeps the latest binaries.
 
 Pre-releases never trigger the production deploy: `release.yml` only promotes non-prerelease releases.
 
