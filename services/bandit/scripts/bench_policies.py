@@ -1,14 +1,15 @@
-"""Warm-start prior study (prototype, issue #60): heuristic vs LinUCB vs warm LinUCB.
+"""Heuristic vs LinUCB over simulated students (the evaluation behind
+``docs/scheduler/heuristic-vs-linucb-report.md``).
 
-uv run python -m scripts.bench_warmstart --seeds 1-3 --students 1000 --workers 16 \
-    --priors pref:2 pref:5 pref:10 --out-dir sim_out/warmstart
+uv run python -m scripts.bench_policies --seeds 1-20 --students 700 --workers 8 \
+    --out-dir sim_out/policies
 
-One simulation pass per seed runs the heuristic, the cold LinUCB and one warm LinUCB
-world per ``mode:n0`` (all on the same students / calendars / tasks / reaction
-draws). Each finished student is reduced to per scenario x cold-start-bucket sums for
-every policy over the *paired* placements, plus time-to-threshold, so memory stays
-small. Output: ``summary.json`` and ``summary.md`` (pooled across seeds: sum over
-placements / placements; ttt = mean over student x scenario x seed).
+One simulation pass per seed runs the heuristic and LinUCB (same students /
+calendars / tasks / reaction draws). Each finished student is reduced to per
+scenario x cold-start-bucket sums for both policies over the *paired* placements,
+plus time-to-threshold, so memory stays small. Output: ``summary.json`` and
+``summary.md`` (pooled across seeds: sum over placements / placements; ttt = mean
+over student x scenario x seed).
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from typing import cast
 import numpy as np
 from numpy.typing import NDArray
 
+from src.core.constants import LINUCB_PREF_WEIGHT
 from src.simulation.engine import HEURISTIC, SimConfig, linucb_label
 from src.simulation.metrics import (
     BUCKET_LABELS,
@@ -37,13 +39,12 @@ from src.simulation.metrics import (
     bucket_index,
     time_to_threshold,
 )
-from src.simulation.prior import PriorSpec
 from src.simulation.rng import stream
 from src.simulation.run import _run_one
 
 Floats = NDArray[np.float64]
 METRICS = ("regret", "accept", "drag")
-POLICIES = ("heuristic", "cold")  # then one per warm spec
+POLICIES = ("heuristic", "linucb")
 
 
 def parse_seeds(text: str) -> list[int]:
@@ -69,14 +70,12 @@ def student_record(
     """``(cell, sums[policy] (B, 4), ttt[policy] (S,))`` for one student.
 
     ``sums`` columns: placements, regret, accept, drag over the placements shared by
-    *every* policy (heuristic, cold and all warm priors) in each scenario, so every
+    *both* policies in each scenario, so every
     policy difference is over the same proposals even when a policy leaves a later
     task infeasible.
     """
     res = _run_one((cfg, student_id))
-    specs = [PriorSpec(m, n) for m, n in cfg.priors]
-    labels = {"cold": linucb_label(0.15)}
-    labels.update({s.tag: linucb_label(0.15, s) for s in specs})
+    labels = {"linucb": linucb_label(0.15)}
     n_b = len(BUCKET_LABELS)
     sums = {p: np.zeros((n_b, 4)) for p in ("heuristic", *labels)}
     ttt: dict[str, Floats] = {}
@@ -85,10 +84,10 @@ def student_record(
         logs.update({n: res.logs[scn][lab] for n, lab in labels.items()})
         # one placement set for every policy, so all differences are paired
         common = reduce(np.intersect1d, (_key(lg) for lg in logs.values()))
-        # buckets follow the cold arm's own observation count, as in paired_rows
-        cold = logs["cold"]
+        # buckets follow LinUCB's own observation count, as in paired_rows
+        lin = logs["linucb"]
         bucket = bucket_index(
-            cold["obs_before"][np.isin(_key(cold), common, assume_unique=True)]
+            lin["obs_before"][np.isin(_key(lin), common, assume_unique=True)]
         )
         for pol, lg in logs.items():
             keep = np.isin(_key(lg), common, assume_unique=True)
@@ -124,18 +123,16 @@ def _job(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="python -m scripts.bench_warmstart")
+    ap = argparse.ArgumentParser(prog="python -m scripts.bench_policies")
     ap.add_argument("--seeds", default="1")
     ap.add_argument("--students", type=int, default=300)
     ap.add_argument("--events", type=int, default=60)
     ap.add_argument("--workers", type=int, default=min(16, os.cpu_count() or 1))
-    ap.add_argument("--priors", nargs="+", default=["pref:2", "pref:5", "pref:10"])
+    ap.add_argument("--pref-weight", type=float, default=LINUCB_PREF_WEIGHT)
     ap.add_argument("--n-boot", type=int, default=N_BOOT)
-    ap.add_argument("--out-dir", type=Path, default=Path("sim_out") / "warmstart")
+    ap.add_argument("--out-dir", type=Path, default=Path("sim_out") / "policies")
     a = ap.parse_args(argv)
-    priors = tuple((p.split(":")[0], float(p.split(":")[1])) for p in a.priors)
-    names = [PriorSpec(m, n).tag for m, n in priors]
-    pol_names = ["heuristic", "cold", *names]
+    pol_names = ["heuristic", "linucb"]
 
     # one record per student (all seeds pooled): cell, sums[policy] (B,4), ttt[policy]
     cells: list[str] = []
@@ -146,7 +143,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         for seed in parse_seeds(a.seeds):
             cfg = replace(
                 SimConfig(seed=seed, n_students=a.students, n_events=a.events),
-                priors=priors,
+                pref_weight=a.pref_weight,
             )
             jobs = [(cfg, sid) for sid in range(cfg.n_students)]
             for cell, s, t in pool.map(_job, jobs, chunksize=2):
@@ -179,11 +176,8 @@ _SPECS = {
 
 
 def pairs(pols: list[str]) -> list[tuple[str, str]]:
-    """``(a, b)`` differences ``a - b``: cold vs heuristic, each warm vs both."""
-    out = [("cold", "heuristic")]
-    for w in pols[2:]:
-        out += [(w, "heuristic"), (w, "cold")]
-    return out
+    """``(a, b)`` differences ``a - b``: LinUCB vs the heuristic."""
+    return [("linucb", "heuristic")]
 
 
 def _student_terms(
@@ -218,7 +212,7 @@ def summarize(
     groups = {"ALL": np.ones(cells.size, dtype=bool)}
     groups.update({c: cells == c for c in sorted(set(cells.tolist()))})
     for grp, keep in groups.items():
-        rng = stream(0, "bootstrap", zlib.crc32(f"warmstart|{grp}".encode()))
+        rng = stream(0, "bootstrap", zlib.crc32(f"policies|{grp}".encode()))
         sub = {
             p: {m: (n[keep], d[keep]) for m, (n, d) in terms[p].items()} for p in pols
         }

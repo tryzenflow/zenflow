@@ -1,7 +1,11 @@
 """Composed student archetypes: chronotype x behavior.
 
-The two axes are drawn independently (every cell is reachable) and each carries
-seeded jitter, so two "night owl / crammer" students are similar, not equal.
+The two axes are drawn independently (every cell is reachable) and label the
+*centre* of a student, not the student: peak hours are spread widely enough that
+chronotypes overlap, every behaviour trait is present to some degree in everyone,
+and the shape constants of the hidden utility (sleep dip, busy-day sensitivity,
+evening pull, width, weekend shift) are drawn per student. Two "night owl /
+crammer" students are therefore alike in kind, not in detail.
 """
 
 from __future__ import annotations
@@ -13,8 +17,18 @@ from .rng import stream
 CHRONOTYPES = ("early_bird", "night_owl", "midday")
 BEHAVIORS = ("stable", "erratic", "crammer", "planner", "weekender")
 
-# peak hour of the hidden time-of-day field
-_PEAK = {"early_bird": 8.0, "night_owl": 21.5, "midday": 13.5}
+# peak hour of the hidden time-of-day field: (centre, sd, lowest, highest). The
+# ranges overlap (early birds up to 11:30, midday from 10:00), so a late early bird
+# and an early midday student are the same kind of person.
+_PEAK = {
+    "early_bird": (8.0, 1.8, 5.0, 11.5),
+    "midday": (13.5, 1.8, 10.0, 17.0),
+    "night_owl": (21.5, 1.4, 19.0, 23.75),
+}
+# behaviour traits each student carries: a trait that is not the student's own
+# label is still present with this chance, at a fraction of the labelled strength
+_OFF_LABEL_CHANCE = 0.4
+_OFF_LABEL_SHARE = (0.15, 0.45)
 
 # base parameters per behavior (jittered per student):
 # noise, threshold, p_edit, inertia, drift_sd, cram, plan, weekend
@@ -54,6 +68,10 @@ class StudentProfile:
     daytime_strength: float = 0.0
     daytime_freq: float = 0.0
     daytime_exam_prob: float = 0.0
+    # shape constants of the hidden utility (defaults are the former fixed values)
+    sleep_penalty: float = 0.45  # how bad the hours opposite the peak are
+    load_sensitivity: float = 0.35  # how much a busy day damps the field
+    evening_hour: float = 20.0  # where a busy day pulls the field to
 
     @property
     def cell(self) -> str:
@@ -89,30 +107,46 @@ def make_student(seed: int, student_id: int, balanced: bool = True) -> StudentPr
     rng = stream(seed, "profile", student_id)
     noise, thr, p_edit, inertia, drift, cram, plan, wknd = _BEHAVIOR[behavior]
 
-    def jit(v: float, rel: float = 0.25) -> float:
+    def jit(v: float, rel: float = 0.4) -> float:
         return float(v * rng.uniform(1 - rel, 1 + rel))
 
+    def trait(label_value: float, other_base: float) -> float:
+        """Own-behaviour traits keep their strength; the others show up in some
+        students at a fraction of the strength a student of that label has."""
+        if label_value:
+            return jit(label_value)
+        if rng.random() < _OFF_LABEL_CHANCE:
+            return float(other_base * rng.uniform(*_OFF_LABEL_SHARE))
+        return 0.0
+
+    centre, sd, lo, hi = _PEAK[chrono]
+    peak = float(rng.normal(centre, sd))
+    while not lo <= peak <= hi:  # truncated normal: no pile-up at the bounds
+        peak = float(rng.normal(centre, sd))
     sp = StudentProfile(
         student_id=student_id,
         chronotype=chrono,
         behavior=behavior,
-        peak_hour=_PEAK[chrono] + float(rng.uniform(-0.75, 0.75)),
-        width=float(rng.uniform(2.2, 3.2)),
-        weekend_shift=float(rng.uniform(0.0, 2.0)),
+        peak_hour=peak,
+        width=float(rng.uniform(1.8, 3.8)),
+        weekend_shift=float(rng.uniform(-1.5, 2.5)),
         noise_sd=jit(noise),
         threshold=jit(thr),
-        p_edit=min(1.0, jit(p_edit, 0.1)),
+        p_edit=min(1.0, jit(p_edit, 0.2)),
         inertia=jit(inertia),
         drift_sd=jit(drift),
-        cram_weight=jit(cram),
-        plan_weight=jit(plan),
-        weekend_weight=jit(wknd),
+        cram_weight=trait(cram, 0.9),
+        plan_weight=trait(plan, 0.5),
+        weekend_weight=trait(wknd, 0.7),
     )
     # drawn last (and always), so adding the pull shifts no earlier draw
     d_str, d_freq, d_exam = _DAYTIME_PULL.get(chrono, (0.0, 0.0, 0.0))
     return replace(
         sp,
-        daytime_strength=jit(d_str),
+        daytime_strength=jit(d_str, 0.25),
         daytime_freq=min(1.0, jit(d_freq, 0.4)),
         daytime_exam_prob=min(1.0, jit(d_exam, 0.3)),
+        sleep_penalty=float(rng.uniform(0.2, 0.7)),
+        load_sensitivity=float(rng.uniform(0.15, 0.6)),
+        evening_hour=float(rng.uniform(18.5, 22.0)),
     )

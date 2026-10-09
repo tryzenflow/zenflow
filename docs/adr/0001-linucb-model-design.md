@@ -25,12 +25,12 @@ One Disjoint LinUCB model per student: six time-of-day arms, one shared context 
 
 | Arm             | Local wall clock |
 | --------------- | ---------------- |
-| `EARLY_MORNING` | `[00:00, 06:00)` |
-| `MORNING`       | `[06:00, 11:00)` |
-| `MIDDAY`        | `[11:00, 14:00)` |
-| `AFTERNOON`     | `[14:00, 17:00)` |
-| `EVENING`       | `[17:00, 20:00)` |
-| `NIGHT`         | `[20:00, 24:00)` |
+| `EARLY_MORNING` | `[00:00, 08:00)` |
+| `MORNING`       | `[08:00, 12:00)` |
+| `MIDDAY`        | `[12:00, 14:00)` |
+| `AFTERNOON`     | `[14:00, 18:00)` |
+| `EVENING`       | `[18:00, 22:00)` |
+| `NIGHT`         | `[22:00, 24:00)` |
 
 - Boundaries are half-open, lower-inclusive: a session starting at 17:00 is `EVENING`.
 - The six strings are the API identifiers (`SchedulingArm` in `@zenflow/shared`).
@@ -69,7 +69,7 @@ The arm is not in `x` (disjoint LinUCB keeps one model per arm).
 - Fixed divisors, no running stats: stateless and reproducible. `60` = `MAX_SCAN_DAYS`.
 - `is_weekend` is signed so `‖x‖`, and the exploration bonus, is equal on every day.
 - `d` fixes the width of `BanditArmState.A` (d x d), `.b` and `SlotProposal.featureVector`.
-- Changing `d` means resetting arm state and bumping `BANDIT_MODEL_VERSION` (`linucb-d7-v0`).
+- Changing `d` means resetting arm state and bumping `BANDIT_MODEL_VERSION` (`linucb-d7-v1`).
 - Never inputs: the preference matrix, tags, session type, titles, notes.
 - Code: `services/bandit/src/core/context_vector.py`.
 
@@ -171,7 +171,6 @@ Lifecycle, for a session whose `SlotProposal.primaryPolicy == LINUCB`:
 | exploration `α` | `0.15` | `BANDIT_ALPHA` in `backend/src/scheduler/constants.ts`, sent per request; stability over exploration; tune via offline replay            |
 | `D_SCALE`       | `240`  | minutes; `MOVE` penalty saturates at 4 h                                                                                                 |
 | `MAX_SCAN_DAYS` | `60`   | candidate-day horizon and feature divisor; feeds every stored feature vector, so changing it is a migration                              |
-| `LINUCB_PRIOR_N0` | `5`  | warm start (#60): pseudo-observations per arm, seeded from the default preference matrix, so a new user does not explore `EARLY_MORNING` as neutral |
 
 - Seeding from the user's own `preferenceMatrix` is not shipped.
 - Evidence: [heuristic-vs-linucb-report.md](../scheduler/heuristic-vs-linucb-report.md).
@@ -231,7 +230,7 @@ Supersedes §8's "arm, then minute" pick. No separate ADR exists for #62.
    - The heuristic stays preference-only, so the A/B keeps two distinct policies.
 3. Exact ties (within 1e-9), in order:
    - the start's arm in `TIE_BREAK_ARM_ORDER` (seeded per request; decides the band at full cold start, `EARLY_MORNING` last);
-   - distance from the band's centre, a fixed rule that learns nothing;
+   - distance from the band's centre, a fixed rule that learns nothing (the preference term of ADR-0012 comes first and decides the hour whenever the matrix is not flat);
    - the earlier start.
 4. `/update` is unchanged.
 5. `MAX_SCAN_DAYS` stays 60 (it normalizes `x`). A single-task scan covers at most `SCAN_CAP_DAYS = 30`.
@@ -253,9 +252,9 @@ Replaces d = 22, the "cold arm scores 0" rule and the preference-matrix in-band 
   - Before: a cold arm was pinned at `0`, so the first rewarded arm won forever, even when moved.
 - **d = 22 → 7** (§5.1).
   - Dropped: `semester_phase` (always 0), weekday one-hots (collinear with the bias), per-type hours and counts (overlapping, mostly 0).
-  - Stored d = 22 arm state must be cleared before deploy (`BANDIT_MODEL_VERSION = "linucb-d7-v0"`).
+  - Stored d = 22 arm state must be cleared before deploy (`BANDIT_MODEL_VERSION = "linucb-d7-v1"`).
   - Delayed rewards for d = 22 proposals are dropped (`FEATURE_DIM` in `@zenflow/shared`).
-- **No preference matrix in LinUCB.** Inside the winning band the start nearest the band centre wins, so the A/B stays pure LinUCB vs pure heuristic.
+- **No preference matrix in LinUCB** (superseded by [ADR-0012](0012-linucb-time-of-day-arms.md): the matrix is now a weighted slot-score term). Inside the winning band the start nearest the band centre wins, so the A/B stays pure LinUCB vs pure heuristic.
 - **AFTERNOON `[11:00, 17:00)` split into MIDDAY `[11:00, 14:00)` + AFTERNOON `[14:00, 17:00)`.**
   - Each task goes to its band's centre, so a 6 h band could only offer 13:30.
   - A fixed band is now found in ≤ 5 placements.

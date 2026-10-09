@@ -20,6 +20,7 @@ from src.core.preference import (
 from src.core.reward import drag_distance_reward
 from src.core.slot import add_days_str
 from src.models.linucb import update as linucb_update
+from src.schemas_place import PLACEMENT_CONTRACT_VERSION
 from src.simulation.archetypes import (
     BEHAVIORS,
     CHRONOTYPES,
@@ -63,14 +64,32 @@ def test_independent_draws_reach_every_cell_and_axes_are_independent() -> None:
     assert min(counts.values()) > 600 / 15 * 0.4
 
 
-def test_same_cell_students_are_similar_not_identical() -> None:
+def test_same_cell_students_differ_and_chronotypes_overlap() -> None:
+    by_chrono: dict[str, list[float]] = {}
     by_cell: dict[str, list[float]] = {}
-    for i in range(90):
+    for i in range(300):
         s = make_student(5, i)
         by_cell.setdefault(s.cell, []).append(s.peak_hour)
+        by_chrono.setdefault(s.chronotype, []).append(s.peak_hour)
     for peaks in by_cell.values():
         assert len(set(peaks)) == len(peaks)
-        assert max(peaks) - min(peaks) < 1.6  # same chronotype, jittered peak
+        assert max(peaks) - min(peaks) > 2.0  # humans are spread, not jittered
+    # the chronotypes are not separate clusters: late early birds and early midday
+    # students share hours
+    assert max(by_chrono["early_bird"]) > min(by_chrono["midday"])
+
+
+def test_behaviour_traits_are_mixed_across_labels() -> None:
+    students = [make_student(5, i) for i in range(600)]
+    stable = [s for s in students if s.behavior == "stable"]
+    assert any(s.cram_weight > 0 for s in stable)  # not only crammers cram
+    assert any(s.plan_weight > 0 for s in stable)
+    assert any(s.weekend_weight > 0 for s in stable)
+    assert any(s.cram_weight == 0 for s in students if s.behavior == "crammer") is False
+    shapes = {
+        (round(s.sleep_penalty, 2), round(s.load_sensitivity, 2)) for s in students
+    }
+    assert len(shapes) > 500  # utility shape constants differ per student
 
 
 def test_profiles_are_a_pure_function_of_seed_and_id() -> None:
@@ -149,7 +168,7 @@ def test_context_dependent_behaviors_defeat_the_table_most() -> None:
 
 def test_chronotype_peaks_where_it_should() -> None:
     minutes = np.arange(0, 1440 - 60, 15, dtype=np.float64)
-    for chrono, lo, hi in (("early_bird", 6, 11), ("night_owl", 19, 24)):
+    for chrono, lo, hi in (("early_bird", 5, 12), ("night_owl", 19, 24)):
         s = next(
             make_student(1, i)
             for i in range(60)
@@ -223,9 +242,9 @@ def test_preference_rules_are_the_core_functions() -> None:
         m2.matrix,
         reinforce_preference_cell(base, new, TZ, consts.PREFERENCE_RETAINED_WEIGHT),
     )
-    # production constants: eta = 0.1, retained weight 0.25
+    # production constants: eta = 0.2, retained weight 0.25
     i = int(np.argmax(m2.matrix - base))
-    assert m2.matrix[i] - base[i] == pytest.approx(0.1 * 0.25)
+    assert m2.matrix[i] - base[i] == pytest.approx(0.2 * 0.25)
 
 
 def test_linucb_state_matches_models_update_and_rewards() -> None:
@@ -342,7 +361,7 @@ def _request(w: World, task: Any, policy: str) -> dict[str, Any]:
         for arm in ARMS
     }
     return {
-        "contractVersion": 1,
+        "contractVersion": PLACEMENT_CONTRACT_VERSION,
         "requestId": "parity",
         "mode": "PLACE",
         "nowMs": task.now_ms,

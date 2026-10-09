@@ -24,7 +24,7 @@ Only `TASK` sessions reach this path — fixed types and `DND` are user-pinned (
 
 1. **Score candidate day × arm.** For every day from the next 15-min boundary through the
    deadline, build the `d=7` LinUCB context vector and score all six half-open time-of-day
-   arms (`EARLY_MORNING [00:00,06:00)` … `NIGHT [20:00,24:00)`, lower-inclusive).
+   arms (`EARLY_MORNING [00:00,08:00)` … `NIGHT [22:00,24:00)`, lower-inclusive).
 
 2. **Generate concrete candidate slots.** 15-min-aligned starts survive only if: on/after
    now, ending by the deadline, on-grid, and **fully empty** (no overlap with any fixed
@@ -34,10 +34,10 @@ Only `TASK` sessions reach this path — fixed types and `DND` are user-pinned (
 3. **Score each slot** in one pass:
 
    ```text
-   slot_score(c) = Σ_arm overlap_rate(c, arm) × score(day(c), arm) + wS × stability(c)
+   slot_score(c) = Σ_arm overlap_rate(c, arm) × score(day(c), arm) + wP × preference(c) + wS × stability(c)
    ```
 
-   - There is no preference-matrix term; Policy A alone reads the matrix.
+   - `preference(c)` is the user's preference matrix averaged over the slot's hours, weighted by `wP = LINUCB_PREF_WEIGHT`. It chooses the hour inside the winning band and follows the user's drags.
    - `wS` is 1.0 for a task starting within 24h and fades linearly to 0.05 at 7 days.
 
 4. **Rank and pick** the highest `slot_score`. Exact ties break by seeded band order,

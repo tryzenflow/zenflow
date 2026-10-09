@@ -6,7 +6,7 @@ import math
 from collections.abc import Sequence
 
 import numpy as np
-from numpy.typing import NDArray
+from numpy.typing import ArrayLike, NDArray
 
 from src.core import constants as consts
 from src.core.linucb_best_slot import LinucbCandidateDay, best_linucb_slot
@@ -30,8 +30,9 @@ class LinucbPolicy:
     Hydrates every arm's ``(A, b)`` once per request via
     :func:`src.serialization.hydrate_arms`; a cold arm is the ridge prior
     (``A = ridge * I, b = 0``) and scores its full exploration bonus. The
-    preference matrix is deliberately NOT an input: the A/B compares pure
-    LinUCB against the pure preference heuristic.
+    preference matrix enters only the slot score (``best_slot``), as a
+    weighted term that picks the hour inside the chosen band; it never
+    touches the arm models.
     """
 
     def __init__(self, bandit: BanditWire | None, timezone: str) -> None:
@@ -93,6 +94,7 @@ class LinucbPolicy:
         next_ms: int,
         deadline_ms: int,
         tie_break_order: Sequence[str],
+        pref_matrix: ArrayLike | None = None,
     ) -> LinucbPick | None:
         if not self.enabled or not days:
             return None
@@ -116,6 +118,7 @@ class LinucbPolicy:
             extra,
             member.prev_start_ms,
             tie_break_order,
+            pref_matrix,
         )
         if best is None or not math.isfinite(best.score):
             return None

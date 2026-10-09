@@ -44,7 +44,7 @@ from src.models.linucb import score as linucb_score
 from src.place import _ivals, _Ledger, _Placer, _Timer
 from src.policies.selector import PolicySelector
 from src.schemas import ARM_IDS, ArmId
-from src.schemas_place import PlacedMember, PlaceRequest
+from src.schemas_place import PLACEMENT_CONTRACT_VERSION, PlacedMember, PlaceRequest
 
 HOUR = 60 * MS_PER_MINUTE
 NOW = 1_789_977_600_000  # Mon 2026-09-21 08:00 UTC
@@ -91,7 +91,7 @@ def member(
 
 def make_req(**kw: Any) -> PlaceRequest:
     req: dict[str, Any] = {
-        "contractVersion": 1,
+        "contractVersion": PLACEMENT_CONTRACT_VERSION,
         "requestId": "test-batch",
         "mode": "PLACE",
         "nowMs": NOW,
@@ -205,6 +205,7 @@ def _old_run(req: PlaceRequest) -> list[PlacedMember]:
             placer.next15,
             req.deadline_ms,
             seeded_tie_break_order(f"{req.request_id}|{m.id}"),
+            placer.matrix,
         )
 
     def old_place_member(
@@ -356,9 +357,9 @@ def test_dense_overlapping_series_threads_siblings_correctly() -> None:
 
 
 def test_all_cold_arms_matches_oracle() -> None:
-    """Every arm cold (no A/b) -> each arm scores its warm-start prior (the batch
-    tensor's arm-score slices, not just the final pick): equal arms tie, the
-    prior's preferred bands (MORNING, AFTERNOON) outscore the rest."""
+    """Every arm cold (no A/b) -> all arms tie on the same exploration bonus (the
+    batch tensor's arm-score slices, not just the final pick), so the default
+    preference matrix alone puts the picks in the 09:00-12:00 study window."""
     req = make_req(
         members=[member(dur=60), member("t2", dur=60)],
         deadlineMs=NOW + 3 * DAY_MS,
@@ -378,9 +379,11 @@ def test_all_cold_arms_matches_oracle() -> None:
     first_arr = next(iter(batch.arm_scores.values()))
     assert (first_arr[batch.valid] > 0.0).all()
     scores = {a: arr[batch.valid] for a, arr in batch.arm_scores.items()}
-    assert (scores["MORNING"] > scores["EVENING"]).all()
-    assert (scores["AFTERNOON"] > scores["NIGHT"]).all()
-    assert (scores["NIGHT"] > scores["EARLY_MORNING"]).all()
+    for arm_scores in scores.values():
+        np.testing.assert_allclose(arm_scores, scores["MORNING"])
+    for r in results:
+        assert r.start_ms is not None
+        assert 9 <= (r.start_ms % DAY_MS) / HOUR < 12
 
 
 def test_dst_boundary_day_matches_oracle() -> None:

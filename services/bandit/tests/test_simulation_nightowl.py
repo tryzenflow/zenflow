@@ -66,15 +66,20 @@ def test_daytime_pull_happens_sometimes_but_not_always() -> None:
 def test_night_owl_peaks_late_on_ordinary_days_and_in_daytime_on_pull_days() -> None:
     for p in _students("night_owl", "stable", 4):
         assert 19 <= _peak_hour(p, 0.0) < 24
-        assert 9 <= _peak_hour(p, 1.0) < 18
+        # the pull day moves the peak towards the day (how far depends on the
+        # student's field width and evening pull)
+        assert _peak_hour(p, 1.0) < _peak_hour(p, 0.0) - 2
 
 
 def test_most_realised_days_keep_the_late_night_peak() -> None:
+    shares: list[float] = []
     for p in _students("night_owl"):
         draws = build_daytime(1, p, N_DAYS)
         peaks = np.array([_peak_hour(p, daytime_pull(p, d, 3.0)) for d in draws[:120]])
         late = ((peaks >= 19) | (peaks < 2)).mean()
-        assert 0.4 < late < 1.0, f"student {p.student_id}: late-peak share {late}"
+        assert 0.4 < late <= 1.0, f"student {p.student_id}: late-peak share {late}"
+        shares.append(float(late))
+    assert sum(shares) / len(shares) < 0.95  # pull days do move some peaks
 
 
 def test_pull_is_shared_luck_and_deterministic() -> None:

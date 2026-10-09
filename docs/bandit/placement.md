@@ -88,7 +88,7 @@ One request = one placement event: a single `TASK` or one materialized series. A
 | Rotation | `BANDIT_SERVICE_TOKEN_PREVIOUS` is also accepted |
 | Exempt | `/health`, `/ready` |
 | `x-request-id` | Echoes the inbound header, else `req-<n>` |
-| `paramsVersion` | `py-` + sha256 of core constants and contract version; Nest stores it as `SlotProposal.modelVersion` |
+| `paramsVersion` | `py-<ARM_LAYOUT>-` + sha256 of core constants and contract version (Nest drops delayed rewards from proposals stamped with another arm layout); Nest stores it as `SlotProposal.modelVersion` |
 | `timingsMs` | `{decode, context, predict, scan, displace, total}` |
 
 ## Latency

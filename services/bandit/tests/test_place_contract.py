@@ -20,6 +20,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.api import app
+from src.schemas_place import PLACEMENT_CONTRACT_VERSION
 
 ROOT = Path(__file__).resolve().parents[3]
 FIXTURE_DIR = ROOT / "packages/shared/contract/place"
@@ -68,7 +69,7 @@ def _one_day_request(i: dict[str, Any]) -> dict[str, Any]:
 
     tz = i["timezone"]
     return {
-        "contractVersion": 1,
+        "contractVersion": PLACEMENT_CONTRACT_VERSION,
         "requestId": "golden",
         "mode": "PLACE",
         "nowMs": start,

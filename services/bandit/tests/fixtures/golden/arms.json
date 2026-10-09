@@ -6,7 +6,7 @@
       "name": "evening boundary",
       "fn": "armOfMinute",
       "args": [
-        1020
+        1080
       ],
       "expected": "EVENING"
     },
@@ -14,7 +14,7 @@
       "name": "early",
       "fn": "armOfMinute",
       "args": [
-        359
+        479
       ],
       "expected": "EARLY_MORNING"
     },

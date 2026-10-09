@@ -1,4 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
+import { PLACEMENT_CONTRACT_VERSION } from "@zenflow/shared";
 import type { PlaceResponse } from "@zenflow/shared";
 import type { User } from "../../../generated/prisma";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -98,7 +99,7 @@ describe("PlacementGateway.buildRequest", () => {
     expect(m).toHaveLength(168);
     expect(m.every(Number.isFinite)).toBe(true);
     for (let wd = 0; wd < 7; wd++) {
-      expect(m[wd * 24 + 8]).toBe(1);
+      expect(m[wd * 24 + 9]).toBe(1);
       expect(m[wd * 24 + 14]).toBe(0.5);
       expect(m[wd * 24 + 19]).toBe(0.2);
       expect(m[wd * 24 + 3]).toBe(0);
@@ -119,7 +120,7 @@ describe("PlacementGateway.buildRequest", () => {
   it("buckets days, sends the observation count, and omits bandit state for heuristic-only", async () => {
     const { gw, loadAll } = await make(jest.fn());
     const req = await gw.buildRequest({ ...base, members: [member()] });
-    expect(req.contractVersion).toBe(1);
+    expect(req.contractVersion).toBe(PLACEMENT_CONTRACT_VERSION);
     expect(req.days.map((d) => d.dayStr)).toEqual(["2026-06-08"]);
     expect(req.user.observationCount).toBe(7);
     expect(req.bandit).toBeUndefined();

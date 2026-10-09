@@ -25,7 +25,7 @@ export const MAX_SERIES_PER_DAY = 1;
  * `matrix-decay.ts` (half-life 21 days) erodes stale values on the nightly
  * cron independently of this constant.
  */
-export const PREFERENCE_LEARNING_RATE = 0.1;
+export const PREFERENCE_LEARNING_RATE = 0.2;
 
 /** Weight of a kept (`RETAINED`) placement on the preference matrix — a soft
  * reward against the graded, up-to-full penalty of a move. */
@@ -89,7 +89,26 @@ export const BANDIT_RIDGE = 1.0;
 export const MOVE_REWARD_SCALE_MINUTES = 240;
 
 /** Stamped on `SlotProposal.modelVersion` for LinUCB proposals. */
-export const BANDIT_MODEL_VERSION = "linucb-d7-v0";
+export const BANDIT_MODEL_VERSION = "linucb-d7-v1";
+
+/**
+ * Layout of the time-of-day arms (their boundaries). Mirrors `ARM_LAYOUT` in
+ * `services/bandit/src/core/constants.py`, which prefixes the Python
+ * `paramsVersion` stored as `SlotProposal.modelVersion`. Bump both when the arm
+ * hours change: delayed rewards from proposals made under another layout are
+ * dropped, so an old 17:00 `EVENING` proposal cannot reward the new 18:00-22:00 arm.
+ */
+export const ARM_LAYOUT = "arms6-v1";
+
+/** `true` when a proposal's `modelVersion` was stamped under the current arm layout. */
+export function isCurrentModelVersion(
+  version: string | null | undefined,
+): boolean {
+  return (
+    version === BANDIT_MODEL_VERSION ||
+    (version?.startsWith(`py-${ARM_LAYOUT}-`) ?? false)
+  );
+}
 
 /** `SlotProposal.experimentId` for the heuristic-vs-LinUCB A/B experiment. */
 export const BANDIT_EXPERIMENT_ID = "linucb-heuristic-v1";
