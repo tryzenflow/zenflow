@@ -79,7 +79,7 @@ def _params_version() -> str:
     }
     table["PLACEMENT_CONTRACT_VERSION"] = PLACEMENT_CONTRACT_VERSION
     blob = json.dumps(table, sort_keys=True, default=list)
-    return "py-" + hashlib.sha256(blob.encode()).hexdigest()[:12]
+    return f"py-{consts.ARM_LAYOUT}-" + hashlib.sha256(blob.encode()).hexdigest()[:12]
 
 
 PARAMS_VERSION = _params_version()

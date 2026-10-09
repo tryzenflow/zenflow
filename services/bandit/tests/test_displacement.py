@@ -80,7 +80,11 @@ from src.core.displacement import (  # noqa: E402
     plan_displacement,
 )
 from src.core.linucb_best_slot import LinucbCandidateDay, best_linucb_slot  # noqa: E402
-from src.core.preference import default_preference_matrix, matrix_index  # noqa: E402
+from src.core.preference import (  # noqa: E402
+    default_preference_matrix,
+    matrix_index,
+    reinforce_preference_move,
+)
 from src.core.slot_score import stability_weight  # noqa: E402
 
 HORIZON_END = NOW + 40 * DAY_MS
@@ -222,6 +226,33 @@ def test_preference_matrix_picks_the_hour_inside_the_winning_band() -> None:
     assert plain.arm == biased.arm == "MORNING"
     assert plain.start_ms == day + (9 * 60 + 30) * 60_000
     assert biased.start_ms == day + 11 * HOUR
+
+
+def test_repeated_drags_teach_the_hour_inside_the_band() -> None:
+    """Closed loop with the real preference updates: a user who keeps dragging the
+    proposal to 11:00 moves the pick there within a few drags, staying in MORNING."""
+    scores = {a: 0.0 for a, *_ in ARM_BANDS} | {"MORNING": 0.5}
+    day = MIDNIGHT + DAY_MS
+    days = [_one_day(day, scores)]
+    target = day + 11 * HOUR
+    matrix = default_preference_matrix()
+    starts: list[int] = []
+    for _ in range(8):
+        pick = best_linucb_slot(days, 60, "UTC", NOW, day + DAY_MS, pref_matrix=matrix)
+        assert pick is not None and pick.arm == "MORNING"
+        starts.append(pick.start_ms)
+        if pick.start_ms == target:
+            break
+        matrix = reinforce_preference_move(
+            matrix,
+            pick.start_ms,
+            target,
+            "UTC",
+            abs(target - pick.start_ms) / 60_000,
+        )
+    assert starts[0] != target  # not there before any drag
+    assert starts[-1] == target  # learned, in a few drags
+    assert len(starts) <= 6
 
 
 def test_default_matrix_keeps_a_cold_pick_in_waking_study_hours() -> None:

@@ -703,7 +703,7 @@
   "response": {
     "contractVersion": 1,
     "requestId": "00000000-0000-4000-8000-000000000002-3",
-    "paramsVersion": "py-fe8383b68ad0",
+    "paramsVersion": "py-arms6-v1-435641c70fc5",
     "results": [
       {
         "id": "s0",
@@ -800,12 +800,12 @@
       }
     ],
     "timingsMs": {
-      "decode": 0.197,
-      "context": 0.025,
-      "predict": 0.125,
-      "scan": 0.653,
+      "decode": 0.205,
+      "context": 0.023,
+      "predict": 0.107,
+      "scan": 0.641,
       "displace": 0.0,
-      "total": 1.173
+      "total": 1.142
     }
   }
 }

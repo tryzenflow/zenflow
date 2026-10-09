@@ -6,6 +6,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { BanditService } from "../../bandit/bandit.service";
 import { BanditArmStateRepository } from "../../bandit/bandit-arm-state.repository";
 import { RETAINED_GRACE_MS } from "../../common/constants";
+import { BANDIT_MODEL_VERSION } from "../constants";
 
 interface Row {
   id: string;
@@ -207,6 +208,7 @@ describe("RetainedSessionsService.sweep", () => {
           id: "prop-1",
           selectedArm: "MORNING",
           featureVector: [0.1, 0.2, 0.3, -1, 0, 0.25, 1],
+          modelVersion: BANDIT_MODEL_VERSION,
         },
       },
     );

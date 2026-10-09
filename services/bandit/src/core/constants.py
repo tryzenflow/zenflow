@@ -33,6 +33,12 @@ STABILITY_WEIGHT_FAR = 0.05
 STABILITY_NEAR_HOURS = 24
 STABILITY_FAR_HOURS = 168
 
+# Layout of the time-of-day arms (their boundaries). Prefixes ``paramsVersion``,
+# which Nest stores as ``SlotProposal.modelVersion``; Nest drops delayed rewards
+# from proposals made under another layout. Mirrors ``ARM_LAYOUT`` in
+# ``backend/src/scheduler/constants.ts``: bump both when the arm hours change.
+ARM_LAYOUT = "arms6-v1"
+
 # Weight of the (hour-averaged) preference matrix in the LinUCB slot score. It
 # decides the hour *inside* the chosen band, where the arm term is flat, and so
 # lets a user who keeps moving tasks to 10:00 pull the pick off the band centre.
