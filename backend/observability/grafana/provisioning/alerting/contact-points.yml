@@ -1,0 +1,22 @@
+apiVersion: 1
+
+# Where alerts go. Email needs Grafana SMTP: staging sends to Mailpit (see compose.staging.yml),
+# prod needs GRAFANA_SMTP_* in .env.prod (docs/ops/backups.md#alerts). Only the backup rules exist
+# today; revisit the default policy before adding unrelated alerts.
+contactPoints:
+  - orgId: 1
+    name: zenflow-ops-email
+    receivers:
+      - uid: zenflow-ops-email
+        type: email
+        settings:
+          addresses: alphatran.forwork@gmail.com
+          singleEmail: true
+
+policies:
+  - orgId: 1
+    receiver: zenflow-ops-email
+    group_by: ["alertname"]
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h

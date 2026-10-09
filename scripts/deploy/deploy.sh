@@ -112,7 +112,8 @@ env_name="$1"; tag="$2"; api="$3"; bandit="$4"; path="$5"
 provider="$6"; vault_addr="$7"; role_id_file="$8"; secret_id_file="$9"
 mode="${10}"; ttl="${11}"; min_free_mb="${12}"
 cd "$path/backend"
-compose="docker compose -f compose.${env_name}.yml"
+# --env-file: ${VAR} interpolation (Grafana password/SMTP, backup schedules) reads .env.<env>, not just env_file.
+compose="docker compose --env-file .env.${env_name} -f compose.${env_name}.yml"
 workers="watcher worker-portal worker-lms worker-notify"
 mkdir -p state
 active="$(cat state/active 2>/dev/null || true)"

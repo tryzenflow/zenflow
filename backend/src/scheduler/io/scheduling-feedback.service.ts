@@ -205,7 +205,8 @@ export class SchedulingFeedbackService {
   }
 
   private linkEvent(eventId: bigint, proposalId: string): Promise<unknown> {
-    return this.prisma.sessionEvent.update({
+    // `id` alone is not unique on the partitioned table (PK is id + occurredAt).
+    return this.prisma.sessionEvent.updateMany({
       where: { id: eventId },
       data: { slotProposalId: proposalId, policy: SchedulingModel.LINUCB },
     });

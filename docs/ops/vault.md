@@ -4,7 +4,7 @@ For operators. Self-hosted Vault container: KV v2 plus AppRole. Part of the secr
 
 ## Scope
 
-- Vault is **production-only**. The `vault` service exists only in `backend/compose.prod.yml`.
+- Vault is **production-only** for secrets. The `vault` service is in `backend/compose.prod.yml`, and also in `compose.staging.yml` so the backup of `vault_data` ([backups.md](backups.md)) can be tested; staging secrets still come from `.env.staging`.
 - `SECRETS_PROVIDER=vault` is valid only for the `production` Environment; `deploy.sh` exits 2 and `deploy.yml` fails otherwise.
 - Dev and staging read `.env.<env>` via `host`, `sops` or `command`; `FOO_FILE` support is unchanged.
 - MVP-minimum: KV v2 with least-privilege AppRole replaces plaintext `.env` secrets.

@@ -1,0 +1,78 @@
+apiVersion: 1
+
+# Backup alerts (ADR-0014, docs/ops/backups.md). Metrics come from the `backup`
+# container via node-exporter's textfile collector. noData = alerting: a missing
+# metric means the job never ran or the container is gone. No contact point is
+# provisioned; wire one in the Grafana UI.
+groups:
+  - orgId: 1
+    name: backups
+    folder: Zenflow
+    interval: 5m
+    rules:
+      - uid: zenflow-backup-missing
+        title: No Postgres backup in 26 h
+        condition: C
+        for: 10m
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: Last successful backup is older than 26 h (or absent)
+          runbook: docs/ops/backups.md
+        labels:
+          severity: critical
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model: {refId: A, expr: 'time() - max(zenflow_backup_last_success_timestamp_seconds)', instant: true}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, type: reduce, expression: A, reducer: last}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [93600]}}]}
+      - uid: zenflow-backup-small
+        title: Postgres backup suspiciously small
+        condition: C
+        for: 10m
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: Last encrypted dump is under 1 MiB
+          runbook: docs/ops/backups.md
+        labels:
+          severity: critical
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model: {refId: A, expr: 'min(zenflow_backup_last_size_bytes)', instant: true}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, type: reduce, expression: A, reducer: last}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: lt, params: [1048576]}}]}
+      - uid: zenflow-backup-restore-stale
+        title: Backup restore test stale
+        condition: C
+        for: 10m
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: No successful restore test in 8 days
+          runbook: docs/ops/backups.md
+        labels:
+          severity: critical
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model: {refId: A, expr: 'time() - max(zenflow_backup_restore_last_success_timestamp_seconds)', instant: true}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, type: reduce, expression: A, reducer: last}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [691200]}}]}

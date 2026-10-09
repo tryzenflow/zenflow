@@ -295,6 +295,44 @@ services:
       timeout: 5s
       retries: 5
 
+  # Separate cron process (busybox crond): encrypted pg_dump to S3 plus a restore test.
+  # Staging: short interval, backs up to MinIO.
+  # Keys come from .env.staging: BACKUP_S3_*, BACKUP_AGE_RECIPIENT, BACKUP_AGE_IDENTITY. See docs/ops/backups.md.
+  backup:
+    container_name: zenflow-backup-staging
+    image: postgres:18.4-alpine
+    restart: unless-stopped
+    entrypoint: ["sh", "/opt/backup/entrypoint.sh"]
+    env_file:
+      - .env.staging
+    environment:
+      BACKUP_ENV: staging
+      BACKUP_CRON: ${BACKUP_CRON:-*/15 * * * *}
+      RESTORE_TEST_CRON: ${RESTORE_TEST_CRON:-7 * * * *}
+      BACKUP_S3_ENDPOINT: http://storage:9000
+      BACKUP_CREATE_BUCKET: "1"
+      BACKUP_ON_START: "1"
+      BACKUP_PRUNE_DAYS: ${BACKUP_PRUNE_DAYS:-1}
+      BACKUP_VAULT_DIR: /vault-data
+    volumes:
+      - ./ops/backup:/opt/backup:ro
+      - backup_metrics:/metrics
+      - vault_data:/vault-data:ro
+    networks:
+      - db
+      - storage
+      - egress
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Healthy once the tools are installed, the crontab is rendered and crond is running.
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /run/backup.env && pgrep crond >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+
   # Sessions + OTP. Every key carries a TTL, so volatile-lru can only ever drop expiring keys.
   # AOF everysec plus an RDB snapshot keep sessions across restarts (ADR-0017).
   session-redis:
@@ -536,6 +574,7 @@ services:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./observability/prometheus/scrape.d/redis-exporter.yml:/etc/prometheus/scrape.d/redis-exporter.yml:ro
       - ./observability/prometheus/rules.d/redis-sessions.yml:/etc/prometheus/rules.d/redis-sessions.yml:ro
+      - ./observability/prometheus/rules.d/session-event-partitions.yml:/etc/prometheus/rules.d/session-event-partitions.yml:ro
       - ./observability/prometheus/scrape.d/postgres-exporter.yml:/etc/prometheus/scrape.d/postgres-exporter.yml:ro
       - prometheus_data:/prometheus
     expose:
@@ -566,8 +605,10 @@ services:
     restart: unless-stopped
     command:
       - --path.rootfs=/host
+      - --collector.textfile.directory=/textfile
     volumes:
       - /:/host:ro,rslave
+      - backup_metrics:/textfile:ro
     expose:
       - "9100"
     networks:
@@ -604,20 +645,26 @@ services:
     restart: unless-stopped
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
-      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://grafana.localhost}
       GF_FEATURE_TOGGLES_ENABLE: traceqlEditor traceToMetrics
       GF_LOG_LEVEL: warn
       # Server-side PNG rendering (panel/report exports, alert images).
       GF_RENDERING_SERVER_URL: http://grafana-renderer:8081/render
       GF_RENDERING_CALLBACK_URL: http://grafana:3000/
+      # Alert email goes to Mailpit (the `mail` service) in staging.
+      GF_SMTP_ENABLED: "true"
+      GF_SMTP_HOST: mail:1025
+      GF_SMTP_FROM_ADDRESS: grafana@zenflow.local
     volumes:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./observability/grafana/dashboards:/etc/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
-    ports:
-      - "127.0.0.1:3000:3000"
+    # No published port: reached through nginx at http://grafana.localhost.
+    expose:
+      - "3000"
     networks:
       - o11y
+      - mail
     depends_on:
       - prometheus
       - tempo
@@ -652,6 +699,35 @@ services:
       postgres:
         condition: service_healthy
 
+  # Staging runs Vault only so the backup path (the vault_data snapshot) can be tested before prod; secrets
+  # still come from .env.staging (SECRETS_PROVIDER=vault stays production-only).
+  vault:
+    container_name: zenflow-vault-staging
+    image: hashicorp/vault:1.20.4
+    restart: unless-stopped
+    # Config lives outside /vault/config: the image entrypoint already passes
+    # -config=/vault/config for `server`, and a second file there duplicates the listener.
+    command: ["server", "-config=/vault/custom/config.hcl"]
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_ADDR: http://127.0.0.1:8200
+    ports:
+      - "127.0.0.1:8200:8200"
+    volumes:
+      - vault_data:/vault/file
+      - ./ops/vault/config.hcl:/vault/custom/config.hcl:ro
+    networks:
+      - vault
+    healthcheck:
+      # sealedcode/uninitcode=200 so a sealed or not-yet-initialised Vault still
+      # counts as "process is up" (it must be unsealed by a human, not by compose).
+      test: ["CMD-SHELL", "wget -q -O /dev/null 'http://127.0.0.1:8200/v1/sys/health?standbyok=true&sealedcode=200&uninitcode=200'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
   nginx:
     image: nginx:1.28-alpine
     container_name: nginx-staging
@@ -664,8 +740,12 @@ services:
       - ./state:/etc/nginx/zenflow/state:ro
       - ./nginx/snippets-proxy.conf:/etc/nginx/zenflow/snippets-proxy.conf:ro
       - ./nginx/sse.conf:/etc/nginx/zenflow/sse.conf:ro
+      - ./nginx/grafana.conf:/etc/nginx/zenflow/grafana.conf:ro
+    depends_on:
+      - grafana
     networks:
       - edge
+      - o11y
 
   storage:
     container_name: zenflow-storage-staging
@@ -721,9 +801,12 @@ networks:
   upstream:
     driver: bridge
     internal: true
+  vault:
+    driver: bridge
 
 volumes:
   storage_data:
+  vault_data:
   postgres_data:
   uploads:
   tempo_data:
@@ -734,4 +817,5 @@ volumes:
   redis_data:
   redis_ratelimit_data:
   redis_queue_data:
+  backup_metrics:
   redis_killswitch_data:
