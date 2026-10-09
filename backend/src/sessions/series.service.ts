@@ -639,6 +639,7 @@ export class SeriesService {
       where: { id: seriesId, userId: user.id },
       include: {
         sessions: {
+          where: { userId: user.id },
           orderBy: { createdAt: "asc" },
           take: 1,
           include: WITH_TAGS_AND_SERIES,
