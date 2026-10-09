@@ -11,7 +11,7 @@
 
 ## Decision
 One image, a `ROLE` env:
-- `api`: HTTP only, no `ScheduleModule`, no cron or watcher providers. Run 2-3 processes behind Caddy.
+- `api`: HTTP only, no `ScheduleModule`, no cron or watcher providers. Run 2-3 processes behind nginx.
 - `worker`: no HTTP listener beyond `/health`; runs the crons, ingestion ticker and watchers, materializer, retained-sessions, matrix decay and the retention job ([ADR-0016](0016-telemetry-retention-and-partitioning.md)). One replica, with CPU and memory limits, in the prod and staging compose files.
 - SSE fan-out moves to Redis pub/sub ([ADR-0018](0018-redis-pubsub-instance.md)) so the worker and any replica can notify any client.
 - Reminders and retained-sessions are verified idempotent before any overlap (deploys briefly run two workers).

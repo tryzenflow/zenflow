@@ -6,7 +6,7 @@ owns:
   - backend/compose*.yml
   - backend/compose-dev.sh
   - backend/Dockerfile
-  - backend/Caddyfile*
+  - backend/nginx/**
   - backend/docker-entrypoint.sh
   - backend/observability/**
   - backend/src/observability/**

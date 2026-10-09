@@ -50,7 +50,7 @@ async function up() {
 }
 
 async function waitApi() {
-  // /auth/me answers 401 without a cookie: any answer other than a Caddy 502/503 means the API is up
+  // /auth/me answers 401 without a cookie: any answer other than an nginx 502/503 means the API is up
   for (let i = 0; i < 150; i++) {
     const r = spawnSync("curl", ["-s", "-o", "/dev/null", "-w", "%{http_code}", "-m", "3", `${BASE}/auth/me`], { encoding: "utf8" });
     if (/^[1-5]\d\d$/.test(r.stdout) && !["502", "503", "504"].includes(r.stdout)) return console.log("api up, /auth/me ->", r.stdout);

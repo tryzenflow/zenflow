@@ -7,7 +7,7 @@
  *
  * Prereqs (all already running for this experiment):
  *  - dev stack up (postgres/redis/redis-ratelimit/mail) — compose.dev.yml
- *  - backend `start:dev` on :5000, .env.dev LMS_URL/PORTAL_API_URL pointed at
+ *  - backend `start:dev` on :8000, .env.dev LMS_URL/PORTAL_API_URL pointed at
  *    the fake server, OTP rate limits raised (see .env.dev)
  *  - `node scripts/fake-dlu-server.ts` (ts-node) on :4100
  *  - the issue-#56 measurement block in .env.dev (every period = one tick, batch
@@ -20,9 +20,8 @@
 const fs = require("fs");
 const path = require("path");
 
-// Overridable because :5000 is not always free — macOS's AirPlay receiver
-// holds it by default.
-const API = process.env.ZENFLOW_API ?? "http://localhost:5000/api/v1";
+// Overridable because the API port may differ per setup.
+const API = process.env.ZENFLOW_API ?? "http://localhost:8000/api/v1";
 const MAIL = process.env.MAIL_URL ?? "http://localhost:8025"; // Mailpit UI/API from compose.dev.yml
 const FAKE_DLU = process.env.FAKE_DLU_URL ?? "http://localhost:4100";
 const CONCURRENCY = 8;

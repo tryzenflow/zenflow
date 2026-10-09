@@ -189,7 +189,8 @@ describe("parseMonthlyView — assignments", () => {
       BEFORE_ALL,
     ).items;
 
-    const escaped = "https://lms.test/mod/assign/view.php?id=1&amp;x=&lt;b&gt;&quot;";
+    const escaped =
+      "https://lms.test/mod/assign/view.php?id=1&amp;x=&lt;b&gt;&quot;";
     expect(item.note).toBe(`<p><a href="${escaped}">${escaped}</a></p>`);
   });
 

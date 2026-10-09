@@ -19,7 +19,7 @@ Run `generate.js` and `seed-and-sync.js` from this directory. Edit `generate.js`
 | `FAKE_DLU_LATENCY_MS` | fake server | delay on every upstream response (default `0`) |
 | `FAKE_DLU_JITTER_MS` | fake server | extra random delay in `[0, n]` ms (default `0`) |
 | `FAKE_DKHP_API_KEY` | fake server | require this exact `apikey` on DKHP calls; unset accepts any non-empty key |
-| `ZENFLOW_API` | `seed-and-sync.js` | `http://localhost:5000/api/v1` |
+| `ZENFLOW_API` | `seed-and-sync.js` | `http://localhost:8000/api/v1` |
 | `MAIL_URL` | `seed-and-sync.js` | `http://localhost:8025` (Mailpit, OTP login) |
 | `FAKE_DLU_URL` | `seed-and-sync.js`, `measure.js` | `http://localhost:4100` |
 

@@ -19,7 +19,7 @@ App-side instrumentation: `../src/observability/`, `../src/tracing.ts`, `service
 
 - Run from `backend/`. Compose defaults the Grafana password to `admin` when unset; always set it.
 - Grafana (<http://localhost:3000>) binds to `127.0.0.1` in both stacks; anonymous access is off.
-- Production: reach Grafana through an SSH tunnel or an authenticated Caddy route.
+- Production: reach Grafana through an SSH tunnel or an authenticated nginx route.
 - Dashboards are in the **Zenflow** folder. **Explore** has Tempo, Loki and Prometheus wired.
 - Staging adds `postgres-exporter` (scrape file `prometheus/scrape.d/postgres-exporter.yml`) and a fake DLU upstream for [the staging load test](../../loadtest/staging/README.md).
 - cAdvisor sees only the aggregate `/docker` cgroup on containerd image stores (Colima, recent Docker Engine); see the `cadvisor` service comment.

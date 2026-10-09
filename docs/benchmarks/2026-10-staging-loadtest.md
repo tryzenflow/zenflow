@@ -19,7 +19,7 @@
 | API | NestJS, Node 20.20 |
 | Database | PostgreSQL 16.15 + `pg_stat_statements` (committed stacks now use 18.4; not re-measured) |
 | Scheduler | `services/bandit`, `python` placement mode |
-| Stack | `backend/compose.staging.yml`: api, bandit, postgres, 2x redis, MinIO, Mailpit, Caddy, fake DLU, observability |
+| Stack | `backend/compose.staging.yml`: api, bandit, postgres, 2x redis, MinIO, Mailpit, nginx, fake DLU, observability |
 | Caps | api 4 CPU / 4 GB, postgres 4 CPU / 8 GB, bandit 2 CPU / 2 GB |
 | Data | 1,500 users via the real API (60% light / 30% medium / 10% heavy), 62-day horizon; `Session` = 130,669 rows (25 MB) after the run |
 
@@ -136,7 +136,7 @@ Not measured: heuristic-only vs LinUCB-only cost. A load-test-only rate below 1 
 ## Conclusions
 1. Launch load through 3x passes every draft SLO with wide margin, for this environment only.
 2. Fix the series lookup: add `userId` to the query or index `seriesId`. At 5k users the table is ~3.3x larger (estimate).
-3. Run more than one API process (instances or Node cluster behind Caddy). Capacity ends around 4x of this load (estimate, untested).
+3. Run more than one API process (instances or Node cluster behind nginx). Capacity ends around 4x of this load (estimate, untested).
 4. To cut placement cost, look at Postgres gather/apply, not the bandit.
 5. Sync is safe at a sparse rate; keep it out of aggregate dashboards (done).
 

@@ -38,7 +38,7 @@ RUN pnpm deploy --filter=backend --prod --legacy /app/deploy
 # ---- Runner: minimal production image ----
 FROM base AS runner
 ENV NODE_ENV=production
-ENV PORT=5000
+ENV PORT=8000
 
 # Production node_modules + manifest (npm scripts) from the deploy bundle...
 COPY --from=builder /app/deploy/node_modules ./node_modules
@@ -56,7 +56,7 @@ COPY --from=builder /app/backend/generated ./generated
 COPY backend/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-EXPOSE 5000
+EXPOSE 8000
 
 ENTRYPOINT ["docker-entrypoint.sh"]
 

@@ -22,7 +22,7 @@ export interface SessionConfigParams {
    *
    * Decoupled from `NODE_ENV` so it can be configured per-environment via
    * `COOKIE_SECURE`. Must be `true` in production behind TLS; with TLS
-   * terminated by a proxy (Caddy), Express needs `trust proxy` set so it
+   * terminated by a proxy (nginx), Express needs `trust proxy` set so it
    * recognises the connection as secure and actually emits the cookie.
    */
   secure: boolean;

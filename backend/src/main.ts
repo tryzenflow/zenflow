@@ -40,7 +40,7 @@ async function bootstrap() {
     bufferLogs: true,
   });
   app.useLogger(app.get(Logger));
-  // TLS is terminated by the Caddy reverse proxy, which forwards plain HTTP to
+  // TLS is terminated by the nginx reverse proxy, which forwards plain HTTP to
   // this app with the real scheme in `X-Forwarded-Proto`. Trusting the first
   // proxy hop makes `req.secure` reflect that header, so express-session will
   // emit the `Secure` session cookie instead of silently dropping it. This must
@@ -90,13 +90,20 @@ async function bootstrap() {
     ttlSec: Math.ceil(sessionTtlMs / 1000),
   });
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle("Zenflow API")
-    .setDescription("Documentation for Zenflow API")
-    .setVersion("1.0")
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup("api", app, document); // available at <API_URL>/api
+  // Off in production unless SWAGGER_ENABLED=true (staging sets it); the
+  // staging image also runs with NODE_ENV=production.
+  const swaggerEnabled =
+    process.env.NODE_ENV !== "production" ||
+    process.env.SWAGGER_ENABLED === "true";
+  if (swaggerEnabled) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle("Zenflow API")
+      .setDescription("Documentation for Zenflow API")
+      .setVersion("1.0")
+      .build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup("api", app, document); // available at <API_URL>/api
+  }
 
   app.use(
     session(
@@ -113,6 +120,6 @@ async function bootstrap() {
   );
   app.use(passport.initialize());
   app.use(passport.session());
-  await app.listen(process.env.PORT ?? 5000);
+  await app.listen(process.env.PORT ?? 8000);
 }
 void (getRole() === "worker" ? bootstrapWorker() : bootstrap());

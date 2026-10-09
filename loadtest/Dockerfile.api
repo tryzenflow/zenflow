@@ -23,11 +23,11 @@ RUN pnpm --filter @zenflow/shared build \
 RUN pnpm deploy --filter=backend --prod --legacy /app/deploy
 
 FROM base AS runner
-ENV NODE_ENV=production PORT=5000
+ENV NODE_ENV=production PORT=8000
 COPY --from=builder /app/deploy/node_modules ./node_modules
 COPY --from=builder /app/deploy/package.json ./package.json
 COPY --from=builder /app/backend/dist ./dist
 COPY --from=builder /app/backend/prisma ./prisma
 COPY --from=builder /app/backend/generated ./generated
-EXPOSE 5000
+EXPOSE 8000
 CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && exec node dist/main"]

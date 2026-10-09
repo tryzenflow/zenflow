@@ -10,13 +10,13 @@
  * `NotificationsService.create` + emit **inside the API process**. That matters:
  * a standalone script boots its own Nest context whose in-memory event emitter
  * has no SSE subscribers, so emitting there writes the DB row but never reaches
- * a connected browser. Point `API_URL` at the server if it is not on :5000.
+ * a connected browser. Point `API_URL` at the server if it is not on :8000.
  *
  * Needs `pnpm --filter backend start:dev` up (with the dev Postgres + Redis).
  * `<userId>` is a `User.id` (uuid) — find yours with
  * `pnpm --filter backend prisma:dev:studio`. Refused when NODE_ENV=production.
  */
-const API_URL = process.env.API_URL ?? "http://localhost:5000";
+const API_URL = process.env.API_URL ?? "http://localhost:8000";
 
 interface RaiseResponse {
   success: boolean;

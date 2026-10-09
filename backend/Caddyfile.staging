@@ -1,5 +1,0 @@
-:80 {
-    reverse_proxy {
-        dynamic a api 5000
-    }
-}
