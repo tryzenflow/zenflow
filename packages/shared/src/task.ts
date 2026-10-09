@@ -21,6 +21,7 @@ export type SessionSource = "USER" | "LMS" | "PORTAL";
 export interface Session {
   id: string;
   title: string;
+  /** HTML. File refs are stored as `/api/v1/files/<id>`; responses add `?sig=`. */
   note: string | null;
   /**
    * Free-text location (room / building / campus), or `null`. Set directly by

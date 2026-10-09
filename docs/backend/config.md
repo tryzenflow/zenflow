@@ -19,7 +19,7 @@ For: developers and operators setting up the API. Source of truth: the Joi schem
 | `COOKIE_SECURE` / `COOKIE_SAMESITE` | `true` / `lax` | Cross-site prod needs `true` + `none`. |
 | `MAIL_TRANSPORT` / `MAIL_FROM` | none | Required. `MAIL_TRANSPORT` is an SMTP URI. |
 | `MASTER_LMS_ENCRYPTION_KEY_V1` / `MASTER_PORTAL_ENCRYPTION_KEY_V1` | none | Required. 64 hex chars (`openssl rand -hex 32`). Add `_V<n>` to rotate. |
-| `FILE_URL_SECRET` | none | Required, 32+ chars. HMAC for signed file URLs; rotating breaks stored links. |
+| `FILE_URL_SECRET` | none | Required, 32+ chars. HMAC for signed file URLs. Notes store no sig, so rotating needs no rewrite. |
 | `S3_ENDPOINT` | none | Required. `http://storage:9000` in compose; `http://localhost:9000` for host `start:dev`. |
 | `S3_REGION` | `us-east-1` | |
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` / `S3_BUCKET` | none | Required. Bucket must exist (compose creates it). |

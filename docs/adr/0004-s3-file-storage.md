@@ -14,7 +14,7 @@ Uploads were written to the API host's disk (`uploads/` volume) and streamed bac
 - Uploads are buffered by multer to a temp dir, streamed to S3, then removed.
 - Infrastructure creates the bucket: the compose `storage` service (`alphatran/minio:latest`) creates it before the server starts. The app neither creates nor checks it, so there is no startup race.
 - `remove` scopes the DB delete by `userId` (it previously did not).
-- Signed file URLs for embeds (#89): `FILE_URL_SECRET` HMAC, see `backend/src/files/file-url-signer.service.ts`.
+- Signed file URLs for embeds (#89): `FILE_URL_SECRET` HMAC, see `backend/src/files/file-url-signer.service.ts`. Notes store the sig-less `/api/v1/files/<id>`; the API signs on read and strips on save (#146, `note-files.service.ts`).
 
 ## Consequences
 - Run `backend/src/files/migrate-to-s3.cli.ts` (compiled into the image) before dropping the `uploads` volume.

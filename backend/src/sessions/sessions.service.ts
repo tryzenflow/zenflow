@@ -20,6 +20,7 @@ import { SessionCrudService } from "./session-crud.service";
 import { SeriesService } from "./series.service";
 import { SessionUpdateService } from "./session-update.service";
 import { SlotPickService } from "./slot-pick.service";
+import { NoteFilesService } from "../files/note-files.service";
 import { RemindersService } from "../reminders/reminders.service";
 
 /**
@@ -40,6 +41,7 @@ export class SessionsService {
     private readonly updates: SessionUpdateService,
     private readonly slotPickService: SlotPickService,
     private readonly reminders: RemindersService,
+    private readonly noteFiles: NoteFilesService,
   ) {}
 
   /**
@@ -51,6 +53,7 @@ export class SessionsService {
     dto: CreateSessionDto,
     user: User,
   ): Promise<CreateSessionResponse> {
+    dto.note = await this.noteFiles.normalize(dto.note, user.id);
     const minutes = this.reminders.resolveForCreate(
       dto.type,
       dto.reminders,
@@ -85,6 +88,7 @@ export class SessionsService {
     dto: UpdateSessionDto,
     user: User,
   ): Promise<UpdateSessionResponse> {
+    dto.note = await this.noteFiles.normalize(dto.note, user.id);
     const target =
       dto.reminders !== undefined
         ? await this.reminders.resolveUpdateTargets(id, dto.reminders, user)
