@@ -8,6 +8,7 @@ import {
   Post,
   Query,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
 import { SessionsService } from "./sessions.service";
 import { CreateSessionDto } from "./dto/create-session.dto";
@@ -16,6 +17,7 @@ import { SlotPickDto } from "./dto/slot-pick.dto";
 import { ListSessionsDto } from "./dto/list-sessions.dto";
 import { ListSessionSuggestionsDto } from "./dto/list-session-suggestions.dto";
 import { DeadlineOptionsDto } from "./dto/deadline-options.dto";
+import { SignNoteFilesInterceptor } from "./sign-note-files.interceptor";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { type User } from "../../generated/prisma";
@@ -23,6 +25,7 @@ import { deadlineOptions } from "./utils/deadline-options";
 
 @Controller("sessions")
 @UseGuards(CookieAuthGuard)
+@UseInterceptors(SignNoteFilesInterceptor)
 export class SessionsController {
   constructor(private readonly sessionsService: SessionsService) {}
 

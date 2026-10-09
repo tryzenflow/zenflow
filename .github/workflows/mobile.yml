@@ -3,11 +3,13 @@ name: Mobile
 # Native builds + Maestro e2e for mobile/ (issue #79). Unit + component tests
 # run on every PR through ci.yml and again here as a gate for the builds; this
 # workflow is the slow, native half: PRs that touch mobile/ get a build-only
-# check, the e2e suite runs nightly, on release/** pushes and on demand.
+# check when labelled `build-mobile`; the e2e suite runs nightly, on
+# release/** pushes and on demand.
 # Not wired into ci.yml's `ci-ok` on purpose (macOS minutes, emulator flakiness).
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
     paths:
       - "mobile/**"
       - "packages/**"
@@ -74,6 +76,7 @@ jobs:
 
   build-android:
     name: Build Android APK
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'build-mobile')
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -112,6 +115,7 @@ jobs:
 
   build-ios:
     name: Build iOS simulator app
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'build-mobile')
     needs: test
     runs-on: macos-latest
     timeout-minutes: 75

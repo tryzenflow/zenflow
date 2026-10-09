@@ -3,6 +3,7 @@ import {
   buildFileUrl,
   escapeHtml,
   parseFileIdFromHref,
+  resolveNoteFileUrls,
   safeFileName,
 } from "../file-link";
 
@@ -37,5 +38,27 @@ describe("file-link", () => {
 
   it("escapes html", () => {
     expect(escapeHtml(`a"<b>&`)).toBe("a&quot;&lt;b&gt;&amp;");
+  });
+});
+
+describe("resolveNoteFileUrls", () => {
+  it("prefixes origin-relative file refs with the API origin", () => {
+    const html =
+      '<img src="/api/v1/files/a1?sig=s"><a href=\'/api/v1/files/b2\'>f</a>';
+    expect(resolveNoteFileUrls(html, BASE)).toBe(
+      '<img src="http://192.168.1.5:8000/api/v1/files/a1?sig=s">' +
+        "<a href='http://192.168.1.5:8000/api/v1/files/b2'>f</a>",
+    );
+  });
+
+  it("is idempotent and leaves other urls alone", () => {
+    const html =
+      '<img src="http://192.168.1.5:8000/api/v1/files/a1?sig=s"><a href="https://x.test/api/v1/files/z">x</a>';
+    expect(resolveNoteFileUrls(html, BASE)).toBe(html);
+  });
+
+  it("is a no-op without a base URL", () => {
+    const html = '<img src="/api/v1/files/a1">';
+    expect(resolveNoteFileUrls(html, undefined)).toBe(html);
   });
 });

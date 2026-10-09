@@ -26,7 +26,7 @@ import { Text } from "@/components/ui/text";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { getBaseURL } from "@/lib/api-client";
-import { escapeHtml } from "@/lib/file-link";
+import { escapeHtml, resolveNoteFileUrls } from "@/lib/file-link";
 import { loadGeistWebviewFontDataUri } from "@/lib/geist-webview-font";
 import {
   LINK_TAP_SCRIPT,
@@ -151,7 +151,7 @@ function templateHtml(sections: string[]): string {
 }
 
 export function DescriptionField({
-  initialValue,
+  initialValue: storedValue,
   onChange,
   disabled,
 }: {
@@ -160,6 +160,8 @@ export function DescriptionField({
   disabled?: boolean;
 }) {
   useLanguage();
+  // The API sends file refs origin-relative; the editor WebView needs absolute.
+  const initialValue = resolveNoteFileUrls(storedValue, getBaseURL());
   const [value, setValue] = useState(initialValue);
   const [open, setOpen] = useState(false);
   // A genuinely new `initialValue` from the parent (its fetch resolved after

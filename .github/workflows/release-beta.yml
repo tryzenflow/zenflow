@@ -47,6 +47,7 @@ jobs:
       new: ${{ steps.v.outputs.new }}
       version: ${{ steps.v.outputs.version }}
       prerelease: ${{ steps.v.outputs.prerelease }}
+      mobile: ${{ steps.m.outputs.changed }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -63,11 +64,26 @@ jobs:
             echo "new=false" >> "$GITHUB_OUTPUT"
             echo "::notice::v$version already released (or placeholder); nothing to publish."
           fi
+      # Rebuild the native apps only when something that ends up in them changed
+      # since the last release. The version bump itself touches every package's
+      # package.json and CHANGELOG.md (fixed group), so those are excluded.
+      - id: m
+        run: |
+          prev="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)"
+          if [ -z "$prev" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          elif git diff --quiet "$prev" HEAD -- mobile packages .github/workflows/mobile.yml \
+              ':(exclude)**/package.json' ':(exclude)**/CHANGELOG.md'; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::mobile/ and packages/ unchanged since $prev; skipping the mobile build."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
 
   build:
     name: Build mobile artifacts
     needs: detect
-    if: needs.detect.outputs.new == 'true'
+    if: needs.detect.outputs.new == 'true' && needs.detect.outputs.mobile == 'true'
     uses: ./.github/workflows/mobile.yml
     with:
       variant: release
@@ -78,12 +94,18 @@ jobs:
   release:
     name: Publish GitHub release
     needs: [detect, build]
+    # `build` is skipped when mobile is unchanged; the release then carries no
+    # app binaries (the previous release has them).
+    if: >-
+      !cancelled() && needs.detect.outputs.new == 'true'
+      && (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v5
+      - if: needs.build.result == 'success'
+        uses: actions/download-artifact@v5
         with:
           path: dist
           merge-multiple: true
@@ -102,5 +124,7 @@ jobs:
         run: |
           flags=""
           [ "$PRERELEASE" = "true" ] && flags="--prerelease"
-          gh release create "v$VERSION" dist/zenflow-android.apk dist/zenflow-ios-simulator.zip \
+          assets=""
+          [ -d dist ] && assets="dist/zenflow-android.apk dist/zenflow-ios-simulator.zip"
+          gh release create "v$VERSION" $assets \
             --target "$GITHUB_SHA" --title "v$VERSION" --notes-file notes.md $flags

@@ -12,7 +12,7 @@ Values are never listed. `backend/.env.example` shows the shape.
 | --- | --- | --- | --- |
 | `DATABASE_URL` (holds the DB password), `POSTGRES_PASSWORD` | API, migrations, Postgres | store, injected into `.env.<env>` | [runbook](#database-password) |
 | `SESSION_SECRET` | signs the session cookie (`express-session`); no JWT in this app | store | [runbook](#session-signing-key-session_secret) |
-| `FILE_URL_SECRET` | HMAC-SHA256 key for signed, non-expiring file URLs (`/files/:id?sig=`) in notes | store | change and redeploy; **breaks every stored link** (note images stop loading), so rotate only on suspected leak |
+| `FILE_URL_SECRET` | HMAC-SHA256 key for signed, non-expiring file URLs (`/files/:id?sig=`); notes store only the file id and the API signs on read | store | change and redeploy; notes need no rewrite |
 | `MASTER_LMS_ENCRYPTION_KEY_V<n>`, `MASTER_PORTAL_ENCRYPTION_KEY_V<n>` | wrap per-user DEKs that protect stored DLU/LMS credentials (`backend/src/crypto`) | store; never only in the DB | [runbook](#crypto-master-keys-master__encryption_key_vn) |
 | `PORTAL_API_KEY` | DLU portal API key (expires upstream, from a browser session) | store | replace when DLU invalidates it |
 | `MAIL_TRANSPORT` | SMTP URL with credentials | store | at the SMTP provider |

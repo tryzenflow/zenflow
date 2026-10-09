@@ -63,7 +63,7 @@ Install Maestro first: <https://docs.maestro.dev/getting-started/installing-maes
 
 | Job | When | Output |
 | --- | --- | --- |
-| `build-android` | PRs touching `mobile/`, nightly, `release/**`, manual | `zenflow-android-apk` → `zenflow-android.apk` |
+| `build-android` | PRs touching `mobile/` or `packages/` **labelled `build-mobile`**, nightly, `release/**`, manual | `zenflow-android-apk` → `zenflow-android.apk` |
 | `build-ios` | same | `zenflow-ios-simulator-app` → `zenflow-ios-simulator.zip` |
 | `e2e-android` | nightly, `release/**`, manual | `maestro-android-results`: junit, failure screenshots, screen recording, logcat, `api.log` |
 | `e2e-ios` | `release/**`, or manual with `run_ios_e2e` (advisory) | `maestro-ios-results` |

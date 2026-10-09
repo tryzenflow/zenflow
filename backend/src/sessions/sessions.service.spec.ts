@@ -12,6 +12,7 @@ import { SeriesService } from "./series.service";
 import { SessionUpdateService } from "./session-update.service";
 import { SlotPickService } from "./slot-pick.service";
 import { RemindersService } from "../reminders/reminders.service";
+import { NoteFilesService } from "../files/note-files.service";
 import type { Tag, Session, SessionSeries, User } from "../../generated/prisma";
 import type { CreateSessionDto } from "./dto/create-session.dto";
 import type { UpdateSessionDto } from "./dto/update-session.dto";
@@ -167,6 +168,10 @@ async function makeService(
       { provide: TaskPlacementService, useValue: placement },
       { provide: SchedulingFeedbackService, useValue: feedback },
       { provide: RemindersService, useValue: fakeReminders() },
+      {
+        provide: NoteFilesService,
+        useValue: { normalize: (note: unknown) => Promise.resolve(note) },
+      },
     ],
   }).compile();
   return module.get<SessionsService>(SessionsService);
