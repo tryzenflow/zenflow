@@ -150,7 +150,17 @@ function promSnapshot(w, atMs) {
   };
 }
 
-const WATCHED = ["zenflow-api-staging", "zenflow-db-staging", "zenflow-bandit-staging", "zenflow-fake-dlu-staging"];
+// Compose service names, not container names: `api` runs several replicas with generated names.
+const WATCHED_SERVICES = ["api", "worker", "postgres", "bandit", "fake-dlu"];
+// Running staging containers of the watched services, as { name: service }.
+function watchedContainers() {
+  const out = {};
+  for (const svc of WATCHED_SERVICES) {
+    const r = spawnSync("docker", ["ps", "--filter", `label=com.docker.compose.service=${svc}`, "--filter", "name=staging", "--format", "{{.Names}}"], { encoding: "utf8" });
+    for (const name of (r.stdout || "").split("\n").filter(Boolean)) out[name] = svc;
+  }
+  return out;
+}
 const toMiB = (s) => { const m = s.match(/([\d.]+)\s*(B|KiB|MiB|GiB)/); return m ? +m[1] * { B: 1 / 1048576, KiB: 1 / 1024, MiB: 1, GiB: 1024 }[m[2]] : NaN; };
 
 // Samples `docker stats` every 15 s. Returns { summary(fromMs, toMs), stop() }; summary is
@@ -158,7 +168,9 @@ const toMiB = (s) => { const m = s.match(/([\d.]+)\s*(B|KiB|MiB|GiB)/); return m
 function sampleStats() {
   const rows = {};
   const tick = () => {
-    const r = spawnSync("docker", ["stats", "--no-stream", "--format", "{{json .}}", ...WATCHED], { encoding: "utf8" });
+    const names = Object.keys(watchedContainers());
+    if (!names.length) return;
+    const r = spawnSync("docker", ["stats", "--no-stream", "--format", "{{json .}}", ...names], { encoding: "utf8" });
     for (const line of (r.stdout || "").split("\n").filter(Boolean)) {
       try {
         const j = JSON.parse(line);
@@ -192,6 +204,8 @@ async function run(profile, flags) {
   const { user: pgUser, db: pgDb } = pgEnv();
   sh("docker", ["exec", PG, "psql", "-U", pgUser, "-d", pgDb, "-qc", "SELECT pg_stat_statements_reset()"], { allowFail: true });
   const stats = sampleStats();
+  const svcByName = watchedContainers();
+  const svcOf = (n) => svcByName[n];
   let tWorkload = 0;
   const k6 = (name, script, env) =>
     new Promise((resolve) => {
@@ -223,8 +237,14 @@ async function run(profile, flags) {
   sh("docker", ["exec", PG, "psql", "-U", pgUser, "-d", pgDb, "-c", "SELECT calls, round(total_exec_time::numeric) AS total_ms, round(mean_exec_time::numeric,2) AS mean_ms, rows, left(query,140) AS q FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 15"], { allowFail: true, stdio: ["ignore", fs.openSync(path.join(out, "pg_stat_statements.txt"), "w"), "inherit"] });
   for (const [name, st] of Object.entries(perStep)) {
     const c = st.containers;
-    const cpu = (n) => (c[n] ? `${c[n].cpuCoresAvg}/${c[n].cpuCoresMax} cores, ${c[n].memMiBMax} MiB` : "-");
-    console.log(`${name.padEnd(6)} api ${cpu("zenflow-api-staging")} | db ${cpu("zenflow-db-staging")} | bandit ${cpu("zenflow-bandit-staging")}`);
+    // Sum a service's replicas (api runs several); per-container detail is in containers.json.
+    const cpu = (svc) => {
+      const xs = Object.entries(c).filter(([n]) => svcOf(n) === svc).map(([, v]) => v);
+      if (!xs.length) return "-";
+      const sum = (k) => +xs.reduce((a, x) => a + x[k], 0).toFixed(2);
+      return `${sum("cpuCoresAvg")}/${sum("cpuCoresMax")} cores, ${sum("memMiBMax")} MiB${xs.length > 1 ? ` (x${xs.length})` : ""}`;
+    };
+    console.log(`${name.padEnd(6)} api ${cpu("api")} | worker ${cpu("worker")} | db ${cpu("postgres")} | bandit ${cpu("bandit")}`);
   }
   console.log(`\nresults: ${out}\nk6 exit codes${withSync ? " (sync, workload)" : ""}: ${codes.join(",")}  (99 = an SLO threshold failed)`);
   // every k6 process must have passed (a failed sync must not hide behind a green workload)

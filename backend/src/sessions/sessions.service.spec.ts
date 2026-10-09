@@ -140,7 +140,6 @@ function fakeReminders() {
         Promise.resolve({ applied: minutes, skipped: [] }),
       ),
     propagateSeries: jest.fn().mockResolvedValue(undefined),
-    syncUser: jest.fn().mockResolvedValue(undefined),
   };
 }
 

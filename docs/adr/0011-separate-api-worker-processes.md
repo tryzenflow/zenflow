@@ -20,4 +20,5 @@ One image, a `ROLE` env:
 ## Consequences
 - Jobs fire once regardless of API replica count, and request latency is isolated from sync load.
 - The worker is a single point of failure for scheduled work; it restarts unattended and jobs are claim-based.
+- Manual sync stays in the API: the watcher/materializer classes load in every role; only the ticker, crons and reminder timers are worker-only. API edits reach reminder timers on the worker's next 5-minute sweep.
 - New env `ROLE`, a `worker` service, a split of module wiring in `app.module.ts` and `main.ts`.

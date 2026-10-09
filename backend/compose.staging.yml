@@ -3,8 +3,8 @@
 # (--env-file feeds the ${...} interpolation used by postgres-exporter.)
 name: zenflow-staging
 services:
+  # HTTP only (ADR-0011); scheduled work runs in `worker`.
   api:
-    container_name: zenflow-api-staging
     build:
       context: ..
       dockerfile: backend/Dockerfile
@@ -42,6 +42,7 @@ services:
     env_file:
       - .env.staging
     environment:
+      ROLE: api
       SWAGGER_ENABLED: "true"
       OTEL_SDK_DISABLED: "false"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
@@ -55,6 +56,28 @@ services:
     # Caps keep the load test fair: no service can starve the others on a big host.
     cpus: 4
     mem_limit: 4g
+    deploy:
+      replicas: 3
+
+  # Crons, ingestion ticker/watchers, retained-sessions, matrix decay, reminder
+  # timers (ADR-0011). Exactly one replica; serves only GET /health on :5001.
+  worker:
+    extends:
+      service: api
+    container_name: zenflow-worker-staging
+    restart: unless-stopped
+    environment:
+      ROLE: worker
+    deploy:
+      replicas: 1
+    cpus: 2
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5001/health/live').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   # Stand-in for lms.dlu.edu.vn / portal-api.dlu.edu.vn so ingestion can be load
   # tested without touching the real university. Any credentials work except the

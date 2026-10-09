@@ -25,6 +25,7 @@ For: developers and operators setting up the API. Source of truth: the Joi schem
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` / `S3_BUCKET` | none | Required. Bucket must exist (compose creates it). |
 | `UPLOAD_TMP_DIR` | none | Optional upload buffer dir. |
 | `PORT` | 8000 | |
+| `ROLE` | `all` | `api` = HTTP only, no crons/ticker/reminder timers; `worker` = scheduled work only, serves `GET /health/live` on `WORKER_PORT` (5001); `all` = both (dev, test). Prod/staging run `api` replicas + one `worker` ([ADR-0011](../adr/0011-separate-api-worker-processes.md)). |
 | `NODE_ENV` | `development` | `production` makes `BANDIT_SERVICE_URL` required and turns Swagger (`/api`) off. |
 | `SWAGGER_ENABLED` | unset | `true` keeps Swagger on under `NODE_ENV=production` (staging only). |
 

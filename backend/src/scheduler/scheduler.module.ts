@@ -4,8 +4,6 @@ import { Module } from "@nestjs/common";
 import { PrismaModule } from "../prisma/prisma.module";
 import { BanditModule } from "../bandit/bandit.module";
 import { ExperimentModule } from "../experiments/experiment.module";
-import { MatrixDecayService } from "./io/matrix-decay.service";
-import { RetainedSessionsService } from "./io/retained-sessions.service";
 import { HeuristicPlacer } from "./io/heuristic-placer.service";
 import { PlacementClient } from "./io/placement-client.service";
 import { PlacementGateway } from "./io/placement-gateway.service";
@@ -24,7 +22,8 @@ import { SchedulingFeedbackService } from "./io/scheduling-feedback.service";
  *  - `io/`    the only Prisma / bandit-HTTP layer — `PythonPlacer` (calls
  *             `POST /v1/place`), `FallbackPlacer` (Python-down degraded
  *             driver, built on `HeuristicPlacer`), `day-load`, the delayed-
- *             reward feedback, and the two crons.
+ *             reward feedback. The two crons (MatrixDecayService,
+ *             RetainedSessionsService) live in `SchedulerWorkerModule`.
  *
  * `SessionsModule` consumes only {@link TaskPlacementService} (place a TASK /
  * series and persist it) and {@link SchedulingFeedbackService} (first-move
@@ -33,8 +32,6 @@ import { SchedulingFeedbackService } from "./io/scheduling-feedback.service";
 @Module({
   imports: [PrismaModule, BanditModule, ExperimentModule],
   providers: [
-    MatrixDecayService,
-    RetainedSessionsService,
     HeuristicPlacer,
     PlacementClient,
     PlacementGateway,

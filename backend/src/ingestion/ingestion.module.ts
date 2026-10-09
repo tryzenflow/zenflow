@@ -9,7 +9,6 @@ import { EnrollmentDiscoveryService } from "./enrollment-discovery.service";
 import { ExamWatcherService } from "./exam-watcher.service";
 import { IngestionJobsService } from "./ingestion-jobs.service";
 import { IngestionScheduleService } from "./ingestion-schedule.service";
-import { IngestionTickerService } from "./ingestion-ticker.service";
 import { IngestionSyncService } from "./ingestion-sync.service";
 import { LmsWatcherService } from "./lms-watcher.service";
 import { MaterializerService } from "./materializer.service";
@@ -59,11 +58,18 @@ import { TimetableWatcherService } from "./timetable-watcher.service";
     ExamWatcherService,
     IngestionSyncService,
     IngestionScheduleService,
-    IngestionTickerService,
     EnrollmentDiscoveryService,
     OccurrenceCacheService,
     OccurrenceFanoutService,
   ],
-  exports: [IngestionSyncService, IngestionScheduleService],
+  // The watchers and discovery are exported for IngestionWorkerModule's ticker.
+  exports: [
+    IngestionSyncService,
+    IngestionScheduleService,
+    TimetableWatcherService,
+    ExamWatcherService,
+    LmsWatcherService,
+    EnrollmentDiscoveryService,
+  ],
 })
 export class IngestionModule {}

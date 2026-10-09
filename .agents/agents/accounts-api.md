@@ -14,6 +14,7 @@ owns:
   - backend/src/files/**
   - backend/src/prisma/**
   - backend/src/common/**
+  - backend/src/health/**
   - backend/src/crypto/**
   - backend/prisma/**
   - backend/scripts/send-test-notification.ts

@@ -1,7 +1,8 @@
 name: zenflow-prod
 services:
+  # HTTP only (ADR-0011): no crons, ticker or reminder timers, so replicas can be
+  # scaled freely. All scheduled work runs in `worker`.
   api:
-    container_name: zenflow-api-prod
     build:
       context: ..
       dockerfile: backend/Dockerfile
@@ -39,6 +40,30 @@ services:
       # Written by ops/vault/render-secrets.sh when SECRETS_PROVIDER=vault; absent otherwise.
       - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/api/files.env
         required: false
+    environment:
+      ROLE: api
+    deploy:
+      replicas: 2
+
+  # Crons, ingestion ticker/watchers, retained-sessions, matrix decay, reminder
+  # timers (ADR-0011). Exactly one replica; serves only GET /health on :5001.
+  worker:
+    extends:
+      service: api
+    container_name: zenflow-worker-prod
+    restart: unless-stopped
+    environment:
+      ROLE: worker
+    deploy:
+      replicas: 1
+    cpus: 2
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5001/health/live').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   bandit:
     container_name: zenflow-bandit-prod

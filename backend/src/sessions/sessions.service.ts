@@ -62,7 +62,6 @@ export class SessionsService {
     res.reminders = applied;
     res.sessions?.forEach((s) => (s.reminders = applied));
     if (skipped.length > 0) res.skippedReminders = skipped;
-    await this.reminders.syncUser(user.id);
     return res;
   }
 
@@ -105,13 +104,11 @@ export class SessionsService {
       // New sittings of a grown series inherit the series' reminders.
       await this.reminders.propagateSeries(res.seriesId);
     }
-    await this.reminders.syncUser(user.id);
     return res;
   }
 
   async remove(id: string, user: User): Promise<RemoveSessionResponse> {
     const res = await this.crud.remove(id, user);
-    await this.reminders.syncUser(user.id);
     return res;
   }
 
@@ -121,7 +118,6 @@ export class SessionsService {
     user: User,
   ): Promise<SlotPickResponse> {
     const res = await this.slotPickService.recordPick(id, dto, user);
-    await this.reminders.syncUser(user.id); // a pick can move the session
     return res;
   }
 
@@ -131,7 +127,6 @@ export class SessionsService {
     user: User,
   ): Promise<RemoveSessionSeriesResponse> {
     const res = await this.series.truncateFrom(seriesId, fromStartISO, user);
-    await this.reminders.syncUser(user.id);
     return res;
   }
 
@@ -140,7 +135,6 @@ export class SessionsService {
     user: User,
   ): Promise<RemoveSessionSeriesResponse> {
     const res = await this.series.removeSeries(seriesId, user);
-    await this.reminders.syncUser(user.id);
     return res;
   }
 
@@ -150,7 +144,6 @@ export class SessionsService {
     user: User,
   ): Promise<RemoveSessionSeriesResponse> {
     const res = await this.series.removeFrom(seriesId, sessionId, user);
-    await this.reminders.syncUser(user.id);
     return res;
   }
 
@@ -159,7 +152,6 @@ export class SessionsService {
     user: User,
   ): Promise<RemoveTimetableGroupResponse> {
     const res = await this.crud.removeTimetableGroupFrom(sessionId, user);
-    await this.reminders.syncUser(user.id);
     return res;
   }
 
@@ -168,7 +160,6 @@ export class SessionsService {
     user: User,
   ): Promise<RemoveTimetableGroupResponse> {
     const res = await this.crud.removeTimetableGroup(sessionId, user);
-    await this.reminders.syncUser(user.id);
     return res;
   }
 }
