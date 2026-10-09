@@ -33,8 +33,8 @@ Env: copy `.env.example` to `.env.dev` (and `.env.test`, `.env.staging`, `.env.p
 pnpm typecheck           # tsc --noEmit
 pnpm lint                # eslint --fix
 pnpm test                # unit tests
-pnpm test:e2e            # e2e (needs the .env.test DB)
-pnpm test:e2e:queue      # BullMQ flow over real role processes; needs `docker compose --profile queue -f compose.test.yml up -d`
+pnpm test:e2e            # all e2e (builds first); needs `docker compose --profile queue -f compose.test.yml up -d` and the .env.test DB
+                         # one suite: pnpm exec jest --config ./test/jest-e2e.json backup  (queue | backup | app ...)
 pnpm prisma:dev:studio   # browse the DB
 pnpm prisma:gen:dev      # regenerate the client into generated/prisma
 ```

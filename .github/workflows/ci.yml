@@ -115,9 +115,9 @@ jobs:
           --exit-code
 
   backend-e2e:
-    name: Backend e2e (compose.test.yml)
+    name: Backend e2e (app, queue, backup)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     services:
       redis:
         image: redis:8.8.0-alpine
@@ -125,53 +125,12 @@ jobs:
       redis-ratelimit:
         image: redis:8.8.0-alpine
         ports: ["6380:6379"]
-      mailhog:
-        image: mailhog/mailhog:v1.0.1
-        ports: ["1025:1025", "8025:8025"]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
       - name: Generate throwaway .env.test
         run: .github/scripts/write-test-env.sh backend/.env.test
-      - name: Start Postgres + object storage
-        working-directory: backend
-        run: docker compose -f compose.test.yml up -d
-      - name: Wait for Postgres
-        working-directory: backend
-        run: |
-          for i in $(seq 1 30); do
-            docker exec zenflow-test-db pg_isready -U ci -d zenflow-test && exit 0
-            sleep 2
-          done
-          docker compose -f compose.test.yml logs postgres
-          exit 1
-      # migrate deploy (not db push) so the e2e run also proves the migration
-      # history applies cleanly from scratch.
-      - name: Apply migrations
-        working-directory: backend
-        run: pnpm exec dotenv -e .env.test -- prisma migrate deploy
-      - name: Run e2e
-        run: pnpm --filter backend test:e2e
-      - name: Dump compose logs on failure
-        if: failure()
-        working-directory: backend
-        run: docker compose -f compose.test.yml logs --no-color
-      - name: Tear down
-        if: always()
-        working-directory: backend
-        run: docker compose -f compose.test.yml down -v
-
-  # Multi-process BullMQ flow (backend/test/queue). Runs on every PR.
-  backend-e2e-queue:
-    name: Backend queue e2e (compose.test.yml, profile queue)
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup
-      - name: Generate throwaway .env.test
-        run: .github/scripts/write-test-env.sh backend/.env.test
-      - name: Start Postgres, storage, Redis and mail
+      - name: Start Postgres, storage, Redis and mail (Mailpit)
         working-directory: backend
         run: docker compose --profile queue -f compose.test.yml up -d
       - name: Wait for Postgres
@@ -183,11 +142,13 @@ jobs:
           done
           docker compose --profile queue -f compose.test.yml logs postgres
           exit 1
+      # migrate deploy (not db push) so the e2e run also proves the migration
+      # history applies cleanly from scratch.
       - name: Apply migrations
         working-directory: backend
         run: pnpm exec dotenv -e .env.test -- prisma migrate deploy
-      - name: Run queue e2e
-        run: pnpm --filter backend test:e2e:queue
+      - name: Run e2e
+        run: pnpm --filter backend test:e2e
       - name: Dump compose logs on failure
         if: failure()
         working-directory: backend
@@ -329,12 +290,19 @@ jobs:
           # a placeholder is enough to validate structure.
           export GRAFANA_ADMIN_PASSWORD=admin
           for f in dev staging prod test; do docker compose -f "compose.$f.yml" config -q; done
-          # Vault is production-only: absent from dev/staging/test, loopback-only in prod.
-          for f in dev staging test; do
+          # Vault runs in prod, and in staging only so the backup snapshot can be tested; never in dev/test.
+          for f in dev test; do
             docker compose -f "compose.$f.yml" config --format json | jq -e '.services | has("vault") | not'
           done
-          docker compose -f compose.prod.yml config --format json \
-            | jq -e '.services.vault.ports | all(.[]; .host_ip == "127.0.0.1")'
+          for f in staging prod; do
+            docker compose -f "compose.$f.yml" config --format json \
+              | jq -e '.services.vault.ports | all(.[]; .host_ip == "127.0.0.1")'
+          done
+          # The cron backup service exists in staging and prod, and snapshots the Vault data read-only.
+          for f in staging prod; do
+            docker compose -f "compose.$f.yml" config --format json \
+              | jq -e '.services.backup.volumes | any(.[]; .source == "vault_data" and .read_only == true)'
+          done
       # Throwaway `vault server -dev` via plain docker run (NOT a compose service; Vault is
       # production-only). Exercises setup-approle.sh + render-secrets.sh end to end.
       - name: render-secrets.sh against a throwaway dev-mode Vault
@@ -406,7 +374,6 @@ jobs:
       - bandit-tests
       - prisma-check
       - backend-e2e
-      - backend-e2e-queue
       - frontend-e2e
       - docker-build
       - gitleaks

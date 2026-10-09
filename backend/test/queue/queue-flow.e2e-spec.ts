@@ -40,9 +40,9 @@ import {
  * Postgres, Mailpit (real OTP login) and the fake DLU server. Everything is
  * driven through HTTP (supertest) and observed in the queues and the database.
  *
- * Needs `docker compose --profile queue -f compose.test.yml up -d` and a build:
- * `pnpm --filter backend test:e2e:queue` does the build and runs only this
- * suite (the default `test:e2e` skips it; it needs the extra services).
+ * Part of `pnpm --filter backend test:e2e` (which builds `dist/` first). Needs
+ * `docker compose --profile queue -f compose.test.yml up -d`. Alone:
+ * `pnpm --filter backend exec jest --config ./test/jest-e2e.json queue`.
  *
  * Timing is shortened through env in `support/stack.ts` (3 attempts, 1 s
  * backoff, breaker opens after 3 failures for 4 s, 4 s sync cooldown, 6 s sync

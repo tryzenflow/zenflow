@@ -90,7 +90,8 @@ provider="$6"; vault_addr="$7"; role_id_file="$8"; secret_id_file="$9"
 cd "$path/backend"
 export ZENFLOW_API_IMAGE="$api" ZENFLOW_BANDIT_IMAGE="$bandit"
 prev="$(tail -n1 "$path/.deploy-history" 2>/dev/null | awk '{print $2}' || true)"
-compose="docker compose -f compose.${env_name}.yml"
+# --env-file: ${VAR} interpolation (Grafana password/SMTP, backup schedules) reads .env.<env>, not just env_file.
+compose="docker compose --env-file .env.${env_name} -f compose.${env_name}.yml"
 $compose pull api watcher worker-portal worker-lms worker-notify migrations bandit
 force=""
 if [ "$provider" = "vault" ]; then
