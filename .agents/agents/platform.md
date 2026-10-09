@@ -12,6 +12,8 @@ owns:
   - backend/src/observability/**
   - backend/src/queue/**
   - backend/ops/**
+  - backend/killswitch
+  - backend/src/killswitch/**
   - build_images.sh
   - .github/**
   - loadtest/**
