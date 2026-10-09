@@ -289,6 +289,7 @@ jobs:
           # compose.staging.yml requires GRAFANA_ADMIN_PASSWORD (interpolated from the shell, not from env_file);
           # a placeholder is enough to validate structure.
           export GRAFANA_ADMIN_PASSWORD=admin
+          export POSTGRES_USER=zenflow POSTGRES_PASSWORD=ci POSTGRES_DB=zenflow
           for f in dev staging prod test; do docker compose -f "compose.$f.yml" config -q; done
           # Vault runs in prod, and in staging only so the backup snapshot can be tested; never in dev/test.
           for f in dev test; do
@@ -309,6 +310,7 @@ jobs:
         run: |
           touch .env.staging .env.prod
           export GRAFANA_ADMIN_PASSWORD=admin
+          export POSTGRES_USER=zenflow POSTGRES_PASSWORD=ci POSTGRES_DB=zenflow
           for f in staging prod; do
             docker compose -f "compose.$f.yml" config --format json | jq -e '
               (.services | has("api-blue") and has("api-green") and has("bandit-blue") and has("bandit-green"))

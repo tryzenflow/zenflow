@@ -255,7 +255,7 @@ REMOTE
 
 # 4. Health gate from the runner (optional).
 if [ -n "${HEALTHCHECK_URL:-}" ]; then
-  for i in $(seq 1 30); do
+  for _ in $(seq 1 30); do
     curl -fsS --max-time 5 "$HEALTHCHECK_URL" >/dev/null && { echo "==> healthy"; exit 0; }
     sleep 5
   done
