@@ -1,12 +1,13 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { EventEmitter2 } from "@nestjs/event-emitter";
 import { type Notification } from "../../generated/prisma";
-import { NotificationsService } from "../notifications/notifications.service";
-import { NotificationEvent } from "../notifications/types";
 import { PrismaService } from "../prisma/prisma.service";
 import { ApnsSender } from "./apns.sender";
 import { FcmSender } from "./fcm.sender";
-import { PushService } from "./push.service";
+import {
+  PushProviderError,
+  PushService,
+  type ProviderGuard,
+} from "./push.service";
 import type { SendResult } from "./types";
 
 interface DeviceRow {
@@ -42,7 +43,7 @@ function makePrismaDouble(devices: DeviceRow[], allowNotifications = true) {
 
 function fakeSender(
   enabled: boolean,
-  result: SendResult = { sent: 0, invalidTokens: [] },
+  result: SendResult = { sent: 1, invalidTokens: [] },
 ) {
   return {
     enabled,
@@ -63,13 +64,9 @@ async function make(opts: {
   devices?: DeviceRow[];
   fcm?: ReturnType<typeof fakeSender>;
   apns?: ReturnType<typeof fakeSender>;
-  emitter?: EventEmitter2;
   allowNotifications?: boolean;
 }) {
   const db = makePrismaDouble(opts.devices ?? [], opts.allowNotifications);
-  const notifications = {
-    notificationEmitter: opts.emitter ?? new EventEmitter2(),
-  } as unknown as NotificationsService;
   const fcm = opts.fcm ?? fakeSender(true);
   const apns = opts.apns ?? fakeSender(true);
 
@@ -77,14 +74,13 @@ async function make(opts: {
     providers: [
       PushService,
       { provide: PrismaService, useValue: db.client },
-      { provide: NotificationsService, useValue: notifications },
       { provide: FcmSender, useValue: fcm },
       { provide: ApnsSender, useValue: apns },
     ],
   }).compile();
   const service = module.get<PushService>(PushService);
 
-  return { db, service, fcm, apns, notifications };
+  return { db, service, fcm, apns };
 }
 
 describe("PushService", () => {
@@ -202,31 +198,98 @@ describe("PushService", () => {
     });
   });
 
-  describe("onModuleInit listener", () => {
-    it("pushes on a NEW_SESSION emit for the row's user", async () => {
-      const emitter = new EventEmitter2();
-      const { service } = await make({ emitter });
+  describe("providers", () => {
+    const BOTH: DeviceRow[] = [
+      { platform: "ANDROID", pushToken: "a1", userId: "u1" },
+      { platform: "IOS", pushToken: "i1", userId: "u1" },
+    ];
+
+    it("a per-provider job only touches that provider", async () => {
+      const { service, fcm, apns } = await make({ devices: BOTH });
+
+      await service.sendToUser("u1", ROW, { provider: "apns" });
+
+      expect(fcm.send).not.toHaveBeenCalled();
+      expect(apns.send).toHaveBeenCalledWith(["i1"], expect.anything());
+    });
+
+    it("runs each provider through the guard under its own name", async () => {
+      const { service } = await make({
+        devices: BOTH,
+        fcm: fakeSender(true, { sent: 1, invalidTokens: [] }),
+        apns: fakeSender(true, { sent: 1, invalidTokens: [] }),
+      });
+      const calls: string[] = [];
+      const guard: ProviderGuard = (p, fn) => {
+        calls.push(p);
+        return fn();
+      };
+
+      await service.sendToUser("u1", ROW, { guard });
+
+      expect(calls.sort()).toEqual(["apns", "fcm"]);
+    });
+
+    it("throws PushProviderError when every token failed transiently, so the job retries", async () => {
+      const { service } = await make({
+        devices: BOTH,
+        fcm: fakeSender(true, { sent: 0, invalidTokens: [] }),
+        apns: fakeSender(true, { sent: 1, invalidTokens: [] }),
+      });
+
+      await expect(service.sendToUser("u1", ROW)).rejects.toBeInstanceOf(
+        PushProviderError,
+      );
+    });
+
+    it("treats all-dead tokens as handled (pruned, no retry)", async () => {
+      const { service, db } = await make({
+        devices: [BOTH[0]],
+        fcm: fakeSender(true, { sent: 0, invalidTokens: ["a1"] }),
+      });
+
+      await expect(service.sendToUser("u1", ROW)).resolves.toBeUndefined();
+      expect(db.devices).toHaveLength(0);
+    });
+
+    it("a guard rejection (breaker open) still lets the other provider finish and prune", async () => {
+      const { service, apns } = await make({
+        devices: BOTH,
+        apns: fakeSender(true, { sent: 1, invalidTokens: [] }),
+      });
+      const open = new Error("parked");
+      const guard = <T>(p: string, fn: () => Promise<T>) =>
+        p === "fcm" ? Promise.reject(open) : fn();
+
+      await expect(service.sendToUser("u1", ROW, { guard })).rejects.toBe(open);
+      expect(apns.send).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("deliver", () => {
+    it("loads the row by id and sends to its user", async () => {
+      const { service, db } = await make({});
+      (db.client as unknown as Record<string, unknown>).notification = {
+        findUnique: jest.fn().mockResolvedValue(ROW),
+      };
       const spy = jest
         .spyOn(service, "sendToUser")
         .mockResolvedValue(undefined);
 
-      service.onModuleInit();
-      emitter.emit(NotificationEvent.NEW_SESSION, ROW);
-      await new Promise((r) => setImmediate(r));
+      await service.deliver("n1", { provider: "fcm" });
 
-      expect(spy).toHaveBeenCalledWith("u1", ROW);
+      expect(spy).toHaveBeenCalledWith("u1", ROW, { provider: "fcm" });
     });
 
-    it("swallows a rejected send so the emitter never sees it", async () => {
-      const emitter = new EventEmitter2();
-      const { service } = await make({ emitter });
-      jest.spyOn(service, "sendToUser").mockRejectedValue(new Error("boom"));
+    it("throws when the row is missing so BullMQ retries", async () => {
+      const { service, db } = await make({});
+      (db.client as unknown as Record<string, unknown>).notification = {
+        findUnique: jest.fn().mockResolvedValue(null),
+      };
 
-      service.onModuleInit();
-      expect(() =>
-        emitter.emit(NotificationEvent.NEW_SESSION, ROW),
-      ).not.toThrow();
-      await new Promise((r) => setImmediate(r));
+      await expect(
+        service.deliver("gone", { provider: "fcm" }),
+      ).rejects.toThrow(/not found/);
     });
   });
 });

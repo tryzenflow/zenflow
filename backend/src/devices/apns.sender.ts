@@ -1,4 +1,4 @@
-import { Injectable, Logger, type OnModuleDestroy } from "@nestjs/common";
+import { Injectable, Logger, type OnApplicationShutdown } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Notification, Provider } from "@parse/node-apn";
 import { pushSoundFile } from "@zenflow/shared";
@@ -19,7 +19,7 @@ const APNS_DEAD_TOKEN_REASONS = new Set<string>([
  * Best-effort — never throws; only reports which tokens to prune.
  */
 @Injectable()
-export class ApnsSender implements OnModuleDestroy {
+export class ApnsSender implements OnApplicationShutdown {
   private readonly logger = new Logger(ApnsSender.name);
   private readonly provider?: Provider;
   private readonly topic?: string;
@@ -90,7 +90,8 @@ export class ApnsSender implements OnModuleDestroy {
     }
   }
 
-  async onModuleDestroy(): Promise<void> {
+  /** After the queue workers drained: a running push job may still send. */
+  async onApplicationShutdown(): Promise<void> {
     await this.provider?.shutdown();
   }
 }

@@ -1,14 +1,15 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return */
 import { Test, TestingModule } from "@nestjs/testing";
-import { SchedulerRegistry } from "@nestjs/schedule";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { NotificationEvent } from "../notifications/types";
+import { QueueService } from "../queue/queue.service";
+import { NOTIFY_QUEUE } from "../queue/queues";
 import {
   ARM_HORIZON_MS,
   REMINDER_RANDOM,
   ReminderSchedulerService,
-  reminderJobName,
+  reminderJobId,
 } from "./reminder-scheduler.service";
 
 const HOUR = 3_600_000;
@@ -41,15 +42,16 @@ function makeRow(over: {
 }
 
 describe("ReminderSchedulerService", () => {
-  let registry: SchedulerRegistry;
   let prisma: {
     sessionReminder: {
       findMany: jest.Mock;
       findUnique: jest.Mock;
       updateMany: jest.Mock;
     };
+    $transaction: jest.Mock;
   };
-  let notifications: { create: jest.Mock; notify: jest.Mock };
+  let notifications: { create: jest.Mock; announce: jest.Mock };
+  let queue: { enqueueBestEffort: jest.Mock };
   let service: ReminderSchedulerService;
   let rand: jest.Mock;
 
@@ -61,93 +63,76 @@ describe("ReminderSchedulerService", () => {
         findUnique: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
+      $transaction: jest.fn(),
     };
+    prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) =>
+      fn(prisma),
+    );
     notifications = {
       create: jest.fn().mockResolvedValue({ id: "n1", userId: "u1" }),
-      notify: jest.fn(),
+      announce: jest.fn().mockResolvedValue(undefined),
     };
+    queue = { enqueueBestEffort: jest.fn().mockResolvedValue({}) };
     rand = jest.fn().mockReturnValue(0);
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ReminderSchedulerService,
-        SchedulerRegistry,
         { provide: PrismaService, useValue: prisma },
         { provide: NotificationsService, useValue: notifications },
+        { provide: QueueService, useValue: queue },
         { provide: REMINDER_RANDOM, useValue: rand },
       ],
     }).compile();
     service = module.get<ReminderSchedulerService>(ReminderSchedulerService);
-    registry = module.get<SchedulerRegistry>(SchedulerRegistry);
   });
 
-  afterEach(() => {
-    for (const name of registry.getTimeouts()) registry.deleteTimeout(name);
-    jest.useRealTimers();
-  });
+  afterEach(() => jest.useRealTimers());
 
   describe("sweep / arming", () => {
-    it("arms a timeout for a reminder inside the horizon", async () => {
+    it("enqueues a delayed reminder job with a stable id for a reminder inside the horizon", async () => {
+      const row = makeRow({ startsInMs: 3 * HOUR });
+      prisma.sessionReminder.findMany.mockResolvedValue([row]);
+      await service.sweep();
+      const start = row.session.scheduledStartTime;
+      expect(queue.enqueueBestEffort).toHaveBeenCalledWith(
+        NOTIFY_QUEUE,
+        { type: "reminder", reminderId: "r1", startsAt: start.toISOString() },
+        {
+          jobId: reminderJobId("r1", start.getTime()),
+          delayMs: 2 * HOUR + 5_000,
+        },
+      );
+    });
+
+    it("sweeping twice uses the same job id (BullMQ dedupes)", async () => {
       prisma.sessionReminder.findMany.mockResolvedValue([
         makeRow({ startsInMs: 3 * HOUR }),
       ]);
       await service.sweep();
-      expect(registry.doesExist("timeout", reminderJobName("r1"))).toBe(true);
+      await service.sweep();
+      const ids = queue.enqueueBestEffort.mock.calls.map((c) => c[2].jobId);
+      expect(new Set(ids).size).toBe(1);
+      expect(ids[0]).not.toContain(":");
     });
 
-    it("does not arm a reminder beyond the 24h horizon (32-bit overflow guard)", async () => {
+    it("does not arm a reminder beyond the horizon", async () => {
       prisma.sessionReminder.findMany.mockResolvedValue([
         makeRow({ startsInMs: 60 * 24 * HOUR }),
       ]);
       await service.sweep();
-      expect(registry.getTimeouts()).toHaveLength(0);
-      expect(ARM_HORIZON_MS).toBeLessThan(2 ** 31 - 1);
+      expect(queue.enqueueBestEffort).not.toHaveBeenCalled();
+      expect(ARM_HORIZON_MS).toBe(24 * HOUR);
     });
 
-    describe("jitter", () => {
-      const armWith = async (r: number, startsInMs: number, before = 60) => {
-        rand.mockReturnValue(r);
-        const row = makeRow({ startsInMs, before });
-        prisma.sessionReminder.findMany.mockResolvedValue([row]);
-        prisma.sessionReminder.findUnique.mockResolvedValue(row);
-        await service.sweep();
-      };
-      const firedAfter = async (ms: number) => {
-        await jest.advanceTimersByTimeAsync(ms);
-        return notifications.create.mock.calls.length > 0;
-      };
-
-      it("delays by 5 s at the low bound, never earlier", async () => {
-        await armWith(0, 3 * HOUR);
-        const nominal = 2 * HOUR;
-        expect(await firedAfter(nominal + 4_999)).toBe(false);
-        expect(await firedAfter(1)).toBe(true);
-      });
-      it("delays by 10 s at the high bound", async () => {
-        await armWith(1, 3 * HOUR);
-        const nominal = 2 * HOUR;
-        expect(await firedAfter(nominal + 9_999)).toBe(false);
-        expect(await firedAfter(1)).toBe(true);
-      });
-      it("is capped so it never lands after session start", async () => {
-        // lead 0 -> nominal == start (3 s away): jitter would overshoot, so
-        // it fires 1 s before start (a timer at start would find it started).
-        await armWith(1, 3_000, 0);
-        expect(await firedAfter(1_999)).toBe(false);
-        expect(await firedAfter(1)).toBe(true);
-      });
-    });
-
-    it("cancels a timer whose reminder no longer exists", async () => {
-      prisma.sessionReminder.findMany.mockResolvedValueOnce([
-        makeRow({ startsInMs: 3 * HOUR }),
+    it("skips sessions that already started", async () => {
+      prisma.sessionReminder.findMany.mockResolvedValue([
+        makeRow({ startsInMs: -HOUR }),
       ]);
       await service.sweep();
-      prisma.sessionReminder.findMany.mockResolvedValueOnce([]);
-      await service.sweep();
-      expect(registry.getTimeouts()).toHaveLength(0);
+      expect(queue.enqueueBestEffort).not.toHaveBeenCalled();
     });
 
-    it("re-arms when the session was moved", async () => {
+    it("a moved session gets a job for the new start", async () => {
       prisma.sessionReminder.findMany.mockResolvedValueOnce([
         makeRow({ startsInMs: 3 * HOUR }),
       ]);
@@ -156,24 +141,34 @@ describe("ReminderSchedulerService", () => {
         makeRow({ startsInMs: 5 * HOUR }),
       ]);
       await service.sweep();
-      expect(registry.getTimeouts()).toEqual([reminderJobName("r1")]);
+      const ids = queue.enqueueBestEffort.mock.calls.map((c) => c[2].jobId);
+      expect(new Set(ids).size).toBe(2);
     });
 
-    it("skips sessions that already started", async () => {
-      prisma.sessionReminder.findMany.mockResolvedValue([
-        makeRow({ startsInMs: -HOUR }),
-      ]);
-      await service.sweep();
-      expect(registry.getTimeouts()).toHaveLength(0);
+    it("swallows a failing sweep", async () => {
+      prisma.sessionReminder.findMany.mockRejectedValue(new Error("db"));
+      await expect(service.sweep()).resolves.toBeUndefined();
     });
 
-    it("cancel() removes the timer", async () => {
-      prisma.sessionReminder.findMany.mockResolvedValue([
-        makeRow({ startsInMs: 3 * HOUR }),
-      ]);
-      await service.sweep();
-      service.cancel("r1");
-      expect(registry.getTimeouts()).toHaveLength(0);
+    describe("jitter", () => {
+      const delayFor = async (r: number, startsInMs: number, before = 60) => {
+        rand.mockReturnValue(r);
+        prisma.sessionReminder.findMany.mockResolvedValue([
+          makeRow({ startsInMs, before }),
+        ]);
+        await service.sweep();
+        return queue.enqueueBestEffort.mock.calls[0][2].delayMs as number;
+      };
+
+      it("delays by 5 s at the low bound, never earlier", async () => {
+        expect(await delayFor(0, 3 * HOUR)).toBe(2 * HOUR + 5_000);
+      });
+      it("delays by 10 s at the high bound", async () => {
+        expect(await delayFor(1, 3 * HOUR)).toBe(2 * HOUR + 10_000);
+      });
+      it("is capped so it never lands after session start", async () => {
+        expect(await delayFor(1, 3_000, 0)).toBe(2_000);
+      });
     });
   });
 
@@ -181,19 +176,20 @@ describe("ReminderSchedulerService", () => {
     it("two workers firing the same reminder send it once (claim)", async () => {
       const row = makeRow({ startsInMs: HOUR });
       prisma.sessionReminder.findUnique.mockResolvedValue(row);
-      // First claim wins, the overlapping worker's updateMany matches nothing.
       prisma.sessionReminder.updateMany
         .mockResolvedValueOnce({ count: 1 })
         .mockResolvedValueOnce({ count: 0 });
       const start = row.session.scheduledStartTime.getTime();
       await Promise.all([service.fire("r1", start), service.fire("r1", start)]);
       expect(notifications.create).toHaveBeenCalledTimes(1);
+      expect(notifications.announce).toHaveBeenCalledTimes(1);
     });
 
-    it("creates a REMINDER notification and emits it", async () => {
+    it("claims and creates the row in one transaction, then notifies", async () => {
       const row = makeRow({ startsInMs: HOUR });
       prisma.sessionReminder.findUnique.mockResolvedValue(row);
       await service.fire("r1", row.session.scheduledStartTime.getTime());
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
       expect(notifications.create).toHaveBeenCalledWith(
         "u1",
         expect.objectContaining({
@@ -202,40 +198,54 @@ describe("ReminderSchedulerService", () => {
           title: "Class in 1 hour: Standup",
           content: expect.stringContaining("Standup begins at"),
         }),
+        prisma,
       );
-      expect(notifications.notify).toHaveBeenCalledWith(
+      expect(notifications.announce).toHaveBeenCalledWith(
         NotificationEvent.NEW_SESSION,
         expect.anything(),
       );
     });
 
-    it("restart catch-up: fires a reminder missed by <= 2 min, with the real time left", async () => {
-      const row = makeRow({ startsInMs: 59 * 60_000, before: 60 });
-      prisma.sessionReminder.findMany.mockResolvedValue([row]);
+    it("a failed row insert propagates (job retries) and sends nothing", async () => {
+      const row = makeRow({ startsInMs: HOUR });
       prisma.sessionReminder.findUnique.mockResolvedValue(row);
-      await service.sweep();
-      await jest.advanceTimersByTimeAsync(10_000);
+      notifications.create.mockRejectedValue(new Error("db down"));
+      await expect(
+        service.fire("r1", row.session.scheduledStartTime.getTime()),
+      ).rejects.toThrow("db down");
+      expect(notifications.announce).not.toHaveBeenCalled();
+    });
+
+    it("catch-up: fires a reminder missed by <= 2 min, with the real time left", async () => {
+      const row = makeRow({ startsInMs: 59 * 60_000, before: 60 });
+      prisma.sessionReminder.findUnique.mockResolvedValue(row);
+      await service.fire("r1", row.session.scheduledStartTime.getTime());
       expect(notifications.create).toHaveBeenCalledWith(
         "u1",
         expect.objectContaining({ title: "Class in 59 minutes: Standup" }),
+        prisma,
       );
     });
 
-    it("restart catch-up: drops a reminder missed by more than 2 min", async () => {
+    it("catch-up: drops a reminder missed by more than 2 min", async () => {
       const row = makeRow({ startsInMs: 20 * 60_000, before: 60 });
-      prisma.sessionReminder.findMany.mockResolvedValue([row]);
-      await service.sweep();
-      expect(registry.getTimeouts()).toHaveLength(0);
-      await jest.advanceTimersByTimeAsync(60_000);
+      prisma.sessionReminder.findUnique.mockResolvedValue(row);
+      await service.fire("r1", row.session.scheduledStartTime.getTime());
       expect(notifications.create).not.toHaveBeenCalled();
     });
 
-    it("does not fire when the session was moved (re-arms instead)", async () => {
+    it("does not fire when the session was moved (arms the new start instead)", async () => {
       const row = makeRow({ startsInMs: 4 * HOUR });
       prisma.sessionReminder.findUnique.mockResolvedValue(row);
       await service.fire("r1", NOW.getTime() + 2 * HOUR);
       expect(notifications.create).not.toHaveBeenCalled();
-      expect(registry.doesExist("timeout", reminderJobName("r1"))).toBe(true);
+      expect(queue.enqueueBestEffort).toHaveBeenCalledWith(
+        NOTIFY_QUEUE,
+        expect.objectContaining({ reminderId: "r1" }),
+        expect.objectContaining({
+          jobId: reminderJobId("r1", row.session.scheduledStartTime.getTime()),
+        }),
+      );
     });
 
     it("does not fire for a started session, a deleted reminder or a lost claim", async () => {
@@ -250,6 +260,7 @@ describe("ReminderSchedulerService", () => {
       prisma.sessionReminder.updateMany.mockResolvedValueOnce({ count: 0 });
       await service.fire("r1", row.session.scheduledStartTime.getTime());
       expect(notifications.create).not.toHaveBeenCalled();
+      expect(notifications.announce).not.toHaveBeenCalled();
     });
 
     it("never fires for DND", async () => {

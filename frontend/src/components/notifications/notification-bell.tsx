@@ -169,9 +169,13 @@ export function NotificationBell() {
       { withCredentials: true },
     );
 
-    // 2. Listen for generic message events
+    // 2. Listen for generic message events. Delivery is at-least-once (a
+    // publish can be re-emitted), so drop an id this stream already showed.
+    const seen = new Set<string>();
     eventSource.onmessage = (event) => {
       const newData = JSON.parse(event.data) as NotificationDto;
+      if (seen.has(newData.id)) return;
+      seen.add(newData.id);
       setItems((newItems) => [newData, ...newItems]);
       setUnread((prevUnread) => prevUnread + 1);
       // A sync watcher wrote/removed a session behind this notification — the

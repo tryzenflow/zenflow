@@ -1,14 +1,15 @@
 import { Module } from "@nestjs/common";
-import { PrismaModule } from "../prisma/prisma.module";
 import { NotificationsModule } from "../notifications/notifications.module";
-import { ReminderSchedulerService } from "./reminder-scheduler.service";
+import { ReminderSweepService } from "./reminder-sweep.service";
+import { RemindersSchedulerModule } from "./reminders-scheduler.module";
 
 /**
- * Worker-only reminder timers and delivery through `NotificationsService`.
- * `SchedulerRegistry` comes from the worker's global `ScheduleModule.forRoot()`.
+ * Watcher-only reminder arming (the 5-minute sweep). Firing is the notify
+ * worker's `reminder` job. `ScheduleModule` comes from the watcher's global
+ * `ScheduleModule.forRoot()`.
  */
 @Module({
-  imports: [PrismaModule, NotificationsModule],
-  providers: [ReminderSchedulerService],
+  imports: [RemindersSchedulerModule, NotificationsModule],
+  providers: [ReminderSweepService],
 })
 export class RemindersWorkerModule {}

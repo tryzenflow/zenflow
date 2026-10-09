@@ -5,6 +5,11 @@ import { IntegrationsModule } from "../integrations/integrations.module";
 import { IntegrationsService } from "../integrations/integrations.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { ExamWatcherService } from "./exam-watcher.service";
+import {
+  LmsFetchWorkerModule,
+  PortalFetchWorkerModule,
+} from "./fetch-worker.module";
+import { LmsFetchProcessor, PortalFetchProcessor } from "./fetch.processor";
 import { IngestionModule } from "./ingestion.module";
 import { IngestionWorkerModule } from "./ingestion-worker.module";
 import { IngestionScheduleService } from "./ingestion-schedule.service";
@@ -40,6 +45,8 @@ describe("IngestionModule ↔ IntegrationsModule", () => {
         ScheduleModule.forRoot(),
         IngestionModule,
         IngestionWorkerModule,
+        PortalFetchWorkerModule,
+        LmsFetchWorkerModule,
         IntegrationsModule,
       ],
     })
@@ -57,6 +64,8 @@ describe("IngestionModule ↔ IntegrationsModule", () => {
     }
     // ...and IntegrationsService got its way back to them.
     expect(moduleRef.get(IngestionSyncService)).toBeDefined();
+    expect(moduleRef.get(PortalFetchProcessor)).toBeDefined();
+    expect(moduleRef.get(LmsFetchProcessor)).toBeDefined();
     expect(moduleRef.get(IntegrationsService)).toBeDefined();
 
     // Issue #56's rolling scheduler, including the handle IntegrationsService

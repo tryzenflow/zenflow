@@ -100,6 +100,7 @@ Opening a PR (`gh pr create` loads [`.github/PULL_REQUEST_TEMPLATE.md`](.github/
 | Frontend e2e | Playwright (`frontend/playwright.config.ts`, `testDir` `frontend/e2e/`, no specs checked in yet) against a running stack | `pnpm --filter frontend test:e2e` |
 | Mobile | Vitest unit + component (MSW), Maestro e2e (`mobile/e2e/`), see [`docs/mobile/testing.md`](docs/mobile/testing.md) | `pnpm --filter mobile test` / `pnpm --filter mobile e2e` |
 
+- Backend tests use NestJS DI (`Test.createTestingModule`, `overrideProvider`), not hand-built `new Service(mocks)`: see [AGENTS.md](AGENTS.md) → Tests.
 - New behaviour needs a test; a bug fix needs a regression test.
 - Scheduler changes update the matching `*.spec.ts` in the same commit.
 

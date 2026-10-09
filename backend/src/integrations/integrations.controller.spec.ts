@@ -1,3 +1,4 @@
+import type { Response } from "express";
 import { Test, TestingModule } from "@nestjs/testing";
 import type { User } from "../../generated/prisma";
 import { IntegrationsController } from "./integrations.controller";
@@ -12,6 +13,8 @@ describe("IntegrationsController", () => {
   const update = jest.fn();
   const disconnect = jest.fn();
   const sync = jest.fn();
+  const httpStatus = jest.fn();
+  const httpRes = { status: httpStatus } as unknown as Response;
 
   beforeEach(async () => {
     connect.mockReset().mockResolvedValue({
@@ -111,7 +114,7 @@ describe("IntegrationsController", () => {
   });
 
   it("answers sync() with the provider's status, not a counts payload", async () => {
-    const res = await controller.sync(USER, "LMS");
+    const res = await controller.sync(USER, "LMS", httpRes);
 
     expect(sync).toHaveBeenCalledWith(USER, "LMS");
     expect(res).toEqual({
@@ -124,6 +127,19 @@ describe("IntegrationsController", () => {
         lastSyncedAt: "2026-09-06T04:00:00.000Z",
         lastSyncStatus: "COMPLETED",
       },
+    });
+  });
+
+  it("answers 202 when the sync is still running", async () => {
+    sync.mockResolvedValueOnce({ provider: "LMS", syncPending: true });
+
+    const res = await controller.sync(USER, "LMS", httpRes);
+
+    expect(httpStatus).toHaveBeenCalledWith(202);
+    expect(res).toMatchObject({
+      success: true,
+      message: "LMS sync queued",
+      data: { syncPending: true },
     });
   });
 

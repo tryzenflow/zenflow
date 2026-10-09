@@ -34,6 +34,7 @@ pnpm typecheck           # tsc --noEmit
 pnpm lint                # eslint --fix
 pnpm test                # unit tests
 pnpm test:e2e            # e2e (needs the .env.test DB)
+pnpm test:e2e:queue      # BullMQ flow over real role processes; needs `docker compose --profile queue -f compose.test.yml up -d`
 pnpm prisma:dev:studio   # browse the DB
 pnpm prisma:gen:dev      # regenerate the client into generated/prisma
 ```

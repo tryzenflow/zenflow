@@ -28,6 +28,7 @@ You own the path from a student's campus accounts to sessions on their calendar.
 - Synced fixed sessions are virtual series (AGENTS.md invariant 4); sync must not null a `TASK` start or drop user edits (`sync-conflicts`).
 - Placement of detected items goes through `scheduler`; do not rank here.
 - Upstream is unreliable: watchers must be idempotent and tolerate partial failures.
+- Backend tests follow NestJS DI (AGENTS.md → Tests): build the unit with `Test.createTestingModule`, replace deps via `{ provide, useValue }` / `.overrideProvider`, fetch with `module.get`; no `new Service(mock…)`, no `as any` casts of mocks.
 - Docs stay lean (AGENTS.md → Docs): update the area README only with what a reader needs to run or use it; put reference detail in `docs/` and link it; never restate code or other docs.
 
 ## Done when

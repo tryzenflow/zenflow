@@ -1,6 +1,9 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { NotFoundException } from "@nestjs/common";
-import { Prisma, type User } from "../../generated/prisma";
+import { ConfigService } from "@nestjs/config";
+import { Prisma, type Notification, type User } from "../../generated/prisma";
+import { QueueService } from "../queue/queue.service";
+import { NotificationPubSub } from "./notification-pubsub.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "./notifications.service";
 
@@ -121,19 +124,146 @@ function row(over: Partial<Row> & { id: string }): Row {
 
 async function makeService(rows: Row[]) {
   const db = makePrismaDouble(rows);
+  const queue = {
+    enqueueBestEffort: jest.fn().mockResolvedValue({ id: "job" }),
+    getJob: jest.fn().mockResolvedValue(undefined),
+  };
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       NotificationsService,
+      NotificationPubSub,
+      { provide: ConfigService, useValue: new ConfigService({}) },
       { provide: PrismaService, useValue: db.client },
+      { provide: QueueService, useValue: queue },
     ],
   }).compile();
   return {
     db,
+    queue,
     service: module.get<NotificationsService>(NotificationsService),
   };
 }
 
 describe("NotificationsService", () => {
+  describe("notify", () => {
+    const ROW = { id: "n1", userId: "u1" } as unknown as Notification;
+
+    it("emits to the local SSE emitter (no pub/sub Redis configured)", async () => {
+      const { service } = await makeService([]);
+      const seen = jest.fn();
+      service.notificationEmitter.on("session.new", seen);
+      service.notify("session.new", ROW);
+      expect(seen).toHaveBeenCalledWith(ROW);
+    });
+
+    it("enqueues one idempotent push job per provider", async () => {
+      const { service, queue } = await makeService([]);
+      service.notify("session.new", ROW);
+      service.notify("session.new", ROW);
+      const calls = queue.enqueueBestEffort.mock.calls as [
+        unknown,
+        { type: string; notificationId: string; provider: string },
+        { jobId: string },
+      ][];
+      expect(calls.map((c) => c[2].jobId)).toEqual([
+        "push_n1_fcm",
+        "push_n1_apns",
+        "push_n1_fcm",
+        "push_n1_apns",
+      ]);
+      expect(calls[0][1]).toEqual({
+        type: "push",
+        notificationId: "n1",
+        provider: "fcm",
+      });
+    });
+    it("retries a failed enqueue, then counts it dropped without throwing", async () => {
+      jest.useFakeTimers();
+      try {
+        const { service, queue } = await makeService([]);
+        queue.enqueueBestEffort.mockResolvedValue(null);
+        const done = service.announce("session.new", ROW);
+        await jest.advanceTimersByTimeAsync(5_000);
+        await expect(done).resolves.toBeUndefined();
+        // 3 attempts x 2 providers
+        expect(queue.enqueueBestEffort).toHaveBeenCalledTimes(6);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("stops retrying once an attempt succeeds", async () => {
+      jest.useFakeTimers();
+      try {
+        const { service, queue } = await makeService([]);
+        queue.enqueueBestEffort
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce(null)
+          .mockResolvedValue({ id: "job" });
+        const done = service.announce("session.new", ROW);
+        await jest.advanceTimersByTimeAsync(5_000);
+        await done;
+        expect(queue.enqueueBestEffort).toHaveBeenCalledTimes(4);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+  });
+
+  describe("reconcileRecent", () => {
+    it("re-enqueues only the push jobs that no longer exist", async () => {
+      const { service, queue, db } = await makeService([]);
+      (db.client.notification as { findMany: unknown }).findMany = jest
+        .fn()
+        .mockResolvedValue([{ id: "n1" }, { id: "n2" }]);
+      queue.getJob.mockImplementation((_def: unknown, id: string) =>
+        Promise.resolve(id === "push_n1_fcm" ? { id } : undefined),
+      );
+      await expect(service.reconcileRecent()).resolves.toBe(3);
+      const ids = (
+        queue.enqueueBestEffort.mock.calls as [
+          unknown,
+          unknown,
+          { jobId: string },
+        ][]
+      ).map((c) => c[2].jobId);
+      expect(ids).toEqual(["push_n1_apns", "push_n2_fcm", "push_n2_apns"]);
+    });
+
+    it("pages past the first batch so older rows are still checked", async () => {
+      const { service, queue, db } = await makeService([]);
+      const page = (from: number, n: number) =>
+        Array.from({ length: n }, (_, i) => ({ id: `n${from + i}` }));
+      const findMany = jest
+        .fn()
+        .mockResolvedValueOnce(page(0, 500))
+        .mockResolvedValueOnce(page(500, 2));
+      (db.client.notification as { findMany: unknown }).findMany = findMany;
+      queue.getJob.mockResolvedValue({ id: "exists" });
+
+      await expect(service.reconcileRecent()).resolves.toBe(0);
+
+      expect(findMany).toHaveBeenCalledTimes(2);
+      expect(findMany).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ cursor: { id: "n499" }, skip: 1 }),
+      );
+      expect(queue.getJob).toHaveBeenCalledWith(
+        expect.anything(),
+        "push_n501_fcm",
+      );
+    });
+
+    it("propagates a queue outage so the sweep stops and retries later", async () => {
+      const { service, queue, db } = await makeService([]);
+      (db.client.notification as { findMany: unknown }).findMany = jest
+        .fn()
+        .mockResolvedValue([{ id: "n1" }]);
+      queue.getJob.mockRejectedValue(new Error("timed out"));
+      await expect(service.reconcileRecent()).rejects.toThrow("timed out");
+    });
+  });
+
   describe("list", () => {
     it("returns newest first, regardless of read state", async () => {
       const { service } = await makeService([

@@ -1,3 +1,4 @@
+import { Test } from "@nestjs/testing";
 import { buildReminderText } from "../scheduler/core/reminder";
 import { localizeNotification } from "./localize-notification";
 import { NotificationsService } from "./notifications.service";
@@ -7,6 +8,34 @@ import { FcmSender } from "../devices/fcm.sender";
 import { ApnsSender } from "../devices/apns.sender";
 import type { PushMessage, SendResult } from "../devices/types";
 import type { User } from "../../generated/prisma";
+import { ConfigService } from "@nestjs/config";
+import { NotificationPubSub } from "./notification-pubsub.service";
+import { QueueService } from "../queue/queue.service";
+
+async function build(
+  prisma: unknown,
+  sender: { enabled: boolean; send: jest.Mock } = {
+    enabled: false,
+    send: jest.fn(),
+  },
+) {
+  const module = await Test.createTestingModule({
+    providers: [
+      NotificationsService,
+      NotificationPubSub,
+      PushService,
+      { provide: ConfigService, useValue: new ConfigService({}) },
+      { provide: PrismaService, useValue: prisma },
+      { provide: QueueService, useValue: { enqueueBestEffort: jest.fn() } },
+      { provide: FcmSender, useValue: sender },
+      { provide: ApnsSender, useValue: sender },
+    ],
+  }).compile();
+  return {
+    service: module.get(NotificationsService),
+    push: module.get(PushService),
+  };
+}
 
 describe("Vietnamese notification delivery", () => {
   it("renders legacy canonical inbox rows in the current language after switching back to English", async () => {
@@ -27,8 +56,8 @@ describe("Vietnamese notification delivery", () => {
         findMany: jest.fn().mockResolvedValue([legacy]),
         count: jest.fn().mockResolvedValue(1),
       },
-    } as unknown as PrismaService;
-    const service = new NotificationsService(prisma);
+    };
+    const { service } = await build(prisma);
     const vi = await service.list({ id: "u", lang: "VI_VN" } as User, {});
     expect(vi.notifications[0].title).toBe("Lịch thi mới: Algorithms");
     const en = await service.list({ id: "u", lang: "EN_US" } as User, {});
@@ -61,8 +90,14 @@ describe("Vietnamese notification delivery", () => {
             { platform: "IOS", pushToken: "ios" },
           ]),
         },
-      } as unknown as PrismaService;
-      const service = new NotificationsService(prisma);
+      };
+      const sender = {
+        enabled: true,
+        send: jest
+          .fn<Promise<SendResult>, [string[], PushMessage]>()
+          .mockResolvedValue({ sent: 1, invalidTokens: [] }),
+      };
+      const { service, push } = await build(prisma, sender);
       const row = await service.create("u", {
         eventName: "assignment.group_created",
         title: "You have a new assignment from LMS",
@@ -82,18 +117,6 @@ describe("Vietnamese notification delivery", () => {
       service.notificationEmitter.on("test", listener);
       service.notify("test", row);
       expect(listener).toHaveBeenCalledWith(row);
-      const sender = {
-        enabled: true,
-        send: jest
-          .fn<Promise<SendResult>, [string[], PushMessage]>()
-          .mockResolvedValue({ sent: 1, invalidTokens: [] }),
-      };
-      const push = new PushService(
-        prisma,
-        service,
-        sender as unknown as FcmSender,
-        sender as unknown as ApnsSender,
-      );
       await push.sendToUser("u", row);
       expect(sender.send).toHaveBeenCalledTimes(2);
       expect(sender.send.mock.calls[0][1]).toMatchObject({
