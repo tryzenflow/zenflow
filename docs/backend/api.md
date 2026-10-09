@@ -72,7 +72,7 @@ Drag, resize and reschedule are all `PATCH /sessions/:id` (a `MOVE` signal). The
 - Uploads buffer to `UPLOAD_TMP_DIR`, stream to S3, then are removed.
 - **Notes:** `Session.note` stores file refs as `/api/v1/files/<id>` (no `sig`). Every sessions response adds `?sig=` to them; `POST`/`PATCH` strip it and neutralise refs to files the caller does not own.
 - The compose `storage` service creates the bucket. Decision: [ADR-0004](../adr/0004-s3-file-storage.md).
-- Migrate pre-S3 files: `pnpm migrate:files-to-s3` locally, or `docker compose exec api node dist/files/migrate-to-s3.cli.js [--dry-run]`.
+- Migrate pre-S3 files: `pnpm migrate:files-to-s3` locally, or `docker compose exec api-<colour> node dist/files/migrate-to-s3.cli.js [--dry-run]`.
 
 ## Integrations (`/integrations`)
 

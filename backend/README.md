@@ -58,7 +58,7 @@ Config and rationale: [ADR-0010](../docs/adr/0010-nginx-replaces-caddy.md); file
 
 - First issuance, once per host, before the first `up`: `LE_EMAIL=you@example.com ./nginx/init-cert.sh`.
 - Renewal is the `certbot` service (twice daily, webroot); `nginx` reloads every 12 h to pick the new certificate up. Alert on certificate expiry.
-- Upstreams live in `nginx/upstream.api.conf`; edit and `docker compose exec nginx nginx -s reload`.
+- The API upstream is `state/upstream.api.conf` on the host, written by `scripts/deploy/deploy.sh` (blue-green, [ci-cd.md](../docs/ops/ci-cd.md)); do not edit it by hand.
 
 ## Layout
 

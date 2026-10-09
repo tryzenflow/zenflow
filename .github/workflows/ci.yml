@@ -289,6 +289,7 @@ jobs:
           # compose.staging.yml requires GRAFANA_ADMIN_PASSWORD (interpolated from the shell, not from env_file);
           # a placeholder is enough to validate structure.
           export GRAFANA_ADMIN_PASSWORD=admin
+          export POSTGRES_USER=zenflow POSTGRES_PASSWORD=ci POSTGRES_DB=zenflow
           for f in dev staging prod test; do docker compose -f "compose.$f.yml" config -q; done
           # Vault runs in prod, and in staging only so the backup snapshot can be tested; never in dev/test.
           for f in dev test; do
@@ -303,6 +304,23 @@ jobs:
             docker compose -f "compose.$f.yml" config --format json \
               | jq -e '.services.backup.volumes | any(.[]; .source == "vault_data" and .read_only == true)'
           done
+      # Blue-green (ADR-0013): both colours exist; the api/bandit templates are never started.
+      - name: blue-green colours and deploy script
+        working-directory: backend
+        run: |
+          touch .env.staging .env.prod
+          export GRAFANA_ADMIN_PASSWORD=admin
+          export POSTGRES_USER=zenflow POSTGRES_PASSWORD=ci POSTGRES_DB=zenflow
+          for f in staging prod; do
+            docker compose -f "compose.$f.yml" config --format json | jq -e '
+              (.services | has("api-blue") and has("api-green") and has("bandit-blue") and has("bandit-green"))
+              and (.services | has("api") | not) and (.services | has("bandit") | not)
+              and (.services["api-blue"].environment.BANDIT_SERVICE_URL == "http://bandit-blue:8000")
+              and (.services["api-green"].environment.BANDIT_SERVICE_URL == "http://bandit-green:8000")
+              and (.services.watcher != null)'
+          done
+          bash -n ../scripts/deploy/deploy.sh
+          shellcheck -S warning ../scripts/deploy/deploy.sh killswitch
       # Throwaway `vault server -dev` via plain docker run (NOT a compose service; Vault is
       # production-only). Exercises setup-approle.sh + render-secrets.sh end to end.
       - name: render-secrets.sh against a throwaway dev-mode Vault
