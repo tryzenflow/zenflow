@@ -28,7 +28,7 @@ function extract(run, st) {
     if (ops[o]) { m[`${o}_p50`] = ops[o].p50; m[`${o}_p95`] = ops[o].p95; m[`${o}_p99`] = ops[o].p99; m[`${o}_n`] = ops[o].count; for (const [c, n] of Object.entries(ops[o].status)) m[`${o}_st_${c}`] = n; }
   }
   if (st && st.pgTotal) { m.pgPerReq = st.pgTotal.calls / total; m.pgMsPerReq = st.pgTotal.total_ms / total; }
-  if (st && st.docker) for (const [svc, d] of Object.entries(st.docker)) if (["api", "bandit", "postgres", "redis"].includes(svc)) { m[`${svc}_cpu`] = d.cpuAvgPct; m[`${svc}_cpumax`] = d.cpuMaxPct; m[`${svc}_mem`] = d.memMaxMiB; }
+  if (st && st.docker) for (const [svc, d] of Object.entries(st.docker)) if (["api", "bandit", "postgres", "session-redis"].includes(svc)) { m[`${svc}_cpu`] = d.cpuAvgPct; m[`${svc}_cpumax`] = d.cpuMaxPct; m[`${svc}_mem`] = d.memMaxMiB; }
   for (const [p, d] of Object.entries(run.phases || {})) m[`ph_${p}`] = d.avg;
   return m;
 }

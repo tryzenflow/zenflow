@@ -31,7 +31,7 @@ services:
         condition: service_started
       postgres:
         condition: service_healthy
-      redis:
+      session-redis:
         condition: service_healthy
       redis-ratelimit:
         condition: service_healthy
@@ -232,8 +232,9 @@ services:
       timeout: 5s
       retries: 5
 
-  # Sessions + OTP. Must NOT evict: losing keys logs users out. AOF keeps them across restarts.
-  redis:
+  # Sessions + OTP. Every key carries a TTL, so volatile-lru can only ever drop expiring keys.
+  # AOF everysec plus an RDB snapshot keep sessions across restarts (ADR-0017).
+  session-redis:
     container_name: zenflow-cache-staging
     image: redis:8.8.0-alpine
     restart: unless-stopped
@@ -242,11 +243,13 @@ services:
       - --maxmemory
       - 192mb
       - --maxmemory-policy
-      - noeviction
+      - volatile-lru
       - --appendonly
       - "yes"
       - --appendfsync
       - everysec
+      - --save
+      - "1800 1"
     volumes:
       - redis_data:/data
     expose:
@@ -261,7 +264,7 @@ services:
       retries: 5
 
   # Rate-limit counters only (ADR-0005): disposable, so LRU eviction + RDB snapshot
-  # (every 15 s when >= 1 key changed) and no AOF. Keep separate from `redis`.
+  # (every 15 s when >= 1 key changed) and no AOF. Keep separate from `session-redis`.
   redis-ratelimit:
     container_name: zenflow-cache-ratelimit-staging
     image: redis:8.8.0-alpine
@@ -290,7 +293,7 @@ services:
       retries: 5
 
   # Job queues (ADR-0007, BullMQ). Must NOT evict or lose jobs: noeviction + AOF on
-  # its own volume. Keep separate from `redis` and `redis-ratelimit`.
+  # its own volume. Keep separate from `session-redis` and `redis-ratelimit`.
   redis-queue:
     container_name: zenflow-cache-queue-staging
     image: redis:8.8.0-alpine
@@ -468,12 +471,31 @@ services:
       - --enable-feature=exemplar-storage,native-histograms
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/scrape.d/redis-exporter.yml:/etc/prometheus/scrape.d/redis-exporter.yml:ro
+      - ./observability/prometheus/rules.d/redis-sessions.yml:/etc/prometheus/rules.d/redis-sessions.yml:ro
       - ./observability/prometheus/scrape.d/postgres-exporter.yml:/etc/prometheus/scrape.d/postgres-exporter.yml:ro
       - prometheus_data:/prometheus
     expose:
       - "9090"
     networks:
       - o11y
+
+  # Sessions Redis memory and evictions (Prometheus job `redis-exporter`, rules in
+  # observability/prometheus/rules.d/redis-sessions.yml).
+  redis-exporter:
+    container_name: zenflow-redis-exporter-staging
+    image: oliver006/redis_exporter:v1.67.0-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: redis://session-redis:6379
+    expose:
+      - "9121"
+    networks:
+      - cache
+      - o11y
+    depends_on:
+      session-redis:
+        condition: service_healthy
 
   node-exporter:
     container_name: zenflow-node-exporter-staging
