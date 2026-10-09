@@ -6,7 +6,7 @@ Disable a subsystem at runtime, no deploy. Design: [ADR-0008](../adr/0008-redis-
 
 | Flag | Off means | Fail-safe default (only while Redis is unreachable) |
 | --- | --- | --- |
-| `ingestion` | DLU/LMS sync stops: ticker claims nothing, fetch jobs and manual sync skip | **off**: protects the upstream portals |
+| `ingestion` | DLU/LMS sync stops: ticker claims nothing, already-queued scheduled fetch jobs are parked (rechecked every 60 s) and resume when back on, manual sync is refused | **off**: protects the upstream portals |
 | `notifications` | push and reminder jobs are dropped; reminder sweep pauses | **on** |
 | `bandit` | placement uses the frozen TS heuristic | **off**: heuristic is always safe |
 | `signups` | new accounts are refused (503); existing users still log in | **on** |
