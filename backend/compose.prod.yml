@@ -2,7 +2,13 @@ name: zenflow-prod
 services:
   # HTTP only (ADR-0011): no crons, ticker or reminder timers, so replicas can be
   # scaled freely. All scheduled work runs in `watcher`, queue consumers in `worker-*`.
+  #
+  # Blue-green (ADR-0013): `api` and `bandit` are templates only (never started;
+  # the `template` profile is never enabled). The app tier runs as api-blue/api-green
+  # and bandit-blue/bandit-green, driven by scripts/deploy/deploy.sh. Queue roles and
+  # `migrations` use the newest tag (ZENFLOW_API_IMAGE).
   api:
+    profiles: ["template"]
     build:
       context: ..
       dockerfile: backend/Dockerfile
@@ -53,6 +59,42 @@ services:
     deploy:
       replicas: 2
 
+  api-blue:
+    extends:
+      service: api
+    profiles: !reset []
+    image: ${ZENFLOW_API_IMAGE_BLUE:-${ZENFLOW_API_IMAGE:-zenflow-api:0.1.0-beta.0}}
+    mem_limit: 1g
+    environment:
+      BANDIT_SERVICE_URL: http://bandit-blue:8000
+    depends_on:
+      bandit-blue:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8000/api/v1/health/ready').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  api-green:
+    extends:
+      service: api
+    profiles: !reset []
+    image: ${ZENFLOW_API_IMAGE_GREEN:-${ZENFLOW_API_IMAGE:-zenflow-api:0.1.0-beta.0}}
+    mem_limit: 1g
+    environment:
+      BANDIT_SERVICE_URL: http://bandit-green:8000
+    depends_on:
+      bandit-green:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8000/api/v1/health/ready').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
   # Queue roles (ADR-0007, ADR-0011). Each serves only GET /health on :5001.
   # `watcher` is the only cron runner (ingestion ticker, reminder sweep,
   # retained-sessions, matrix decay): exactly one replica. The consumers scale
@@ -62,10 +104,12 @@ services:
   watcher:
     extends:
       service: api
+    profiles: !reset []
     container_name: zenflow-watcher-prod
     restart: unless-stopped
     environment:
       ROLE: watcher
+      BANDIT_SERVICE_URL: http://bandit-${ZENFLOW_ACTIVE_COLOUR:-blue}:8000
       QUEUE_SHUTDOWN_TIMEOUT_MS: "50000"
     stop_grace_period: 60s
     deploy:
@@ -83,10 +127,12 @@ services:
   worker-portal:
     extends:
       service: api
+    profiles: !reset []
     container_name: zenflow-worker-portal-prod
     restart: unless-stopped
     environment:
       ROLE: worker-portal
+      BANDIT_SERVICE_URL: http://bandit-${ZENFLOW_ACTIVE_COLOUR:-blue}:8000
       QUEUE_SHUTDOWN_TIMEOUT_MS: "50000"
     stop_grace_period: 60s
     deploy:
@@ -104,10 +150,12 @@ services:
   worker-lms:
     extends:
       service: api
+    profiles: !reset []
     container_name: zenflow-worker-lms-prod
     restart: unless-stopped
     environment:
       ROLE: worker-lms
+      BANDIT_SERVICE_URL: http://bandit-${ZENFLOW_ACTIVE_COLOUR:-blue}:8000
       QUEUE_SHUTDOWN_TIMEOUT_MS: "50000"
     stop_grace_period: 60s
     deploy:
@@ -125,10 +173,12 @@ services:
   worker-notify:
     extends:
       service: api
+    profiles: !reset []
     container_name: zenflow-worker-notify-prod
     restart: unless-stopped
     environment:
       ROLE: worker-notify
+      BANDIT_SERVICE_URL: http://bandit-${ZENFLOW_ACTIVE_COLOUR:-blue}:8000
       QUEUE_SHUTDOWN_TIMEOUT_MS: "50000"
     stop_grace_period: 60s
     deploy:
@@ -143,6 +193,7 @@ services:
       start_period: 30s
 
   bandit:
+    profiles: ["template"]
     container_name: zenflow-bandit-prod
     build: ../services/bandit
     image: ${ZENFLOW_BANDIT_IMAGE:-zenflow-bandit:latest}
@@ -163,6 +214,20 @@ services:
     networks:
       - bandit
       - o11y
+
+  bandit-blue:
+    extends:
+      service: bandit
+    profiles: !reset []
+    container_name: zenflow-bandit-prod-blue
+    image: ${ZENFLOW_BANDIT_IMAGE_BLUE:-${ZENFLOW_BANDIT_IMAGE:-zenflow-bandit:latest}}
+
+  bandit-green:
+    extends:
+      service: bandit
+    profiles: !reset []
+    container_name: zenflow-bandit-prod-green
+    image: ${ZENFLOW_BANDIT_IMAGE_GREEN:-${ZENFLOW_BANDIT_IMAGE:-zenflow-bandit:latest}}
 
   migrations:
     container_name: zenflow-db-migration-prod
@@ -536,13 +601,12 @@ services:
       - "443:443"
     volumes:
       - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/upstream.api.conf:/etc/nginx/zenflow/upstream.api.conf:ro
+      # Written by deploy.sh (active colour); a directory mount survives file replacement.
+      - ./state:/etc/nginx/zenflow/state:ro
       - ./nginx/snippets-proxy.conf:/etc/nginx/zenflow/snippets-proxy.conf:ro
       - ./nginx/sse.conf:/etc/nginx/zenflow/sse.conf:ro
       - letsencrypt:/etc/letsencrypt:ro
       - certbot_webroot:/var/www/certbot:ro
-    depends_on:
-      - api
     networks:
       - edge
 

@@ -18,7 +18,7 @@ Changes apply within the cache TTL (`KILLSWITCH_CACHE_TTL_MS`, default 5 s) on e
 
 ## Use
 
-On the prod/staging host, from the deploy `backend/` directory (wraps `docker compose -f compose.prod.yml exec api`; `ZENFLOW_ENV=staging` for staging). From a laptop, wrap it in SSH: `ssh <host> "cd <deploy-dir>/backend && ./killswitch status"`.
+On the prod/staging host, from the deploy `backend/` directory (wraps `docker compose -f compose.prod.yml exec api-<active colour>`; `ZENFLOW_ENV=staging` for staging). From a laptop, wrap it in SSH: `ssh <host> "cd <deploy-dir>/backend && ./killswitch status"`.
 
 ```sh
 ./killswitch status

@@ -4,8 +4,10 @@ name: Deploy
 #   images.yml   -> staging, automatically after the images are pushed
 #   release.yml  -> production, on a published release (GitHub Environment
 #                   "production" holds the required-reviewers approval gate)
-#   manual run   -> any environment, any SHA. THIS IS THE ROLLBACK PATH:
-#                   run it with the previous good SHA (docs/ops/ci-cd.md).
+#   manual run   -> any environment, any SHA. THIS IS THE ROLLBACK PATH once the
+#                   old colour is gone: run it with the previous good SHA.
+#                   mode=flip is the fast path while the old colour is still up
+#                   (docs/ops/ci-cd.md, ADR-0013).
 on:
   workflow_call:
     inputs:
@@ -22,17 +24,22 @@ on:
         type: choice
         options: [staging, production]
         required: true
+      mode:
+        description: deploy = blue-green rollout of image_tag; flip = switch back to the previous colour (image_tag ignored)
+        type: choice
+        options: [deploy, flip]
+        default: deploy
       image_tag:
-        description: Full git SHA whose images to deploy (must already be in the registry)
+        description: Full git SHA whose images to deploy (must already be in the registry; not needed for flip)
         type: string
-        required: true
+        required: false
 
 permissions:
   contents: read
 
 jobs:
   deploy:
-    name: Deploy ${{ inputs.image_tag }} -> ${{ inputs.environment }}
+    name: ${{ inputs.mode == 'flip' && 'Flip' || format('Deploy {0}', inputs.image_tag) }} -> ${{ inputs.environment }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # Environment-level protection rules (required reviewers for production)
@@ -46,6 +53,7 @@ jobs:
       packages: read
     env:
       DEPLOY_ENABLED: ${{ vars.DEPLOY_ENABLED }}
+      DEPLOY_MODE: ${{ inputs.mode == 'flip' && 'flip' || 'deploy' }}
     steps:
       - name: Skip when the target is not configured
         if: env.DEPLOY_ENABLED != 'true'
@@ -58,9 +66,9 @@ jobs:
       - uses: actions/checkout@v4
         if: env.DEPLOY_ENABLED == 'true'
         with:
-          ref: ${{ inputs.image_tag }}
+          ref: ${{ inputs.mode == 'flip' && github.sha || inputs.image_tag }}
       - name: Verify images exist for this SHA
-        if: env.DEPLOY_ENABLED == 'true'
+        if: env.DEPLOY_ENABLED == 'true' && env.DEPLOY_MODE == 'deploy'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IMAGE_TAG: ${{ inputs.image_tag }}
@@ -95,11 +103,14 @@ jobs:
         if: env.DEPLOY_ENABLED == 'true'
         env:
           DEPLOY_ENV: ${{ inputs.environment == 'production' && 'prod' || inputs.environment }}
+          DEPLOY_MODE: ${{ inputs.mode == 'flip' && 'flip' || 'deploy' }}
           IMAGE_TAG: ${{ inputs.image_tag }}
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           DEPLOY_USER: ${{ vars.DEPLOY_USER }}
           DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
           HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
+          OLD_COLOUR_TTL: ${{ vars.OLD_COLOUR_TTL }}
+          MIN_FREE_MB: ${{ vars.MIN_FREE_MB }}
           SECRETS_PROVIDER: ${{ vars.SECRETS_PROVIDER }}
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
           SECRETS_COMMAND: ${{ secrets.SECRETS_COMMAND }}
@@ -110,4 +121,7 @@ jobs:
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           export REGISTRY="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"
+          # Unset vars arrive as empty strings; let the script defaults apply.
+          [ -n "$OLD_COLOUR_TTL" ] || unset OLD_COLOUR_TTL
+          [ -n "$MIN_FREE_MB" ] || unset MIN_FREE_MB
           scripts/deploy/deploy.sh
