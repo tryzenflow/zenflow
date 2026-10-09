@@ -44,12 +44,16 @@ async function makeService(
   findMany.mockResolvedValue([]);
 
   let eventSeq = 0;
+  const claimedIds = new Set<string>();
   const tx = {
     session: {
-      update: jest.fn(
+      // Claim semantics: only the first updateMany per id wins.
+      updateMany: jest.fn(
         (args: { where: { id: string }; data: Record<string, unknown> }) => {
+          if (claimedIds.has(args.where.id)) return Promise.resolve({ count: 0 });
+          claimedIds.add(args.where.id);
           updates.push({ id: args.where.id, data: args.data });
-          return Promise.resolve({});
+          return Promise.resolve({ count: 1 });
         },
       ),
     },
@@ -133,6 +137,18 @@ describe("RetainedSessionsService.sweep", () => {
     expect(events[0].eventType).toBe("RETAINED");
     expect(events[0].rewardScore).toBeGreaterThan(0);
     expect(events[0].sessionId).toBe("s1");
+  });
+
+  it("is idempotent: an overlapping sweep records no second event", async () => {
+    const r = row({ id: "s1" });
+    const { service, events } = await makeService([[r], [r]]);
+
+    const first = await service.sweep(NOW);
+    const second = await service.sweep(NOW);
+
+    expect(first).toBe(1);
+    expect(second).toBe(0);
+    expect(events).toHaveLength(1);
   });
 
   it("skips a session whose end + grace has not yet passed", async () => {
