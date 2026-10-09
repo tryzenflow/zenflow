@@ -2,6 +2,7 @@
   "name": "@zenflow/core",
   "version": "0.1.0-beta.0",
   "private": true,
+  "license": "PolyForm-Strict-1.0.0",
   "type": "commonjs",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

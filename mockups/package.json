@@ -1,6 +1,7 @@
 {
   "name": "mobile-mockups",
   "private": true,
+  "license": "PolyForm-Strict-1.0.0",
   "version": "0.0.0",
   "scripts": {
     "build": "tailwindcss -i ./src/input.css -o ./dist/output.css",
