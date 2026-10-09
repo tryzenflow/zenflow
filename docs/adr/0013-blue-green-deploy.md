@@ -25,5 +25,5 @@ Rollback: `deploy.yml` with `mode=flip` while the old colour is up; otherwise th
 ## Consequences
 - Migrations must be backward compatible with the previous release (expand, then contract), because both colours share the database. The arm change wipes `BanditArmState`, so it ships as its own release in a short `maintenance` window ([ADR-0008](0008-redis-topology-and-kill-switch.md)).
 - The overlap temporarily doubles the app tier's memory; the host budget ([ADR-0015](0015-launch-capacity-estimate.md)) holds only with observability trimmed.
-- Vault secrets are rendered once to the tmpfs `*_FILE` mounts and shared by both colours; the root deploy-user requirement is unchanged.
+- Vault secrets are rendered once to the tmpfs `*_FILE` mounts and shared by both colours; the deploy-user ownership requirement is unchanged.
 - Uses the existing `/health/ready` endpoint; changes `compose.{prod,staging}.yml`, `deploy.yml` and `docs/ops/ci-cd.md`.

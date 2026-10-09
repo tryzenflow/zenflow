@@ -17,7 +17,7 @@
 # Optional:
 #   SECRETS_PROVIDER  host (default) | sops | command | vault   -- see docs/ops/secrets.md (vault: prod only)
 #   VAULT_ROLE_ID_FILE / VAULT_SECRET_ID_FILE  for vault: AppRole creds ON THE HOST
-#                     (default /etc/zenflow/vault/{role_id,secret_id}, root-only)
+#                     (default /etc/zenflow/vault/{role_id,secret_id}, owned by the deploy user, 600)
 #   VAULT_ADDR        for vault: address as seen from the host (default http://127.0.0.1:8200)
 #   SOPS_FILE         for sops: path to the encrypted dotenv (default backend/secrets/<env>.env.enc)
 #   SECRETS_COMMAND   for command: prints a dotenv document on stdout
@@ -181,11 +181,13 @@ export "ZENFLOW_API_IMAGE_${IDLE}=$api" "ZENFLOW_BANDIT_IMAGE_${IDLE}=$bandit"
 export ZENFLOW_ACTIVE_COLOUR="$idle"
 $compose pull "api-$idle" "bandit-$idle" $workers migrations
 if [ "$provider" = "vault" ]; then
-  # AppRole creds are root-only and /run/zenflow is a root-owned 700 dir that
-  # compose reads env_file from, so the vault flow needs a root deploy account.
-  if [ "$(id -u)" != 0 ]; then
-    echo "SECRETS_PROVIDER=vault requires DEPLOY_USER=root on the host (see docs/ops/secrets.md)" >&2; exit 1
-  fi
+  # The deploy account must own the AppRole creds and /run/zenflow (700, tmpfs) that
+  # compose reads env_file from; root is not required (see docs/ops/ci-cd.md).
+  for f in "$role_id_file" "$secret_id_file"; do
+    [ -r "$f" ] || { echo "SECRETS_PROVIDER=vault: $f is not readable by $(id -un); the deploy user must own the AppRole creds" >&2; exit 1; }
+  done
+  [ -d /run/zenflow ] && [ -w /run/zenflow ] || [ "$(id -u)" = 0 ] || {
+    echo "SECRETS_PROVIDER=vault: /run/zenflow must exist and be writable by $(id -un) (e.g. sudo install -d -o $(id -un) -m 700 /run/zenflow)" >&2; exit 1; }
   export ZENFLOW_SECRETS_DIR="/run/zenflow/${env_name}"
   $compose up -d --no-build vault
   # Vault starts sealed after any restart; unsealing is a manual, human step.

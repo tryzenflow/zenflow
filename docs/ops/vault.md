@@ -99,9 +99,19 @@ Fill in and review quarterly.
 - Auto-unseal via cloud KMS or Transit (`seal "awskms" { ... }` in `config.hcl`) is documented, **not configured**: no cloud account to bind to.
   It trades the human quorum for trust in the KMS IAM policy; migrate with `vault operator unseal -migrate`.
 
+## Deploy user
+
+`DEPLOY_USER` need not be root, but must be the owner of the AppRole creds and of `/run/zenflow`, and be able to run docker. `deploy.sh` checks both and fails with the fix. One-time, as root:
+
+```bash
+chown <user> /etc/zenflow/vault/role_id /etc/zenflow/vault/secret_id
+echo 'd /run/zenflow 0700 <user> <user>' > /etc/tmpfiles.d/zenflow.conf   # /run is tmpfs: recreated each boot
+systemd-tmpfiles --create
+```
+
 ## AppRole credential rotation
 
-`role_id` is an identifier. `secret_id` is the credential, in `/etc/zenflow/vault/secret_id` (root-only, 600) on the deploy host.
+`role_id` is an identifier. `secret_id` is the credential, in `/etc/zenflow/vault/secret_id` (600, owned by the deploy user) on the deploy host.
 It expires after 30 days: rotate at least monthly, and at once if the host or file may be exposed.
 
 1. With an admin or freshly generated root token: `ENV_NAME=prod ... setup-approle.sh --secret-id-file /creds/secret_id.new`. Old secret_ids stay valid until expiry, so there is no downtime.
