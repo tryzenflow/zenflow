@@ -28,7 +28,7 @@ async function makeSvc(over: { proposal?: unknown; updateResult?: unknown }) {
   const eventUpdate = jest.fn().mockResolvedValue({});
   const prisma = {
     slotProposal: { findFirst: slotFindFirst },
-    sessionEvent: { update: eventUpdate },
+    sessionEvent: { updateMany: eventUpdate },
   };
   const bandit = {
     update: jest
