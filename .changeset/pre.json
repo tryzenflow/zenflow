@@ -2,6 +2,7 @@
   "mode": "pre",
   "tag": "beta",
   "changesets": [
+    "file-ids-queue-release",
     "mobile-test-pyramid"
   ],
   "initialVersions": {

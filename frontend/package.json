@@ -2,7 +2,7 @@
   "name": "frontend",
   "private": true,
   "license": "PolyForm-Strict-1.0.0",
-  "version": "0.1.0-beta.0",
+  "version": "0.1.0-beta.1",
   "type": "module",
   "scripts": {
     "dev": "pnpm --filter @zenflow/core build && vite",
