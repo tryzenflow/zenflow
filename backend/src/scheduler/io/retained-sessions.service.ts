@@ -87,7 +87,7 @@ export class RetainedSessionsService {
       const elapsed = this.filterElapsed(candidates, now);
       if (elapsed.length > 0) {
         const rewarded = await this.markRetainedBatch(elapsed, now);
-        total += elapsed.length;
+        total += rewarded.length;
         await this.applyDelayedRewards(rewarded);
       }
 
@@ -146,10 +146,13 @@ export class RetainedSessionsService {
     const rewarded: RewardedSession[] = [];
     await this.prisma.$transaction(async (tx) => {
       for (const session of elapsed) {
-        await tx.session.update({
-          where: { id: session.id },
+        // Claim: an overlapping sweep (two workers during a deploy) loses the
+        // race here and must not double-record the event or reward.
+        const claimed = await tx.session.updateMany({
+          where: { id: session.id, retainedAt: null },
           data: { retainedAt: now },
         });
+        if (claimed.count === 0) continue;
         const event = await tx.sessionEvent.create({
           data: {
             sessionId: session.id,

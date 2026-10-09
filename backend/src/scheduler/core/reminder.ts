@@ -38,8 +38,12 @@ export function pickReminderStart(
 
 /** A reminder set on create/edit must fire at least this far in the future. */
 export const MIN_REMINDER_LEAD_MS = MIN_MS;
-/** A reminder missed (e.g. by a restart) by at most this much still fires. */
-export const REMINDER_CATCH_UP_MS = 2 * MIN_MS;
+/**
+ * A reminder missed by at most this much still fires. It must exceed the
+ * worker's 5-minute sweep, or a reminder saved just after a sweep (the worker
+ * only sees API edits on the next one) could land past the window and be lost.
+ */
+export const REMINDER_CATCH_UP_MS = 6 * MIN_MS;
 
 /**
  * Create/edit path: is a reminder `remindBeforeMinutes` before `startsAt` too

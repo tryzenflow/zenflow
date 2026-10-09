@@ -3,5 +3,8 @@
 }
 
 zenflow-api.alphatrann.com {
-  reverse_proxy api:5000
+  reverse_proxy {
+    # Re-resolve the service name so every api replica is balanced.
+    dynamic a api 5000
+  }
 }

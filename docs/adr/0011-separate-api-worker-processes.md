@@ -11,7 +11,7 @@
 
 ## Decision
 One image, a `ROLE` env:
-- `api`: HTTP only, no `ScheduleModule`, no cron or watcher providers. Run 2-3 processes behind nginx.
+- `api`: HTTP only, no `ScheduleModule`, no cron or watcher providers. Run 2-3 processes behind Caddy.
 - `worker`: no HTTP listener beyond `/health`; runs the crons, ingestion ticker and watchers, materializer, retained-sessions, matrix decay and the retention job ([ADR-0016](0016-telemetry-retention-and-partitioning.md)). One replica, with CPU and memory limits, in the prod and staging compose files.
 - SSE fan-out moves to Redis pub/sub ([ADR-0018](0018-redis-pubsub-instance.md)) so the worker and any replica can notify any client.
 - Reminders and retained-sessions are verified idempotent before any overlap (deploys briefly run two workers).
@@ -20,4 +20,5 @@ One image, a `ROLE` env:
 ## Consequences
 - Jobs fire once regardless of API replica count, and request latency is isolated from sync load.
 - The worker is a single point of failure for scheduled work; it restarts unattended and jobs are claim-based.
+- Manual sync stays in the API: the watcher/materializer classes load in every role; only the ticker, crons and reminder timers are worker-only. API edits reach reminder timers on the worker's next 5-minute sweep.
 - New env `ROLE`, a `worker` service, a split of module wiring in `app.module.ts` and `main.ts`.

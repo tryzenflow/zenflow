@@ -18,12 +18,12 @@ describe("planReminder", () => {
   it("fires now when the nominal time was missed by <= the catch-up window", () => {
     // start in 59 min, lead 60 -> nominal 1 min ago
     expect(planReminder(at(59), 60, now)?.fireAt).toEqual(now);
-    expect(planReminder(at(58), 60, now)?.fireAt).toEqual(now); // exactly 2 min
+    expect(planReminder(at(54), 60, now)?.fireAt).toEqual(now); // exactly 6 min
   });
   it("drops a reminder missed by more than the catch-up window", () => {
     expect(planReminder(at(20), 60, now)).toBeNull();
-    expect(planReminder(at(57.9), 60, now)).toBeNull();
-    expect(REMINDER_CATCH_UP_MS).toBe(120_000);
+    expect(planReminder(at(53.9), 60, now)).toBeNull();
+    expect(REMINDER_CATCH_UP_MS).toBe(360_000);
   });
   it("skips a session that already started or starts exactly now", () => {
     expect(planReminder(at(-5), 60, now)).toBeNull();

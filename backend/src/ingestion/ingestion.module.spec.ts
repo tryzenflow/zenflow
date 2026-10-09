@@ -6,6 +6,7 @@ import { IntegrationsService } from "../integrations/integrations.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { ExamWatcherService } from "./exam-watcher.service";
 import { IngestionModule } from "./ingestion.module";
+import { IngestionWorkerModule } from "./ingestion-worker.module";
 import { IngestionScheduleService } from "./ingestion-schedule.service";
 import { IngestionSyncService } from "./ingestion-sync.service";
 import { IngestionTickerService } from "./ingestion-ticker.service";
@@ -38,6 +39,7 @@ describe("IngestionModule ↔ IntegrationsModule", () => {
         ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }),
         ScheduleModule.forRoot(),
         IngestionModule,
+        IngestionWorkerModule,
         IntegrationsModule,
       ],
     })
