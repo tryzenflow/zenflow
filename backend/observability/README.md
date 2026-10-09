@@ -5,7 +5,7 @@ App-side instrumentation: `../src/observability/`, `../src/tracing.ts`, `service
 
 ```
  API, bandit ──OTLP/HTTP :4318──► OTel Collector ──► Tempo (traces) ──► Prometheus (span metrics, remote_write)
-                                       │──► Prometheus exporter :8889 ──► Prometheus ──► Grafana :3000
+                                       │──► Prometheus exporter :8889 ──► Prometheus ──► Grafana :3000 (behind nginx)
  container stdout ──► Alloy ──► Loki ────────────────────────────────────────────────► Grafana
  host / cgroups ──► node-exporter + cAdvisor ──► Prometheus
 ```
@@ -18,8 +18,7 @@ App-side instrumentation: `../src/observability/`, `../src/tracing.ts`, `service
 | Production | folded into `compose.prod.yml` | `GRAFANA_ADMIN_PASSWORD`, `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318` |
 
 - Run from `backend/`. Compose defaults the Grafana password to `admin` when unset; always set it.
-- Grafana (<http://localhost:3000>) binds to `127.0.0.1` in both stacks; anonymous access is off.
-- Production: reach Grafana through an SSH tunnel or an authenticated nginx route.
+- Grafana has no published port; nginx proxies it: <http://grafana.localhost> (staging) and <https://grafana.alphatrann.com> (prod, own Let's Encrypt cert: `DOMAIN=grafana.alphatrann.com ./nginx/init-cert.sh`, DNS A record first). Anonymous access is off; prod refuses to start without `GRAFANA_ADMIN_PASSWORD`.
 - Dashboards are in the **Zenflow** folder. **Explore** has Tempo, Loki and Prometheus wired.
 - Staging adds `postgres-exporter` (scrape file `prometheus/scrape.d/postgres-exporter.yml`) and a fake DLU upstream for [the staging load test](../../loadtest/staging/README.md).
 - cAdvisor sees only the aggregate `/docker` cgroup on containerd image stores (Colima, recent Docker Engine); see the `cadvisor` service comment.
@@ -50,6 +49,7 @@ Names and labels are an API: update the dashboards with them. Definitions: `../s
 | `scheduler.proposals` | `scheduler_proposals_total` |
 | `scheduler.cron.duration` (s) | `scheduler_cron_duration_seconds_bucket` |
 | `ingestion.last_success.timestamp` (s) | `ingestion_last_success_timestamp_seconds` |
+| (textfile, `backup` container) | `zenflow_backup_last_success_timestamp_seconds`, `zenflow_backup_last_size_bytes`, `zenflow_backup_restore_last_success_timestamp_seconds` |
 | `bandit.update.duration` (s) | `bandit_update_duration_seconds_bucket` |
 | `bandit.linucb.cold_arms` | `bandit_linucb_cold_arms_{sum,count}` |
 
