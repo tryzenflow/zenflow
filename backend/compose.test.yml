@@ -38,7 +38,7 @@ services:
   # -f compose.test.yml up -d`. Cache and rate-limit use 7379/7380 (the stack
   # overrides CACHE_URL and RATE_LIMIT_CACHE_URL for its processes); queue/pubsub
   # use 7381/7382, so nothing clashes with dev's 6379-6382 or the main e2e stack.
-  redis:
+  session-redis:
     container_name: zenflow-test-cache
     profiles: ["queue"]
     image: redis:8.8.0-alpine

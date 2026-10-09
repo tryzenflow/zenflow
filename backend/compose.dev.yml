@@ -12,7 +12,7 @@ services:
     networks:
       - db
 
-  redis:
+  session-redis:
     container_name: zenflow-cache
     image: redis:8.8.0-alpine
     ports:

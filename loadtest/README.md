@@ -19,7 +19,7 @@ The bandit container runs for all three, built from that commit's `services/band
 | Path | Role |
 | --- | --- |
 | `Dockerfile.api` | API image (build context = a variant's worktree root) |
-| `compose.loadtest.yml` | postgres (`pg_stat_statements`), redis x2, mailhog, bandit, api; explicit limits |
+| `compose.loadtest.yml` | postgres (`pg_stat_statements`), session-redis + redis-ratelimit, mailhog, bandit, api; explicit limits |
 | `scripts/lib.js` | OTP login, date helpers, fixed-load plans (light/medium/heavy) |
 | `scripts/seed.js` | seeds 50 users per level via the API; prints session cookies |
 | `scripts/run.js` | workload: `mix`, `task`, `series`, `infeasible`; constant, steady or arrival |
@@ -102,7 +102,7 @@ Recorded per scenario:
 - p50/p95/p99 per operation and overall, throughput.
 - Status classes: ok, 409, 503, 4xx, 5xx, connection error.
 - Response flags: `late`, `conflict`, `displaced`, `schedulingDegraded`.
-- `docker stats` (CPU%, memory) for api, bandit, postgres, redis.
+- `docker stats` (CPU%, memory) for api, bandit, postgres, session-redis.
 - `pg_stat_statements` totals (statements per request) and top statements.
 - `Server-Timing` per phase: `dayload`, `http`, `scan`, `predict`, `db_apply` (`BENCH_TIMING=1` on B and C; not in A).
 
