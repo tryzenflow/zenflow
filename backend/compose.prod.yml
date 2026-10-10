@@ -321,8 +321,14 @@ services:
     container_name: zenflow-cache-prod
     image: redis:8.8.0-alpine
     restart: unless-stopped
+    env_file:
+      # This instance's password only (Vault set `session-redis`); start.sh refuses to run without it.
+      - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/session-redis/files.env
+        required: false
+    environment:
+      REDIS_PASSWORD_VAR: SESSION_REDIS_PASSWORD
+    entrypoint: ["sh", "/opt/redis/start.sh"]
     command:
-      - redis-server
       - --maxmemory
       - 192mb
       - --maxmemory-policy
@@ -334,6 +340,7 @@ services:
       - --save
       - "1800 1"
     volumes:
+      - ./ops/redis:/opt/redis:ro
       - redis_data:/data
     expose:
       - "6379"
@@ -341,7 +348,7 @@ services:
       - cache
     mem_limit: 256m
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", 'REDISCLI_AUTH="$$SESSION_REDIS_PASSWORD" redis-cli ping | grep -q PONG']
       interval: 5s
       timeout: 3s
       retries: 5
@@ -352,8 +359,14 @@ services:
     container_name: zenflow-cache-ratelimit-prod
     image: redis:8.8.0-alpine
     restart: unless-stopped
+    env_file:
+      # This instance's password only (Vault set `redis-ratelimit`); start.sh refuses to run without it.
+      - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/redis-ratelimit/files.env
+        required: false
+    environment:
+      REDIS_PASSWORD_VAR: RATE_LIMIT_REDIS_PASSWORD
+    entrypoint: ["sh", "/opt/redis/start.sh"]
     command:
-      - redis-server
       - --maxmemory
       - 64mb
       - --maxmemory-policy
@@ -363,6 +376,7 @@ services:
       - --appendonly
       - "no"
     volumes:
+      - ./ops/redis:/opt/redis:ro
       - redis_ratelimit_data:/data
     expose:
       - "6379"
@@ -370,7 +384,7 @@ services:
       - ratelimit
     mem_limit: 128m
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", 'REDISCLI_AUTH="$$RATE_LIMIT_REDIS_PASSWORD" redis-cli ping | grep -q PONG']
       interval: 5s
       timeout: 3s
       retries: 5
@@ -381,8 +395,14 @@ services:
     container_name: zenflow-cache-queue-prod
     image: redis:8.8.0-alpine
     restart: unless-stopped
+    env_file:
+      # This instance's password only (Vault set `redis-queue`); start.sh refuses to run without it.
+      - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/redis-queue/files.env
+        required: false
+    environment:
+      REDIS_PASSWORD_VAR: QUEUE_REDIS_PASSWORD
+    entrypoint: ["sh", "/opt/redis/start.sh"]
     command:
-      - redis-server
       - --maxmemory
       - 192mb
       - --maxmemory-policy
@@ -392,6 +412,7 @@ services:
       - --appendfsync
       - everysec
     volumes:
+      - ./ops/redis:/opt/redis:ro
       - redis_queue_data:/data
     expose:
       - "6379"
@@ -399,7 +420,7 @@ services:
       - queue
     mem_limit: 256m
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", 'REDISCLI_AUTH="$$QUEUE_REDIS_PASSWORD" redis-cli ping | grep -q PONG']
       interval: 5s
       timeout: 3s
       retries: 5
@@ -411,8 +432,14 @@ services:
     container_name: zenflow-cache-killswitch-prod
     image: redis:8.8.0-alpine
     restart: unless-stopped
+    env_file:
+      # This instance's password only (Vault set `redis-killswitch`); start.sh refuses to run without it.
+      - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/redis-killswitch/files.env
+        required: false
+    environment:
+      REDIS_PASSWORD_VAR: REDIS_KILLSWITCH_PASSWORD
+    entrypoint: ["sh", "/opt/redis/start.sh"]
     command:
-      - redis-server
       - --maxmemory
       - 32mb
       - --maxmemory-policy
@@ -422,6 +449,7 @@ services:
       - --appendfsync
       - everysec
     volumes:
+      - ./ops/redis:/opt/redis:ro
       - redis_killswitch_data:/data
     expose:
       - "6379"
@@ -429,7 +457,7 @@ services:
       - queue
     mem_limit: 64m
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", 'REDISCLI_AUTH="$$REDIS_KILLSWITCH_PASSWORD" redis-cli ping | grep -q PONG']
       interval: 5s
       timeout: 3s
       retries: 5
@@ -439,21 +467,29 @@ services:
     container_name: zenflow-cache-pubsub-prod
     image: redis:8.8.0-alpine
     restart: unless-stopped
+    env_file:
+      # This instance's password only (Vault set `redis-pubsub`); start.sh refuses to run without it.
+      - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/redis-pubsub/files.env
+        required: false
+    environment:
+      REDIS_PASSWORD_VAR: REDIS_PUBSUB_PASSWORD
+    entrypoint: ["sh", "/opt/redis/start.sh"]
     command:
-      - redis-server
       - --maxmemory
       - 32mb
       - --save
       - ""
       - --appendonly
       - "no"
+    volumes:
+      - ./ops/redis:/opt/redis:ro
     expose:
       - "6379"
     networks:
       - pubsub
     mem_limit: 64m
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", 'REDISCLI_AUTH="$$REDIS_PUBSUB_PASSWORD" redis-cli ping | grep -q PONG']
       interval: 5s
       timeout: 3s
       retries: 5
@@ -559,6 +595,11 @@ services:
     container_name: zenflow-redis-exporter-prod
     image: oliver006/redis_exporter:v1.67.0-alpine
     restart: unless-stopped
+    # Scrapes the password-protected session Redis: reads the same Vault set as that instance.
+    entrypoint: ["/bin/sh", "-c", 'REDIS_PASSWORD="$$SESSION_REDIS_PASSWORD" exec /redis_exporter']
+    env_file:
+      - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/session-redis/files.env
+        required: false
     environment:
       REDIS_ADDR: redis://session-redis:6379
     expose:

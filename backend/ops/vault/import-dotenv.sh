@@ -5,7 +5,7 @@
 #     ./ops/vault/import-dotenv.sh .env.prod
 #
 # Imports SECRETS ONLY into one set per consumer under secret/zenflow/$VAULT_ENV/:
-# api, bandit, postgres, minio, grafana, backup (see secret_sets below; a secret a
+# api, bandit, postgres, minio, grafana, backup and one per Redis instance (see classify below; a secret a
 # few containers share is written to each of their sets). Known non-secret keys
 # stay in the env file (backend/env/<env>.env) and are only listed. An unknown key
 # is an error, so nothing lands in a set by default. It does not source the dotenv
@@ -33,8 +33,12 @@ classify() {
     BANDIT_SERVICE_TOKEN_PREVIOUS) echo bandit ;;
     GF_SECURITY_ADMIN_PASSWORD|GF_SMTP_PASSWORD) echo grafana ;;
     BACKUP_S3_ACCESS_KEY_ID|BACKUP_S3_SECRET_ACCESS_KEY|BACKUP_AGE_IDENTITY) echo backup ;;
-    SESSION_REDIS_PASSWORD|RATE_LIMIT_REDIS_PASSWORD|QUEUE_REDIS_PASSWORD|REDIS_KILLSWITCH_PASSWORD|REDIS_PUBSUB_PASSWORD)
-      echo "import-dotenv: $1 has no set: prod Redis runs without requirepass. Remove it, or add a redis set if you enable one" >&2; return 1 ;;
+    # One password per Redis instance: the app (api set) and that instance's own set.
+    SESSION_REDIS_PASSWORD) echo "api session-redis" ;;
+    RATE_LIMIT_REDIS_PASSWORD) echo "api redis-ratelimit" ;;
+    QUEUE_REDIS_PASSWORD) echo "api redis-queue" ;;
+    REDIS_KILLSWITCH_PASSWORD) echo "api redis-killswitch" ;;
+    REDIS_PUBSUB_PASSWORD) echo "api redis-pubsub" ;;
     # Known non-secrets: identifiers, hosts, ports, URLs without credentials, tunables.
     DB_HOST|DB_PORT|DB_SCHEMA|DB_SSLMODE|POSTGRES_USER|POSTGRES_DB) echo env ;;
     SESSION_REDIS_HOST|SESSION_REDIS_PORT|RATE_LIMIT_REDIS_HOST|RATE_LIMIT_REDIS_PORT|QUEUE_REDIS_HOST|QUEUE_REDIS_PORT|REDIS_KILLSWITCH_HOST|REDIS_KILLSWITCH_PORT|REDIS_PUBSUB_HOST|REDIS_PUBSUB_PORT) echo env ;;
@@ -114,7 +118,7 @@ put_set() {
   echo "imported $set"
 }
 
-for set in api bandit postgres minio grafana backup; do put_set "$set"; done
+for set in api bandit postgres minio grafana backup session-redis redis-ratelimit redis-queue redis-killswitch redis-pubsub; do put_set "$set"; done
 if [ "$dry_run" = --dry-run ]; then
   printf 'left in env (not imported): '
   payload_for env | jq -r '.data | keys[]' | paste -sd, -

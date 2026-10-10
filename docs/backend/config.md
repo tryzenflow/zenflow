@@ -13,7 +13,7 @@ For: developers and operators setting up the API. Source of truth: the Joi schem
 | --- | --- | --- |
 | `DB_HOST` / `DB_PORT` / `DB_SCHEMA` / `DB_SSLMODE` | none / 5432 / `public` / unset | `DB_HOST` required. Postgres is composed from parts in `src/common/config/connections.ts`; there is no `DATABASE_URL`. |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | none | Required. The same vars the Postgres container reads, so there is one password. |
-| `SESSION_REDIS_HOST` / `SESSION_REDIS_PORT` / `SESSION_REDIS_PASSWORD` | none / 6379 / unset | `SESSION_REDIS_HOST` required. Redis for sessions and OTP codes. |
+| `SESSION_REDIS_HOST` / `SESSION_REDIS_PORT` / `SESSION_REDIS_PASSWORD` | none / 6379 / unset | `SESSION_REDIS_HOST` required. Every Redis below takes the same three settings per prefix; the password is optional here and required by the prod Redis containers. Redis for sessions and OTP codes. |
 | `REDIS_KILLSWITCH_HOST` / `_PORT` / `_PASSWORD` | none / 6379 / unset | Host required in production ([kill switch](../ops/kill-switch.md)); unset elsewhere = fail-safe defaults only. |
 | `RATE_LIMIT_REDIS_HOST` / `_PORT` / `_PASSWORD` | none / 6379 / unset | Host required. Dedicated Redis for LimitKit; see [ADR-0005](../adr/0005-rate-limit-store-lru-rdb.md). |
 | `CORS_ORIGIN` | none | Required. |

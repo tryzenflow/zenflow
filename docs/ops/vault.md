@@ -18,9 +18,9 @@ Image `hashicorp/vault` is pinned in `compose.prod.yml`; bump deliberately (Depe
 | Item | Value |
 | --- | --- |
 | KV mount | v2 at `secret/` |
-| Secret sets | one per consumer, `secret/zenflow/<env>/<set>`: `api` (Nest app: `api`, `watcher`, `worker-*`, `migrations`), `bandit`, `postgres`, `minio`, `grafana`, `backup` |
+| Secret sets | one per consumer, `secret/zenflow/<env>/<set>`: `api` (Nest app: `api`, `watcher`, `worker-*`, `migrations`), `bandit`, `postgres`, `minio`, `grafana`, `backup`, and one per Redis instance: `session-redis`, `redis-ratelimit`, `redis-queue`, `redis-killswitch`, `redis-pubsub` |
 | Keys | secrets only, by env var name (`SESSION_SECRET`, `POSTGRES_PASSWORD`, `MASTER_LMS_ENCRYPTION_KEY_V1`, ...). Hosts, ports, usernames and bucket names are not secrets and live in `backend/env/prod.env` |
-| Shared keys | written to every set that needs them: `POSTGRES_PASSWORD` (`api`, `postgres`, `backup`), `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` (`api`, `minio`), `BANDIT_SERVICE_TOKEN` (`api`, `bandit`) |
+| Shared keys | written to every set that needs them: `POSTGRES_PASSWORD` (`api`, `postgres`, `backup`), `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` (`api`, `minio`), `BANDIT_SERVICE_TOKEN` (`api`, `bandit`), each `*_REDIS_PASSWORD` (`api` and that instance's set; the session one also reaches `redis-exporter`) |
 | Policy `zenflow-api-<env>` | `read` on each set's `secret/data/zenflow/<env>/<set>` path, listed explicitly; no wildcard, list, write or other environments. A new set needs a line in `policy.hcl` and a re-run of `setup-approle.sh` |
 | AppRole `zenflow-api-<env>` | token TTL 10 min (max 30), `secret_id` valid 30 days |
 | Rendered files | `/run/zenflow/<env>/<set>/` on the host tmpfs: one file per key plus `files.env` |
@@ -69,6 +69,13 @@ Its healthcheck treats sealed or uninitialised as "process up" (`sealedcode=200&
    $V kv put -mount=secret zenflow/prod/minio S3_ACCESS_KEY_ID=... S3_SECRET_ACCESS_KEY=...
    $V kv put -mount=secret zenflow/prod/grafana GF_SECURITY_ADMIN_PASSWORD=... GF_SMTP_PASSWORD=...
    $V kv put -mount=secret zenflow/prod/backup POSTGRES_PASSWORD=... BACKUP_S3_ACCESS_KEY_ID=... BACKUP_S3_SECRET_ACCESS_KEY=... BACKUP_AGE_IDENTITY=...
+   # One password per Redis instance (openssl rand -hex 24): in `api` too, and in that instance's own set.
+   $V kv patch -mount=secret zenflow/prod/api SESSION_REDIS_PASSWORD=... RATE_LIMIT_REDIS_PASSWORD=... QUEUE_REDIS_PASSWORD=... REDIS_KILLSWITCH_PASSWORD=... REDIS_PUBSUB_PASSWORD=...
+   $V kv put -mount=secret zenflow/prod/session-redis SESSION_REDIS_PASSWORD=...
+   $V kv put -mount=secret zenflow/prod/redis-ratelimit RATE_LIMIT_REDIS_PASSWORD=...
+   $V kv put -mount=secret zenflow/prod/redis-queue QUEUE_REDIS_PASSWORD=...
+   $V kv put -mount=secret zenflow/prod/redis-killswitch REDIS_KILLSWITCH_PASSWORD=...
+   $V kv put -mount=secret zenflow/prod/redis-pubsub REDIS_PUBSUB_PASSWORD=...
    sudo install -d -m 700 /etc/zenflow/vault
    docker run --rm --network container:zenflow-vault-prod -v $PWD/backend/ops/vault:/ops:ro \
      -v /etc/zenflow/vault:/creds -e VAULT_ADDR=http://127.0.0.1:8200 -e VAULT_TOKEN -e ENV_NAME=prod \
@@ -97,6 +104,14 @@ Done once, by the root-token holder (or `generate-root` with three shares):
 3. `import-dotenv.sh .env.prod --dry-run`, then for real. Old KV versions stay, so nothing is lost.
 4. Copy the non-secret keys into `backend/env/prod.env` and merge that PR, then deploy.
 5. After the stack is healthy, delete the retired `platform` set: `vault kv metadata delete -mount=secret zenflow/prod/platform`.
+
+### Turning on Redis passwords on a running stack
+
+Prod Redis used to run open on internal networks. The first deploy with passwords restarts every Redis with `requirepass` before the new app colour starts, so the colour still serving cannot reach Redis until the flip: sessions, OTP, rate limits, queues and SSE fail for a short window (jobs and sessions persist on the AOF volumes). Do it off-peak.
+
+1. Generate five passwords and write each to `api` and its own set (above), or add the `*_REDIS_PASSWORD` lines to the `.env.prod` you import from.
+2. Re-run `setup-approle.sh` so the policy lists the five new set paths.
+3. Deploy. Check `docker compose ps` is healthy and `docker exec zenflow-cache-prod redis-cli ping` answers `NOAUTH`.
 
 ### After a Vault restart or host reboot
 
@@ -179,6 +194,7 @@ The runbooks in [secrets.md](secrets.md#rotation-runbooks) apply with two change
 | Secret | Vault specifics |
 | --- | --- |
 | `SESSION_SECRET` | patch, deploy; all users are logged out |
+| Redis password | patch the value in `api` **and** the instance's own set, deploy; brief outage for that instance, see [secrets.md](secrets.md#redis-passwords) |
 | Database password | run the `ALTER USER` step, patch `POSTGRES_PASSWORD` in all three sets (`api`, `postgres`, `backup`), then deploy; dynamic DB credentials are post-MVP |
 | Crypto master keys | add `MASTER_*_ENCRYPTION_KEY_V2` with `kv patch`, ship the code change, deploy |
 
