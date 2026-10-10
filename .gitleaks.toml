@@ -16,9 +16,8 @@ paths = [
   '''backend/src/devices/apns\.sender\.spec\.ts''',  # one synthetic private-key fixture
   '''packages/shared/contract/.*''',
 ]
-
-# Placeholder text (`VAULT_TOKEN=<initial-root-token>`), not a credential; the docs no longer contain it.
-# The PR's earlier commit still does, so the commit-range scan needs this fingerprint.
-fingerprints = [
-  "90e96670296ab08179a1bb5b98abc2ee224bd585:docs/ops/vault.md:generic-api-key:74",
+# Placeholder, not a credential: an earlier commit in the vault PR documented it; the docs no longer do.
+regexTarget = "line"
+regexes = [
+  '''VAULT_TOKEN=<initial-root-token>''',
 ]
