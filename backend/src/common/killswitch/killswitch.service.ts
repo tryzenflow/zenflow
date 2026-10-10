@@ -55,7 +55,7 @@ type KillSwitchRedis = Redis & {
 /**
  * Reads and writes runtime flags on the dedicated kill-switch Redis. Reads
  * are served from a short-TTL in-process snapshot refreshed for all flags in
- * a single Lua call, and never throw: an unset URL, an outage or a timeout
+ * a single Lua call, and never throw: an unset host, an outage or a timeout
  * resolves to each flag's documented fail-safe default.
  */
 @Injectable()
@@ -85,13 +85,13 @@ export class KillSwitchService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Operator read: the stored values, with no fallback. Throws when the URL is
+   * Operator read: the stored values, with no fallback. Throws when the host is
    * unset or Redis cannot be read, so an operator never mistakes a default for
    * saved state during an incident. Flags never toggled report their normal
    * value.
    */
   async readStrict(): Promise<Record<KillSwitchFlag, boolean>> {
-    if (!this.redis) throw new Error("REDIS_KILLSWITCH_URL is not configured");
+    if (!this.redis) throw new Error("REDIS_KILLSWITCH_HOST is not configured");
     await this.whenReady(this.redis);
     const raw = await this.redis.ksReadAll(
       String(KILLSWITCH_FLAG_NAMES.length),
@@ -144,7 +144,7 @@ export class KillSwitchService implements OnModuleInit, OnModuleDestroy {
     reason: string,
   ): Promise<void> {
     if (!this.redis) {
-      throw new Error("REDIS_KILLSWITCH_URL is not configured");
+      throw new Error("REDIS_KILLSWITCH_HOST is not configured");
     }
     await this.whenReady(this.redis);
     await this.redis.ksSet(

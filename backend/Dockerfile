@@ -49,6 +49,9 @@ COPY --from=builder /app/deploy/package.json ./package.json
 COPY --from=builder /app/backend/dist ./dist
 COPY --from=builder /app/backend/prisma ./prisma
 COPY --from=builder /app/backend/generated ./generated
+# The migrations service runs the Prisma CLI through this wrapper, which composes
+# DATABASE_URL from DB_HOST/POSTGRES_* (the app itself never reads a URL var).
+COPY --from=builder /app/backend/scripts/with-database-url.cjs ./scripts/with-database-url.cjs
 
 # Secrets are never baked in: env files are excluded by .dockerignore and the
 # platform injects them at runtime, either as env vars or as FOO_FILE=/path

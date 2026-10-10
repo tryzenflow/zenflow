@@ -4,6 +4,7 @@ import { Global, Module } from "@nestjs/common";
 import { MailService } from "./mail.service";
 import { join } from "path";
 import { ConfigModule, ConfigService } from "@nestjs/config";
+import { mailTransport } from "../common/config/connections";
 import { PrismaModule } from "../prisma/prisma.module";
 
 @Global()
@@ -14,7 +15,7 @@ import { PrismaModule } from "../prisma/prisma.module";
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        transport: config.get("MAIL_TRANSPORT"),
+        transport: mailTransport((key) => config.get(key)),
         defaults: {
           from: `"Zenflow" <${config.get("MAIL_FROM")}>`,
         },

@@ -1,8 +1,9 @@
 #!/bin/sh
 # Expand Docker/Kubernetes-style FOO_FILE=/path secrets into FOO before exec.
 # The Node app does this itself (src/common/config/file-secrets.ts), but the
-# Prisma CLI (`prisma migrate deploy`, run by the migrations service) reads
-# DATABASE_URL straight from the environment and never loads that module.
+# Prisma CLI (`prisma migrate deploy`, run by the migrations service through
+# scripts/with-database-url.cjs) never loads that module, so POSTGRES_PASSWORD_FILE
+# has to be expanded here before the wrapper composes DATABASE_URL.
 # An already-set FOO wins. Values never reach stdout/stderr.
 set -eu
 

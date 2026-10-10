@@ -94,7 +94,7 @@ describe("KillSwitchService", () => {
         expect(await ks.isEnabled(flag)).toBe(KILLSWITCH_FLAGS[flag].failSafe);
       });
 
-      it("is not used when the URL is unset or the key was never set", async () => {
+      it("is not used when the host is unset or the key was never set", async () => {
         expect(await (await build(null)).isEnabled(flag)).toBe(
           KILLSWITCH_FLAGS[flag].normal,
         );
@@ -138,9 +138,9 @@ describe("KillSwitchService", () => {
       );
     });
 
-    it("rejects when REDIS_KILLSWITCH_URL is unset", async () => {
+    it("rejects when REDIS_KILLSWITCH_HOST is unset", async () => {
       await expect((await build(null)).readStrict()).rejects.toThrow(
-        "REDIS_KILLSWITCH_URL",
+        "REDIS_KILLSWITCH_HOST",
       );
     });
   });

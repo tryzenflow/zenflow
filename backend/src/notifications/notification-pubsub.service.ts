@@ -8,6 +8,10 @@ import { ConfigService } from "@nestjs/config";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import Redis, { type RedisOptions } from "ioredis";
 import type { Notification } from "../../generated/prisma";
+import {
+  redisOptions,
+  type RedisConnection,
+} from "../common/config/connections";
 import { parseRole, runsHttp } from "../common/config/role";
 import {
   ssePubsubDelivered,
@@ -43,7 +47,7 @@ export function reviveNotification(raw: Record<string, unknown>): Notification {
  * SSE fan-out across processes (ADR-0018, #133).
  *
  * `publish()` sends a notification event to the dedicated pub/sub Redis
- * (`REDIS_PUBSUB_URL`); every process that serves HTTP subscribes once and
+ * (`REDIS_PUBSUB_HOST`); every process that serves HTTP subscribes once and
  * re-emits into the local `emitter` that `GET /notifications/stream` reads, so
  * a row raised by a worker or another API replica reaches the client's own
  * connection.
@@ -54,7 +58,7 @@ export function reviveNotification(raw: Record<string, unknown>): Notification {
  * endpoint is the source of truth after a reconnect. ioredis reconnects and
  * resubscribes on its own.
  *
- * Without `REDIS_PUBSUB_URL` (tests, a bare dev box) events are emitted
+ * Without `REDIS_PUBSUB_HOST` (tests, a bare dev box) events are emitted
  * locally and nothing connects.
  */
 @Injectable()
@@ -65,10 +69,10 @@ export class NotificationPubSub implements OnModuleInit, OnApplicationShutdown {
   private subscriber?: Redis;
 
   constructor(private readonly config: ConfigService) {
-    const url = config.get<string>("REDIS_PUBSUB_URL");
-    if (!url) return;
+    const connection = redisOptions((key) => config.get(key), "REDIS_PUBSUB");
+    if (!connection) return;
     const timeout = config.get<number>("REDIS_PUBSUB_TIMEOUT_MS") ?? 250;
-    this.publisher = this.client(url, {
+    this.publisher = this.client(connection, {
       commandTimeout: timeout,
       maxRetriesPerRequest: 1,
       enableOfflineQueue: false,
@@ -81,10 +85,13 @@ export class NotificationPubSub implements OnModuleInit, OnApplicationShutdown {
   }
 
   onModuleInit(): void {
-    const url = this.config.get<string>("REDIS_PUBSUB_URL");
-    if (!url) return;
+    const connection = redisOptions(
+      (key) => this.config.get(key),
+      "REDIS_PUBSUB",
+    );
+    if (!connection) return;
     if (!runsHttp(parseRole(this.config.get<string>("ROLE")))) return;
-    const sub = this.client(url, {});
+    const sub = this.client(connection, {});
     this.subscriber = sub;
     sub.on("message", (_channel: string, message: string) =>
       this.onMessage(message),
@@ -132,10 +139,11 @@ export class NotificationPubSub implements OnModuleInit, OnApplicationShutdown {
     }
   }
 
-  private client(url: string, extra: RedisOptions) {
-    const client = new Redis(url, {
+  private client(connection: RedisConnection, extra: RedisOptions) {
+    const client = new Redis({
+      ...connection,
       // Never lazy: a lazy publisher with the offline queue off rejects its
-      // first publish and would not connect until then. Without a URL no
+      // first publish and would not connect until then. Without a host no
       // client is built at all (tests), so nothing connects in suites.
       ...extra,
     });

@@ -15,15 +15,19 @@ cat > "$out" <<ENV
 POSTGRES_USER=ci
 POSTGRES_PASSWORD=${pg_pass}
 POSTGRES_DB=zenflow-test
-DATABASE_URL=postgresql://ci:${pg_pass}@localhost:5433/zenflow-test?schema=public
-CACHE_URL=redis://localhost:6379
-RATE_LIMIT_CACHE_URL=redis://localhost:6380
-# QUEUE_REDIS_URL and REDIS_PUBSUB_URL stay unset on purpose: the suites use the
+DB_HOST=localhost
+DB_PORT=5433
+CACHE_HOST=localhost
+CACHE_PORT=6379
+RATE_LIMIT_CACHE_HOST=localhost
+RATE_LIMIT_CACHE_PORT=6380
+# QUEUE_REDIS_HOST and REDIS_PUBSUB_HOST stay unset on purpose: the suites use the
 # in-memory queue fallback and in-process SSE events, so no extra Redis is needed.
 # The queue e2e suite (test/queue) defaults to compose.test.yml's queue profile
 # on 127.0.0.1:7381 (queue) and :7382 (pub/sub) and passes them to its processes.
 CORS_ORIGIN=http://localhost:5173
-MAIL_TRANSPORT=smtp://localhost:1025
+MAIL_HOST=localhost
+MAIL_PORT=1025
 MAIL_FROM=noreply@example.com
 SESSION_SECRET=$(rnd 32)
 FILE_URL_SECRET=$(rnd 32)

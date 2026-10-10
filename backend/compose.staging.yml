@@ -62,9 +62,9 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       # Pinned here, not left to .env.staging: a missing value would fall back to the REAL DLU hosts, and the load
       # test drives hundreds of synthetic accounts. These must only ever point at fake-dlu.
-      QUEUE_REDIS_URL: redis://redis-queue:6379
-      REDIS_KILLSWITCH_URL: redis://redis-killswitch:6379
-      REDIS_PUBSUB_URL: redis://redis-pubsub:6379
+      QUEUE_REDIS_HOST: redis-queue
+      REDIS_KILLSWITCH_HOST: redis-killswitch
+      REDIS_PUBSUB_HOST: redis-pubsub
       LMS_URL: http://fake-dlu:4100
       PORTAL_API_URL: http://fake-dlu:4100
       PORTAL_API_KEY: fake-portal-key

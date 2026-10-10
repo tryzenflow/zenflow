@@ -9,6 +9,7 @@ import { CacheModule } from "@nestjs/cache-manager";
 import { createKeyv } from "@keyv/redis";
 import { Keyv } from "keyv";
 import { CacheableMemory } from "cacheable";
+import { redisOptions, redisUrl } from "./common/config/connections";
 import { MailService } from "./mail/mail.service";
 import { MailModule } from "./mail/mail.module";
 import { UsersModule } from "./users/users.module";
@@ -49,6 +50,17 @@ import { RemindersWorkerModule } from "./reminders/reminders-worker.module";
 import { HealthModule } from "./health/health.module";
 
 const configEnvFile = envFilePath();
+// `<PREFIX>_HOST` / `_PORT` / `_PASSWORD` for one Redis instance (connections.ts).
+// Connections are composed from parts, never read from a URL var.
+const redisEnv = (prefix: string, host: Joi.StringSchema) => ({
+  [`${prefix}_HOST`]: host,
+  [`${prefix}_PORT`]: Joi.number().port().default(6379),
+  [`${prefix}_PASSWORD`]: Joi.string().optional(),
+});
+const requiredInProduction = Joi.string().when("NODE_ENV", {
+  is: "production",
+  then: Joi.required(),
+});
 // Process role (ADR-0011), fixed at module-evaluation time.
 const role = getRole();
 // The watcher (cron heartbeat that enqueues) and each queue consumer register
@@ -76,7 +88,18 @@ const jobModules = [
         ? { envFilePath: configEnvFile }
         : { ignoreEnvFile: true }),
       validationSchema: Joi.object({
-        DATABASE_URL: Joi.string().required(),
+        // Postgres, composed in connections.ts (the Prisma CLI gets DATABASE_URL
+        // from scripts/with-database-url.cjs). POSTGRES_* are the same vars the
+        // Postgres container reads, so there is one password.
+        DB_HOST: Joi.string().required(),
+        DB_PORT: Joi.number().port().default(5432),
+        POSTGRES_USER: Joi.string().required(),
+        POSTGRES_PASSWORD: Joi.string().required(),
+        POSTGRES_DB: Joi.string().required(),
+        DB_SCHEMA: Joi.string().default("public"),
+        DB_SSLMODE: Joi.string()
+          .valid("disable", "prefer", "require", "verify-ca", "verify-full")
+          .optional(),
         SESSION_SECRET: Joi.string().required(),
         // Per-provider master keys for the DLU-credential envelope scheme (see
         // crypto/). 32 bytes, hex-encoded (64 chars) each. Each one wraps that
@@ -106,18 +129,23 @@ const jobModules = [
         // Where multer buffers uploads before they move to S3. Defaults to the
         // OS temp dir.
         UPLOAD_TMP_DIR: Joi.string().optional(),
-        CACHE_URL: Joi.string().uri().required(),
+        // Session/OTP Redis.
+        ...redisEnv("CACHE", Joi.string().required()),
         // Separate Redis instance dedicated to LimitKit's rate-limit
         // counters (see common/rate-limit/) — kept off the session/OTP
-        // Redis (CACHE_URL) so counter churn can't evict that data.
-        RATE_LIMIT_CACHE_URL: Joi.string().uri().required(),
+        // Redis (CACHE_*) so counter churn can't evict that data.
+        ...redisEnv("RATE_LIMIT_CACHE", Joi.string().required()),
         // Dedicated noeviction + AOF Redis for runtime kill-switch flags
         // (ADR-0008). Unset outside production = fail-safe defaults only.
-        REDIS_KILLSWITCH_URL: Joi.string()
-          .uri()
-          .when("NODE_ENV", { is: "production", then: Joi.required() }),
+        ...redisEnv("REDIS_KILLSWITCH", requiredInProduction),
         KILLSWITCH_CACHE_TTL_MS: Joi.number().integer().min(0).optional(),
-        MAIL_TRANSPORT: Joi.string().uri().required(),
+        // SMTP, composed into a nodemailer transport in connections.ts. No
+        // MAIL_USER = unauthenticated (Mailpit, dev).
+        MAIL_HOST: Joi.string().required(),
+        MAIL_PORT: Joi.number().port().default(587),
+        MAIL_SECURE: Joi.boolean().default(false),
+        MAIL_USER: Joi.string().optional(),
+        MAIL_PASSWORD: Joi.string().allow("").optional(),
         MAIL_FROM: Joi.string().email().required(),
         // Idle session lifetime in ms; with rolling sessions, active use keeps
         // extending it. Defaults to 7 days. Drives both the cookie maxAge and
@@ -378,13 +406,9 @@ const jobModules = [
         // --- Job queues (queue/, BullMQ; ADR-0007) -------------------------
         // Dedicated Redis with noeviction + AOF (compose `redis-queue`): the
         // LRU instances would evict jobs. Required in production; elsewhere it
-        // defaults to redis://localhost:6381, and with NODE_ENV=test and no
-        // value jobs are recorded in memory and never consumed.
-        QUEUE_REDIS_URL: Joi.string().uri().when(Joi.ref("NODE_ENV"), {
-          is: "production",
-          then: Joi.required(),
-          otherwise: Joi.optional(),
-        }),
+        // defaults to localhost:6381, and with NODE_ENV=test and no
+        // host jobs are recorded in memory and never consumed.
+        ...redisEnv("QUEUE_REDIS", requiredInProduction),
         // Attempts per job (first run included) and the base of the exponential
         // backoff between them; the last failure moves the job to `<queue>.dlq`.
         QUEUE_JOB_ATTEMPTS: Joi.number().integer().min(1).default(5),
@@ -433,7 +457,7 @@ const jobModules = [
         // --- SSE fan-out (notifications/notification-pubsub.service.ts; ADR-0018)
         // Pub/sub Redis with no persistence. Unset = events stay in-process
         // (tests, single-process dev). Publishes fail open after the timeout.
-        REDIS_PUBSUB_URL: Joi.string().uri().optional(),
+        ...redisEnv("REDIS_PUBSUB", Joi.string().optional()),
         REDIS_PUBSUB_TIMEOUT_MS: Joi.number().integer().positive().default(250),
         NODE_ENV: Joi.string()
           .valid("development", "production", "test")
@@ -473,7 +497,9 @@ const jobModules = [
             new Keyv({
               store: new CacheableMemory({ ttl: 900000, lruSize: 10000 }),
             }),
-            createKeyv(configService.get("CACHE_URL")),
+            createKeyv(
+              redisUrl(redisOptions((key) => configService.get(key), "CACHE")!),
+            ),
           ],
         };
       },

@@ -54,10 +54,15 @@ services:
     environment:
       NODE_ENV: production
       PORT: "8000"
-      DATABASE_URL: postgres://admin:admin@postgres:5432/zenflow-test?sslmode=disable&schema=public
-      CACHE_URL: redis://session-redis:6379
-      RATE_LIMIT_CACHE_URL: redis://redis-ratelimit:6379
-      MAIL_TRANSPORT: smtp://mail:1025
+      DB_HOST: postgres
+      DB_SSLMODE: disable
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: zenflow-test
+      CACHE_HOST: session-redis
+      RATE_LIMIT_CACHE_HOST: redis-ratelimit
+      MAIL_HOST: mail
+      MAIL_PORT: "1025"
       MAIL_FROM: zenflow@example.com
       SESSION_SECRET: loadtest
       CORS_ORIGIN: http://localhost:5173

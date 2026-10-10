@@ -83,7 +83,7 @@ async function bootstrap() {
   // The Redis client backing sessions/OTP codes (see
   // common/redis/redis.module.ts) — connects in the background, not awaited
   // here. The LimitKit rate limiter (common/rate-limit/) uses its own
-  // separate `RATE_LIMIT_REDIS_CLIENT` / `RATE_LIMIT_CACHE_URL` instance
+  // separate `RATE_LIMIT_REDIS_CLIENT` / `RATE_LIMIT_CACHE_HOST` instance
   // instead of this one.
   const redisClient = app.get<Redis>(REDIS_CLIENT);
   const sessionTtlMs =
