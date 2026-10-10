@@ -188,4 +188,26 @@ describe("SyncDigest", () => {
     const [n] = digestNotifications(d.drain(), NOW);
     expect(n.title).toBe("2 new lectures");
   });
+
+  it("names LMS on an exam so it never matches the portal's exam row", () => {
+    const fromLms = new SyncDigest(NOW);
+    fromLms.add(item({ type: "EXAM", sessionId: "a" }), "LMS");
+    fromLms.add(item({ type: "EXAM", sessionId: "b" }), "LMS");
+    const fromPortal = new SyncDigest(NOW);
+    fromPortal.add(item({ type: "EXAM", sessionId: "c" }), "PORTAL");
+    fromPortal.add(item({ type: "EXAM", sessionId: "d" }), "PORTAL");
+
+    const [lms] = digestNotifications(fromLms.drain(), NOW);
+    const [portal] = digestNotifications(fromPortal.drain(), NOW);
+    expect(lms.title).toBe("2 new exams on LMS");
+    expect(portal.title).toBe("2 new exams");
+  });
+
+  it("does not name LMS on an assignment, its usual source", () => {
+    const d = new SyncDigest(NOW);
+    d.add(item({ type: "ASSIGNMENT" }), "LMS");
+    expect(digestNotifications(d.drain(), NOW)[0].title).toBe(
+      "A new assignment",
+    );
+  });
 });

@@ -18,6 +18,7 @@ import {
   type NotificationDto,
   pushChannelId,
   pushSoundFile,
+  pushCategoryFor,
   pushToneFor,
 } from "@zenflow/shared";
 import * as Notifications from "expo-notifications";
@@ -208,11 +209,11 @@ export async function jumpToSession(
     }
   } catch {
     toast({
-    title: t("Couldn't find that item"),
-    description: t("It's no longer on your calendar."),
-    variant: "destructive",
-    icon: "calendar-x",
-  });
+      title: t("Couldn't find that item"),
+      description: t("It's no longer on your calendar."),
+      variant: "destructive",
+      icon: "calendar-x",
+    });
   }
 }
 
@@ -237,11 +238,11 @@ export async function viewSessionOnCalendar(
     } as Href);
   } catch {
     toast({
-    title: t("Couldn't find that item"),
-    description: t("It's no longer on your calendar."),
-    variant: "destructive",
-    icon: "calendar-x",
-  });
+      title: t("Couldn't find that item"),
+      description: t("It's no longer on your calendar."),
+      variant: "destructive",
+      icon: "calendar-x",
+    });
   }
 }
 
@@ -331,17 +332,17 @@ export function useNotificationsSubscription(): void {
                 },
               }
             : n.sessionId
-            ? {
-                label: t("View on calendar"),
-                onPress: () =>
-                  viewSessionOnCalendar(
-                    n.sessionId!,
-                    currentRouter,
-                    currentToast,
-                    n.id,
-                  ),
-              }
-            : undefined,
+              ? {
+                  label: t("View on calendar"),
+                  onPress: () =>
+                    viewSessionOnCalendar(
+                      n.sessionId!,
+                      currentRouter,
+                      currentToast,
+                      n.id,
+                    ),
+                }
+              : undefined,
         });
 
         // 2. System notification in Android notification shade / lock screen
@@ -353,9 +354,13 @@ export function useNotificationsSubscription(): void {
             content: {
               title: cleanTitle,
               body: n.content,
+              // The server push is suppressed when SSE wins, so the local copy
+              // must carry the conflict "Reschedule" category itself.
+              categoryIdentifier: pushCategoryFor(n.eventName) ?? undefined,
               data: {
                 sessionId: n.sessionId,
                 notificationId: n.id,
+                eventName: n.eventName,
                 source: LOCAL_NOTIFICATION_SOURCE,
               },
               sound: pushSoundFile(tone),

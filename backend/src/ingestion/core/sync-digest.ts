@@ -112,6 +112,27 @@ function phrase(
   return `${count} ${n === 1 ? one : many} removed`;
 }
 
+/** Where each type normally comes from; only an off-default source is named. */
+const DEFAULT_SOURCE: Record<IngestedSessionType, SessionSource> = {
+  EXAM: "PORTAL",
+  ASSIGNMENT: "LMS",
+  LECTURE: "PORTAL",
+};
+
+/**
+ * " on LMS" when every item came from LMS but the type usually doesn't (the
+ * LMS also lists exams), so portal and LMS rows never share a title.
+ */
+function onSource(
+  type: IngestedSessionType,
+  items: readonly DigestItem[],
+): string {
+  const sources = new Set(items.map((i) => i.source));
+  if (sources.size !== 1) return "";
+  const [source] = sources;
+  return source === "LMS" && DEFAULT_SOURCE[type] !== "LMS" ? " on LMS" : "";
+}
+
 /**
  * The session a row opens on the calendar: the soonest upcoming live one,
  * else the latest past one. `null` when every item was removed.
@@ -190,7 +211,7 @@ export function digestNotifications(
         : "removed";
     out.push({
       sessionId,
-      title: capitalize(parts.join(", ")),
+      title: capitalize(`${parts.join(", ")}${onSource(type, ofType)}`),
       content: nextStep(type, kind, one, sessionId !== null),
       eventEndsAt: one ? ofType[0].endsAt : null,
       eventName: `${type.toLowerCase()}.group_${kind}`,

@@ -27,7 +27,6 @@ import { t } from "./i18n";
  * push capability; every entry point fails soft.
  */
 
-
 /**
  * `data.source` on the system notification the SSE handler posts itself
  * (`hooks/use-notifications.ts`), so the foreground push listener can tell it
@@ -127,12 +126,20 @@ export async function ensureAndroidChannel(): Promise<void> {
   await Promise.all(
     TONES.map((tone) =>
       Notifications.setNotificationChannelAsync(pushChannelId(tone), {
-        name: t(tone === "urgent" ? "Urgent" : tone === "reminder" ? "Reminders" : "General"),
+        name: t(
+          tone === "urgent"
+            ? "Urgent"
+            : tone === "reminder"
+              ? "Reminders"
+              : "General",
+        ),
         importance: Notifications.AndroidImportance.MAX,
         sound: pushSoundFile(tone),
-        vibrationPattern: tone === "urgent" ? [0, 200, 120, 200] : [0, 250, 250, 250],
+        vibrationPattern:
+          tone === "urgent" ? [0, 200, 120, 200] : [0, 250, 250, 250],
         lightColor: "#f97316",
-        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        lockscreenVisibility:
+          Notifications.AndroidNotificationVisibility.PUBLIC,
       }),
     ),
   );

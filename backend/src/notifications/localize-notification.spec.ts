@@ -183,6 +183,19 @@ describe("Vietnamese notification delivery", () => {
     };
     expect(localizeNotification(row, "VI_VN")).toEqual(row);
   });
+  it("translates the LMS source on a digest title", () => {
+    expect(
+      localizeNotification(
+        {
+          eventName: "exam.group_created",
+          title: "2 new exams on LMS",
+          content: "Plan your revision now.",
+        },
+        "VI_VN",
+      ).title,
+    ).toBe("2 lịch thi mới trên LMS");
+  });
+
   it("translates the short digest and conflict copy", () => {
     const digest = localizeNotification(
       {

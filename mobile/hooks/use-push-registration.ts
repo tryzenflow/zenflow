@@ -1,7 +1,7 @@
 import { t } from "@/lib/i18n";
 import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { AppState } from "react-native";
 import { getSessionDetails } from "@/api/tasks";
 import { useToast } from "@/components/ui/toast";
@@ -20,6 +20,7 @@ import {
   pushOwner,
   registerPushCategories,
 } from "@/lib/push";
+import { markResponseHandled } from "@/lib/push-response";
 import type { Href } from "expo-router";
 
 // Set once, before any notification can arrive.
@@ -38,7 +39,6 @@ export function usePushRegistration(): void {
   const userId = useUserStore((s) => s.user?.id ?? null);
   const language = useUserStore((s) => s.user?.lang);
   const onboarded = useUserStore((s) => s.user?.onboardedAt != null);
-  const lastHandledResponseId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -69,8 +69,10 @@ export function usePushRegistration(): void {
     ) => {
       if (!response) return;
       const id = response.notification.request.identifier;
-      if (id === lastHandledResponseId.current) return;
-      lastHandledResponseId.current = id;
+      // Module-level, so a remount never replays a saved response (and the
+      // Reschedule button never fires twice); the OS copy is cleared too.
+      if (!markResponseHandled(`${id}:${response.actionIdentifier}`)) return;
+      Notifications.clearLastNotificationResponse();
       const data = response.notification.request.content.data as
         | Record<string, string>
         | undefined;

@@ -30,7 +30,8 @@ export function localizeNotification<
         .replace(
           /(\d+|an?) (exams?|assignments?|lectures?) removed/gi,
           (_, n: string, noun: string) => `${num(n)} ${vn(noun)} đã xóa`,
-        );
+        )
+        .replace(/ on LMS$/, " trên LMS");
     }
     if (title.startsWith("You have ")) {
       title = title
