@@ -47,6 +47,20 @@ The age **master private key is held off the server** by: **alpha** (stored in a
 - Retention is by age, set as an S3 lifecycle rule (the IAM user cannot delete, so the container never prunes in prod): expire current objects under `zenflow/prod/` after **14 days** and noncurrent versions after 7. At 3-hourly that is about 112 objects.
 - IAM user policy: `s3:PutObject`, `s3:GetObject`, `s3:ListBucket` on the bucket and `zenflow/prod/*` only. `GetObject` is what `restore-test.sh` needs to download the newest dump; the dumps are age-encrypted, so read access alone exposes nothing. No delete, so a compromised host cannot erase history.
 
+  ```json
+  {
+    "Version": "2012-10-17",
+    "Statement": [
+      { "Effect": "Allow", "Action": ["s3:PutObject", "s3:GetObject"],
+        "Resource": "arn:aws:s3:::<bucket>/zenflow/prod/*" },
+      { "Effect": "Allow", "Action": "s3:ListBucket", "Resource": "arn:aws:s3:::<bucket>",
+        "Condition": { "StringLike": { "s3:prefix": "zenflow/prod/*" } } }
+    ]
+  }
+  ```
+
+  Check it from the server: `restore-test.sh` (see Operate) lists, downloads and restores the newest dump, so a missing `GetObject` shows up as a failed restore test and the "no restore test in 8 days" alert.
+
 ## Operate
 
 ```bash
