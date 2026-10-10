@@ -1,3 +1,4 @@
+import type { CreateSessionResponse, Session } from "@zenflow/shared";
 import { PrismaClient } from "../generated/prisma";
 import { connectDb } from "./queue/support/db";
 import {
@@ -13,8 +14,9 @@ import {
  * Placement through the Python bandit service (the primary path), as opposed to
  * the frozen TS fallback that `sessions.e2e-spec.ts` runs on. Needs the service:
  * `docker compose --profile bandit -f compose.test.yml up -d` (port 8100), or
- * `BANDIT_E2E_URL` pointing at one. Without it the suite is skipped locally and
- * fails in CI (`CI` set), so a missing service can't hide a regression.
+ * `BANDIT_E2E_URL` pointing at one. The suite fails without it rather than
+ * skipping: Jest can't report a skip decided at run time, so a silent early
+ * return would show as passed.
  */
 jest.setTimeout(180_000);
 
@@ -24,34 +26,20 @@ const DAY = 24 * HOUR;
 const SLOT = 15 * 60_000;
 const SESSIONS = "/api/v1/sessions";
 
-interface SessionDto {
-  id: string;
-  type: string;
-  durationMinutes: number;
-  scheduledStartTime: string | null;
-  seriesId: string | null;
-  late: boolean;
-  schedulingDegraded?: boolean;
-  slotProposalId?: string | null;
-  sessions?: SessionDto[];
-}
+type SessionDto = CreateSessionResponse;
 
-let up = false;
 let api: Proc | undefined;
 let prisma: PrismaClient;
 
 beforeAll(async () => {
   prisma = connectDb();
-  up = await fetch(`${BANDIT_URL}/ready`)
+  const up = await fetch(`${BANDIT_URL}/ready`)
     .then((r) => r.ok)
     .catch(() => false);
   if (!up) {
-    if (process.env.CI)
-      throw new Error(`bandit service not ready at ${BANDIT_URL}`);
-    console.warn(
-      `bandit service not ready at ${BANDIT_URL}: skipping sessions-bandit`,
+    throw new Error(
+      `bandit service not ready at ${BANDIT_URL}: start it with \`docker compose --profile bandit -f compose.test.yml up -d --build\``,
     );
-    return;
   }
   api = await startRole("api", { BANDIT_SERVICE_URL: BANDIT_URL });
 });
@@ -61,16 +49,11 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-/** `it` that is skipped (not failed) when the service isn't there. */
-const itUp = (name: string, fn: () => Promise<void>) =>
-  it(name, async () => {
-    if (!up) return;
-    await fn();
-  });
-
 const iso = (ms: number) => new Date(ms).toISOString();
-const startOf = (s: SessionDto) => Date.parse(s.scheduledStartTime as string);
-const endOf = (s: SessionDto) => startOf(s) + s.durationMinutes * 60_000;
+const startOf = (s: Pick<Session, "scheduledStartTime">) =>
+  Date.parse(s.scheduledStartTime as string);
+const endOf = (s: Pick<Session, "scheduledStartTime" | "durationMinutes">) =>
+  startOf(s) + s.durationMinutes * 60_000;
 const data = (res: { body: unknown }) =>
   (res.body as { data: SessionDto }).data;
 const create = (student: Student, body: Record<string, unknown>) =>
@@ -84,29 +67,26 @@ const task = (over: Record<string, unknown> = {}) => ({
 });
 
 describe("with the bandit service", () => {
-  itUp(
-    "places a task on the grid before its deadline, not degraded",
-    async () => {
-      const student = await signUp("bandit-place");
-      const deadline = Date.now() + 3 * DAY;
-      const placed = data(
-        await create(student, task({ deadline: iso(deadline) })).expect(201),
-      );
-      expect(startOf(placed) % SLOT).toBe(0);
-      expect(endOf(placed)).toBeLessThanOrEqual(deadline);
-      expect(placed.schedulingDegraded).toBeFalsy();
-      expect(placed.slotProposalId).toBeTruthy();
-    },
-  );
+  it("places a task on the grid before its deadline, not degraded", async () => {
+    const student = await signUp("bandit-place");
+    const deadline = Date.now() + 3 * DAY;
+    const placed = data(
+      await create(student, task({ deadline: iso(deadline) })).expect(201),
+    );
+    expect(startOf(placed) % SLOT).toBe(0);
+    expect(endOf(placed)).toBeLessThanOrEqual(deadline);
+    expect(placed.schedulingDegraded).toBeFalsy();
+    expect(placed.slotProposalId).toBeTruthy();
+  });
 
-  itUp("keeps two tasks apart", async () => {
+  it("keeps two tasks apart", async () => {
     const student = await signUp("bandit-two");
     const a = data(await create(student, task({ title: "A" })).expect(201));
     const b = data(await create(student, task({ title: "B" })).expect(201));
     expect(startOf(a) < endOf(b) && startOf(b) < endOf(a)).toBe(false);
   });
 
-  itUp("spreads a series over distinct days", async () => {
+  it("spreads a series over distinct days", async () => {
     const student = await signUp("bandit-series");
     const created = data(
       await create(
@@ -119,7 +99,8 @@ describe("with the bandit service", () => {
     expect(
       new Set(sittings.map((s) => iso(startOf(s)).slice(0, 10))).size,
     ).toBe(3);
-    expect(sittings.every((s) => !s.schedulingDegraded)).toBe(true);
+    // The flag is on the response, not on each sitting.
+    expect(created.schedulingDegraded).toBeFalsy();
   });
 
   describe("when the deadline cannot be met", () => {
@@ -134,7 +115,7 @@ describe("with the bandit service", () => {
     }
     const tight = () => task({ deadline: iso(Date.now() + 3 * HOUR) });
 
-    itUp("answers 409 SCHEDULE_INFEASIBLE", async () => {
+    it("answers 409 SCHEDULE_INFEASIBLE", async () => {
       const student = await signUp("bandit-infeasible");
       await wall(student);
       const res = await create(student, tight()).expect(409);
@@ -144,7 +125,7 @@ describe("with the bandit service", () => {
       });
     });
 
-    itUp("ACCEPT_CONFLICTS meets the deadline by overlapping", async () => {
+    it("ACCEPT_CONFLICTS meets the deadline by overlapping", async () => {
       const student = await signUp("bandit-conflicts");
       await wall(student);
       const deadline = Date.now() + 3 * HOUR;
@@ -158,27 +139,24 @@ describe("with the bandit service", () => {
       expect(placed.late).toBe(false);
     });
 
-    itUp(
-      "ACCEPT_LATE_DEADLINE goes clear of the class, after the deadline",
-      async () => {
-        const student = await signUp("bandit-late");
-        await wall(student);
-        const deadline = Date.now() + 3 * HOUR;
-        const placed = data(
-          await create(student, {
-            ...task({ deadline: iso(deadline) }),
-            infeasiblePolicy: "ACCEPT_LATE_DEADLINE",
-          }).expect(201),
-        );
-        expect(endOf(placed)).toBeGreaterThan(deadline);
-        expect(placed.late).toBe(true);
-      },
-    );
+    it("ACCEPT_LATE_DEADLINE goes clear of the class, after the deadline", async () => {
+      const student = await signUp("bandit-late");
+      await wall(student);
+      const deadline = Date.now() + 3 * HOUR;
+      const placed = data(
+        await create(student, {
+          ...task({ deadline: iso(deadline) }),
+          infeasiblePolicy: "ACCEPT_LATE_DEADLINE",
+        }).expect(201),
+      );
+      expect(endOf(placed)).toBeGreaterThan(deadline);
+      expect(placed.late).toBe(true);
+    });
   });
 });
 
 describe("when the bandit service is unreachable", () => {
-  itUp("still places the task, on the fallback, and says so", async () => {
+  it("still places the task, on the fallback, and says so", async () => {
     await stop(api);
     api = await startRole("api", { BANDIT_SERVICE_URL: "http://127.0.0.1:9" });
     const student = await signUp("bandit-down");

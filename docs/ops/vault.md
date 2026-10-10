@@ -74,7 +74,7 @@ Its healthcheck treats sealed or uninitialised as "process up" (`sealedcode=200&
      -v /etc/zenflow/vault:/creds -e VAULT_ADDR=http://127.0.0.1:8200 -e VAULT_TOKEN -e ENV_NAME=prod \
      hashicorp/vault:1.20.4 /ops/setup-approle.sh --role-id-file /creds/role_id --secret-id-file /creds/secret_id
    ```
-   If you already have a `.env.prod` in the new parts format, use the importer instead of retyping values. It writes each secret to every set that needs it, leaves non-secrets in the env file (listed in `--dry-run`), maps the old Grafana variable names, and **rejects** unknown keys, the removed URL vars and misnamed backup keys instead of guessing:
+   If you already have a `.env.prod` in the new parts format, use the importer instead of retyping values. It writes each secret to every set that needs it, leaves non-secrets in the env file (listed in `--dry-run`), and **rejects** unknown keys instead of guessing (use `GF_SECURITY_ADMIN_PASSWORD` and `GF_SMTP_PASSWORD` for Grafana, not the old `GRAFANA_*` names):
    ```bash
    export VAULT_ADDR=http://127.0.0.1:8200 VAULT_ENV=prod
    read -rs -p "Vault root token: " VAULT_TOKEN && export VAULT_TOKEN

@@ -18,7 +18,7 @@ Two spec styles:
 | Spec | Covers |
 | --- | --- |
 | `sessions` | scheduler API on the frozen fallback placer: placement on the 15-minute grid, validation, infeasible handling, TASK series, recurring fixed sessions, reminders on create |
-| `sessions-bandit` | the same API through the Python service, and the fall back when it is down. Skipped locally without the service, fails in CI |
+| `sessions-bandit` | the same API through the Python service, and the fall back when it is down. Fails without the service (start the `bandit` profile) |
 | `integrations` | connect, reconnect, update, status and disconnect of LMS and portal accounts; encryption at rest; the upstream being down |
 | `ingestion-materialize` | what a sync does to the calendar and inbox: first sync, re-sync, student deletion, withdrawn items, sync conflicts and "reschedule them all" |
 | `queue/queue-flow` | ticker, workers, retries, breaker, manual sync, SSE and push job fan-out, graceful shutdown |

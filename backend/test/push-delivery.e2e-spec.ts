@@ -55,6 +55,8 @@ beforeAll(async () => {
   closeModule = () => moduleRef.close();
 });
 afterAll(async () => {
+  // Cascades to devices, notifications and sessions.
+  await prisma.user.deleteMany({ where: { id: { in: createdUsers } } });
   await closeModule();
 });
 beforeEach(() => {
@@ -66,10 +68,12 @@ beforeEach(() => {
   apns.send.mockImplementation(acceptAll);
 });
 
+const createdUsers: string[] = [];
+
 async function user(
   over: { allowNotifications?: boolean; lang?: "EN_US" | "VI_VN" } = {},
 ) {
-  return prisma.user.create({
+  const created = await prisma.user.create({
     data: {
       name: "Push Student",
       email: `push-${randomUUID()}@example.test`,
@@ -77,6 +81,8 @@ async function user(
       lang: over.lang ?? "EN_US",
     },
   });
+  createdUsers.push(created.id);
+  return created;
 }
 const device = (
   userId: string,

@@ -1,3 +1,8 @@
+import type {
+  CreateSessionResponse,
+  Session,
+  SessionsListResponse,
+} from "@zenflow/shared";
 import request from "supertest";
 import { PrismaClient } from "../generated/prisma";
 import { connectDb } from "./queue/support/db";
@@ -28,21 +33,6 @@ const DAY = 24 * HOUR;
 const SLOT = 15 * 60_000;
 const SESSIONS = "/api/v1/sessions";
 
-interface SessionDto {
-  id: string;
-  title: string;
-  type: string;
-  durationMinutes: number;
-  scheduledStartTime: string | null;
-  deadline: string | null;
-  seriesId: string | null;
-  late: boolean;
-  reminders?: number[];
-  schedulingDegraded?: boolean;
-  skippedReminders?: number[];
-  sessions?: SessionDto[];
-}
-
 let api: Proc;
 let prisma: PrismaClient;
 
@@ -60,9 +50,13 @@ const iso = (ms: number) => new Date(ms).toISOString();
 /** The next quarter-hour boundary at least `minAhead` ms from now. */
 const nextSlot = (minAhead = 0) =>
   Math.ceil((Date.now() + minAhead) / SLOT) * SLOT;
-const startOf = (s: SessionDto) => Date.parse(s.scheduledStartTime as string);
-const endOf = (s: SessionDto) => startOf(s) + s.durationMinutes * 60_000;
-const overlaps = (a: SessionDto, b: SessionDto) =>
+type SessionDto = CreateSessionResponse;
+const startOf = (s: Pick<Session, "scheduledStartTime">) =>
+  Date.parse(s.scheduledStartTime as string);
+const endOf = (s: Pick<Session, "scheduledStartTime" | "durationMinutes">) =>
+  startOf(s) + s.durationMinutes * 60_000;
+type Timed = Pick<Session, "scheduledStartTime" | "durationMinutes">;
+const overlaps = (a: Timed, b: Timed) =>
   startOf(a) < endOf(b) && startOf(b) < endOf(a);
 const data = <T = SessionDto>(res: { body: unknown }) =>
   (res.body as { data: T }).data;
@@ -85,7 +79,7 @@ async function list(
     .get(SESSIONS)
     .query({ view, date: iso(at).slice(0, 10) })
     .expect(200);
-  return data<{ sessions: SessionDto[] }>(res).sessions;
+  return data<SessionsListResponse>(res).sessions;
 }
 
 describe("creating a TASK", () => {

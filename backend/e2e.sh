@@ -6,4 +6,5 @@ cd "$(dirname "$0")"
 docker compose --profile queue --profile bandit -f compose.test.yml up -d --build
 until docker exec zenflow-test-db pg_isready -U ci -d zenflow-test; do sleep 2; done
 pnpm exec dotenv -e .env.test -- node scripts/with-database-url.cjs prisma migrate deploy
+pnpm prisma:test:gen
 pnpm test:e2e

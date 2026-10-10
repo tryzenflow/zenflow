@@ -1,3 +1,4 @@
+import type { Session, SessionsListResponse } from "@zenflow/shared";
 import { PrismaClient } from "../generated/prisma";
 import { connectDb, noteRows } from "./queue/support/db";
 import {
@@ -49,28 +50,21 @@ afterEach(() => hide({ lms: false, exams: false, timetable: false }));
 const hide = (items: Partial<Record<"lms" | "exams" | "timetable", boolean>>) =>
   fetch(`${FAKE_URL}/_/hide`, { method: "POST", body: JSON.stringify(items) });
 
-interface SessionDto {
-  id: string;
-  title: string;
-  type: "TASK" | "ASSIGNMENT" | "EXAM" | "LECTURE" | "DND";
-  source: "USER" | "LMS" | "PORTAL";
-  scheduledStartTime: string;
-  durationMinutes: number;
-  deadline: string | null;
-}
+type SessionDto = Session;
 
-/** Every session in the two months around now (the fake serves the current term). */
+/** Every session in this month and the next (the fake serves the current term). */
 async function calendar(student: Student): Promise<SessionDto[]> {
   const found = new Map<string, SessionDto>();
-  for (const offset of [0, 30]) {
+  const now = new Date();
+  const nextMonth = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+  );
+  for (const day of [now, nextMonth]) {
     const res = await student.agent
       .get("/api/v1/sessions")
-      .query({
-        view: "month",
-        date: new Date(Date.now() + offset * DAY).toISOString().slice(0, 10),
-      })
+      .query({ view: "month", date: day.toISOString().slice(0, 10) })
       .expect(200);
-    for (const s of (res.body as { data: { sessions: SessionDto[] } }).data
+    for (const s of (res.body as { data: SessionsListResponse }).data
       .sessions) {
       found.set(s.id, s);
     }
@@ -80,7 +74,9 @@ async function calendar(student: Student): Promise<SessionDto[]> {
 const ingested = async (student: Student) =>
   (await calendar(student)).filter((s) => s.source !== "USER");
 const upcoming = (sessions: SessionDto[]) =>
-  sessions.filter((s) => Date.parse(s.scheduledStartTime) > Date.now());
+  sessions.filter(
+    (s) => Date.parse(s.scheduledStartTime as string) > Date.now(),
+  );
 const tally = (sessions: SessionDto[]) =>
   sessions.reduce<Record<string, number>>((acc, s) => {
     const key = `${s.source}/${s.type}`;
@@ -276,14 +272,24 @@ describe("when the school withdraws items", () => {
 });
 
 describe("when a sync lands on the student's own task", () => {
-  /** Next Monday 00:30 UTC: where the fake's weekly timetable puts a lecture. */
-  const nextMondayLecture = () => {
-    const d = new Date();
-    d.setUTCHours(0, 30, 0, 0);
-    do d.setUTCDate(d.getUTCDate() + 1);
-    while (d.getUTCDay() !== 1);
-    return d;
-  };
+  /**
+   * Where the school really puts an upcoming lecture: a probe student syncs and
+   * we read the earliest one. The task is then pinned on top of it, whatever
+   * the date or term (a hard-coded weekday can fall outside the fetched term).
+   */
+  async function upcomingLectureStart(): Promise<Date> {
+    const probe = await connectedStudent("conflict-probe");
+    await sync(probe, "PORTAL");
+    const [first] = upcoming(await ingested(probe))
+      .filter((s) => s.type === "LECTURE")
+      .sort(
+        (a, b) =>
+          Date.parse(a.scheduledStartTime as string) -
+          Date.parse(b.scheduledStartTime as string),
+      );
+    expect(first).toBeDefined();
+    return new Date(first.scheduledStartTime as string);
+  }
 
   async function taskAt(student: Student, start: Date) {
     const created = await student.agent
@@ -312,7 +318,7 @@ describe("when a sync lands on the student's own task", () => {
 
   it("warns once, naming the task, and reschedules it on request", async () => {
     const student = await connectedStudent("conflict");
-    const taskId = await taskAt(student, nextMondayLecture());
+    const taskId = await taskAt(student, await upcomingLectureStart());
     await syncAll(student);
 
     const rows = await until("a conflict notification", async () => {
@@ -340,14 +346,16 @@ describe("when a sync lands on the student's own task", () => {
 
     const all = await calendar(student);
     const task = all.find((s) => s.id === taskId) as SessionDto;
-    const start = Date.parse(task.scheduledStartTime);
+    const start = Date.parse(task.scheduledStartTime as string);
     const end = start + task.durationMinutes * 60_000;
     const clashes = all.filter(
       (s) =>
         s.id !== taskId &&
         s.source !== "USER" &&
-        Date.parse(s.scheduledStartTime) < end &&
-        start < Date.parse(s.scheduledStartTime) + s.durationMinutes * 60_000,
+        Date.parse(s.scheduledStartTime as string) < end &&
+        start <
+          Date.parse(s.scheduledStartTime as string) +
+            s.durationMinutes * 60_000,
     );
     expect(clashes).toEqual([]);
 
@@ -359,7 +367,7 @@ describe("when a sync lands on the student's own task", () => {
 
   it("rescheduling twice is harmless", async () => {
     const student = await connectedStudent("conflict-twice");
-    await taskAt(student, nextMondayLecture());
+    await taskAt(student, await upcomingLectureStart());
     await syncAll(student);
     const [row] = await until("a conflict notification", async () => {
       const r = await conflicts(student);
@@ -383,7 +391,7 @@ describe("when a sync lands on the student's own task", () => {
   it("won't reschedule for another student's notification", async () => {
     const owner = await connectedStudent("conflict-owner");
     const other = await signUp("conflict-other");
-    await taskAt(owner, nextMondayLecture());
+    await taskAt(owner, await upcomingLectureStart());
     await syncAll(owner);
     const [row] = await until("a conflict notification", async () => {
       const r = await conflicts(owner);
