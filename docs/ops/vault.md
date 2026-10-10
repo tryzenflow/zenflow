@@ -71,7 +71,8 @@ Its healthcheck treats sealed or uninitialised as "process up" (`sealedcode=200&
    ```
    If you already have `backend/.env.prod`, use the importer instead of retyping values. It maps the old Grafana variable names and splits keys into `api`, `bandit`, and `platform`:
    ```bash
-   export VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=<initial-root-token> VAULT_ENV=prod
+   export VAULT_ADDR=http://127.0.0.1:8200 VAULT_ENV=prod
+   read -rs -p "Vault root token: " VAULT_TOKEN && export VAULT_TOKEN
    ./ops/vault/import-dotenv.sh .env.prod --dry-run  # prints names only
    ./ops/vault/import-dotenv.sh .env.prod
    unset VAULT_TOKEN

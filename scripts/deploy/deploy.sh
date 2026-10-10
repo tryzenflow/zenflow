@@ -112,8 +112,9 @@ provider="$6"; vault_addr="$7"; role_id_file="$8"; secret_id_file="$9"
 mode="${10}"; ttl="${11}"; min_free_mb="${12}"
 cd "$path/backend"
 if [ "$provider" = vault ]; then
-  # Bootstrap empty files so Compose can parse the full stack while starting Vault.
-  # They are atomically replaced with Vault values before any app service is started.
+  # Bootstrap empty files only where none exist, so Compose can parse the full stack while
+  # starting Vault. An existing render is never truncated (a flip/rollback reuses it, and the
+  # renderer leaves files read-only); render-secrets.sh replaces them before app services start.
   for f in "$role_id_file" "$secret_id_file"; do
     [ -r "$f" ] || { echo "SECRETS_PROVIDER=vault: $f is not readable by $(id -un); the deploy user must own the AppRole creds" >&2; exit 1; }
   done
@@ -122,8 +123,10 @@ if [ "$provider" = vault ]; then
   export ZENFLOW_SECRETS_DIR="/run/zenflow/${env_name}"
   for set in api bandit platform; do
     mkdir -p "$ZENFLOW_SECRETS_DIR/$set"
-    : > "$ZENFLOW_SECRETS_DIR/$set/files.env"
-    chmod 600 "$ZENFLOW_SECRETS_DIR/$set/files.env"
+    [ -e "$ZENFLOW_SECRETS_DIR/$set/files.env" ] || {
+      : > "$ZENFLOW_SECRETS_DIR/$set/files.env"
+      chmod 600 "$ZENFLOW_SECRETS_DIR/$set/files.env"
+    }
   done
 fi
 # Vault has no persistent dotenv: it renders service env files under /run.
@@ -211,7 +214,14 @@ if [ "$provider" = "vault" ]; then
     SECRET_SETS="api bandit platform" PLAIN_ENV_SETS="platform" \
     VAULT_ROLE_ID_FILE="$role_id_file" VAULT_SECRET_ID_FILE="$secret_id_file" \
     ./ops/vault/render-secrets.sh
-  # All runtime values come from Vault-rendered env files. No .env.prod is read.
+  # An explicit KEY in a leftover .env.<env> would beat the rendered KEY_FILE, so drop any
+  # from a previous dotenv-based provider (the file is optional in Vault mode).
+  if [ -f ".env.${env_name}" ]; then
+    for f in "$ZENFLOW_SECRETS_DIR"/*/files.env; do
+      [ -f "$f" ] || continue
+      sed -n 's/_FILE=.*//p' "$f" | while read -r k; do sed -i "/^${k}=/d" ".env.${env_name}"; done
+    done
+  fi
 fi
 # Containers read *_FILE only at boot; the idle colour and the queue roles are always
 # recreated below, so they pick up a fresh render. The active colour keeps its loaded secrets.

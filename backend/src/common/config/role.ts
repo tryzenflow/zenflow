@@ -37,7 +37,8 @@ export const ROLE_VALUES = ROLES;
 /** Local development loads `.env.dev`; production receives its values from Compose. */
 export const envFilePath = (
   env: NodeJS.ProcessEnv = process.env,
-): string | undefined => (env.NODE_ENV === "production" ? undefined : ".env.dev");
+): string | undefined =>
+  env.NODE_ENV === "production" ? undefined : ".env.dev";
 
 /**
  * Resolved before Nest builds the module graph, i.e. before `ConfigModule`

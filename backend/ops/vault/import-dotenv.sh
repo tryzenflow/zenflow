@@ -27,9 +27,19 @@ emit_set() {
     [[ "$line" = *=* ]] || { echo "import-dotenv: unsupported line in $dotenv_file" >&2; exit 2; }
     key="${line%%=*}"; value="${line#*=}"
     [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] || { echo "import-dotenv: invalid key $key" >&2; exit 2; }
+    value="${value#"${value%%[![:space:]]*}"}"
     case "$value" in
-      \"*\") value="${value:1:${#value}-2}" ;;
-      \'*\') value="${value:1:${#value}-2}" ;;
+      \"*|\'*)
+        # Quoted: take up to the matching quote; only a comment may follow it.
+        q="${value:0:1}"; rest="${value:1}"
+        [[ "$rest" = *"$q"* ]] || { echo "import-dotenv: unterminated quote for $key" >&2; exit 2; }
+        tail="${rest#*"$q"}"; value="${rest%%"$q"*}"
+        tail="${tail#"${tail%%[![:space:]]*}"}"
+        [ -z "$tail" ] || [[ "$tail" = \#* ]] || { echo "import-dotenv: unsupported text after quoted value for $key" >&2; exit 2; } ;;
+      *)
+        # Unquoted: an inline comment starts at whitespace followed by '#'.
+        value="${value%%[[:space:]]#*}"
+        value="${value%"${value##*[![:space:]]}"}" ;;
     esac
     target=api
     case "$key" in

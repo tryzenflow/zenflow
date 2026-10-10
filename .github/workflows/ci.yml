@@ -291,19 +291,16 @@ jobs:
           export GRAFANA_ADMIN_PASSWORD=admin
           export POSTGRES_USER=zenflow POSTGRES_PASSWORD=ci POSTGRES_DB=zenflow
           for f in dev staging prod test; do docker compose -f "compose.$f.yml" config -q; done
-          # Vault runs in prod, and in staging only so the backup snapshot can be tested; never in dev/test.
-          for f in dev test; do
+          # Vault runs in prod only; never in dev, staging or test.
+          for f in dev staging test; do
             docker compose -f "compose.$f.yml" config --format json | jq -e '.services | has("vault") | not'
           done
-          for f in staging prod; do
-            docker compose -f "compose.$f.yml" config --format json \
-              | jq -e '.services.vault.ports | all(.[]; .host_ip == "127.0.0.1")'
-          done
-          # The cron backup service exists in staging and prod, and snapshots the Vault data read-only.
-          for f in staging prod; do
-            docker compose -f "compose.$f.yml" config --format json \
-              | jq -e '.services.backup.volumes | any(.[]; .source == "vault_data" and .read_only == true)'
-          done
+          docker compose -f compose.prod.yml config --format json \
+            | jq -e '.services.vault.ports | all(.[]; .host_ip == "127.0.0.1")'
+          # The cron backup service exists in staging and prod; only prod snapshots the Vault data (read-only).
+          docker compose -f compose.staging.yml config --format json | jq -e '.services.backup != null'
+          docker compose -f compose.prod.yml config --format json \
+            | jq -e '.services.backup.volumes | any(.[]; .source == "vault_data" and .read_only == true)'
       # Blue-green (ADR-0013): both colours exist; the api/bandit templates are never started.
       - name: blue-green colours and deploy script
         working-directory: backend
