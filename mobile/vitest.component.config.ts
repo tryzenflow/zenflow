@@ -23,6 +23,7 @@ export default defineConfig({
       { find: /^expo-blur$/, replacement: path.resolve(__dirname, "test/mocks/expo-blur.tsx") },
       { find: /^react-native-reanimated$/, replacement: path.resolve(__dirname, "test/mocks/reanimated.tsx") },
       { find: /^react-native-screens$/, replacement: path.resolve(__dirname, "test/mocks/screens.tsx") },
+      { find: /^@react-native-community\/datetimepicker$/, replacement: path.resolve(__dirname, "test/mocks/datetimepicker.tsx") },
       { find: /^@\//, replacement: `${path.resolve(__dirname)}/` },
     ],
   },
