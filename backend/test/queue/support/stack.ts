@@ -40,7 +40,7 @@ export const FAKE_URL = `http://127.0.0.1:${PORTS.fake}`;
 // Cache and rate-limit are fixed: the inherited .env.test points them at the main
 // e2e stack's 6379/6380, which other suites share. Only queue and pub/sub are
 // overridable (they are unset in .env.test).
-const CACHE_REDIS = { host: "127.0.0.1", port: 7379 };
+const SESSION_REDIS = { host: "127.0.0.1", port: 7379 };
 const RATE_LIMIT_REDIS = { host: "127.0.0.1", port: 7380 };
 const redisAt = (prefix: string, port: number) => ({
   host: process.env[`${prefix}_HOST`] ?? "127.0.0.1",
@@ -86,10 +86,10 @@ function childEnv(role: Role): NodeJS.ProcessEnv {
     WORKER_PORT: String(PORTS[role]),
     // The compose queue profile publishes cache/rate-limit on 7379/7380; the
     // inherited .env.test values point at the main e2e stack's 6379/6380.
-    CACHE_HOST: CACHE_REDIS.host,
-    CACHE_PORT: String(CACHE_REDIS.port),
-    RATE_LIMIT_CACHE_HOST: RATE_LIMIT_REDIS.host,
-    RATE_LIMIT_CACHE_PORT: String(RATE_LIMIT_REDIS.port),
+    SESSION_REDIS_HOST: SESSION_REDIS.host,
+    SESSION_REDIS_PORT: String(SESSION_REDIS.port),
+    RATE_LIMIT_REDIS_HOST: RATE_LIMIT_REDIS.host,
+    RATE_LIMIT_REDIS_PORT: String(RATE_LIMIT_REDIS.port),
     QUEUE_REDIS_HOST: QUEUE_REDIS.host,
     QUEUE_REDIS_PORT: String(QUEUE_REDIS.port),
     REDIS_PUBSUB_HOST: PUBSUB_REDIS.host,

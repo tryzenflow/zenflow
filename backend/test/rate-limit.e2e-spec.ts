@@ -39,7 +39,7 @@ describe("OTP rate limiting (e2e)", () => {
     process.env.MAIL_HOST ??= "localhost";
     process.env.MAIL_PORT ??= "1025";
     process.env.MAIL_FROM ??= "noreply@zenflow.test";
-    process.env.CACHE_HOST ??= "localhost";
+    process.env.SESSION_REDIS_HOST ??= "localhost";
 
     // Small, fast-expiring windows so the test doesn't have to sleep long.
     // The email rule is given a much higher limit than the IP rule in each

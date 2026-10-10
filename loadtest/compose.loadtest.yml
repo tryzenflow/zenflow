@@ -59,8 +59,8 @@ services:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: admin
       POSTGRES_DB: zenflow-test
-      CACHE_HOST: session-redis
-      RATE_LIMIT_CACHE_HOST: redis-ratelimit
+      SESSION_REDIS_HOST: session-redis
+      RATE_LIMIT_REDIS_HOST: redis-ratelimit
       MAIL_HOST: mail
       MAIL_PORT: "1025"
       MAIL_FROM: zenflow@example.com

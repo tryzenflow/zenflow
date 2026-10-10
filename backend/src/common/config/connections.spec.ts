@@ -65,7 +65,9 @@ describe("redisOptions", () => {
   });
 
   it("defaults the port and omits an unset password", () => {
-    expect(redisOptions(from({ CACHE_HOST: "c" }), "CACHE")).toEqual({
+    expect(
+      redisOptions(from({ SESSION_REDIS_HOST: "c" }), "SESSION_REDIS"),
+    ).toEqual({
       host: "c",
       port: 6379,
     });

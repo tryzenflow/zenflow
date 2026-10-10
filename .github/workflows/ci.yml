@@ -372,14 +372,14 @@ jobs:
           grep -q '^postgres: POSTGRES_PASSWORD$' <<<"$out"
           grep -q '^backup: POSTGRES_PASSWORD$' <<<"$out"
           grep -q '^left in env.*LOG_LEVEL' <<<"$out"
-          for bad in DATABASE_URL=x BACKUP_S3_ACCESS_KEY=x CACHE_PASSWORD=x NOT_A_KEY=x QUEUE_JOB_ATTEMPT=x; do
+          for bad in DATABASE_URL=x BACKUP_S3_ACCESS_KEY=x CACHE_HOST=x SESSION_REDIS_PASSWORD=x NOT_A_KEY=x QUEUE_JOB_ATTEMPT=x; do
             echo "$bad" > bad.env
             ! imp bad.env --dry-run
           done
           # Drift guard: every key the app validates (Joi schema + Redis host/port) is classified,
           # so a new setting fails here until it is added to classify() in import-dotenv.sh.
           keys=$( { grep -oE '^\s+[A-Z][A-Z0-9_]+: Joi' src/app.module.ts | sed -E 's/^\s+//; s/: Joi//'
-                    for p in CACHE RATE_LIMIT_CACHE QUEUE_REDIS REDIS_KILLSWITCH REDIS_PUBSUB; do echo "${p}_HOST"; echo "${p}_PORT"; done; } | sort -u)
+                    for p in SESSION_REDIS RATE_LIMIT_REDIS QUEUE_REDIS REDIS_KILLSWITCH REDIS_PUBSUB; do echo "${p}_HOST"; echo "${p}_PORT"; done; } | sort -u)
           for k in $keys; do
             echo "$k=x" > key.env
             imp key.env --dry-run >/dev/null || { echo "::error::$k is not classified in import-dotenv.sh"; exit 1; }

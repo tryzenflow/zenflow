@@ -61,11 +61,11 @@ function createRedisClient(
  * Redis instances so rate-limit counter churn can't evict or contend with
  * session/OTP data:
  *
- * - `REDIS_CLIENT`, connected to `CACHE_HOST` — backs the session store in
+ * - `REDIS_CLIENT`, connected to `SESSION_REDIS_HOST` — backs the session store in
  *   `main.ts` (OTP codes live on the same physical Redis too, via
  *   `@nestjs/cache-manager`/keyv in `app.module.ts`, just through a
  *   different client library).
- * - `RATE_LIMIT_REDIS_CLIENT`, connected to `RATE_LIMIT_CACHE_HOST` — backs
+ * - `RATE_LIMIT_REDIS_CLIENT`, connected to `RATE_LIMIT_REDIS_HOST` — backs
  *   the LimitKit rate limiter in `common/rate-limit/`.
  */
 @Global()
@@ -76,13 +76,13 @@ function createRedisClient(
       provide: REDIS_CLIENT,
       inject: [ConfigService],
       useFactory: (configService: ConfigService) =>
-        createRedisClient(configService, "CACHE"),
+        createRedisClient(configService, "SESSION_REDIS"),
     },
     {
       provide: RATE_LIMIT_REDIS_CLIENT,
       inject: [ConfigService],
       useFactory: (configService: ConfigService) =>
-        createRedisClient(configService, "RATE_LIMIT_CACHE", true),
+        createRedisClient(configService, "RATE_LIMIT_REDIS", true),
     },
     {
       provide: KILLSWITCH_REDIS_CLIENT,

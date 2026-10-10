@@ -17,10 +17,10 @@ POSTGRES_PASSWORD=${pg_pass}
 POSTGRES_DB=zenflow-test
 DB_HOST=localhost
 DB_PORT=5433
-CACHE_HOST=localhost
-CACHE_PORT=6379
-RATE_LIMIT_CACHE_HOST=localhost
-RATE_LIMIT_CACHE_PORT=6380
+SESSION_REDIS_HOST=localhost
+SESSION_REDIS_PORT=6379
+RATE_LIMIT_REDIS_HOST=localhost
+RATE_LIMIT_REDIS_PORT=6380
 # QUEUE_REDIS_HOST and REDIS_PUBSUB_HOST stay unset on purpose: the suites use the
 # in-memory queue fallback and in-process SSE events, so no extra Redis is needed.
 # The queue e2e suite (test/queue) defaults to compose.test.yml's queue profile

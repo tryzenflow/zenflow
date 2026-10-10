@@ -130,11 +130,11 @@ const jobModules = [
         // OS temp dir.
         UPLOAD_TMP_DIR: Joi.string().optional(),
         // Session/OTP Redis.
-        ...redisEnv("CACHE", Joi.string().required()),
+        ...redisEnv("SESSION_REDIS", Joi.string().required()),
         // Separate Redis instance dedicated to LimitKit's rate-limit
         // counters (see common/rate-limit/) — kept off the session/OTP
-        // Redis (CACHE_*) so counter churn can't evict that data.
-        ...redisEnv("RATE_LIMIT_CACHE", Joi.string().required()),
+        // Redis (SESSION_REDIS_*) so counter churn can't evict that data.
+        ...redisEnv("RATE_LIMIT_REDIS", Joi.string().required()),
         // Dedicated noeviction + AOF Redis for runtime kill-switch flags
         // (ADR-0008). Unset outside production = fail-safe defaults only.
         ...redisEnv("REDIS_KILLSWITCH", requiredInProduction),
@@ -498,7 +498,9 @@ const jobModules = [
               store: new CacheableMemory({ ttl: 900000, lruSize: 10000 }),
             }),
             createKeyv(
-              redisUrl(redisOptions((key) => configService.get(key), "CACHE")!),
+              redisUrl(
+                redisOptions((key) => configService.get(key), "SESSION_REDIS")!,
+              ),
             ),
           ],
         };

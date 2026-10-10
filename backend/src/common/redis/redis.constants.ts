@@ -1,5 +1,5 @@
 /**
- * DI token for the `ioredis` client connected to `CACHE_HOST`, backing
+ * DI token for the `ioredis` client connected to `SESSION_REDIS_HOST`, backing
  * sessions (`main.ts`) and OTP codes (via `@nestjs/cache-manager` on the
  * same physical Redis, see `app.module.ts`'s `CacheModule`).
  */
@@ -7,7 +7,7 @@ export const REDIS_CLIENT = Symbol("REDIS_CLIENT");
 
 /**
  * DI token for the separate `ioredis` client connected to
- * `RATE_LIMIT_CACHE_HOST`, dedicated to LimitKit's rate-limit counters (see
+ * `RATE_LIMIT_REDIS_HOST`, dedicated to LimitKit's rate-limit counters (see
  * `common/rate-limit/`). Kept on its own Redis instance so high-churn,
  * short-TTL counter keys can't evict or contend with session/OTP data.
  */

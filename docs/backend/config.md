@@ -13,9 +13,9 @@ For: developers and operators setting up the API. Source of truth: the Joi schem
 | --- | --- | --- |
 | `DB_HOST` / `DB_PORT` / `DB_SCHEMA` / `DB_SSLMODE` | none / 5432 / `public` / unset | `DB_HOST` required. Postgres is composed from parts in `src/common/config/connections.ts`; there is no `DATABASE_URL`. |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | none | Required. The same vars the Postgres container reads, so there is one password. |
-| `CACHE_HOST` / `CACHE_PORT` / `CACHE_PASSWORD` | none / 6379 / unset | `CACHE_HOST` required. Redis for sessions, OTP, cache. |
+| `SESSION_REDIS_HOST` / `SESSION_REDIS_PORT` / `SESSION_REDIS_PASSWORD` | none / 6379 / unset | `SESSION_REDIS_HOST` required. Redis for sessions and OTP codes. |
 | `REDIS_KILLSWITCH_HOST` / `_PORT` / `_PASSWORD` | none / 6379 / unset | Host required in production ([kill switch](../ops/kill-switch.md)); unset elsewhere = fail-safe defaults only. |
-| `RATE_LIMIT_CACHE_HOST` / `_PORT` / `_PASSWORD` | none / 6379 / unset | Host required. Dedicated Redis for LimitKit; see [ADR-0005](../adr/0005-rate-limit-store-lru-rdb.md). |
+| `RATE_LIMIT_REDIS_HOST` / `_PORT` / `_PASSWORD` | none / 6379 / unset | Host required. Dedicated Redis for LimitKit; see [ADR-0005](../adr/0005-rate-limit-store-lru-rdb.md). |
 | `CORS_ORIGIN` | none | Required. |
 | `SESSION_SECRET` | none | Required. |
 | `SESSION_TTL_MS` | 604800000 (7 d) | Idle lifetime; rolling. Drives cookie `maxAge` and Redis TTL. |

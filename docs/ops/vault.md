@@ -30,7 +30,7 @@ Image `hashicorp/vault` is pinned in `compose.prod.yml`; bump deliberately (Depe
 - `render-secrets.sh` logs in with the AppRole and writes the files; `file-secrets.ts` and `docker-entrypoint.sh` consume them.
 - Bandit reuses `docker-entrypoint.sh` (bind-mounted, entrypoint override in compose) because it reads plain env vars only.
 - Non-secret settings are the committed `backend/env/prod.env`, which `deploy.sh` ships as `.env.prod` (600). Only secrets are in Vault. A key in both aborts the deploy: a plain `KEY` would beat the rendered `KEY_FILE` and silently ignore Vault.
-- The app composes its connections from parts (`DB_HOST`, `POSTGRES_*`, `CACHE_HOST`, `MAIL_HOST`, ...), so a password exists once instead of inside a URL.
+- The app composes its connections from parts (`DB_HOST`, `POSTGRES_*`, `SESSION_REDIS_HOST`, `MAIL_HOST`, ...), so a password exists once instead of inside a URL.
 - Plain-env sets are still exposed as container environment variables because the upstream images do not consistently support `FOO_FILE`. They are rendered only on host tmpfs.
 
 ## Test the render script locally
