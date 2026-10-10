@@ -100,7 +100,7 @@ describe("placementToastMessage", () => {
     );
     const { title, description } = splitToastMessage(message);
     expect(title).toBe("Scheduled");
-    expect(description).toContain("09:00");
+    expect(description).toBe("Mon Oct 12, 9:00 AM");
   });
 });
 
@@ -114,7 +114,7 @@ describe("showMovedToast", () => {
     });
     const arg = toast.mock.calls[0][0];
     expect(arg.title).toBe("Moved");
-    expect(arg.description).toBe("Mon, Oct 12, 09:00");
+    expect(arg.description).toBe("Mon, Oct 12, 9:00 AM");
   });
 });
 

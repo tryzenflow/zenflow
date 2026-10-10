@@ -439,7 +439,6 @@ export default {
     "Đã cập nhật {applied}, bỏ qua {failed}",
   "Skipped ones clashed with another sitting and stayed put.":
     "Các buổi bị bỏ qua trùng với buổi khác nên giữ nguyên.",
-  Scheduled: "Đã xếp lịch",
   "Scheduled late": "Đã xếp lịch trễ",
   "No time found before its deadline.": "Không có giờ trống trước hạn chót.",
   "Check your inbox": "Kiểm tra hộp thư nhé",
