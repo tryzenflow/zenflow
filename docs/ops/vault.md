@@ -74,7 +74,7 @@ Its healthcheck treats sealed or uninitialised as "process up" (`sealedcode=200&
      -v /etc/zenflow/vault:/creds -e VAULT_ADDR=http://127.0.0.1:8200 -e VAULT_TOKEN -e ENV_NAME=prod \
      hashicorp/vault:1.20.4 /ops/setup-approle.sh --role-id-file /creds/role_id --secret-id-file /creds/secret_id
    ```
-   If you already have a `.env.prod` in the new parts format, use the importer instead of retyping values. It writes each secret to every set that needs it, leaves non-secrets in the env file (listed in `--dry-run`), maps the old Grafana variable names, and **rejects** unknown keys, the removed URL vars and misnamed backup keys instead of guessing:
+   If you already have a `.env.prod` in the new parts format, use the importer instead of retyping values. It writes each secret to every set that needs it, leaves non-secrets in the env file (listed in `--dry-run`), and **rejects** unknown keys instead of guessing (use `GF_SECURITY_ADMIN_PASSWORD` and `GF_SMTP_PASSWORD` for Grafana, not the old `GRAFANA_*` names):
    ```bash
    export VAULT_ADDR=http://127.0.0.1:8200 VAULT_ENV=prod
    read -rs -p "Vault root token: " VAULT_TOKEN && export VAULT_TOKEN
@@ -92,11 +92,11 @@ Its healthcheck treats sealed or uninitialised as "process up" (`sealedcode=200&
 
 Done once, by the root-token holder (or `generate-root` with three shares):
 
-1. Convert the old `.env.prod` to parts: drop `DATABASE_URL` and `MAIL_TRANSPORT`, add `DB_HOST`, `POSTGRES_*`, `MAIL_*`, `*_HOST`, and rename the backup keys to `BACKUP_S3_ACCESS_KEY_ID` / `BACKUP_S3_SECRET_ACCESS_KEY`. Remove unused `*_PASSWORD` Redis vars.
+1. Write the old `.env.prod` as parts (`DB_HOST`, `POSTGRES_*`, `MAIL_*`, `*_HOST`, `BACKUP_S3_*`) with no URL vars or Redis `*_PASSWORD`.
 2. Re-run `setup-approle.sh` so the policy lists the new set paths.
 3. `import-dotenv.sh .env.prod --dry-run`, then for real. Old KV versions stay, so nothing is lost.
 4. Copy the non-secret keys into `backend/env/prod.env` and merge that PR, then deploy.
-5. After the stack is healthy, delete the retired set and keys: `vault kv metadata delete -mount=secret zenflow/prod/platform`, and `vault kv patch` the `api` set without `DATABASE_URL` / `MAIL_TRANSPORT` (or `kv put` the full new `api` set).
+5. After the stack is healthy, delete the retired `platform` set: `vault kv metadata delete -mount=secret zenflow/prod/platform`.
 
 ### After a Vault restart or host reboot
 
