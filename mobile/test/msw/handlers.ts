@@ -19,5 +19,7 @@ export const handlers = [
   http.get(`${API}/integrations`, () =>
     HttpResponse.json({ data: { integrations: [] } }),
   ),
+  http.get(`${API}/sessions`, () => HttpResponse.json({ data: { sessions: [] } })),
+  http.patch(`${API}/users/update/basic-info`, () => HttpResponse.json({ data: testUser })),
   http.patch(`${API}/users/me`, () => HttpResponse.json({ data: testUser })),
 ];
