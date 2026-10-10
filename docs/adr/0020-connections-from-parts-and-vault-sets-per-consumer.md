@@ -14,7 +14,7 @@
 - The Prisma CLI is the only reader of `DATABASE_URL`; `backend/scripts/with-database-url.cjs` composes it from the same parts and runs the command. A unit test keeps the two compositions identical.
 - Vault holds secrets only, one set per consumer: `api`, `bandit`, `postgres`, `minio`, `grafana`, `backup`. A shared secret is written to each set that needs it. The AppRole policy lists each set path explicitly. Each compose service mounts only its own set.
 - Non-secrets are the committed `backend/env/prod.env`, shipped by `deploy.sh` as `.env.prod`. A key in both the env file and Vault aborts the deploy, because a plain `KEY` beats a rendered `KEY_FILE`.
-- `import-dotenv.sh` routes by an explicit table and rejects unknown keys, the removed URL vars and misnamed backup keys.
+- `import-dotenv.sh` routes by an explicit table and rejects unknown keys.
 
 ## Consequences
 - One Postgres password source; rotation patches three Vault sets instead of one plus a URL.

@@ -84,11 +84,11 @@ Contact point `zenflow-ops-email` (`alerting/contact-points.yml`) emails alphatr
 | Env | Delivery |
 | --- | --- |
 | Staging | Grafana (<http://grafana.localhost>) sends to Mailpit (<http://localhost:8025>) |
-| Prod | Mailgun SMTP, sender domain `alerts.alphatrann.com`, from `alerts@alerts.alphatrann.com` |
+| Prod | Mailgun SMTP, sender domain `zenflow.alphatrann.com`, from `alerts@zenflow.alphatrann.com` |
 
 Prod Mailgun setup (Grafana only speaks SMTP, not the Mailgun API):
-1. Mailgun: add domain `alerts.alphatrann.com`; publish the SPF and DKIM DNS records it shows and wait for "verified".
-2. Domain settings > SMTP credentials: create/reset the password for `postmaster@alerts.alphatrann.com`.
+1. Mailgun: add domain `zenflow.alphatrann.com`; publish the SPF and DKIM DNS records it shows and wait for "verified".
+2. Domain settings > SMTP credentials: create/reset the password for `postmaster@zenflow.alphatrann.com`.
 3. Vault `grafana` set: `GF_SMTP_PASSWORD=<that password>`. The configured host is `smtp.mailgun.org:587`; edit `compose.prod.yml` for a different Mailgun region or sender.
 4. Deploy, then Grafana > Alerting > Contact points > Test, and check Mailgun logs.
 
