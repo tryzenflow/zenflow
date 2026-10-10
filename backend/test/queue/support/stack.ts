@@ -75,7 +75,7 @@ export interface Proc {
   exited: Promise<number | null>;
 }
 
-function childEnv(role: Role): NodeJS.ProcessEnv {
+function childEnv(role: Role, extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   return {
     ...process.env,
     // Not "test": there the pub/sub clients are lazy and never connect
@@ -115,6 +115,7 @@ function childEnv(role: Role): NodeJS.ProcessEnv {
     OTP_VERIFY_IP_LIMIT: "1000",
     OTEL_SDK_DISABLED: "true",
     LOG_LEVEL: "info",
+    ...extra,
   };
 }
 
@@ -173,10 +174,14 @@ function track(role: string, child: ChildProcess): Proc {
   return { role, child, output, exited };
 }
 
-export async function startRole(role: Role): Promise<Proc> {
+/** `extraEnv` overrides the shared test env for this process (e.g. `BANDIT_SERVICE_URL`). */
+export async function startRole(
+  role: Role,
+  extraEnv: NodeJS.ProcessEnv = {},
+): Promise<Proc> {
   const child = spawn(process.execPath, [MAIN], {
     cwd: os.tmpdir(),
-    env: childEnv(role),
+    env: childEnv(role, extraEnv),
   });
   const proc = track(role, child);
   const live =
