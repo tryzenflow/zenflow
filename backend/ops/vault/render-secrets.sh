@@ -12,7 +12,8 @@
 #   <KEY>        one file per key holding the raw value (no trailing newline)
 #   files.env    KEY_FILE=<MOUNT_PATH>/<KEY> lines (not secret) for compose env_file
 # PLAIN_ENV_SETS are written as plain KEY=value files for images that cannot
-# read KEY_FILE (Postgres, MinIO, backup and Grafana). OUT_DIR should live on
+# read KEY_FILE (Postgres, MinIO, backup and Grafana). Only sets in SECRET_SETS
+# are fetched, so a plain set must be listed in both. OUT_DIR should live on
 # tmpfs (/run/... on Linux) so values never hit disk.
 # Needs curl and jq. Logs in with AppRole; nothing secret goes to argv or stdout.
 set -euo pipefail

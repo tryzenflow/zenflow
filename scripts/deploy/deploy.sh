@@ -79,7 +79,7 @@ case "$SECRETS_PROVIDER" in
            # tmpfs mounts during the remote steps. Only the NON-secret settings
            # (backend/env/<env>.env, committed) are shipped, as .env.<env>.
            [ -r "backend/env/${DEPLOY_ENV}.env" ] || { echo "backend/env/${DEPLOY_ENV}.env is missing (non-secret settings for SECRETS_PROVIDER=vault)" >&2; exit 2; }
-           ! grep -q REPLACE_ME "backend/env/${DEPLOY_ENV}.env" || { echo "backend/env/${DEPLOY_ENV}.env still has REPLACE_ME values" >&2; exit 2; }
+           ! grep -Eq '^[A-Z0-9_]+=REPLACE_ME' "backend/env/${DEPLOY_ENV}.env" || { echo "backend/env/${DEPLOY_ENV}.env still has REPLACE_ME values" >&2; exit 2; }
            echo "==> Secrets: rendering from Vault on the host; shipping non-secret backend/env/${DEPLOY_ENV}.env as ${env_target}"
            push_env < "backend/env/${DEPLOY_ENV}.env" ;;
   *)       echo "unknown SECRETS_PROVIDER ${SECRETS_PROVIDER}" >&2; exit 2 ;;
@@ -216,7 +216,7 @@ if [ "$provider" = "vault" ]; then
     sleep 3
   done
   VAULT_ADDR="$vault_addr" VAULT_ENV="$env_name" OUT_DIR="$ZENFLOW_SECRETS_DIR" \
-    SECRET_SETS="$secret_sets" PLAIN_ENV_SETS="$plain_sets" \
+    SECRET_SETS="$secret_sets $plain_sets" PLAIN_ENV_SETS="$plain_sets" \
     VAULT_ROLE_ID_FILE="$role_id_file" VAULT_SECRET_ID_FILE="$secret_id_file" \
     ./ops/vault/render-secrets.sh
   # A plain KEY in .env.<env> beats the rendered KEY_FILE (file-secrets.ts,

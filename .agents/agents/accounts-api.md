@@ -13,6 +13,7 @@ owns:
   - backend/src/mail/**
   - backend/src/files/**
   - backend/src/prisma/**
+  - backend/scripts/with-database-url.cjs
   - backend/src/common/**
   - backend/src/health/**
   - backend/src/crypto/**

@@ -11,6 +11,8 @@ Staging harness: [staging/README.md](staging/README.md). Synthetic users only.
 | `B` AFTER-legacy | HEAD of `feat/issue-60-62` | `SCHEDULER_PLACEMENT_MODE=legacy` (slot-first TS scan); bandit container up so `/predict` runs |
 | `C` AFTER-python | same HEAD | `SCHEDULER_PLACEMENT_MODE=python`, `services/bandit` as `BANDIT_SERVICE_URL` |
 
+The compose file and `Dockerfile.api` use the parts-based connection settings (`DB_HOST`, `POSTGRES_*`, ...) and `backend/scripts/with-database-url.cjs`, so only commits that include them build and boot here. Older commits (such as variant `A` above) need the pre-change compose and Dockerfile from their own checkout.
+
 Each variant builds from its own git worktree (`../zenflow-lt-A|B|C`); the main tree is untouched.
 The bandit container runs for all three, built from that commit's `services/bandit`.
 

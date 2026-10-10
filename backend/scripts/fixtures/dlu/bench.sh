@@ -107,7 +107,7 @@ psql_admin -c 'CREATE DATABASE zenflow' >/dev/null
 flush_redis
 curl -s -X DELETE http://localhost:8025/api/v1/messages >/dev/null || true
 echo "migrating"
-npx dotenv -e .env.dev -- npx prisma migrate deploy >"$OUT/setup.migrate.log" 2>&1
+npx dotenv -e .env.dev -- node scripts/with-database-url.cjs npx prisma migrate deploy >"$OUT/setup.migrate.log" 2>&1
 start_fake 0 0
 start_backend "$OUT/setup.seed.backend.log" INGESTION_ENABLED=false
 wait_up; sleep 5
