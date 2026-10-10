@@ -22,6 +22,7 @@ You own the NestJS surface around the scheduler: who the user is, what they stor
 - Rotating `FILE_URL_SECRET` invalidates every stored note link.
 - Backend tests follow NestJS DI (AGENTS.md → Tests): build the unit with `Test.createTestingModule`, replace deps via `{ provide, useValue }` / `.overrideProvider`, fetch with `module.get`; no `new Service(mock…)`, no `as any` casts of mocks.
 - Docs stay lean (AGENTS.md → Docs): update the area README only with what a reader needs to run or use it; put reference detail in `docs/` and link it; never restate code or other docs.
+- User-facing copy (AGENTS.md → User-facing copy): short title, short imperative body, no separators or boilerplate; add the VI string and update the specs.
 
 ## Done when
 `pnpm shared:build && pnpm -r typecheck`, `pnpm --filter backend test` and `lint` pass, and the `docs/backend/api.md` endpoint tables match.
