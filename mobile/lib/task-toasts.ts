@@ -1,6 +1,6 @@
 import { t } from "./i18n";
 import { format } from "./i18n";
-import type { ToastIconName, useToast } from "@/components/ui/toast";
+import type { ToastIcon, useToast } from "@/components/ui/toast";
 import { placementQualifier, zonedDate } from "@zenflow/core";
 import {
   type DisplacedSession,
@@ -48,7 +48,7 @@ export function showSplitToast(
   toast: ToastFn,
   raw: string,
   variant: "success" | "destructive" | "warning" = "destructive",
-  icon?: ToastIconName,
+  icon?: ToastIcon,
 ): void {
   const { title, description } = splitToastMessage(t(raw));
   toast({ title, description, variant, ...(icon && { icon }) });
@@ -65,7 +65,7 @@ export function showErrorToast(
   toast: ToastFn,
   error: unknown,
   fallback: string,
-  icon?: ToastIconName,
+  icon?: ToastIcon,
 ): void {
   const message = describeSaveError(error, fallback);
   // Only the generic fallback is known: add a next step so it isn't a dead end.
@@ -125,23 +125,20 @@ export function placementToastMessage(
     // fired on *every* creation. Mirrors
     // `frontend/src/components/tasks/create-task-dialog.tsx`.
     return {
-      message: t('"{title}" created', { title: task.title }),
+      message: `${t("Task created")}\n${t("No time found before its deadline.")}`,
       variant: "success",
     };
   }
 
   const qualifier = placementQualifier(task, { timezone: user.timezone });
-  const suffix =
-    qualifier === "pastDeadline" ? `\n${t("It's past its deadline.")}` : "";
-
-  const when = format(
-    zonedDate(task.scheduledStartTime, user.timezone),
-    "EEE MMM d, HH:mm",
-  );
-  return {
-    message: t("Scheduled for {when}", { when }) + suffix,
-    variant: "success",
-  };
+  const start = zonedDate(task.scheduledStartTime, user.timezone);
+  // The time is the news, so it leads the title; the date is the detail.
+  const when = format(start, "HH:mm");
+  const title =
+    qualifier === "pastDeadline"
+      ? t("Scheduled late for {when}", { when })
+      : t("Scheduled for {when}", { when });
+  return { message: `${title}\n${format(start, "EEE MMM d")}`, variant: "success" };
 }
 
 const POLICY_LABEL: Record<InfeasiblePolicy, string> = {

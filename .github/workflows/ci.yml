@@ -13,6 +13,43 @@ permissions:
   contents: read
 
 jobs:
+  # Which heavy jobs can be skipped. Compares the PR against its base; any other
+  # trigger (merge queue, manual run) runs everything. Skipped jobs count as
+  # passing in "CI ok".
+  changes:
+    name: Detect changed areas
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.diff.outputs.backend }}
+      image: ${{ steps.diff.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: diff
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+            echo "image=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}")
+          # Backend tests: the API, the shared packages it imports, the
+          # dependency lockfile/workspace, and the CI wiring that runs them.
+          if echo "$files" | grep -qE '^(backend/|packages/|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|package\.json$|\.npmrc$|\.github/(workflows/ci\.yml|actions/|scripts/))'; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "backend=false" >> "$GITHUB_OUTPUT"
+          fi
+          # API image: its Dockerfile context (see .dockerignore): backend,
+          # packages/shared, root manifests.
+          if echo "$files" | grep -qE '^(backend/|packages/shared/|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|package\.json$|\.npmrc$|\.dockerignore$|\.github/workflows/ci\.yml$)'; then
+            echo "image=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "image=false" >> "$GITHUB_OUTPUT"
+          fi
+
   lint:
     name: Lint (changed files)
     runs-on: ubuntu-latest
@@ -55,12 +92,14 @@ jobs:
 
   unit-tests:
     name: Unit tests (backend, mobile)
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
-      - run: pnpm --filter backend test
+      - if: needs.changes.outputs.backend == 'true'
+        run: pnpm --filter backend test
       - run: pnpm --filter mobile test
 
   bandit-tests:
@@ -116,6 +155,8 @@ jobs:
 
   backend-e2e:
     name: Backend e2e (app, queue, backup)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     services:
@@ -226,6 +267,8 @@ jobs:
 
   docker-build:
     name: API image builds (no push)
+    needs: changes
+    if: needs.changes.outputs.image == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -432,6 +475,7 @@ jobs:
     name: CI ok
     if: always()
     needs:
+      - changes
       - lint
       - typecheck
       - unit-tests

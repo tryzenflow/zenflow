@@ -202,7 +202,12 @@ const COPY = {
     },
   },
   get saveFailed() {
-    return t("Couldn't save. Try again.");
+    return {
+      title: t("Couldn't save"),
+      description: t("Try again in a moment."),
+      variant: "destructive",
+      icon: Sliders,
+    } as const;
   },
 } as const;
 
@@ -355,7 +360,7 @@ export default function OnboardingScreen() {
     try {
       if ((await fn()) !== false) go();
     } catch {
-      toast(COPY.saveFailed, "destructive", { icon: Sliders });
+      toast(COPY.saveFailed);
     } finally {
       setBusy(false);
     }
@@ -369,7 +374,7 @@ export default function OnboardingScreen() {
   function savePref(patch: Parameters<typeof update>[0]) {
     const p = (async () => {
       if (await update(patch)) return true;
-      toast(COPY.saveFailed, "destructive", { icon: Sliders });
+      toast(COPY.saveFailed);
       return false;
     })();
     pendingSaves.current.add(p);
@@ -415,7 +420,7 @@ export default function OnboardingScreen() {
     if (useUserStore.getState().user?.allowNotifications === true) {
       return "saved";
     }
-    toast(COPY.saveFailed, "destructive", { icon: Sliders });
+    toast(COPY.saveFailed);
     return "failed";
   }
 
@@ -456,7 +461,7 @@ export default function OnboardingScreen() {
       // Idempotent; the root AuthGate then routes to the app.
       updateUser(await updateBasicInfo({ onboarded: true }));
     } catch {
-      toast(COPY.saveFailed, "destructive", { icon: Sliders });
+      toast(COPY.saveFailed);
       setBusy(false);
     }
   }
