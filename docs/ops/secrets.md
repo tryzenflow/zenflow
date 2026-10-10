@@ -21,7 +21,7 @@ Values are never listed. `backend/.env.example` shows the shape.
 | `FCM_SERVICE_ACCOUNT`, `APNS_KEY` (+ `APNS_KEY_ID`, `APNS_TEAM_ID`) | push notifications | store | Firebase / Apple developer portal |
 | `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY`, `BACKUP_AGE_RECIPIENT`, `BACKUP_AGE_IDENTITY` | backup container; IAM user is put + list only. `BACKUP_AGE_RECIPIENT` is public; `BACKUP_AGE_IDENTITY` is the restore-test key, never the offline master key | store, injected into `.env.<env>` | [runbook](backups.md#rotation) |
 | `GRAFANA_ADMIN_PASSWORD` | Grafana (staging, prod; prod refuses to start without it) | store | change and redeploy |
-| `GRAFANA_SMTP_PASSWORD` | Grafana alert mail: Mailgun SMTP credential for `postmaster@alerts.alphatrann.com` (prod) | store, `.env.prod` | reset in Mailgun, redeploy |
+| `GF_SMTP_PASSWORD` | Grafana alert mail: Mailgun SMTP credential for `postmaster@alerts.alphatrann.com` (prod) | Vault `platform` set | reset in Mailgun, redeploy |
 | `CACHE_URL`, `RATE_LIMIT_CACHE_URL`, `QUEUE_REDIS_URL`, `REDIS_PUBSUB_URL`, `REDIS_KILLSWITCH_URL` | Redis ([ADR-0005](../adr/0005-rate-limit-store-lru-rdb.md), [ADR-0007](../adr/0007-bullmq-for-notification-queue.md), [ADR-0018](../adr/0018-redis-pubsub-instance.md)); unauthenticated on internal-only Docker networks | n/a | add a password if the network assumption changes |
 | Per-user DLU/LMS credentials | `Integration` rows in Postgres, encrypted under per-user DEKs | DB (ciphertext only) | by the user |
 | `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`, `SOPS_AGE_KEY`, `SECRETS_COMMAND` | CI deploy | GitHub Environment secrets | yearly or on offboarding |
@@ -54,7 +54,7 @@ Not secrets: `VITE_*`, `EXPO_PUBLIC_*` (shipped to clients), `backend/certs/lms-
 | `host` (default) | `backend/.env.<env>` already on the host, written by your secret-manager agent | Vault Agent, cloud sidecar/cron, manual bootstrap |
 | `sops` | CI decrypts `backend/secrets/<env>.env.enc` with `SOPS_AGE_KEY`, streams it to the host as `.env.<env>` (600, never on the runner disk) | no managed store yet; the encrypted file is safe to commit |
 | `command` | runs `SECRETS_COMMAND`, which prints dotenv on stdout (e.g. `aws secretsmanager get-secret-value ... \| jq -r ...`) | cloud secret manager, external Vault |
-| `vault` (**prod only**) | self-hosted `vault` container; deploy renders secrets into tmpfs `*_FILE` mounts on the host (no plaintext `.env`, nothing via the runner) | prod; refused for staging; see [vault.md](vault.md) |
+| `vault` (**prod only**) | self-hosted `vault` container; deploy renders API/Bandit `*_FILE` mounts and platform env files into host tmpfs (no `.env.prod`, nothing via the runner) | prod; refused for staging; see [vault.md](vault.md) |
 
 SOPS bootstrap (once):
 

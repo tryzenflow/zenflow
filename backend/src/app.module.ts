@@ -48,7 +48,8 @@ import { SchedulerWorkerModule } from "./scheduler/scheduler-worker.module";
 import { RemindersWorkerModule } from "./reminders/reminders-worker.module";
 import { HealthModule } from "./health/health.module";
 
-// Process role (ADR-0011), fixed at module-evaluation time (reads the env file).
+const configEnvFile = envFilePath();
+// Process role (ADR-0011), fixed at module-evaluation time.
 const role = getRole();
 // The watcher (cron heartbeat that enqueues) and each queue consumer register
 // only in their own role; an API replica must register none, or every cron
@@ -71,7 +72,9 @@ const jobModules = [
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: envFilePath(),
+      ...(configEnvFile
+        ? { envFilePath: configEnvFile }
+        : { ignoreEnvFile: true }),
       validationSchema: Joi.object({
         DATABASE_URL: Joi.string().required(),
         SESSION_SECRET: Joi.string().required(),

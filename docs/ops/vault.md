@@ -7,7 +7,7 @@ For operators. Self-hosted Vault container: KV v2 plus AppRole. Part of the secr
 - Vault is **production-only** for secrets. The `vault` service is in `backend/compose.prod.yml`, and also in `compose.staging.yml` so the backup of `vault_data` ([backups.md](backups.md)) can be tested; staging secrets still come from `.env.staging`.
 - `SECRETS_PROVIDER=vault` is valid only for the `production` Environment; `deploy.sh` exits 2 and `deploy.yml` fails otherwise.
 - Dev and staging read `.env.<env>` via `host`, `sops` or `command`; `FOO_FILE` support is unchanged.
-- MVP-minimum: KV v2 with least-privilege AppRole replaces plaintext `.env` secrets.
+- MVP-minimum: KV v2 with least-privilege AppRole replaces production `.env.prod`.
 - **Not implemented (post-MVP, issue #76 "full Vault"):** dynamic DB credentials, transit engine, automated key rotation, auto-unseal, HA/Raft.
 
 Files in `backend/ops/vault/`: `config.hcl` (server), `policy.hcl` (read-only), `setup-approle.sh`, `render-secrets.sh`.
@@ -18,18 +18,19 @@ Image `hashicorp/vault` is pinned in `compose.prod.yml`; bump deliberately (Depe
 | Item | Value |
 | --- | --- |
 | KV mount | v2 at `secret/` |
-| Secret sets | `secret/zenflow/<env>/api` (`api`, `migrations`) and `secret/zenflow/<env>/bandit` |
+| Secret sets | `secret/zenflow/<env>/api` (`api`, `migrations`), `bandit`, and `platform` (Postgres, backup, MinIO, Grafana) |
 | Keys | env var names (`SESSION_SECRET`, `DATABASE_URL`, `MASTER_LMS_ENCRYPTION_KEY_V1`, ...) |
 | Shared key | `BANDIT_SERVICE_TOKEN` is stored in both sets |
 | Policy `zenflow-api-<env>` | `read` on `secret/data/zenflow/<env>/*` only; no list, write or other environments |
 | AppRole `zenflow-api-<env>` | token TTL 10 min (max 30), `secret_id` valid 30 days |
-| Rendered files | `/run/zenflow/<env>/<set>/` on the host tmpfs: one file per key plus `files.env` (`FOO_FILE=/run/secrets/zenflow/FOO`) |
-| Container mounts | `.../api` into `api` and `migrations`, `.../bandit` into `bandit`, at `/run/secrets/zenflow` read-only; `files.env` is an optional `env_file` |
+| Rendered files | `/run/zenflow/<env>/<set>/` on the host tmpfs: one file per key plus `files.env` |
+| API and Bandit delivery | `files.env` has `FOO_FILE=/run/secrets/zenflow/FOO`; `api` and `migrations` mount `api`, and Bandit mounts `bandit`, read-only |
+| Platform delivery | `platform/files.env` has direct values for images without `FOO_FILE` support; it is injected into Postgres, backup, MinIO, and Grafana |
 
 - `render-secrets.sh` logs in with the AppRole and writes the files; `file-secrets.ts` and `docker-entrypoint.sh` consume them.
 - Bandit reuses `docker-entrypoint.sh` (bind-mounted, entrypoint override in compose) because it reads plain env vars only.
-- Still on `.env.<env>`: `POSTGRES_*` (the image supports `POSTGRES_PASSWORD_FILE`; wire it when needed), `S3_*` (MinIO root user), `GRAFANA_ADMIN_PASSWORD`.
-- Remove a key from `.env.<env>` once Vault serves it: an explicit `FOO` beats `FOO_FILE`.
+- Production has no `.env.prod`. All API configuration and secrets belong in `api`; `BANDIT_SERVICE_TOKEN` belongs in `bandit`; platform values belong in `platform`.
+- `platform` values are still exposed as container environment variables because the upstream images do not consistently support `FOO_FILE`. They are rendered only on host tmpfs, not written to a persistent dotenv file.
 
 ## Test the render script locally
 
@@ -49,7 +50,7 @@ docker rm -f vault-smoke
 The service uses file storage on volume `vault_data`, `IPC_LOCK`, no UI, and a plain-HTTP listener on `127.0.0.1:8200` only.
 Its healthcheck treats sealed or uninitialised as "process up" (`sealedcode=200&uninitcode=200`). It always starts **sealed**.
 
-1. Deploy once with `SECRETS_PROVIDER=host`, or start only Vault: `docker compose -f compose.prod.yml up -d vault`.
+1. Start only Vault: `docker compose -f compose.prod.yml up -d vault`.
 2. Initialise on the host (5 shares, threshold 3). Save the output only into the password managers below.
    ```bash
    docker exec zenflow-vault-prod vault operator init -key-shares=5 -key-threshold=3
@@ -59,17 +60,27 @@ Its healthcheck treats sealed or uninitialised as "process up" (`sealedcode=200&
    ```bash
    V="docker exec -e VAULT_TOKEN zenflow-vault-prod vault"
    $V secrets enable -path=secret -version=2 kv
-   $V kv put -mount=secret zenflow/prod/api DATABASE_URL=... SESSION_SECRET=... ...   # read values from a prompt/file, not shell history
+   # Copy every API value from the old .env.prod into this set before removing that file.
+   $V kv put -mount=secret zenflow/prod/api DATABASE_URL=... SESSION_SECRET=... S3_ACCESS_KEY_ID=... S3_SECRET_ACCESS_KEY=...   # read values from a prompt/file, not shell history
    $V kv put -mount=secret zenflow/prod/bandit BANDIT_SERVICE_TOKEN=...
+   $V kv put -mount=secret zenflow/prod/platform POSTGRES_USER=... POSTGRES_PASSWORD=... POSTGRES_DB=... BACKUP_S3_BUCKET=... BACKUP_S3_ACCESS_KEY_ID=... BACKUP_S3_SECRET_ACCESS_KEY=... BACKUP_AGE_RECIPIENT=... BACKUP_AGE_IDENTITY=... S3_ACCESS_KEY_ID=... S3_SECRET_ACCESS_KEY=... S3_BUCKET=... GF_SECURITY_ADMIN_PASSWORD=... GF_SMTP_PASSWORD=...
    sudo install -d -m 700 /etc/zenflow/vault
    docker run --rm --network container:zenflow-vault-prod -v $PWD/backend/ops/vault:/ops:ro \
      -v /etc/zenflow/vault:/creds -e VAULT_ADDR=http://127.0.0.1:8200 -e VAULT_TOKEN -e ENV_NAME=prod \
      hashicorp/vault:1.20.4 /ops/setup-approle.sh --role-id-file /creds/role_id --secret-id-file /creds/secret_id
    ```
+   If you already have `backend/.env.prod`, use the importer instead of retyping values. It maps the old Grafana variable names and splits keys into `api`, `bandit`, and `platform`:
+   ```bash
+   export VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=<initial-root-token> VAULT_ENV=prod
+   ./ops/vault/import-dotenv.sh .env.prod --dry-run  # prints names only
+   ./ops/vault/import-dotenv.sh .env.prod
+   unset VAULT_TOKEN
+   ```
 5. **Revoke the root token**: `vault token revoke -self`. Recreate one with `vault operator generate-root` (needs the shares) only for policy changes or a new environment.
-6. Set `SECRETS_PROVIDER=vault` on the GitHub Environment and deploy.
-   - The deploy starts Vault, renders the files and force-recreates `api`, `migrations` and `bandit`.
+6. Set `SECRETS_PROVIDER=vault` on the GitHub Environment and deploy. Move any remaining API settings from `.env.prod` into `api`; do not delete the old file until the new containers are healthy.
+   - The deploy starts Vault, renders the API, Bandit and platform files, and starts services from those files.
    - It fails with a clear message if Vault is sealed (HTTP 503) or uninitialised (501).
+7. Verify `docker compose -f compose.prod.yml ps` is healthy, then securely remove `backend/.env.prod` from the deploy host. It is no longer read in Vault mode.
 
 ### After a Vault restart or host reboot
 
@@ -152,7 +163,7 @@ The runbooks in [secrets.md](secrets.md#rotation-runbooks) apply with two change
 | Secret | Vault specifics |
 | --- | --- |
 | `SESSION_SECRET` | patch, deploy; all users are logged out |
-| Database password | run the `ALTER USER` step, patch `DATABASE_URL`, deploy; `POSTGRES_PASSWORD` still lives in `.env.<env>`, update it too; dynamic DB credentials are post-MVP |
+| Database password | run the `ALTER USER` step, patch both `api/DATABASE_URL` and `platform/POSTGRES_PASSWORD`, then deploy; dynamic DB credentials are post-MVP |
 | Crypto master keys | add `MASTER_*_ENCRYPTION_KEY_V2` with `kv patch`, ship the code change, deploy |
 
 - Never `kv put` over a set without V1: `kv put` replaces all keys, and V1 must stay while rows reference it.

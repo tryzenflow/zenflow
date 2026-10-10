@@ -491,7 +491,7 @@ services:
   # --- Observability stack (see observability/README.md) --------------------
   # Receives OTLP/HTTP from the API (src/tracing.ts) and the bandit service on
   # :4318, fans traces -> Tempo, metrics -> Prometheus (scrape :8889),
-  # logs -> Loki. .env.prod must set
+  # logs -> Loki. .env.staging must set
   # OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318 (set on the api service below).
   otel-collector:
     container_name: zenflow-otel-collector-staging
