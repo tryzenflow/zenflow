@@ -17,7 +17,7 @@ For maintainers (issue #75). Workflows live in `.github/workflows/`.
 - Unit tests: backend Jest, mobile Vitest, bandit pytest/ruff.
 - Prisma drift, backend e2e (`compose.test.yml`), frontend Playwright e2e.
 - API image build smoke test, gitleaks.
-- Vault: `docker compose config` for every compose file; Vault absent from dev/test and loopback-only in staging/prod; the `backup` service in staging/prod mounts `vault_data` read-only; `render-secrets.sh` against a throwaway `vault server -dev`; prod Vault config boots.
+- Vault: `docker compose config` for every compose file; Vault only in prod (absent from dev, staging and test) and loopback-only; the prod `backup` service mounts `vault_data` read-only; `render-secrets.sh` against a throwaway `vault server -dev`; prod Vault config boots.
 - Agents: `.claude/` and `.codex/` match `.agents/` (`node scripts/sync-agents.mjs --check`), hook tests, ownership check.
 
 Prisma check, against a throwaway shadow Postgres:
