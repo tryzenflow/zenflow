@@ -241,8 +241,11 @@ export default function LoginScreen() {
     clearErrors("otp");
     try {
       const result = await verifyOtp(getValues("email"), data.otp);
-      toast(t("Welcome back"), "success", { icon: CircleUserRound });
       let user: User = result.data;
+      // New users land on onboarding next — "back" would be wrong for them.
+      if (user.onboardedAt) {
+        toast(t("Welcome back"), "success", { icon: CircleUserRound });
+      }
       // The language shown on this screen (the top-right select, or the
       // Vietnamese default) overrides the account's stored preference.
       const language = getLanguage();
