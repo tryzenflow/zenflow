@@ -1,4 +1,4 @@
-import type { Session } from "@zenflow/shared";
+import type { NotificationDto, Session } from "@zenflow/shared";
 
 /** A Session with sensible defaults; override only what a test cares about. */
 export function makeSession(overrides: Partial<Session> = {}): Session {
@@ -22,6 +22,23 @@ export function makeSession(overrides: Partial<Session> = {}): Session {
     late: false,
     createdAt: "2026-10-01T00:00:00.000Z",
     updatedAt: "2026-10-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+/** A NotificationDto (unread assignment by default). */
+export function makeNotification(overrides: Partial<NotificationDto> = {}): NotificationDto {
+  return {
+    id: "n1",
+    eventName: "assignment.created",
+    title: "New assignment",
+    content: "Something new on your portal",
+    eventEndsAt: null,
+    sentAt: "2026-10-15T01:00:00.000Z",
+    readAt: null,
+    actionTakenAt: null,
+    sessionId: null,
+    conflictSessionIds: [],
     ...overrides,
   };
 }

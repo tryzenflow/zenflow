@@ -18,23 +18,35 @@ Screens render through `react-native-web` in happy-dom, with the API mocked over
 
 - Config: `mobile/vitest.component.config.ts`. Native-only modules are replaced by stubs in `mobile/test/mocks/` (aliased in the config) and `mobile/test/setup.component.tsx`.
 - `mobile/test/msw/handlers.ts` holds happy-path defaults. Override per test with `server.use(...)`. Unmatched requests fail the test (`onUnhandledRequest: "error"`), so a screen can't silently call an endpoint you didn't account for.
-- Render with `renderScreen` from `mobile/test/utils/render.tsx` (adds the toast provider). Select elements by `testID` (`getByTestId`); `className` styling is not applied in this environment.
+- Render with `renderScreen` from `mobile/test/utils/render.tsx` (adds the toast provider and the `PortalHost` that sheets render through). Use `makeSession` and `makeNotification` from `mobile/test/fixtures.ts`. Select elements by `testID` (`getByTestId`); `className` styling is not applied in this environment.
 - Keep tests out of `mobile/app/`: expo-router treats every file there as a route.
-- Peripheral heavy widgets (language dropdown, settings sections) are `vi.mock`ed per test file.
+- Peripheral heavy widgets (the rich-text editor, bottom sheets owned by another screen, floating chrome) are `vi.mock`ed per test file.
+- Screens that depend on "now" freeze only the clock: `vi.useFakeTimers({ toFake: ["Date"] })` plus `vi.setSystemTime(...)`. Faking timers wholesale breaks MSW and `waitFor`.
 - A new native import that breaks the environment usually needs a stub in `test/mocks/` plus an alias.
 
 ### Cases to cover
 
-Covered now: login (invalid email, OTP request success/server error/429 lockout/offline, verify success/wrong code, change email) and settings sign-out (success, request failure still clears the session).
+Covered now, by file in `mobile/test/screens/`:
 
-Still to write, in priority order:
+| File | Covers |
+| --- | --- |
+| `login` | invalid email, OTP request success/server error/429 lockout/offline, verify success/wrong code, change email |
+| `onboarding` | step order, name save, skip paths, notifications step (on, blocked, not now), preference saves and rollback, tags bulk, summary "Set up" detour, `onboarded: true` and its failure |
+| `week` | header range and today chip, blocks from `GET /sessions` in the user's timezone, tap and recurring-id routing, empty-day add, day switching and "Jump to today", `date` deep link, "Next up" pill |
+| `month` | grid and adjacent days, pills, month navigation, "Jump to today", load-failure toast |
+| `task-new` | defaults and route-param prefill, validation, `POST /sessions` payload, landing on the placed day, no-slot, infeasible policies and retry, divergent hand-off, error |
+| `task-edit` | read-only view, edit and `PATCH`, validation, infeasible retry, delete (one-off, recurring scopes, task sittings) and failure |
+| `settings`, `settings-sections`, `preferences-section`, `dlu-accounts` | sign-out; profile edit; finish-setup card; tags; language, timezone, reminder and notification toggle; connect, sync, update and disconnect LMS and portal accounts |
+| `notifications` | empty, list, open row, dismiss, select and clear all, sync-conflict "Reschedule them all" |
+| `tab-bar` | labels, tab press events, no navigation on the focused tab |
 
-1. **Task create** – required title, deadline required for TASK, `POST /sessions` payload, placement conflict/infeasible error toasts, offline.
-2. **Task edit/delete** – form prefilled from `GET /sessions/:id`, `PATCH` payload, delete (plain and recurring scope sheet), 404.
-3. **Calendar** – week/month render tasks from `GET /sessions`; loading, empty and error+retry states; cached-offline render.
-4. **Onboarding** – step order, skip paths, completion PATCHes `onboarded: true`.
-5. **Notification permission** – prompt only once per login, grant registers the device (`POST /devices`), deny does not, blocked state opens system settings.
-6. **Session expiry** – any 401/403 clears the user and redirects to login.
+Not covered by component tests, on purpose: pan, long-press and swipe gestures (the gesture-handler and swipeable stubs only simulate taps), and `className` styling.
+
+Still to write:
+
+1. **Notification permission** – prompt only once per login, grant registers the device (`POST /devices`), deny does not, blocked state opens system settings.
+2. **Session expiry** – any 401/403 clears the user and redirects to login.
+3. **Offline calendar** – cached week/month render with the stale glyph instead of an error toast.
 
 ## E2E (Maestro)
 
