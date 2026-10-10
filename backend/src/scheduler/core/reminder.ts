@@ -148,12 +148,12 @@ export function buildReminderText(input: {
     case "EXAM":
       return {
         title: `Exam in ${lead}: ${t}`,
-        content: `Your exam starts at ${at}${where}. Time for a last look at your notes.`,
+        content: `Starts at ${at}${where}. Good luck!`,
       };
     case "ASSIGNMENT":
       return {
         title: `Due in ${lead}: ${t}`,
-        content: `${t} is due at ${at}. Make sure it's submitted before the deadline.`,
+        content: `Due at ${at}. Submit it now.`,
       };
     case "LECTURE":
       return {

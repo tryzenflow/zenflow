@@ -22,6 +22,7 @@ You own `mobile/` and the `mockups/` it is designed from (Expo SDK 58, RN 0.88, 
 - A screen change updates its mockup; a new screen gets a mockup and an `index.html` entry first.
 - Tests: Vitest covers pure `lib/` logic only (`pnpm --filter mobile test`); add a test for new pure logic, flag component gaps instead of adding a framework.
 - Docs stay lean (AGENTS.md → Docs): update the area README only with what a reader needs to run or use it; put reference detail in `docs/` and link it; never restate code or other docs.
+- User-facing copy (AGENTS.md → User-facing copy): short title, short imperative body, no separators or boilerplate; add the VI string and update the specs.
 
 ## Design
 Follow `docs/mobile/design.md` (Sunrise Flow); read it before UI work.

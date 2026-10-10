@@ -3,18 +3,15 @@ import type { SessionSource } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { NotificationEvent } from "../notifications/types";
-import {
-  conflictCountLabel,
-  findConflictingTaskIds,
-} from "../scheduler/core/sync-conflicts";
+import { findConflictingTaskIds } from "../scheduler/core/sync-conflicts";
 import { DAY_MS } from "../scheduler/core/slot";
 import type { IngestedSessionType } from "./core/types";
 
 /** Sync-conflict copy per ingested block type (timetable / exam / LMS). */
 const CONFLICT_KINDS: Record<IngestedSessionType, { label: string }> = {
   LECTURE: { label: "your timetable" },
-  EXAM: { label: "your exam schedule" },
-  ASSIGNMENT: { label: "LMS" },
+  EXAM: { label: "your exams" },
+  ASSIGNMENT: { label: "LMS deadlines" },
 };
 
 /** How far ahead of a sync a conflict is worth telling the user about. */
@@ -22,8 +19,8 @@ const CONFLICT_HORIZON_MS = 120 * DAY_MS;
 
 /**
  * After a watcher run puts fixed blocks on the calendar, tells the student how
- * many of THEIR OWN scheduled tasks now overlap them ("After syncing ..., we
- * detected X conflicts with your own tasks. Reschedule them all?"). One
+ * many of THEIR OWN scheduled tasks now overlap them ("3 tasks clash with your
+ * timetable" / "Reschedule them now?"). One
  * notification per source type (timetable / exam / LMS), raised through the
  * same `NEW_SESSION` emitter as every other inbox row (SSE + push). No-op when
  * nothing conflicts; deduped while an identical un-acted notification is open.
@@ -115,11 +112,8 @@ export class SyncConflictsService {
     try {
       const row = await this.notifications.raiseConflict(userId, {
         eventName,
-        title: `Schedule conflicts after syncing ${kind.label}`,
-        content:
-          `After syncing with ${kind.label}, we detected ` +
-          `${conflictCountLabel(ids.length)} with your own tasks. ` +
-          `Reschedule them all?`,
+        title: `${ids.length} ${ids.length === 1 ? "task clashes" : "tasks clash"} with ${kind.label}`,
+        content: "Reschedule them now?",
         conflictSessionIds: ids,
       });
       this.notifications.notify(NotificationEvent.NEW_SESSION, row);

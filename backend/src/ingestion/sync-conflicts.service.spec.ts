@@ -2,10 +2,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { SyncConflictsService } from "./sync-conflicts.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
-import {
-  conflictCountLabel,
-  findConflictingTaskIds,
-} from "../scheduler/core/sync-conflicts";
+import { findConflictingTaskIds } from "../scheduler/core/sync-conflicts";
 
 const NOW = new Date("2026-09-01T00:00:00.000Z");
 const at = (iso: string) => new Date(iso);
@@ -55,7 +52,7 @@ const run = (
     now: NOW,
   });
 
-describe("findConflictingTaskIds / conflictCountLabel", () => {
+describe("findConflictingTaskIds", () => {
   it("returns sorted ids of tasks overlapping any fixed block", () => {
     const fixed = [{ start: 1000 * 60_000, end: 1060 * 60_000 }];
     const ids = findConflictingTaskIds(fixed, [
@@ -64,10 +61,6 @@ describe("findConflictingTaskIds / conflictCountLabel", () => {
       { id: "c", startMs: 1000 * 60_000, durationMinutes: 15 },
     ]);
     expect(ids).toEqual(["b", "c"]);
-  });
-  it("pluralizes", () => {
-    expect(conflictCountLabel(1)).toBe("1 conflict");
-    expect(conflictCountLabel(3)).toBe("3 conflicts");
   });
 });
 
@@ -82,7 +75,7 @@ describe("SyncConflictsService.detectAndNotify", () => {
     durationMinutes: 60,
   };
 
-  it("raises a per-source notification with the count and 'Reschedule them all?'", async () => {
+  it("raises a per-source notification with the count and 'Reschedule them now?'", async () => {
     const { svc, notifications } = await make({
       fixed: [lecture],
       tasks: [clash],
@@ -90,12 +83,13 @@ describe("SyncConflictsService.detectAndNotify", () => {
     expect(await run(svc, "LECTURE")).toBe(1);
     const dto = notifications.raiseConflict.mock.calls[0][1] as {
       eventName: string;
+      title: string;
       content: string;
       conflictSessionIds: string[];
     };
     expect(dto.eventName).toBe("sync_conflict.lecture");
-    expect(dto.content).toContain("1 conflict with your own tasks");
-    expect(dto.content).toContain("Reschedule them all?");
+    expect(dto.title).toBe("1 task clashes with your timetable");
+    expect(dto.content).toBe("Reschedule them now?");
     expect(dto.conflictSessionIds).toEqual(["t1"]);
     expect(notifications.notify).toHaveBeenCalledTimes(1);
   });

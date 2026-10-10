@@ -10,6 +10,29 @@ export function localizeNotification<
       .replace(/^New exam: /, "Lịch thi mới: ")
       .replace(/^Updated: /, "Đã cập nhật: ")
       .replace(/^Lectures removed: /, "Đã xóa lịch học: ");
+    if (row.eventName.includes(".group_") && !title.startsWith("You have ")) {
+      const vn = (noun: string) =>
+        noun.startsWith("exam")
+          ? "lịch thi"
+          : noun.startsWith("assignment")
+            ? "bài tập"
+            : "buổi học";
+      const num = (n: string) => (/^an?$/i.test(n) ? "1" : n);
+      title = title
+        .replace(
+          /(\d+|an?) new (exams?|assignments?|lectures?)/gi,
+          (_, n: string, noun: string) => `${num(n)} ${vn(noun)} mới`,
+        )
+        .replace(
+          /(\d+|an?) (exam|assignment|lecture) changes?/gi,
+          (_, n: string, noun: string) => `${num(n)} thay đổi về ${vn(noun)}`,
+        )
+        .replace(
+          /(\d+|an?) (exams?|assignments?|lectures?) removed/gi,
+          (_, n: string, noun: string) => `${num(n)} ${vn(noun)} đã xóa`,
+        )
+        .replace(/ on LMS$/, " trên LMS");
+    }
     if (title.startsWith("You have ")) {
       title = title
         .slice(9)
@@ -33,6 +56,14 @@ export function localizeNotification<
       title = `Bạn có ${title}`;
     }
     const copy: Record<string, string> = {
+      "Plan it before it's due.": "Hãy lên kế hoạch trước hạn nộp.",
+      "Plan them before they're due.": "Hãy lên kế hoạch trước hạn nộp.",
+      "Plan your revision now.": "Hãy lên lịch ôn tập ngay.",
+      "Check your timetable.": "Xem lại thời khóa biểu của bạn.",
+      "See what changed.": "Xem có gì thay đổi.",
+      "It's gone from your calendar.": "Mục này đã biến mất khỏi lịch của bạn.",
+      "They're gone from your calendar.":
+        "Các mục này đã biến mất khỏi lịch của bạn.",
       "Synced from DLU. Tap to see it on your calendar.":
         "Đã đồng bộ từ DLU. Nhấn để xem trên lịch của bạn.",
       "Synced from DLU. Tap to see the next one on your calendar.":
@@ -70,17 +101,24 @@ export function localizeNotification<
       };
       title = `${label[kind]} ${lead}: ${sessionTitle}`;
       // Only replace framing surrounding the exact session title.
-      const prefix =
+      const prefixes =
         kind === "Exam"
-          ? "Your exam starts at "
-          : `${sessionTitle}${kind === "Due" ? " is due at " : kind === "Class" ? " begins at " : " starts at "}`;
-      if (content.startsWith(prefix)) {
+          ? ["Starts at ", "Your exam starts at "]
+          : kind === "Due"
+            ? ["Due at ", `${sessionTitle} is due at `]
+            : [
+                `${sessionTitle}${kind === "Class" ? " begins at " : " starts at "}`,
+              ];
+      const prefix = prefixes.find((p) => content.startsWith(p));
+      if (prefix) {
         let rest = content
           .slice(prefix.length)
+          .replace(/\. Good luck!$/, ". Chúc bạn thi tốt!")
           .replace(
             /\. Time for a last look at your notes\.$/,
             ". Hãy xem lại ghi chú trước khi thi.",
           )
+          .replace(/\. Submit it now\.$/, ". Hãy nộp bài ngay.")
           .replace(
             /\. Make sure it's submitted before the deadline\.$/,
             ". Hãy nộp bài trước hạn.",
@@ -109,16 +147,27 @@ export function localizeNotification<
             `${index === 6 ? "Chủ nhật" : `Thứ ${index + 2}`}, ${date[2]}/${months.indexOf(date[3]) + 1}, ${date[4]}` +
             rest.slice(date[0].length).replace(/^ (in|at) /, " tại ");
         }
-        content = `${kind === "Exam" ? "Kỳ thi" : sessionTitle}${kind === "Due" ? " đến hạn lúc " : " bắt đầu lúc "}${rest}`;
+        content =
+          prefix === "Starts at " || prefix === "Due at "
+            ? `${prefix === "Due at " ? "Đến hạn lúc" : "Bắt đầu lúc"} ${rest}`
+            : `${kind === "Exam" ? "Kỳ thi" : sessionTitle}${kind === "Due" ? " đến hạn lúc " : " bắt đầu lúc "}${rest}`;
       }
     }
   } else if (row.eventName.startsWith("sync_conflict.")) {
     const label = (value: string) =>
       value === "your timetable"
         ? "thời khóa biểu"
-        : value === "your exam schedule"
+        : value === "your exam schedule" || value === "your exams"
           ? "lịch thi"
-          : value;
+          : value === "LMS deadlines"
+            ? "hạn nộp LMS"
+            : value;
+    title = title.replace(
+      /^(\d+) tasks? clash(?:es)? with (.+)$/,
+      (_, n: string, source: string) =>
+        `${n} công việc trùng với ${label(source)}`,
+    );
+    content = content.replace(/^Reschedule them now\?$/, "Sắp xếp lại ngay?");
     title = title.replace(
       /^Schedule conflicts after syncing (.+)$/,
       (_, source: string) => `Lịch bị trùng sau khi đồng bộ ${label(source)}`,

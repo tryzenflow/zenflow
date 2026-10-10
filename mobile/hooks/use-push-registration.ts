@@ -1,12 +1,14 @@
 import { t } from "@/lib/i18n";
 import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { AppState } from "react-native";
 import { getSessionDetails } from "@/api/tasks";
 import { useToast } from "@/components/ui/toast";
 import { usePushStatusStore } from "@/hooks/use-push-status-store";
 import { useUserStore } from "@/hooks/use-user-store";
+import { rescheduleWithToast } from "@/lib/reschedule-toast";
+import { PUSH_ACTION_RESCHEDULE, pushCategoryFor } from "@zenflow/shared";
 import { notificationToastVisual } from "@/lib/notification-visual";
 import {
   claimNotification,
@@ -16,7 +18,9 @@ import {
   isLocalNotification,
   notificationIdOf,
   pushOwner,
+  registerPushCategories,
 } from "@/lib/push";
+import { markResponseHandled } from "@/lib/push-response";
 import type { Href } from "expo-router";
 
 // Set once, before any notification can arrive.
@@ -35,10 +39,11 @@ export function usePushRegistration(): void {
   const userId = useUserStore((s) => s.user?.id ?? null);
   const language = useUserStore((s) => s.user?.lang);
   const onboarded = useUserStore((s) => s.user?.onboardedAt != null);
-  const lastHandledResponseId = useRef<string | null>(null);
 
   useEffect(() => {
-    if (userId) void ensureAndroidChannel().catch(() => {});
+    if (!userId) return;
+    void ensureAndroidChannel().catch(() => {});
+    void registerPushCategories().catch(() => {});
   }, [userId, language]);
 
   // Apply the push rule (`decidePushAction`) on login / onboarding completion
@@ -64,11 +69,26 @@ export function usePushRegistration(): void {
     ) => {
       if (!response) return;
       const id = response.notification.request.identifier;
-      if (id === lastHandledResponseId.current) return;
-      lastHandledResponseId.current = id;
+      // Module-level, so a remount never replays a saved response (and the
+      // Reschedule button never fires twice); the OS copy is cleared too.
+      if (!markResponseHandled(`${id}:${response.actionIdentifier}`)) return;
+      Notifications.clearLastNotificationResponse();
       const data = response.notification.request.content.data as
         | Record<string, string>
         | undefined;
+      // iOS "Reschedule" button on a sync-conflict push: act without opening the app.
+      if (
+        response.actionIdentifier === PUSH_ACTION_RESCHEDULE &&
+        data?.notificationId
+      ) {
+        await rescheduleWithToast(data.notificationId, toast);
+        return;
+      }
+      // A conflict has no session to open: show the inbox row with its button.
+      if (data?.eventName && pushCategoryFor(data.eventName)) {
+        router.push("/notifications" as Href);
+        return;
+      }
       const sessionId = data?.sessionId;
       if (sessionId) {
         try {

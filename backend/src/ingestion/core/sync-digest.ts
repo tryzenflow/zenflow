@@ -92,9 +92,9 @@ const NOUN: Record<IngestedSessionType, [string, string, string]> = {
 };
 
 /**
- * "3 new exams" / "1 change to your exams" / "2 exams removed". `alone` (the
- * title's only phrase, count 1) reads "a new exam" instead — digits stay in a
- * list so "2 new lectures, 1 lecture removed" doesn't mix in "a lecture".
+ * "3 new exams" / "2 exam changes" / "2 exams removed". `alone` (the title's
+ * only phrase, count 1) reads "a new exam" instead — digits stay in a list so
+ * "2 new lectures, 1 lecture removed" doesn't mix in "a lecture".
  */
 function phrase(
   type: IngestedSessionType,
@@ -104,27 +104,33 @@ function phrase(
 ): string {
   const [one, many, article] = NOUN[type];
   const count =
-    alone && n === 1 ? (kind === "removed" ? article : "a") : `${n}`;
+    alone && n === 1 ? (kind === "created" ? "a" : article) : `${n}`;
   if (kind === "created") return `${count} new ${n === 1 ? one : many}`;
   if (kind === "updated") {
-    return `${count} ${n === 1 ? "change" : "changes"} to your ${many}`;
+    return `${count} ${one} ${n === 1 ? "change" : "changes"}`;
   }
   return `${count} ${n === 1 ? one : many} removed`;
 }
 
-/** How a title names the upstream an item was synced from. */
-const SOURCE_LABEL: Partial<Record<SessionSource, string>> = {
-  LMS: "LMS",
-  PORTAL: "the portal",
+/** Where each type normally comes from; only an off-default source is named. */
+const DEFAULT_SOURCE: Record<IngestedSessionType, SessionSource> = {
+  EXAM: "PORTAL",
+  ASSIGNMENT: "LMS",
+  LECTURE: "PORTAL",
 };
 
-/** " from LMS" when every item shares one known source, else "". */
-function fromSource(items: readonly DigestItem[]): string {
+/**
+ * " on LMS" when every item came from LMS but the type usually doesn't (the
+ * LMS also lists exams), so portal and LMS rows never share a title.
+ */
+function onSource(
+  type: IngestedSessionType,
+  items: readonly DigestItem[],
+): string {
   const sources = new Set(items.map((i) => i.source));
   if (sources.size !== 1) return "";
   const [source] = sources;
-  const label = source && SOURCE_LABEL[source];
-  return label ? ` from ${label}` : "";
+  return source === "LMS" && DEFAULT_SOURCE[type] !== "LMS" ? " on LMS" : "";
 }
 
 /**
@@ -150,9 +156,32 @@ function representative(
   return (past[0] ?? live[0]).sessionId;
 }
 
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** The next step, one short sentence — never a source label or sync boilerplate. */
+function nextStep(
+  type: IngestedSessionType,
+  kind: DigestKind,
+  one: boolean,
+  live: boolean,
+): string {
+  if (!live)
+    return one
+      ? "It's gone from your calendar."
+      : "They're gone from your calendar.";
+  if (kind === "updated") return "See what changed.";
+  if (type === "ASSIGNMENT") {
+    return one ? "Plan it before it's due." : "Plan them before they're due.";
+  }
+  if (type === "EXAM") return "Plan your revision now.";
+  return "Check your timetable.";
+}
+
 /**
- * One notification per item type the run touched, e.g. "You have 3 new
- * lectures, 2 changes to your lectures, 1 lecture removed from the portal". `eventName` uses
+ * One notification per item type the run touched, e.g. "3 new lectures,
+ * 2 lecture changes, 1 lecture removed" with a one-line next step. `eventName` uses
  * the most significant kind (created > updated > removed); a one-item row
  * keeps its `eventEndsAt`.
  */
@@ -182,14 +211,8 @@ export function digestNotifications(
         : "removed";
     out.push({
       sessionId,
-      title: `You have ${parts.join(", ")}${fromSource(ofType)}`,
-      content: sessionId
-        ? one
-          ? "Synced from DLU. Tap to see it on your calendar."
-          : "Synced from DLU. Tap to see the next one on your calendar."
-        : one
-          ? "Synced from DLU. It's no longer on your calendar."
-          : "Synced from DLU. They're no longer on your calendar.",
+      title: capitalize(`${parts.join(", ")}${onSource(type, ofType)}`),
+      content: nextStep(type, kind, one, sessionId !== null),
       eventEndsAt: one ? ofType[0].endsAt : null,
       eventName: `${type.toLowerCase()}.group_${kind}`,
       materializeSession: false,

@@ -132,6 +132,7 @@ export default {
     "Thông báo đẩy về nhắc nhở và thay đổi lịch",
   "Reminder before each study session": "Nhắc trước mỗi buổi học",
   "Reminders and schedule changes": "Nhắc nhở và thay đổi lịch",
+  "Reschedule": "Xếp lại",
   "Reschedule them all": "Xếp lại tất cả",
   "Resend code": "Gửi lại mã",
   "Resend code in": "Gửi lại mã sau",

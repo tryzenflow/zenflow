@@ -20,6 +20,7 @@ You review; you do not edit. Report findings ranked by severity with `path:line`
 9. Docs, README tables, ADRs and `.env.example` updated where the change requires.
 10. Mobile UI: matches `docs/mobile/design.md` (motion via `lib/motion.ts` and Reduce Motion, 44pt targets, glass only on floating chrome, no new lucide on brand surfaces, offline state present).
 11. Tests: new behaviour covered, bug fix has a regression test, scheduler changes update specs. Backend specs use Nest DI (`Test.createTestingModule`, `overrideProvider`/`useValue`), not `new Service(mocks)`.
+12. User-facing copy (notifications, push, toasts) follows AGENTS.md → User-facing copy: titles 2–5 words, imperative body, no `·`/`—` separators, no "You have"/"Synced from" boilerplate, VI string and specs updated.
 
 ## Live checks (only when asked)
 Bring up the dev stack and drive the changed flow with the Playwright MCP; mobile flows on an emulator. Say what you ran and what you did not.
