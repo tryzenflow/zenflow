@@ -1,165 +1,132 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1660 1180" font-family="Helvetica, Arial, sans-serif" role="img" aria-label="Zenflow scheduler component diagram: Nest placement orchestration, frozen TypeScript fallback, delayed-reward loop and the Python bandit service">
-  <title>Zenflow scheduler component diagram: Nest placement orchestration, frozen TypeScript fallback, delayed-reward loop and the Python bandit service</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1660 1180" font-family="Helvetica, Arial, sans-serif" role="img" aria-label="Zenflow scheduler components: Nest placement orchestration, frozen fallback, delayed-reward loop and the Python bandit service">
+  <title>Zenflow scheduler components: Nest placement orchestration, frozen fallback, delayed-reward loop and the Python bandit service</title>
   <defs><marker id="aO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#FF6900"/></marker><marker id="aA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#F0B100"/></marker><marker id="aB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3B7EA1"/></marker><marker id="aN" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2B2724" fill-opacity="0.55"/></marker><marker id="aR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#C2410C"/></marker></defs>
   <rect width="1660" height="1180" fill="#FCFBFA"/>
-  <text x="30" y="34" text-anchor="start" font-size="21" font-weight="700" fill="#2B2724">Zenflow — scheduler components</text>
-  <text x="30" y="56" text-anchor="start" font-size="11" font-weight="400" fill="#2B2724" opacity="0.7">Nest gathers → Python ranks → Nest applies and persists. Orange = placement call path · blue = feedback loop · red = degraded path</text>
+  <text x="30" y="34" text-anchor="start" font-size="21" font-weight="700" fill="#2B2724">Zenflow — scheduler</text>
+  <text x="30" y="56" text-anchor="start" font-size="11" font-weight="400" fill="#2B2724" opacity="0.7">Gather → rank → apply.   orange: placement   blue: learning   red: fallback</text>
   <rect x="20" y="80" width="880" height="1080" rx="14" fill="none" stroke="#FF6900" stroke-width="1.8" stroke-dasharray="9 6"/>
-  <rect x="28" y="87" width="352.40000000000003" height="18" fill="#FCFBFA"/>
-  <text x="34" y="100" text-anchor="start" font-size="13" font-weight="700" fill="#FF6900">NestJS API process  (crons run in the watcher)</text>
+  <rect x="28" y="87" width="56.400000000000006" height="18" fill="#FCFBFA"/>
+  <text x="34" y="100" text-anchor="start" font-size="13" font-weight="700" fill="#FF6900">NestJS</text>
   <rect x="960" y="80" width="680" height="1080" rx="14" fill="none" stroke="#FF6900" stroke-width="1.8" stroke-dasharray="9 6"/>
-  <rect x="968" y="87" width="367.20000000000005" height="18" fill="#FCFBFA"/>
-  <text x="974" y="100" text-anchor="start" font-size="13" font-weight="700" fill="#FF6900">services/bandit  (Python, stateless, pure numpy)</text>
+  <rect x="968" y="87" width="182.20000000000002" height="18" fill="#FCFBFA"/>
+  <text x="974" y="100" text-anchor="start" font-size="13" font-weight="700" fill="#FF6900">Bandit service (Python)</text>
   <rect x="40" y="120" width="400" height="104" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="240" y="139" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">sessions/</text>
-  <text x="240" y="155" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">SessionsController → SessionsService</text>
-  <text x="240" y="169" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">create: preflight → INSERT TASK row → placeOrDiscard(place)</text>
-  <text x="240" y="183" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">update: deadline change → re-place · first MOVE → feedback</text>
-  <text x="240" y="197" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">SeriesService: materialised TASK series (N rows, one seriesId)</text>
+  <text x="240" y="161.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">sessions/</text>
+  <text x="240" y="177.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">controller → service</text>
+  <text x="240" y="191.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">create · edit · series</text>
   <rect x="470" y="120" width="410" height="104" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="675" y="139" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">ConflictRescheduleService</text>
-  <text x="675" y="155" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">POST /notifications/:id/reschedule-conflicts</text>
-  <text x="675" y="169" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">re-places each overlapping TASK (EDF order)</text>
-  <text x="675" y="183" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">logs SYSTEM_MOVE events (reward 0)</text>
+  <text x="675" y="161.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">ConflictRescheduleService</text>
+  <text x="675" y="177.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">re-place overlaps</text>
+  <text x="675" y="191.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">SYSTEM_MOVE</text>
   <rect x="40" y="262" width="400" height="84" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
-  <text x="240" y="281" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">TaskPlacementService</text>
-  <text x="240" y="297" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">the only entry sessions/ uses · placeOnCreate</text>
-  <text x="240" y="311" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">placeOnDeadlineChange · placeSeries · preflightTask</text>
-  <text x="240" y="325" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">canPlaceSeries (read-only feasibility)</text>
+  <text x="240" y="293.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">TaskPlacementService</text>
+  <text x="240" y="309.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">only entry</text>
+  <text x="240" y="323.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">create · edit · series</text>
   <rect x="40" y="386" width="400" height="150" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
-  <text x="240" y="405" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">PythonPlacer  (scheduler/io)</text>
-  <text x="240" y="421" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">orchestrator, never ranks</text>
-  <text x="240" y="435" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">1 ExperimentService.assignPolicy (50/50 + pairwise)</text>
-  <text x="240" y="449" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">2 PlacementGateway.buildRequest → POST /v1/place</text>
-  <text x="240" y="463" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">3 applyMoves + UPDATE Session.scheduledStartTime</text>
-  <text x="240" y="477" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">4 recordProposal → SlotProposal row</text>
-  <text x="240" y="491" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">a TASK is never left unplaced: last resort</text>
+  <text x="240" y="436.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">PythonPlacer</text>
+  <text x="240" y="452.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">roll policy</text>
+  <text x="240" y="466.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">call Python</text>
+  <text x="240" y="480.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">apply + persist</text>
+  <text x="240" y="494.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">never ranks</text>
   <rect x="470" y="386" width="410" height="84" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="675" y="405" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">ExperimentService</text>
-  <text x="675" y="421" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">the only RNG: primaryPolicy 50/50 LinUCB vs heuristic</text>
-  <text x="675" y="435" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">pairwiseShown draw (default rate 1 = every event)</text>
-  <text x="675" y="449" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">recordProposal → SlotProposal</text>
+  <text x="675" y="417.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">ExperimentService</text>
+  <text x="675" y="433.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">only RNG</text>
+  <text x="675" y="447.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">records SlotProposal</text>
   <rect x="470" y="494" width="410" height="60" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="675" y="513" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">DisplacementService</text>
-  <text x="675" y="529" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">applies Python's moves: UPDATE start + SYSTEM_MOVE event</text>
+  <text x="675" y="520.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">DisplacementService</text>
+  <text x="675" y="536.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">applies moves</text>
   <rect x="40" y="590" width="400" height="112" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="240" y="609" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">PlacementGateway</text>
-  <text x="240" y="625" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">buildRequest: day-load.ts (the only occupancy query),</text>
-  <text x="240" y="639" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">observation count, preference matrix, bandit (A, b)</text>
-  <text x="240" y="653" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">via BanditArmStateRepository.loadAll</text>
-  <text x="240" y="667" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">placeSingleTwoPhase: infeasible → 2nd call with context</text>
+  <text x="240" y="635.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">PlacementGateway</text>
+  <text x="240" y="651.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">builds request</text>
+  <text x="240" y="665.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">day load · bandit (A, b)</text>
   <rect x="470" y="590" width="410" height="112" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="675" y="609" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">PlacementClient</text>
-  <text x="675" y="625" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">POST /v1/place · timeout 2.5 s · 1 fast retry</text>
-  <text x="675" y="639" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">CircuitBreaker + kill switch "bandit"</text>
-  <text x="675" y="653" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">failure → degraded reason: timeout, breaker_open,</text>
-  <text x="675" y="667" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">connect, http_5xx, version, disabled</text>
+  <text x="675" y="635.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">PlacementClient</text>
+  <text x="675" y="651.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">POST /v1/place</text>
+  <text x="675" y="665.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">timeout · breaker</text>
   <rect x="40" y="752" width="400" height="128" rx="8" fill="#FFF4EC" stroke="#C2410C" stroke-width="1.5"/>
-  <text x="240" y="771" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">FallbackPlacer → HeuristicPlacer</text>
-  <text x="240" y="787" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">FROZEN: bug fixes only (golden fixtures)</text>
-  <text x="240" y="801" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">core/ slot, slot-score, preference, series-spread</text>
-  <text x="240" y="815" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">no displacement · no A/B · response has</text>
-  <text x="240" y="829" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">schedulingDegraded + degradedReason · never a 503</text>
+  <text x="240" y="805.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">FallbackPlacer</text>
+  <text x="240" y="821.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">frozen heuristic</text>
+  <text x="240" y="835.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">flags degraded</text>
   <rect x="470" y="752" width="410" height="128" rx="8" fill="#F5F3F0" stroke="#CFC9C2" stroke-width="1.5"/>
-  <text x="675" y="771" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">PostgreSQL (Prisma)</text>
-  <text x="675" y="787" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">Session · SessionSeries · SessionEvent</text>
-  <text x="675" y="801" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">SlotProposal · BanditArmState</text>
-  <text x="675" y="815" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">User.preferenceMatrix (168 floats)</text>
-  <text x="675" y="829" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">read by day-load, written by PythonPlacer,</text>
-  <text x="675" y="843" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">DisplacementService and the feedback loop</text>
-  <text x="40" y="918" text-anchor="start" font-size="12" font-weight="700" fill="#3B7EA1">Delayed-reward loop</text>
+  <text x="675" y="805.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">PostgreSQL</text>
+  <text x="675" y="821.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">Session · SlotProposal</text>
+  <text x="675" y="835.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">SessionEvent · arm state</text>
+  <text x="40" y="918" text-anchor="start" font-size="12" font-weight="700" fill="#3B7EA1">Learning loop</text>
   <rect x="40" y="930" width="400" height="130" rx="8" fill="#EEF5F9" stroke="#3B7EA1" stroke-width="2"/>
-  <text x="240" y="949" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">SchedulingFeedbackService</text>
-  <text x="240" y="965" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">onFirstMove → applyDelayedReward(reward = −min(1,|drag|/240))</text>
-  <text x="240" y="979" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">only if the proposal was LinUCB and the layout matches</text>
-  <text x="240" y="993" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">stamps SlotProposal first-modified fields</text>
-  <text x="240" y="1007" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">saves arms (version CAS) · reinforces matrix</text>
+  <text x="240" y="984.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">SchedulingFeedbackService</text>
+  <text x="240" y="1000.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">drag → reward</text>
+  <text x="240" y="1014.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">updates one arm</text>
   <rect x="470" y="930" width="195" height="60" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="567.5" y="949" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">BanditService</text>
-  <text x="567.5" y="965" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">POST /v1/update (2 s)</text>
+  <text x="567.5" y="956.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">BanditService</text>
+  <text x="567.5" y="972.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">/v1/update client</text>
   <rect x="685" y="930" width="195" height="60" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="782.5" y="949" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">BanditArmStateRepo</text>
-  <text x="782.5" y="965" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">loadAll · save (version CAS)</text>
+  <text x="782.5" y="956.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">BanditArmStateRepo</text>
+  <text x="782.5" y="972.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">load · save</text>
   <rect x="470" y="1010" width="410" height="134" rx="8" fill="#FFF8E6" stroke="#F0B100" stroke-width="2"/>
-  <text x="675" y="1029" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">watcher crons</text>
-  <text x="675" y="1045" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">RetainedSessionsService · every 30 min:</text>
-  <text x="675" y="1059" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">elapsed, never-moved TASK → RETAINED (+1)</text>
-  <text x="675" y="1073" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">MatrixDecayService · 03:00 · half-life 21 days</text>
-  <text x="675" y="1087" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">SessionEventPartitionService · 02:10 UTC monthly</text>
+  <text x="675" y="1059.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">watcher crons</text>
+  <text x="675" y="1075.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">retained · 30 min</text>
+  <text x="675" y="1089.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">decay · 03:00</text>
+  <text x="675" y="1103.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">partitions · 02:10</text>
   <rect x="40" y="1080" width="400" height="64" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="240" y="1099" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">scheduler/core/* (pure toolbox)</text>
-  <text x="240" y="1115" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">slot, horizon, recurrence, matrix-decay, reward, reminder</text>
-  <text x="240" y="1129" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">no I/O · no clock · `now` is a parameter</text>
+  <text x="240" y="1108.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">scheduler/core</text>
+  <text x="240" y="1124.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">pure toolbox</text>
   <rect x="980" y="120" width="640" height="100" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
-  <text x="1300" y="139" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">api.py</text>
-  <text x="1300" y="155" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">FastAPI · optional bearer token (+ _PREVIOUS for rotation)</text>
-  <text x="1300" y="169" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">body ≤ MAX_BODY_BYTES · PLACEMENT_CONTRACT_VERSION check (422)</text>
-  <text x="1300" y="183" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">POST /v1/place · POST /v1/update · GET /health · GET /ready (self-test)</text>
+  <text x="1300" y="159.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">api.py</text>
+  <text x="1300" y="175.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">/v1/place · /v1/update</text>
+  <text x="1300" y="189.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">token · version check</text>
   <rect x="980" y="262" width="640" height="170" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
-  <text x="1300" y="281" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">place.py · _Placer</text>
-  <text x="1300" y="297" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">one request = one placement event (a task, or one series)</text>
-  <text x="1300" y="311" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">single → one day window · series → series_day_windows (N buckets)</text>
-  <text x="1300" y="325" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">_build_batch: one (members × days × FEATURE_DIM) context tensor</text>
-  <text x="1300" y="339" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">place_member → PolicySelector.resolve → pick</text>
-  <text x="1300" y="353" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">no free slot → NEEDS_INFEASIBLE_CONTEXT → _resolve_infeasible</text>
-  <text x="1300" y="367" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">pairwise series → two full plans (heuristic, LinUCB)</text>
+  <text x="1300" y="329.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">place.py · _Placer</text>
+  <text x="1300" y="345.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">one request = one event</text>
+  <text x="1300" y="359.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">pick policy</text>
+  <text x="1300" y="373.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">last resort</text>
   <rect x="980" y="472" width="310" height="120" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="1135" y="491" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">policies/</text>
-  <text x="1135" y="507" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">HeuristicPolicy · LinucbPolicy</text>
-  <text x="1135" y="521" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">PolicySelector: LINUCB primary applies the</text>
-  <text x="1135" y="535" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">LinUCB pick, else heuristic · PREFLIGHT =</text>
-  <text x="1135" y="549" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">heuristic only (no bandit state touched)</text>
+  <text x="1135" y="514.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">policies/</text>
+  <text x="1135" y="530.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">heuristic</text>
+  <text x="1135" y="544.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">LinUCB</text>
+  <text x="1135" y="558.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">selector</text>
   <rect x="1310" y="472" width="310" height="120" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="1465" y="491" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">models/linucb.py</text>
-  <text x="1465" y="507" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">score = θᵀx + α·√(xᵀA⁻¹x)  (α 0.15)</text>
-  <text x="1465" y="521" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">update(A, b, x, reward) → new (A, b)</text>
-  <text x="1465" y="535" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">6 time-of-day arms · FEATURE_DIM 7</text>
-  <text x="1465" y="549" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">cold arm = ridge prior (A = I, b = 0)</text>
+  <text x="1465" y="521.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">models/linucb.py</text>
+  <text x="1465" y="537.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">score</text>
+  <text x="1465" y="551.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">update</text>
   <rect x="980" y="632" width="640" height="190" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="1300" y="651" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">core/  (pure functions)</text>
-  <text x="1300" y="667" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">scoring: context_vector · arms (6 bands) · slot · slot_score</text>
-  <text x="1300" y="681" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">preference (7×24 matrix) · linucb_best_slot (slot-first scan)</text>
-  <text x="1300" y="695" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75"></text>
-  <text x="1300" y="709" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">displacement: EDF cascade, nearest_free_start, pick_min_conflict_slot,</text>
-  <text x="1300" y="723" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">pick_late_slot (≤ 30 days late), last_resort_pin</text>
-  <text x="1300" y="737" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">series_spread: non-overlapping day windows</text>
-  <text x="1300" y="751" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">NOT on the request path: reward.py, sync_conflicts.py</text>
+  <text x="1300" y="709.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">core/</text>
+  <text x="1300" y="725.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">features · arms · slots</text>
+  <text x="1300" y="739.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">preference · slot scan</text>
+  <text x="1300" y="753.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">displacement</text>
   <rect x="980" y="862" width="640" height="86" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="1300" y="881" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">PlaceResponse</text>
-  <text x="1300" y="897" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">per member: outcome = PLACED · DISPLACED · ACCEPTED_CONFLICTS ·</text>
-  <text x="1300" y="911" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">ACCEPTED_LATE · ACCEPTED_LAST_RESORT · INFEASIBLE</text>
-  <text x="1300" y="925" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">+ start, moves[], heuristic / linucb picks, paramsVersion, timings</text>
+  <text x="1300" y="894.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">PlaceResponse</text>
+  <text x="1300" y="910.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">outcome + start</text>
+  <text x="1300" y="924.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">moves</text>
   <rect x="980" y="988" width="640" height="74" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="1300" y="1007" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">simulation/ · evaluators/  (offline only)</text>
-  <text x="1300" y="1023" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">A/B and learning-curve harness; not imported by api.py</text>
+  <text x="1300" y="1021.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">simulation/ · evaluators/</text>
+  <text x="1300" y="1037.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">offline only</text>
   <path d="M240,224 L240,262" fill="none" stroke="#FF6900" stroke-width="2.2" marker-end="url(#aO)"/>
   <rect x="249" y="237" width="46" height="15" rx="3" fill="#FCFBFA"/>
   <text x="272" y="248" text-anchor="middle" font-size="10.5" font-weight="400" fill="#FF6900">place</text>
   <path d="M470,172 L455,172 L455,300 L440,300" fill="none" stroke="#FF6900" stroke-width="2.2" marker-end="url(#aO)"/>
   <path d="M240,346 L240,386" fill="none" stroke="#FF6900" stroke-width="2.2" marker-end="url(#aO)"/>
   <path d="M440,430 L470,430" fill="none" stroke="#FF6900" stroke-width="2.2" marker-end="url(#aO)"/>
-  <text x="444" y="422" text-anchor="start" font-size="11" font-weight="400" fill="#2B2724"></text>
   <path d="M440,470 L455,470 L455,524 L470,524" fill="none" stroke="#FF6900" stroke-width="2.2" marker-end="url(#aO)"/>
   <path d="M240,536 L240,590" fill="none" stroke="#FF6900" stroke-width="2.2" marker-end="url(#aO)"/>
-  <rect x="253" y="557" width="74" height="15" rx="3" fill="#FCFBFA"/>
-  <text x="290" y="568" text-anchor="middle" font-size="10.5" font-weight="400" fill="#FF6900">buildRequest</text>
+  <rect x="251" y="557" width="50" height="15" rx="3" fill="#FCFBFA"/>
+  <text x="276" y="568" text-anchor="middle" font-size="10.5" font-weight="400" fill="#FF6900">gather</text>
   <path d="M440,646 L470,646" fill="none" stroke="#FF6900" stroke-width="2.2" marker-end="url(#aO)"/>
   <path d="M880,646 L930,646 L930,170 L980,170" fill="none" stroke="#FF6900" stroke-width="2.2" marker-end="url(#aO)"/>
-  <rect x="842" y="419" width="176" height="15" rx="3" fill="#FCFBFA"/>
-  <text x="930" y="430" text-anchor="middle" font-size="10.5" font-weight="400" fill="#FF6900">POST /v1/place → PlaceResponse</text>
+  <rect x="899" y="419" width="62" height="15" rx="3" fill="#FCFBFA"/>
+  <text x="930" y="430" text-anchor="middle" font-size="10.5" font-weight="400" fill="#FF6900">/v1/place</text>
   <path d="M1300,432 L1300,452 L1135,452 L1135,472" fill="none" stroke="#FF6900" stroke-width="2.2" marker-end="url(#aO)"/>
   <path d="M1300,432 L1300,452 L1465,452 L1465,472" fill="none" stroke="#FF6900" stroke-width="2.2" marker-end="url(#aO)"/>
   <path d="M1300,592 L1300,632" fill="none" stroke="#FF6900" stroke-width="2.2" marker-end="url(#aO)"/>
   <path d="M1300,822 L1300,862" fill="none" stroke="#FF6900" stroke-width="2.2" marker-end="url(#aO)"/>
   <path d="M1300,220 L1300,262" fill="none" stroke="#FF6900" stroke-width="2.2" marker-end="url(#aO)"/>
   <path d="M560,702 L560,728 L300,728 L300,752" fill="none" stroke="#C2410C" stroke-width="2.2" marker-end="url(#aR)"/>
-  <rect x="374" y="711" width="112" height="15" rx="3" fill="#FCFBFA"/>
-  <text x="430" y="722" text-anchor="middle" font-size="10.5" font-weight="400" fill="#C2410C">Python unavailable</text>
+  <rect x="392" y="711" width="76" height="15" rx="3" fill="#FCFBFA"/>
+  <text x="430" y="722" text-anchor="middle" font-size="10.5" font-weight="400" fill="#C2410C">Python down</text>
   <path d="M30,172 L28,172 L28,995 L40,995" fill="none" stroke="#3B7EA1" stroke-width="2.2" marker-end="url(#aB)"/>
   <text x="46" y="238" text-anchor="start" font-size="10.5" font-weight="400" fill="#3B7EA1">first MOVE</text>
   <path d="M440,960 L470,960" fill="none" stroke="#3B7EA1" stroke-width="2.2" marker-end="url(#aB)"/>
   <path d="M470,1060 L440,1060" fill="none" stroke="#3B7EA1" stroke-width="2.2" marker-end="url(#aB)"/>
   <path d="M880,960 L955,960 L955,200 L980,200" fill="none" stroke="#3B7EA1" stroke-width="2.2" marker-end="url(#aB)"/>
-  <rect x="907" y="939" width="96" height="15" rx="3" fill="#FCFBFA"/>
-  <text x="955" y="950" text-anchor="middle" font-size="10.5" font-weight="400" fill="#3B7EA1">POST /v1/update</text>
+  <rect x="922" y="939" width="66" height="15" rx="3" fill="#FCFBFA"/>
+  <text x="955" y="950" text-anchor="middle" font-size="10.5" font-weight="400" fill="#3B7EA1">/v1/update</text>
 </svg>
