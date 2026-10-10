@@ -104,6 +104,14 @@ function statsPayload() {
   return { total, uniqueKeys: requestCounts.size, byKey };
 }
 
+/**
+ * Test hook: `POST /_/hide {"lms":true,"exams":true,"timetable":true}` makes the
+ * named upstream answer with no items, as if the school had withdrawn them (a
+ * missing key keeps its current state; `{"lms":false,...}` brings them back).
+ * Lets the ingestion e2e drive the confirm/miss gate's removal path.
+ */
+const hidden = { lms: false, exams: false, timetable: false };
+
 // ---------------------------------------------------------------------------
 // small helpers
 // ---------------------------------------------------------------------------
@@ -425,9 +433,11 @@ async function handleAjaxService(
   // look like two different resources and the redundancy ratio would be a lie.
   countRequest(`lms:calendar:${year}-${String(month).padStart(2, "0")}`);
 
-  const data = studentId
-    ? fixtureMonthlyView(studentId, year, month)
-    : buildMonthlyView(year, month);
+  const data = hidden.lms
+    ? { weeks: [{ days: [] }] }
+    : studentId
+      ? fixtureMonthlyView(studentId, year, month)
+      : buildMonthlyView(year, month);
   sendJson(res, 200, [{ error: false, data }]);
 }
 
@@ -747,6 +757,13 @@ const server = createServer((req, res) => {
         resetDluFixtureCache();
         return sendJson(res, 200, { ok: true });
       }
+      if (pathname === "/_/hide" && req.method === "POST") {
+        const body = JSON.parse((await readBody(req)) || "{}") as Partial<
+          typeof hidden
+        >;
+        Object.assign(hidden, body);
+        return sendJson(res, 200, hidden);
+      }
       if (pathname === "/_/reset" && req.method === "POST") {
         requestCounts.clear();
         requestLog.length = 0;
@@ -791,9 +808,11 @@ const server = createServer((req, res) => {
         return sendJson(
           res,
           200,
-          studentId
-            ? fixtureTimetableRows(studentId, namhoc, hocky, tuan)
-            : buildTimetableRows(namhoc, hocky, tuan),
+          hidden.timetable
+            ? []
+            : studentId
+              ? fixtureTimetableRows(studentId, namhoc, hocky, tuan)
+              : buildTimetableRows(namhoc, hocky, tuan),
         );
       }
       if (pathname === "/api/student/exam" && req.method === "GET") {
@@ -802,6 +821,7 @@ const server = createServer((req, res) => {
         countRequest(`portal:exam:${namhoc}:${hocky}`, studentIdFromAuthHeader(req));
         const studentId = studentIdFromAuthHeader(req);
         const fixtures = studentId ? loadDluFixtures() : null;
+        if (hidden.exams) return sendJson(res, 200, []);
         return sendJson(
           res,
           200,
