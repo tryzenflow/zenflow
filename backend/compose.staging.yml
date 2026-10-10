@@ -315,11 +315,9 @@ services:
       BACKUP_CREATE_BUCKET: "1"
       BACKUP_ON_START: "1"
       BACKUP_PRUNE_DAYS: ${BACKUP_PRUNE_DAYS:-1}
-      BACKUP_VAULT_DIR: /vault-data
     volumes:
       - ./ops/backup:/opt/backup:ro
       - backup_metrics:/metrics
-      - vault_data:/vault-data:ro
     networks:
       - db
       - storage
@@ -701,35 +699,6 @@ services:
       postgres:
         condition: service_healthy
 
-  # Staging runs Vault only so the backup path (the vault_data snapshot) can be tested before prod; secrets
-  # still come from .env.staging (SECRETS_PROVIDER=vault stays production-only).
-  vault:
-    container_name: zenflow-vault-staging
-    image: hashicorp/vault:1.20.4
-    restart: unless-stopped
-    # Config lives outside /vault/config: the image entrypoint already passes
-    # -config=/vault/config for `server`, and a second file there duplicates the listener.
-    command: ["server", "-config=/vault/custom/config.hcl"]
-    cap_add:
-      - IPC_LOCK
-    environment:
-      VAULT_ADDR: http://127.0.0.1:8200
-    ports:
-      - "127.0.0.1:8200:8200"
-    volumes:
-      - vault_data:/vault/file
-      - ./ops/vault/config.hcl:/vault/custom/config.hcl:ro
-    networks:
-      - vault
-    healthcheck:
-      # sealedcode/uninitcode=200 so a sealed or not-yet-initialised Vault still
-      # counts as "process is up" (it must be unsealed by a human, not by compose).
-      test: ["CMD-SHELL", "wget -q -O /dev/null 'http://127.0.0.1:8200/v1/sys/health?standbyok=true&sealedcode=200&uninitcode=200'"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
-
   nginx:
     image: nginx:1.28-alpine
     container_name: nginx-staging
@@ -803,12 +772,8 @@ networks:
   upstream:
     driver: bridge
     internal: true
-  vault:
-    driver: bridge
-
 volumes:
   storage_data:
-  vault_data:
   postgres_data:
   uploads:
   tempo_data:
