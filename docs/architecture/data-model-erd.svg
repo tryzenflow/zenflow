@@ -1,0 +1,552 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1940 1130" font-family="Helvetica, Arial, sans-serif" role="img" aria-label="Zenflow entity relationship diagram of the Prisma schema, grouped into account, calendar, learning loop and ingestion tables">
+  <title>Zenflow entity relationship diagram of the Prisma schema, grouped into account, calendar, learning loop and ingestion tables</title>
+  <defs><marker id="aO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#FF6900"/></marker><marker id="aA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#F0B100"/></marker><marker id="aB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3B7EA1"/></marker><marker id="aN" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2B2724" fill-opacity="0.55"/></marker><marker id="aR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#C2410C"/></marker></defs>
+  <rect width="1940" height="1130" fill="#FCFBFA"/>
+  <text x="30" y="34" text-anchor="start" font-size="21" font-weight="700" fill="#2B2724">Zenflow — data model (ERD)</text>
+  <text x="30" y="56" text-anchor="start" font-size="11" font-weight="400" fill="#2B2724" opacity="0.7">Source of truth: backend/prisma/schema.prisma. Key columns only. Every userId column is an FK to User (onDelete: Cascade), so those edges are not drawn.</text>
+  <text x="30" y="78" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.7">PK primary key · FK foreign key · UK unique · ⇢ soft link (no FK) · Session–Tag is implicit M:N (_SessionToTag) · 1 / N cardinality · [ ] array column · red = column that exists but no code reads or writes</text>
+  <rect x="20" y="100" width="290" height="970" rx="12" fill="none" stroke="#E3DFDA" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <text x="32" y="120" text-anchor="start" font-size="12" font-weight="700" fill="#2B2724" opacity="0.6">ACCOUNT</text>
+  <rect x="335" y="100" width="300" height="970" rx="12" fill="none" stroke="#E3DFDA" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <text x="347" y="120" text-anchor="start" font-size="12" font-weight="700" fill="#2B2724" opacity="0.6">CALENDAR + INBOX</text>
+  <rect x="660" y="100" width="300" height="720" rx="12" fill="none" stroke="#E3DFDA" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <text x="672" y="120" text-anchor="start" font-size="12" font-weight="700" fill="#2B2724" opacity="0.6">LEARNING LOOP</text>
+  <rect x="985" y="100" width="935" height="970" rx="12" fill="none" stroke="#E3DFDA" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <text x="997" y="120" text-anchor="start" font-size="12" font-weight="700" fill="#2B2724" opacity="0.6">INGESTION CATALOG (DLU)</text>
+  <rect x="40" y="130" width="250" height="152" rx="6" fill="#fff" stroke="#E3DFDA" stroke-width="1.5"/>
+  <path d="M40,154 L40,136 Q40,130 46,130 L284,130 Q290,130 290,136 L290,154 Z" fill="#3A3430"/>
+  <text x="50" y="146" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">User</text>
+  <text x="50" y="166" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="178" y="166" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">uuid</text>
+  <text x="282" y="166" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="50" y="181" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">email</text>
+  <text x="178" y="181" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">varchar(255)</text>
+  <text x="282" y="181" text-anchor="end" font-size="9.5" font-weight="700" fill="#2B2724" opacity="0.95">UK</text>
+  <text x="50" y="196" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">name · timezone · lang</text>
+  <text x="178" y="196" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="50" y="211" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">defaultReminderMinutes</text>
+  <text x="178" y="211" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">int</text>
+  <text x="50" y="226" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">allowNotifications</text>
+  <text x="178" y="226" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">bool</text>
+  <text x="50" y="241" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">onboardedAt · seenTips[]</text>
+  <text x="178" y="241" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="50" y="256" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">preferenceMatrix</text>
+  <text x="178" y="256" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">float[168]</text>
+  <text x="50" y="271" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">preferenceMatrixDecayedAt</text>
+  <text x="178" y="271" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">ts</text>
+  <rect x="40" y="320" width="250" height="122" rx="6" fill="#fff" stroke="#E3DFDA" stroke-width="1.5"/>
+  <path d="M40,344 L40,326 Q40,320 46,320 L284,320 Q290,320 290,326 L290,344 Z" fill="#3A3430"/>
+  <text x="50" y="336" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">UserEncryptionKey</text>
+  <text x="50" y="356" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="178" y="356" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">uuid</text>
+  <text x="282" y="356" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="50" y="371" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">userId</text>
+  <text x="178" y="371" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="282" y="371" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="50" y="386" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">provider · version</text>
+  <text x="178" y="386" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">LMS|PORTAL</text>
+  <text x="282" y="386" text-anchor="end" font-size="9.5" font-weight="700" fill="#2B2724" opacity="0.95">UK</text>
+  <text x="50" y="401" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">masterKeyVersion</text>
+  <text x="178" y="401" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">int</text>
+  <text x="50" y="416" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">key · iv · authTag</text>
+  <text x="178" y="416" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">wrapped DEK</text>
+  <text x="50" y="431" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">algorithm</text>
+  <text x="178" y="431" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <rect x="40" y="470" width="250" height="107" rx="6" fill="#fff" stroke="#E3DFDA" stroke-width="1.5"/>
+  <path d="M40,494 L40,476 Q40,470 46,470 L284,470 Q290,470 290,476 L290,494 Z" fill="#3A3430"/>
+  <text x="50" y="486" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">UserDevice</text>
+  <text x="50" y="506" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="178" y="506" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">uuid</text>
+  <text x="282" y="506" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="50" y="521" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">userId</text>
+  <text x="178" y="521" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="282" y="521" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="50" y="536" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">platform</text>
+  <text x="178" y="536" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">IOS|ANDROID</text>
+  <text x="50" y="551" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">pushToken</text>
+  <text x="178" y="551" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="282" y="551" text-anchor="end" font-size="9.5" font-weight="700" fill="#2B2724" opacity="0.95">UK</text>
+  <text x="50" y="566" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">lastSeenAt</text>
+  <text x="178" y="566" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">ts</text>
+  <rect x="40" y="600" width="250" height="77" rx="6" fill="#fff" stroke="#E3DFDA" stroke-width="1.5"/>
+  <path d="M40,624 L40,606 Q40,600 46,600 L284,600 Q290,600 290,606 L290,624 Z" fill="#3A3430"/>
+  <text x="50" y="616" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">Tag</text>
+  <text x="282" y="616" text-anchor="end" font-size="9.5" font-weight="400" fill="#fff" opacity="0.8">UK(userId,name)</text>
+  <text x="50" y="636" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="178" y="636" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">uuid</text>
+  <text x="282" y="636" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="50" y="651" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">userId</text>
+  <text x="178" y="651" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="282" y="651" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="50" y="666" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">name</text>
+  <text x="178" y="666" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="282" y="666" text-anchor="end" font-size="9.5" font-weight="700" fill="#2B2724" opacity="0.95">UK</text>
+  <rect x="40" y="690" width="250" height="92" rx="6" fill="#fff" stroke="#E3DFDA" stroke-width="1.5"/>
+  <path d="M40,714 L40,696 Q40,690 46,690 L284,690 Q290,690 290,696 L290,714 Z" fill="#3A3430"/>
+  <text x="50" y="706" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">File</text>
+  <text x="50" y="726" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="178" y="726" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">uuid</text>
+  <text x="282" y="726" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="50" y="741" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">userId</text>
+  <text x="178" y="741" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="282" y="741" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="50" y="756" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">originalName · filename · path</text>
+  <text x="178" y="756" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="50" y="771" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">mimetype · size</text>
+  <text x="178" y="771" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <rect x="1005" y="130" width="250" height="122" rx="6" fill="#fff" stroke="#E3DFDA" stroke-width="1.5"/>
+  <path d="M1005,154 L1005,136 Q1005,130 1011,130 L1249,130 Q1255,130 1255,136 L1255,154 Z" fill="#3A3430"/>
+  <text x="1015" y="146" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">Integration</text>
+  <text x="1247" y="146" text-anchor="end" font-size="9.5" font-weight="400" fill="#fff" opacity="0.8">UK(userId,provider)</text>
+  <text x="1015" y="166" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="1143" y="166" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">uuid</text>
+  <text x="1247" y="166" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="1015" y="181" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">userId</text>
+  <text x="1143" y="181" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1247" y="181" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="1015" y="196" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">provider</text>
+  <text x="1143" y="196" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">LMS|PORTAL</text>
+  <text x="1247" y="196" text-anchor="end" font-size="9.5" font-weight="700" fill="#2B2724" opacity="0.95">UK</text>
+  <text x="1015" y="211" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">encryptedCredentials</text>
+  <text x="1143" y="211" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">AES-GCM</text>
+  <text x="1015" y="226" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">iv · authTag · encryptionVersion</text>
+  <text x="1143" y="226" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1015" y="241" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">lastVerifiedAt</text>
+  <text x="1143" y="241" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">ts</text>
+  <rect x="1005" y="300" width="250" height="152" rx="6" fill="#fff" stroke="#E3DFDA" stroke-width="1.5"/>
+  <path d="M1005,324 L1005,306 Q1005,300 1011,300 L1249,300 Q1255,300 1255,306 L1255,324 Z" fill="#3A3430"/>
+  <text x="1015" y="316" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">IngestionSchedule</text>
+  <text x="1247" y="316" text-anchor="end" font-size="9.5" font-weight="400" fill="#fff" opacity="0.8">UK(integrationId,kind)</text>
+  <text x="1015" y="336" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="1143" y="336" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">uuid</text>
+  <text x="1247" y="336" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="1015" y="351" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">integrationId</text>
+  <text x="1143" y="351" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1247" y="351" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="1015" y="366" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">kind</text>
+  <text x="1143" y="366" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">5 kinds</text>
+  <text x="1247" y="366" text-anchor="end" font-size="9.5" font-weight="700" fill="#2B2724" opacity="0.95">UK</text>
+  <text x="1015" y="381" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">nextDueAt</text>
+  <text x="1143" y="381" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">ts · claim token</text>
+  <text x="1015" y="396" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">lastClaimedAt · lastRunAt</text>
+  <text x="1143" y="396" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1015" y="411" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">lastSuccessAt · lastSuccessTerm</text>
+  <text x="1143" y="411" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1015" y="426" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">consecutiveFailures</text>
+  <text x="1143" y="426" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">int</text>
+  <text x="1015" y="441" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">cacheHitStreak</text>
+  <text x="1143" y="441" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">int</text>
+  <rect x="1005" y="520" width="250" height="77" rx="6" fill="#fff" stroke="#E3DFDA" stroke-width="1.5"/>
+  <path d="M1005,544 L1005,526 Q1005,520 1011,520 L1249,520 Q1255,520 1255,526 L1255,544 Z" fill="#3A3430"/>
+  <text x="1015" y="536" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">LmsSyncJob</text>
+  <text x="1015" y="556" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="1143" y="556" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">uuid</text>
+  <text x="1247" y="556" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="1015" y="571" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">integrationId</text>
+  <text x="1143" y="571" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1247" y="571" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="1015" y="586" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">status</text>
+  <text x="1143" y="586" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">JobStatus</text>
+  <rect x="1005" y="610" width="250" height="92" rx="6" fill="#fff" stroke="#E3DFDA" stroke-width="1.5"/>
+  <path d="M1005,634 L1005,616 Q1005,610 1011,610 L1249,610 Q1255,610 1255,616 L1255,634 Z" fill="#3A3430"/>
+  <text x="1015" y="626" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">LmsSyncJobItem</text>
+  <text x="1015" y="646" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="1143" y="646" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">uuid</text>
+  <text x="1247" y="646" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="1015" y="661" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">lmsSyncJobId</text>
+  <text x="1143" y="661" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1247" y="661" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="1015" y="676" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">url · attempt · statusCode</text>
+  <text x="1143" y="676" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1015" y="691" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">responseBody</text>
+  <text x="1143" y="691" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">text ≤ 200k</text>
+  <rect x="1005" y="740" width="250" height="77" rx="6" fill="#fff" stroke="#E3DFDA" stroke-width="1.5"/>
+  <path d="M1005,764 L1005,746 Q1005,740 1011,740 L1249,740 Q1255,740 1255,746 L1255,764 Z" fill="#3A3430"/>
+  <text x="1015" y="756" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">PortalAPIJob</text>
+  <text x="1015" y="776" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="1143" y="776" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">uuid</text>
+  <text x="1247" y="776" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="1015" y="791" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">integrationId</text>
+  <text x="1143" y="791" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1247" y="791" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="1015" y="806" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">status</text>
+  <text x="1143" y="806" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">JobStatus</text>
+  <rect x="1005" y="830" width="250" height="92" rx="6" fill="#fff" stroke="#E3DFDA" stroke-width="1.5"/>
+  <path d="M1005,854 L1005,836 Q1005,830 1011,830 L1249,830 Q1255,830 1255,836 L1255,854 Z" fill="#3A3430"/>
+  <text x="1015" y="846" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">PortalAPIJobItem</text>
+  <text x="1015" y="866" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="1143" y="866" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">uuid</text>
+  <text x="1247" y="866" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="1015" y="881" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">portalApiJobId</text>
+  <text x="1143" y="881" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1247" y="881" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="1015" y="896" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">url · attempt · statusCode</text>
+  <text x="1143" y="896" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1015" y="911" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">responseBody</text>
+  <text x="1143" y="911" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">text ≤ 200k</text>
+  <rect x="360" y="130" width="250" height="302" rx="6" fill="#fff" stroke="#FF6900" stroke-width="1.5"/>
+  <path d="M360,154 L360,136 Q360,130 366,130 L604,130 Q610,130 610,136 L610,154 Z" fill="#3A3430"/>
+  <text x="370" y="146" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">Session</text>
+  <text x="602" y="146" text-anchor="end" font-size="9.5" font-weight="400" fill="#fff" opacity="0.8">UK(userId,externalKey)</text>
+  <text x="370" y="166" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="498" y="166" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">uuid</text>
+  <text x="602" y="166" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="370" y="181" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">userId</text>
+  <text x="498" y="181" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="602" y="181" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="370" y="196" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">type</text>
+  <text x="498" y="196" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">TASK · 4 fixed kinds</text>
+  <text x="370" y="211" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">source</text>
+  <text x="498" y="211" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">USER|LMS|PORTAL</text>
+  <text x="370" y="226" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">title · note · location</text>
+  <text x="498" y="226" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="370" y="241" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">durationMinutes</text>
+  <text x="498" y="241" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">int, ×15</text>
+  <text x="370" y="256" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">deadline</text>
+  <text x="498" y="256" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">null for fixed types</text>
+  <text x="370" y="271" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">scheduledStartTime</text>
+  <text x="498" y="271" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">never null on live TASK</text>
+  <text x="370" y="286" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">seriesId · sessionIndex/Total</text>
+  <text x="498" y="286" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="602" y="286" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="370" y="301" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">externalKey</text>
+  <text x="498" y="301" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="602" y="301" text-anchor="end" font-size="9.5" font-weight="700" fill="#2B2724" opacity="0.95">UK</text>
+  <text x="370" y="316" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">scheduleStudyUnitId</text>
+  <text x="498" y="316" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">⇢ PortalSection</text>
+  <text x="602" y="316" text-anchor="end" font-size="9.5" font-weight="700" fill="#F0B100" opacity="0.95">soft</text>
+  <text x="370" y="331" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">lmsCourseId</text>
+  <text x="498" y="331" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">⇢ LmsCourse</text>
+  <text x="602" y="331" text-anchor="end" font-size="9.5" font-weight="700" fill="#F0B100" opacity="0.95">soft</text>
+  <text x="370" y="346" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">deleted</text>
+  <text x="498" y="346" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">soft delete</text>
+  <text x="370" y="361" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">conflict</text>
+  <text x="498" y="361" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">bool</text>
+  <text x="370" y="376" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">lastMovedAt</text>
+  <text x="498" y="376" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">set on user move</text>
+  <text x="370" y="391" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">retainedAt</text>
+  <text x="498" y="391" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">set by 30-min sweep</text>
+  <text x="370" y="406" text-anchor="start" font-size="10.5" font-weight="400" fill="#C2410C">syncConfirmedAt</text>
+  <text x="498" y="406" text-anchor="start" font-size="10" font-weight="400" fill="#C2410C" opacity="0.6">unused</text>
+  <text x="370" y="421" text-anchor="start" font-size="10.5" font-weight="400" fill="#C2410C">syncMissedAt</text>
+  <text x="498" y="421" text-anchor="start" font-size="10" font-weight="400" fill="#C2410C" opacity="0.6">unused</text>
+  <rect x="360" y="475" width="250" height="122" rx="6" fill="#fff" stroke="#E3DFDA" stroke-width="1.5"/>
+  <path d="M360,499 L360,481 Q360,475 366,475 L604,475 Q610,475 610,481 L610,499 Z" fill="#3A3430"/>
+  <text x="370" y="491" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">SessionSeries</text>
+  <text x="370" y="511" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="498" y="511" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">uuid</text>
+  <text x="602" y="511" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="370" y="526" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">userId</text>
+  <text x="498" y="526" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="602" y="526" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="370" y="541" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">type</text>
+  <text x="498" y="541" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">SessionType</text>
+  <text x="370" y="556" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">rrule</text>
+  <text x="498" y="556" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">recurring fixed</text>
+  <text x="370" y="571" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">exdates[]</text>
+  <text x="498" y="571" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">deleted occurrences</text>
+  <text x="370" y="586" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">deadline</text>
+  <text x="498" y="586" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">TASK series</text>
+  <rect x="360" y="630" width="250" height="92" rx="6" fill="#fff" stroke="#E3DFDA" stroke-width="1.5"/>
+  <path d="M360,654 L360,636 Q360,630 366,630 L604,630 Q610,630 610,636 L610,654 Z" fill="#3A3430"/>
+  <text x="370" y="646" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">SessionReminder</text>
+  <text x="370" y="666" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="498" y="666" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">uuid</text>
+  <text x="602" y="666" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="370" y="681" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">sessionId</text>
+  <text x="498" y="681" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="602" y="681" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="370" y="696" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">remindBeforeMinutes</text>
+  <text x="498" y="696" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">int, max 2/session</text>
+  <text x="370" y="711" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">firedForStart</text>
+  <text x="498" y="711" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">ts · fire claim</text>
+  <rect x="360" y="735" width="250" height="152" rx="6" fill="#fff" stroke="#E3DFDA" stroke-width="1.5"/>
+  <path d="M360,759 L360,741 Q360,735 366,735 L604,735 Q610,735 610,741 L610,759 Z" fill="#3A3430"/>
+  <text x="370" y="751" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">Notification</text>
+  <text x="370" y="771" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="498" y="771" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">uuid</text>
+  <text x="602" y="771" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="370" y="786" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">userId</text>
+  <text x="498" y="786" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="602" y="786" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="370" y="801" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">sessionId</text>
+  <text x="498" y="801" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">null on delete</text>
+  <text x="602" y="801" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="370" y="816" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">eventName</text>
+  <text x="498" y="816" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">assignment.created…</text>
+  <text x="370" y="831" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">title · content</text>
+  <text x="498" y="831" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="370" y="846" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">eventEndsAt</text>
+  <text x="498" y="846" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">ts</text>
+  <text x="370" y="861" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">conflictSessionIds[]</text>
+  <text x="498" y="861" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">sync_conflict.*</text>
+  <text x="370" y="876" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">sentAt · readAt · actionTakenAt</text>
+  <text x="498" y="876" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <rect x="685" y="130" width="250" height="287" rx="6" fill="#fff" stroke="#FF6900" stroke-width="1.5"/>
+  <path d="M685,154 L685,136 Q685,130 691,130 L929,130 Q935,130 935,136 L935,154 Z" fill="#3A3430"/>
+  <text x="695" y="146" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">SlotProposal</text>
+  <text x="695" y="166" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="823" y="166" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">uuid</text>
+  <text x="927" y="166" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="695" y="181" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">userId</text>
+  <text x="823" y="181" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="927" y="181" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="695" y="196" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">sessionId</text>
+  <text x="823" y="196" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">null on delete</text>
+  <text x="927" y="196" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="695" y="211" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">experimentId · event</text>
+  <text x="823" y="211" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="695" y="226" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">primaryPolicy</text>
+  <text x="823" y="226" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">HEURISTIC|LINUCB</text>
+  <text x="695" y="241" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">randomizationSeed</text>
+  <text x="823" y="241" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">hex</text>
+  <text x="695" y="256" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">observationCount</text>
+  <text x="823" y="256" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">int</text>
+  <text x="695" y="271" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">proposedStartTime</text>
+  <text x="823" y="271" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">ts</text>
+  <text x="695" y="286" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">appliedStartTime</text>
+  <text x="823" y="286" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">ts</text>
+  <text x="695" y="301" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">featureVector[]</text>
+  <text x="823" y="301" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">float[7]</text>
+  <text x="695" y="316" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">selectedArm</text>
+  <text x="823" y="316" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">6 arms</text>
+  <text x="695" y="331" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">linucbWeight · stabilityWeight</text>
+  <text x="823" y="331" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="695" y="346" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">placementSource</text>
+  <text x="823" y="346" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">PYTHON|TS_FALLBACK</text>
+  <text x="695" y="361" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">degradedReason</text>
+  <text x="823" y="361" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">timeout|breaker_open…</text>
+  <text x="695" y="376" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">pairwiseShown · chosenByUser</text>
+  <text x="823" y="376" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="695" y="391" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">firstModifiedAt · acceptedWithout…</text>
+  <text x="823" y="391" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="695" y="406" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">feedback</text>
+  <text x="823" y="406" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">LIKE|DISLIKE</text>
+  <rect x="685" y="420" width="250" height="182" rx="6" fill="#fff" stroke="#E3DFDA" stroke-width="1.5"/>
+  <path d="M685,444 L685,426 Q685,420 691,420 L929,420 Q935,420 935,426 L935,444 Z" fill="#3A3430"/>
+  <text x="695" y="436" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">SessionEvent</text>
+  <text x="927" y="436" text-anchor="end" font-size="9.5" font-weight="400" fill="#fff" opacity="0.8">monthly partitions</text>
+  <text x="695" y="456" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="823" y="456" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">bigint</text>
+  <text x="927" y="456" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="695" y="471" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">occurredAt</text>
+  <text x="823" y="471" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">ts</text>
+  <text x="927" y="471" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="695" y="486" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">userId</text>
+  <text x="823" y="486" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="927" y="486" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="695" y="501" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">sessionId</text>
+  <text x="823" y="501" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">null on delete</text>
+  <text x="927" y="501" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="695" y="516" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">slotProposalId</text>
+  <text x="823" y="516" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">null on delete</text>
+  <text x="927" y="516" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="695" y="531" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">eventType</text>
+  <text x="823" y="531" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">enum, 4 values</text>
+  <text x="695" y="546" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">rewardScore</text>
+  <text x="823" y="546" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">0 · −1…0 · +1</text>
+  <text x="695" y="561" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">dragDistanceMinutes</text>
+  <text x="823" y="561" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">int</text>
+  <text x="695" y="576" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">old/newSnapshot</text>
+  <text x="823" y="576" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">json</text>
+  <text x="695" y="591" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">policy · seriesId</text>
+  <text x="823" y="591" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <rect x="685" y="620" width="250" height="107" rx="6" fill="#fff" stroke="#E3DFDA" stroke-width="1.5"/>
+  <path d="M685,644 L685,626 Q685,620 691,620 L929,620 Q935,620 935,626 L935,644 Z" fill="#3A3430"/>
+  <text x="695" y="636" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">BanditArmState</text>
+  <text x="695" y="656" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">userId</text>
+  <text x="823" y="656" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="927" y="656" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="695" y="671" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">arm</text>
+  <text x="823" y="671" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">6 time-of-day bands</text>
+  <text x="927" y="671" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="695" y="686" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">A</text>
+  <text x="823" y="686" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">float[7×7]</text>
+  <text x="695" y="701" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">b</text>
+  <text x="823" y="701" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">float[7]</text>
+  <text x="695" y="716" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">version</text>
+  <text x="823" y="716" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">int · CAS guard</text>
+  <rect x="1325" y="130" width="250" height="122" rx="6" fill="#fff" stroke="#E3DFDA" stroke-width="1.5"/>
+  <path d="M1325,154 L1325,136 Q1325,130 1331,130 L1569,130 Q1575,130 1575,136 L1575,154 Z" fill="#3A3430"/>
+  <text x="1335" y="146" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">PortalSectionEnrollment</text>
+  <text x="1567" y="146" text-anchor="end" font-size="9.5" font-weight="400" fill="#fff" opacity="0.8">UK(userId,section)</text>
+  <text x="1335" y="166" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="1463" y="166" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">uuid</text>
+  <text x="1567" y="166" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="1335" y="181" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">userId</text>
+  <text x="1463" y="181" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1567" y="181" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="1335" y="196" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">integrationId</text>
+  <text x="1463" y="196" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1567" y="196" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="1335" y="211" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">scheduleStudyUnitId</text>
+  <text x="1463" y="211" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">→ PortalSection</text>
+  <text x="1567" y="211" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="1335" y="226" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">yearStudy · termId</text>
+  <text x="1463" y="226" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1335" y="241" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">discoveredAt · droppedAt</text>
+  <text x="1463" y="241" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <rect x="1325" y="300" width="250" height="137" rx="6" fill="#fff" stroke="#E3DFDA" stroke-width="1.5"/>
+  <path d="M1325,324 L1325,306 Q1325,300 1331,300 L1569,300 Q1575,300 1575,306 L1575,324 Z" fill="#3A3430"/>
+  <text x="1335" y="316" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">LmsCourseEnrollment</text>
+  <text x="1567" y="316" text-anchor="end" font-size="9.5" font-weight="400" fill="#fff" opacity="0.8">UK(userId,course)</text>
+  <text x="1335" y="336" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="1463" y="336" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">uuid</text>
+  <text x="1567" y="336" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="1335" y="351" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">userId</text>
+  <text x="1463" y="351" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1567" y="351" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="1335" y="366" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">integrationId</text>
+  <text x="1463" y="366" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1567" y="366" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="1335" y="381" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">lmsCourseId</text>
+  <text x="1463" y="381" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">→ LmsCourse</text>
+  <text x="1567" y="381" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="1335" y="396" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">currentTerm · hidden</text>
+  <text x="1463" y="396" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1335" y="411" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">discoveredAt · droppedAt</text>
+  <text x="1463" y="411" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1335" y="426" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">seenFingerprint</text>
+  <text x="1463" y="426" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <rect x="1645" y="130" width="250" height="137" rx="6" fill="#fff" stroke="#E3DFDA" stroke-width="1.5"/>
+  <path d="M1645,154 L1645,136 Q1645,130 1651,130 L1889,130 Q1895,130 1895,136 L1895,154 Z" fill="#3A3430"/>
+  <text x="1655" y="146" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">PortalSection</text>
+  <text x="1655" y="166" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="1783" y="166" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">uuid</text>
+  <text x="1887" y="166" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="1655" y="181" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">scheduleStudyUnitId</text>
+  <text x="1783" y="181" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1887" y="181" text-anchor="end" font-size="9.5" font-weight="700" fill="#2B2724" opacity="0.95">UK</text>
+  <text x="1655" y="196" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">curriculumName · groupNo</text>
+  <text x="1783" y="196" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1655" y="211" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">yearStudy · termId</text>
+  <text x="1783" y="211" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1655" y="226" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">teacherName · roomId</text>
+  <text x="1783" y="226" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1655" y="241" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">timetableRefreshedAt</text>
+  <text x="1783" y="241" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">cache freshness</text>
+  <text x="1655" y="256" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">timetableThroughDate</text>
+  <text x="1783" y="256" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <rect x="1645" y="300" width="250" height="137" rx="6" fill="#fff" stroke="#E3DFDA" stroke-width="1.5"/>
+  <path d="M1645,324 L1645,306 Q1645,300 1651,300 L1889,300 Q1895,300 1895,306 L1895,324 Z" fill="#3A3430"/>
+  <text x="1655" y="316" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">PortalSectionOccurrence</text>
+  <text x="1655" y="336" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="1783" y="336" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">uuid</text>
+  <text x="1887" y="336" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="1655" y="351" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">scheduleStudyUnitId</text>
+  <text x="1783" y="351" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1887" y="351" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="1655" y="366" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">meetingDate · periodId</text>
+  <text x="1783" y="366" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1887" y="366" text-anchor="end" font-size="9.5" font-weight="700" fill="#2B2724" opacity="0.95">UK</text>
+  <text x="1655" y="381" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">startsAt · durationMinutes</text>
+  <text x="1783" y="381" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1655" y="396" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">title · roomId</text>
+  <text x="1783" y="396" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1655" y="411" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">firstSeenAt · lastSeenAt</text>
+  <text x="1783" y="411" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1655" y="426" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">canceledAt</text>
+  <text x="1783" y="426" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">ts</text>
+  <rect x="1645" y="520" width="250" height="107" rx="6" fill="#fff" stroke="#E3DFDA" stroke-width="1.5"/>
+  <path d="M1645,544 L1645,526 Q1645,520 1651,520 L1889,520 Q1895,520 1895,526 L1895,544 Z" fill="#3A3430"/>
+  <text x="1655" y="536" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">LmsCourse</text>
+  <text x="1655" y="556" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="1783" y="556" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">uuid</text>
+  <text x="1887" y="556" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="1655" y="571" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">lmsCourseId</text>
+  <text x="1783" y="571" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">Moodle id</text>
+  <text x="1887" y="571" text-anchor="end" font-size="9.5" font-weight="700" fill="#2B2724" opacity="0.95">UK</text>
+  <text x="1655" y="586" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">fullName · shortName</text>
+  <text x="1783" y="586" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1655" y="601" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">occurrencesRefreshedAt</text>
+  <text x="1783" y="601" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1655" y="616" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">occurrencesFingerprint…</text>
+  <text x="1783" y="616" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">divergence guard</text>
+  <rect x="1645" y="650" width="250" height="122" rx="6" fill="#fff" stroke="#E3DFDA" stroke-width="1.5"/>
+  <path d="M1645,674 L1645,656 Q1645,650 1651,650 L1889,650 Q1895,650 1895,656 L1895,674 Z" fill="#3A3430"/>
+  <text x="1655" y="666" text-anchor="start" font-size="12.5" font-weight="700" fill="#fff">LmsCourseOccurrence</text>
+  <text x="1655" y="686" text-anchor="start" font-size="10.5" font-weight="700" fill="#2B2724">id</text>
+  <text x="1783" y="686" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">uuid</text>
+  <text x="1887" y="686" text-anchor="end" font-size="9.5" font-weight="700" fill="#FF6900" opacity="0.95">PK</text>
+  <text x="1655" y="701" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">lmsCourseId</text>
+  <text x="1783" y="701" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1887" y="701" text-anchor="end" font-size="9.5" font-weight="700" fill="#3B7EA1" opacity="0.95">FK</text>
+  <text x="1655" y="716" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">externalKey</text>
+  <text x="1783" y="716" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">lms:assign|quiz:&lt;id&gt;</text>
+  <text x="1887" y="716" text-anchor="end" font-size="9.5" font-weight="700" fill="#2B2724" opacity="0.95">UK</text>
+  <text x="1655" y="731" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">type</text>
+  <text x="1783" y="731" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">SessionType</text>
+  <text x="1655" y="746" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">startsAt · durationMinutes</text>
+  <text x="1783" y="746" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6"></text>
+  <text x="1655" y="761" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">canceledAt</text>
+  <text x="1783" y="761" text-anchor="start" font-size="10" font-weight="400" fill="#2B2724" opacity="0.6">ts</text>
+  <path d="M460,432 L460,475" fill="none" stroke="#2B2724" stroke-width="1.6" stroke-opacity=".5"/>
+  <text x="466" y="444" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">N</text>
+  <text x="466" y="471" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">1</text>
+  <path d="M360,300 L342,300 L342,670 L360,670" fill="none" stroke="#2B2724" stroke-width="1.6" stroke-opacity=".5"/>
+  <text x="348" y="296" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">1</text>
+  <text x="346" y="666" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">N</text>
+  <path d="M360,330 L328,330 L328,775 L360,775" fill="none" stroke="#2B2724" stroke-width="1.6" stroke-opacity=".5"/>
+  <text x="346" y="344" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">1</text>
+  <text x="346" y="787" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">N</text>
+  <path d="M360,175 L314,175 L314,636 L290,636" fill="none" stroke="#2B2724" stroke-width="1.6" stroke-opacity=".5"/>
+  <text x="346" y="171" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">N</text>
+  <text x="296" y="632" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">M</text>
+  <path d="M610,160 L685,160" fill="none" stroke="#2B2724" stroke-width="1.6" stroke-opacity=".5"/>
+  <text x="596" y="156" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">1</text>
+  <text x="671" y="156" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">N</text>
+  <path d="M610,330 L648,330 L648,474 L685,474" fill="none" stroke="#2B2724" stroke-width="1.6" stroke-opacity=".5"/>
+  <text x="596" y="326" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">1</text>
+  <text x="671" y="470" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">N</text>
+  <path d="M810,417 L810,420" fill="none" stroke="#2B2724" stroke-width="1.6" stroke-opacity=".5"/>
+  <text x="816" y="429" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">1</text>
+  <text x="816" y="416" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">N</text>
+  <path d="M1130,252 L1130,300" fill="none" stroke="#2B2724" stroke-width="1.6" stroke-opacity=".5"/>
+  <text x="1136" y="264" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">1</text>
+  <text x="1136" y="296" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">N</text>
+  <path d="M1005,200 L993,200 L993,550 L1005,550" fill="none" stroke="#2B2724" stroke-width="1.6" stroke-opacity=".5"/>
+  <text x="989" y="196" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">1</text>
+  <text x="991" y="546" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">N</text>
+  <path d="M993,550 L993,770 L1005,770" fill="none" stroke="#2B2724" stroke-width="1.6" stroke-opacity=".5"/>
+  <text x="999" y="546" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900"></text>
+  <text x="991" y="766" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">N</text>
+  <path d="M1130,597 L1130,610" fill="none" stroke="#2B2724" stroke-width="1.6" stroke-opacity=".5"/>
+  <text x="1136" y="609" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">1</text>
+  <text x="1136" y="606" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">N</text>
+  <path d="M1130,817 L1130,830" fill="none" stroke="#2B2724" stroke-width="1.6" stroke-opacity=".5"/>
+  <text x="1136" y="829" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">1</text>
+  <text x="1136" y="826" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">N</text>
+  <path d="M1255,160 L1325,160" fill="none" stroke="#2B2724" stroke-width="1.6" stroke-opacity=".5"/>
+  <text x="1241" y="156" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">1</text>
+  <text x="1311" y="156" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">N</text>
+  <path d="M1255,180 L1290,180 L1290,370 L1325,370" fill="none" stroke="#2B2724" stroke-width="1.6" stroke-opacity=".5"/>
+  <text x="1261" y="176" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900"></text>
+  <text x="1311" y="366" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">N</text>
+  <path d="M1575,205 L1645,205" fill="none" stroke="#2B2724" stroke-width="1.6" stroke-opacity=".5"/>
+  <text x="1561" y="201" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">N</text>
+  <text x="1631" y="201" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">1</text>
+  <path d="M1575,380 L1610,380 L1610,580 L1645,580" fill="none" stroke="#2B2724" stroke-width="1.6" stroke-opacity=".5"/>
+  <text x="1561" y="376" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">N</text>
+  <text x="1631" y="576" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">1</text>
+  <path d="M1770,267 L1770,300" fill="none" stroke="#2B2724" stroke-width="1.6" stroke-opacity=".5"/>
+  <text x="1776" y="279" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">1</text>
+  <text x="1776" y="296" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">N</text>
+  <path d="M1770,627 L1770,650" fill="none" stroke="#2B2724" stroke-width="1.6" stroke-opacity=".5"/>
+  <text x="1776" y="639" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">1</text>
+  <text x="1776" y="646" text-anchor="start" font-size="10.5" font-weight="700" fill="#FF6900">N</text>
+  <rect x="1325" y="520" width="270" height="164" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1335" y="539" text-anchor="start" font-size="12" font-weight="700" fill="#2B2724">How the catalog meets the calendar</text>
+  <text x="1335" y="555" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">Occurrence rows are the shared cache,</text>
+  <text x="1335" y="569" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">independent of any student. A student's</text>
+  <text x="1335" y="583" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">Session is written by the materializer,</text>
+  <text x="1335" y="597" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">keyed [userId, externalKey]:</text>
+  <text x="1335" y="611" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">  PortalSection → lecture keys</text>
+  <text x="1335" y="625" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">  LmsCourse → lms:assign:&lt;id&gt; / lms:quiz:&lt;id&gt;</text>
+  <text x="1335" y="639" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">Session.scheduleStudyUnitId / lmsCourseId</text>
+  <text x="1335" y="653" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">are soft links for grouping and fan-out.</text>
+  <rect x="1325" y="700" width="270" height="100" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1335" y="719" text-anchor="start" font-size="12" font-weight="700" fill="#2B2724">Not in Postgres</text>
+  <text x="1335" y="735" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">sessions, OTP, rate limits, flags, BullMQ jobs</text>
+  <text x="1335" y="749" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">and SSE pub/sub live in Redis (container</text>
+  <text x="1335" y="763" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">diagram). Uploaded files live in S3 / MinIO.</text>
+</svg>
