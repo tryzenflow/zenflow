@@ -12,7 +12,7 @@ Disable a subsystem at runtime, no deploy. Design: [ADR-0008](../adr/0008-redis-
 | `signups` | new accounts are refused (503); existing users still log in | **on** |
 | `maintenance` | every non-GET API request returns 503; `GET` and `/health*` stay up | **off** |
 
-A flag that was never toggled (or an unset `REDIS_KILLSWITCH_URL`) is in its normal state: everything on, `maintenance` off. The fail-safe applies only during an outage.
+A flag that was never toggled (or an unset `REDIS_KILLSWITCH_HOST`) is in its normal state: everything on, `maintenance` off. The fail-safe applies only during an outage.
 
 Changes apply within the cache TTL (`KILLSWITCH_CACHE_TTL_MS`, default 5 s) on every process. `ingestion` also respects `INGESTION_ENABLED=false`; either one disables it.
 
@@ -39,7 +39,7 @@ Grafana: **Zenflow · Kill switch** shows current state and flips over time.
 
 - `redis-killswitch` unreachable: every flag takes its fail-safe default above; reads never block a request (250 ms timeout, cached for one TTL).
 - Other Redis instances restarting or flushed: flags are unaffected (own instance, `noeviction`, AOF `everysec`, own volume).
-- Prod and staging require `REDIS_KILLSWITCH_URL` on every role that reads flags (`api`, `watcher`, `worker-*`).
+- Prod and staging require `REDIS_KILLSWITCH_HOST` on every role that reads flags (`api`, `watcher`, `worker-*`).
 
 ## Verify after a toggle
 

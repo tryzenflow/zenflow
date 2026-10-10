@@ -10,24 +10,25 @@ Values are never listed. `backend/.env.example` shows the shape.
 
 | Secret | Used by | Where | Rotation |
 | --- | --- | --- | --- |
-| `DATABASE_URL` (holds the DB password), `POSTGRES_PASSWORD` | API, migrations, Postgres | store, injected into `.env.<env>` | [runbook](#database-password) |
+| `POSTGRES_PASSWORD` (the app composes its connection from it; there is no `DATABASE_URL`) | API, migrations, Postgres, backup | store; Vault sets `api`, `postgres`, `backup` | [runbook](#database-password) |
 | `SESSION_SECRET` | signs the session cookie (`express-session`); no JWT in this app | store | [runbook](#session-signing-key-session_secret) |
 | `FILE_URL_SECRET` | HMAC-SHA256 key for signed, non-expiring file URLs (`/files/:id?sig=`); notes store only the file id and the API signs on read | store | change and redeploy; notes need no rewrite |
 | `MASTER_LMS_ENCRYPTION_KEY_V<n>`, `MASTER_PORTAL_ENCRYPTION_KEY_V<n>` | wrap per-user DEKs that protect stored DLU/LMS credentials (`backend/src/crypto`) | store; never only in the DB | [runbook](#crypto-master-keys-master__encryption_key_vn) |
 | `PORTAL_API_KEY` | DLU portal API key (expires upstream, from a browser session) | store | replace when DLU invalidates it |
-| `MAIL_TRANSPORT` | SMTP URL with credentials | store | at the SMTP provider |
-| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | file storage; also the MinIO root user/password in compose | store | rotate in MinIO/S3, redeploy |
+| `MAIL_PASSWORD` | SMTP password (host, port and user are non-secret `MAIL_*`) | store | at the SMTP provider |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | file storage; also the MinIO root user/password in compose | store; Vault sets `api` and `minio` | rotate in MinIO/S3, redeploy |
 | `BANDIT_SERVICE_TOKEN` | bearer for `POST /v1/place`; bandit also accepts `BANDIT_SERVICE_TOKEN_PREVIOUS` | store (both services) | zero-downtime: new on bandit with old as `_PREVIOUS`, then API, then drop `_PREVIOUS` |
 | `FCM_SERVICE_ACCOUNT`, `APNS_KEY` (+ `APNS_KEY_ID`, `APNS_TEAM_ID`) | push notifications | store | Firebase / Apple developer portal |
 | `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY`, `BACKUP_AGE_RECIPIENT`, `BACKUP_AGE_IDENTITY` | backup container; IAM user is put + list only. `BACKUP_AGE_RECIPIENT` is public; `BACKUP_AGE_IDENTITY` is the restore-test key, never the offline master key | store, injected into `.env.<env>` | [runbook](backups.md#rotation) |
 | `GRAFANA_ADMIN_PASSWORD` | Grafana (staging, prod; prod refuses to start without it) | store | change and redeploy |
-| `GF_SMTP_PASSWORD` | Grafana alert mail: Mailgun SMTP credential for `postmaster@alerts.alphatrann.com` (prod) | Vault `platform` set | reset in Mailgun, redeploy |
-| `CACHE_URL`, `RATE_LIMIT_CACHE_URL`, `QUEUE_REDIS_URL`, `REDIS_PUBSUB_URL`, `REDIS_KILLSWITCH_URL` | Redis ([ADR-0005](../adr/0005-rate-limit-store-lru-rdb.md), [ADR-0007](../adr/0007-bullmq-for-notification-queue.md), [ADR-0018](../adr/0018-redis-pubsub-instance.md)); unauthenticated on internal-only Docker networks | n/a | add a password if the network assumption changes |
+| `GF_SMTP_PASSWORD` | Grafana alert mail: Mailgun SMTP credential for `postmaster@alerts.alphatrann.com` (prod) | Vault `grafana` set | reset in Mailgun, redeploy |
+| `CACHE_HOST`, `RATE_LIMIT_CACHE_HOST`, `QUEUE_REDIS_HOST`, `REDIS_PUBSUB_HOST`, `REDIS_KILLSWITCH_HOST` (each with an optional `_PASSWORD`) | Redis ([ADR-0005](../adr/0005-rate-limit-store-lru-rdb.md), [ADR-0007](../adr/0007-bullmq-for-notification-queue.md), [ADR-0018](../adr/0018-redis-pubsub-instance.md)); unauthenticated on internal-only Docker networks | n/a | add a password if the network assumption changes |
 | Per-user DLU/LMS credentials | `Integration` rows in Postgres, encrypted under per-user DEKs | DB (ciphertext only) | by the user |
 | `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`, `SOPS_AGE_KEY`, `SECRETS_COMMAND` | CI deploy | GitHub Environment secrets | yearly or on offboarding |
 | `GITHUB_TOKEN` | image push/pull | per workflow run | automatic |
 
-Not secrets: `VITE_*`, `EXPO_PUBLIC_*` (shipped to clients), `backend/certs/lms-ca.pem` (public CA), `CORS_ORIGIN`, URLs without credentials.
+Not secrets: `VITE_*`, `EXPO_PUBLIC_*` (shipped to clients), `backend/certs/lms-ca.pem` (public CA), `CORS_ORIGIN`, hosts, ports, usernames (`POSTGRES_USER`, `MAIL_USER`), database and bucket names, URLs without credentials.
+These go in the non-secret env file (`backend/env/prod.env` for prod), never in Vault. A name must not be in both.
 
 ## How secrets reach the app
 
@@ -37,7 +38,7 @@ Not secrets: `VITE_*`, `EXPO_PUBLIC_*` (shipped to clients), `backend/certs/lms-
 | Method | How |
 | --- | --- |
 | Environment variables | platform-supplied (compose `env_file`, ECS/K8s secret refs) |
-| `*_FILE` variants | `DATABASE_URL_FILE=/run/secrets/database_url`; works for any variable (Docker/Swarm/K8s mounts, Vault Agent, SOPS to tmpfs) |
+| `*_FILE` variants | `POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password`; works for any variable (Docker/Swarm/K8s mounts, Vault Agent, SOPS to tmpfs) |
 
 `*_FILE` rules:
 
@@ -54,7 +55,7 @@ Not secrets: `VITE_*`, `EXPO_PUBLIC_*` (shipped to clients), `backend/certs/lms-
 | `host` (default) | `backend/.env.<env>` already on the host, written by your secret-manager agent | Vault Agent, cloud sidecar/cron, manual bootstrap |
 | `sops` | CI decrypts `backend/secrets/<env>.env.enc` with `SOPS_AGE_KEY`, streams it to the host as `.env.<env>` (600, never on the runner disk) | no managed store yet; the encrypted file is safe to commit |
 | `command` | runs `SECRETS_COMMAND`, which prints dotenv on stdout (e.g. `aws secretsmanager get-secret-value ... \| jq -r ...`) | cloud secret manager, external Vault |
-| `vault` (**prod only**) | self-hosted `vault` container; deploy renders API/Bandit `*_FILE` mounts and platform env files into host tmpfs (no `.env.prod`, nothing via the runner) | prod; refused for staging; see [vault.md](vault.md) |
+| `vault` (**prod only**) | self-hosted `vault` container; deploy renders one set per consumer into host tmpfs (`*_FILE` mounts for API/Bandit, plain env files for Postgres, MinIO, Grafana, backup). The non-secret `backend/env/prod.env` is shipped as `.env.prod`; secrets never pass through the runner. A key in both aborts the deploy | prod; refused for staging; see [vault.md](vault.md) |
 
 SOPS bootstrap (once):
 
@@ -97,11 +98,11 @@ Compose Postgres (18) reads `POSTGRES_PASSWORD` only when the data directory is 
    ```bash
    docker compose exec postgres sh -c 'psql -U "$POSTGRES_USER" -c "ALTER USER \"$POSTGRES_USER\" PASSWORD '"'"'<new>'"'"';"'
    ```
-3. Update `POSTGRES_PASSWORD` and the password inside `DATABASE_URL` (URL-encode special characters) in the store.
+3. Update `POSTGRES_PASSWORD` in the store (with Vault: in all three sets, `api`, `postgres` and `backup`). Any characters are fine; the app URL-encodes it.
 4. Redeploy so `api` and `migrations` pick it up (brief reconnect; off-peak).
 5. Confirm logins work. The old password is already dead after step 2.
 
-Zero-downtime variant: create a second role, switch `DATABASE_URL` to it, drop the old role. Managed DB: use the provider's rotation.
+Zero-downtime variant: create a second role, switch `POSTGRES_USER` and `POSTGRES_PASSWORD` to it, drop the old role. Managed DB: use the provider's rotation.
 
 ### Crypto master keys (`MASTER_*_ENCRYPTION_KEY_V<n>`)
 

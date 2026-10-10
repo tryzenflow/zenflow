@@ -105,7 +105,7 @@ The ingestion inbox, written by the materializer, never by a client. `eventName`
 - Copy follows `User.lang` (`VI_VN` or `EN_US`) for inbox, SSE and push. Rows keep canonical English; known framing is translated on delivery and read.
 - Reminder dates and lead times use Vietnamese wording for `VI_VN`. User and upstream titles and locations stay intact.
 - OTP emails follow the saved language (new addresses get English). Templates: [`localize-notification.ts`](../../backend/src/notifications/localize-notification.ts).
-- SSE crosses processes over Redis pub/sub (`REDIS_PUBSUB_URL`, [ADR-0018](../adr/0018-redis-pubsub-instance.md)): a row raised by a worker reaches clients on any API replica. Delivery is at-most-once; clients refetch the inbox on reconnect.
+- SSE crosses processes over Redis pub/sub (`REDIS_PUBSUB_HOST`, [ADR-0018](../adr/0018-redis-pubsub-instance.md)): a row raised by a worker reaches clients on any API replica. Delivery is at-most-once; clients refetch the inbox on reconnect.
 - `NotificationsService.notify()` publishes to SSE and enqueues one `push` job per provider on the `notify` queue (job id from the row id, so repeats send once; the enqueue is retried and a watcher sweep re-enqueues rows that still have no job). SSE events carry the notification id; clients dedupe by it.
 - Exercise inbox, stream and push without a sync: `pnpm --filter backend exec ts-node scripts/send-test-notification.ts <userId> [count]`.
 

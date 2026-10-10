@@ -17,7 +17,7 @@ For maintainers (issue #75). Workflows live in `.github/workflows/`.
 - Unit tests: backend Jest, mobile Vitest, bandit pytest/ruff.
 - Prisma drift, backend e2e (`compose.test.yml`), frontend Playwright e2e.
 - API image build smoke test, gitleaks.
-- Vault: `docker compose config` for every compose file; Vault only in prod (absent from dev, staging and test) and loopback-only; the prod `backup` service mounts `vault_data` read-only; `render-secrets.sh` against a throwaway `vault server -dev`; prod Vault config boots.
+- Vault: `docker compose config` for every compose file; Vault only in prod (absent from dev, staging and test) and loopback-only; the prod `backup` service mounts `vault_data` read-only; `render-secrets.sh` against a throwaway `vault server -dev` (per-set isolation, explicit policy paths, importer routing and rejections, `backend/env/prod.env` holds no secret); prod Vault config boots.
 - Agents: `.claude/` and `.codex/` match `.agents/` (`node scripts/sync-agents.mjs --check`), hook tests, ownership check.
 
 Prisma check, against a throwaway shadow Postgres:
@@ -79,7 +79,7 @@ Create `staging` (no reviewers) and `production` (required reviewers; branches l
 | var | `DEPLOY_ENABLED` | `true` to turn the deploy on |
 | var | `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PATH` | SSH target; `DEPLOY_PATH` holds `backend/`; with `SECRETS_PROVIDER=vault`, `DEPLOY_USER` must own the AppRole creds and `/run/zenflow` (root works; or a user you `chown` them to, see [vault.md](vault.md)) |
 | var | `HEALTHCHECK_URL` | optional URL polled after rollout |
-| var | `SECRETS_PROVIDER` | `host` (default), `sops`, `command`, or `vault` (**`production` Environment only**; Vault renders all prod values from tmpfs and does not read `.env.prod`; `deploy.yml` and `deploy.sh` refuse it for staging; see [secrets.md](secrets.md)) |
+| var | `SECRETS_PROVIDER` | `host` (default), `sops`, `command`, or `vault` (**`production` Environment only**; Vault renders the prod secrets (one set per consumer) from tmpfs, and the committed non-secret `backend/env/prod.env` is shipped as `.env.prod`; `deploy.yml` and `deploy.sh` refuse it for staging; see [secrets.md](secrets.md)) |
 | var | `VAULT_ADDR`, `VAULT_ROLE_ID_FILE`, `VAULT_SECRET_ID_FILE` | only for `vault` (production only); paths/addr as seen **on the deploy host** (defaults `http://127.0.0.1:8200`, `/etc/zenflow/vault/{role_id,secret_id}`). The AppRole creds live on the host, not in GitHub |
 | secret | `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` | deploy key and pinned host key (`ssh-keyscan`) |
 | secret | `SOPS_AGE_KEY` | only for `sops` |
