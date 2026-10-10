@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+import type { Session } from "@zenflow/shared";
+import { showMovedToast } from "../move-toast";
 import {
   getSlotTakenError,
+  placementToastMessage,
   shouldSurfaceRescheduleHint,
   showBulkPickToast,
   showErrorToast,
@@ -68,6 +71,50 @@ describe("showErrorToast", () => {
     const toast = vi.fn();
     showErrorToast(toast, new Error("boom"), "Something went wrong");
     expect(toast.mock.calls[0][0].title).toBe("Something went wrong");
+  });
+});
+
+describe("placementToastMessage", () => {
+  const user = { timezone: "UTC" };
+
+  it("never puts the user's own title in the toast", () => {
+    const { message } = placementToastMessage(
+      { title: "A very long assignment title", scheduledStartTime: null } as Session,
+      user,
+    );
+    expect(message).not.toContain("A very long assignment title");
+    expect(splitToastMessage(message)).toEqual({
+      title: "Task created",
+      description: "No time found before its deadline.",
+    });
+  });
+
+  it("splits a scheduled placement into a brief title and the time", () => {
+    const { message } = placementToastMessage(
+      {
+        title: "x",
+        scheduledStartTime: "2026-10-12T09:00:00.000Z",
+        deadline: "2026-10-20T09:00:00.000Z",
+      } as Session,
+      user,
+    );
+    const { title, description } = splitToastMessage(message);
+    expect(title).toBe("Scheduled");
+    expect(description).toContain("09:00");
+  });
+});
+
+describe("showMovedToast", () => {
+  it("uses a brief title with the new date, no separators", () => {
+    const toast = vi.fn();
+    showMovedToast(toast, {
+      first: false,
+      to: new Date(2026, 9, 12, 9, 0),
+      withTime: true,
+    });
+    const arg = toast.mock.calls[0][0];
+    expect(arg.title).toBe("Moved");
+    expect(arg.description).toBe("Mon, Oct 12, 09:00");
   });
 });
 

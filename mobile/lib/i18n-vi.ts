@@ -274,7 +274,7 @@ export default {
   "Sync {provider} now": "Đồng bộ {provider} ngay",
   "Sign in to your {provider}": "Đăng nhập {provider}",
   "Update your {provider} login": "Cập nhật đăng nhập {provider}",
-  '"{title}" created': 'Đã tạo "{title}"',
+  "Task created": "Đã tạo công việc",
   "{count} sittings have an alternative": "{count} buổi có giờ thay thế",
   "All {total} are already scheduled — swap any you like":
     "Cả {total} buổi đã có lịch — bạn có thể đổi buổi tùy ý",
@@ -366,7 +366,7 @@ export default {
   "Nice! You moved a task.": "Tuyệt! Bạn đã chuyển một công việc.",
   "Zenflow learns from every move to place tasks better.":
     "Zenflow học từ mỗi lần bạn chuyển để xếp lịch tốt hơn.",
-  "Moved to {when}": "Đã chuyển sang {when}",
+  Moved: "Đã chuyển",
   "{title} · {count} of {total} have alternatives":
     "{title} · {count}/{total} buổi có thời gian khác",
   "Pick a time, then confirm.":
@@ -439,8 +439,9 @@ export default {
     "Đã cập nhật {applied}, bỏ qua {failed}",
   "Skipped ones clashed with another sitting and stayed put.":
     "Các buổi bị bỏ qua trùng với buổi khác nên giữ nguyên.",
-  "It's past its deadline.": "Đã quá hạn chót.",
-  "Scheduled for {when}": "Đã xếp lịch {when}",
+  Scheduled: "Đã xếp lịch",
+  "Scheduled late": "Đã xếp lịch trễ",
+  "No time found before its deadline.": "Không có giờ trống trước hạn chót.",
   "Check your inbox": "Kiểm tra hộp thư nhé",
   "Welcome back": "Chào mừng bạn trở lại",
   "Couldn't send the code. Try again.": "Chưa gửi được mã. Bạn thử lại nhé.",
@@ -492,14 +493,14 @@ export default {
     "Mọi thông báo sẽ bị xóa vĩnh viễn và không thể khôi phục.",
   "{done} of {total} done. Steps tick off as you try them — tap one for a quick guide.":
     "Xong {done}/{total}. Mỗi bước tự đánh dấu khi bạn thử — chạm vào bước để xem hướng dẫn.",
-  "Couldn't load this month's tasks": "Chưa tải được công việc tháng này",
+  "Couldn't load this month": "Chưa tải được tháng này",
   "Couldn't load your day": "Chưa tải được lịch trong ngày",
   "Couldn't move that sitting": "Chưa chuyển được buổi này",
   "Couldn't move this session": "Chưa chuyển được lịch này",
   "Couldn't open this session": "Chưa mở được lịch này",
   "Couldn't record this choice": "Chưa lưu được lựa chọn này",
   "Couldn't reschedule task": "Chưa xếp lại được công việc",
-  "Couldn't save. Try again.": "Chưa lưu được. Bạn thử lại nhé.",
+  "Couldn't save": "Chưa lưu được",
   "Couldn't sync": "Chưa đồng bộ được",
   "Couldn't update this session": "Chưa cập nhật được lịch này",
   "Couldn't update that": "Chưa cập nhật được",

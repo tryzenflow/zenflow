@@ -19,7 +19,7 @@ import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { useColorScheme } from "@/lib/useColorScheme";
 import type { User } from "@zenflow/shared";
-import { isAxiosError } from "axios";
+import { showErrorToast } from "@/lib/task-toasts";
 import { LinearGradient } from "expo-linear-gradient";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
@@ -78,10 +78,12 @@ export function ProfileRow({
       toast(t("Profile updated"), "success", { icon: CircleUserRound });
       bottomSheet.close();
     } catch (error) {
-      const message =
-        (isAxiosError(error) && error.response?.data?.message) ||
-        t("Couldn't update profile");
-      toast(message, "destructive", { icon: CircleUserRound });
+      showErrorToast(
+        toast,
+        error,
+        t("Couldn't update profile"),
+        CircleUserRound,
+      );
     } finally {
       setSaving(false);
     }

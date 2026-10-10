@@ -34,7 +34,7 @@ import {
   zonedWallClockToUtc,
 } from "@zenflow/core";
 import type { Session } from "@zenflow/shared";
-import { isAxiosError } from "axios";
+import { showErrorToast } from "@/lib/task-toasts";
 
 import * as Haptics from "expo-haptics";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -77,14 +77,6 @@ export interface MonthDragHandle {
   update: (absoluteX: number, absoluteY: number) => void;
   end: (absoluteX: number, absoluteY: number) => void;
   cancel: () => void;
-}
-
-function errorMessage(error: unknown, fallback: string): string {
-  return (
-    (isAxiosError(error) &&
-      (error.response?.data as { message?: string } | undefined)?.message) ||
-    fallback
-  );
 }
 
 interface MonthPageProps {
@@ -217,10 +209,11 @@ export const MonthPage = memo(function MonthPage({
       }
       setSessions((cur) => cur ?? []);
       if (isActiveRef.current) {
-        toast(
-          errorMessage(error, t("Couldn't load this month's tasks")),
-          "destructive",
-          { icon: "calendar-x" },
+        showErrorToast(
+          toast,
+          error,
+          t("Couldn't load this month"),
+          "calendar-x",
         );
       }
     }
@@ -456,10 +449,11 @@ export const MonthPage = memo(function MonthPage({
         );
       } catch (error) {
         setSessions(prevSessions ?? []); // rollback the optimistic move
-        toast(
-          errorMessage(error, t("Couldn't reschedule task")),
-          "destructive",
-          { icon: "calendar-x" },
+        showErrorToast(
+          toast,
+          error,
+          t("Couldn't reschedule task"),
+          "calendar-x",
         );
       }
     };
