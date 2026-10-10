@@ -19,3 +19,18 @@ path "secret/data/zenflow/__ENV__/grafana" {
 path "secret/data/zenflow/__ENV__/backup" {
   capabilities = ["read"]
 }
+path "secret/data/zenflow/__ENV__/session-redis" {
+  capabilities = ["read"]
+}
+path "secret/data/zenflow/__ENV__/redis-ratelimit" {
+  capabilities = ["read"]
+}
+path "secret/data/zenflow/__ENV__/redis-queue" {
+  capabilities = ["read"]
+}
+path "secret/data/zenflow/__ENV__/redis-killswitch" {
+  capabilities = ["read"]
+}
+path "secret/data/zenflow/__ENV__/redis-pubsub" {
+  capabilities = ["read"]
+}

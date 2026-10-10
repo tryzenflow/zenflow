@@ -22,7 +22,7 @@ Values are never listed. `backend/.env.example` shows the shape.
 | `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY`, `BACKUP_AGE_RECIPIENT`, `BACKUP_AGE_IDENTITY` | backup container; IAM user is put + list only. `BACKUP_AGE_RECIPIENT` is public; `BACKUP_AGE_IDENTITY` is the restore-test key, never the offline master key | store, injected into `.env.<env>` | [runbook](backups.md#rotation) |
 | `GRAFANA_ADMIN_PASSWORD` (staging), `GF_SECURITY_ADMIN_PASSWORD` (prod) | Grafana admin; prod refuses to start without it | store; prod: Vault `grafana` set | change and redeploy |
 | `GF_SMTP_PASSWORD` | Grafana alert mail: Mailgun SMTP credential for `postmaster@zenflow.alphatrann.com` (prod) | Vault `grafana` set | reset in Mailgun, redeploy |
-| `SESSION_REDIS_HOST`, `RATE_LIMIT_REDIS_HOST`, `QUEUE_REDIS_HOST`, `REDIS_PUBSUB_HOST`, `REDIS_KILLSWITCH_HOST` (each with an optional `_PASSWORD`) | Redis ([ADR-0005](../adr/0005-rate-limit-store-lru-rdb.md), [ADR-0007](../adr/0007-bullmq-for-notification-queue.md), [ADR-0018](../adr/0018-redis-pubsub-instance.md)); unauthenticated on internal-only Docker networks | n/a | add a password if the network assumption changes |
+| `SESSION_REDIS_PASSWORD`, `RATE_LIMIT_REDIS_PASSWORD`, `QUEUE_REDIS_PASSWORD`, `REDIS_KILLSWITCH_PASSWORD`, `REDIS_PUBSUB_PASSWORD` | one per prod Redis instance ([ADR-0005](../adr/0005-rate-limit-store-lru-rdb.md), [ADR-0007](../adr/0007-bullmq-for-notification-queue.md), [ADR-0018](../adr/0018-redis-pubsub-instance.md)): the app (`api` set) and that instance's own Vault set; the session one also feeds `redis-exporter`. Dev, test and staging Redis run without a password | store; Vault sets `api` plus `session-redis`, `redis-ratelimit`, `redis-queue`, `redis-killswitch`, `redis-pubsub` | [runbook](#redis-passwords) |
 | Per-user DLU/LMS credentials | `Integration` rows in Postgres, encrypted under per-user DEKs | DB (ciphertext only) | by the user |
 | `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`, `SOPS_AGE_KEY`, `SECRETS_COMMAND` | CI deploy | GitHub Environment secrets | yearly or on offboarding |
 | `GITHUB_TOKEN` | image push/pull | per workflow run | automatic |
@@ -103,6 +103,17 @@ Compose Postgres (18) reads `POSTGRES_PASSWORD` only when the data directory is 
 5. Confirm logins work. The old password is already dead after step 2.
 
 Zero-downtime variant: create a second role, switch `POSTGRES_USER` and `POSTGRES_PASSWORD` to it, drop the old role. Managed DB: use the provider's rotation.
+
+### Redis passwords
+
+Each prod Redis instance has its own password, set at container start from its Vault set (`backend/ops/redis/start.sh`); the app gets the same value through the `api` set. An instance without a password refuses to start. With the `host`, `sops` or `command` providers, put the five `*_REDIS_PASSWORD` values in `.env.<env>` instead; the Redis containers load that file, like Postgres and the backup job do.
+
+1. Generate: `openssl rand -hex 24` (single-line only, no carriage returns or newlines; `start.sh` quotes other special characters).
+2. Patch the value in **both** sets: `vault kv patch -mount=secret zenflow/prod/api SESSION_REDIS_PASSWORD=...` and `zenflow/prod/session-redis` (same for the other instances; the session password also feeds `redis-exporter`).
+3. Deploy. The shared tier restarts Redis with the new password before the new app colour is up, so the colour still serving traffic cannot reach that Redis until the flip. Expect a short outage of sessions, rate limits, queues or SSE for that instance. Do it off-peak, and for the kill switch Redis expect the fail-safe defaults during the gap.
+4. Confirm: `docker exec -e REDISCLI_AUTH=... <container> redis-cli ping` returns `PONG` and `/api/v1/health` is green.
+
+Data survives (AOF/RDB volumes); only the password changes.
 
 ### Crypto master keys (`MASTER_*_ENCRYPTION_KEY_V<n>`)
 
