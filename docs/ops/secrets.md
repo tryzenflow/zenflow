@@ -106,9 +106,9 @@ Zero-downtime variant: create a second role, switch `POSTGRES_USER` and `POSTGRE
 
 ### Redis passwords
 
-Each prod Redis instance has its own password, set at container start from its Vault set (`backend/ops/redis/start.sh`); the app gets the same value through the `api` set. An instance without a password refuses to start.
+Each prod Redis instance has its own password, set at container start from its Vault set (`backend/ops/redis/start.sh`); the app gets the same value through the `api` set. An instance without a password refuses to start. With the `host`, `sops` or `command` providers, put the five `*_REDIS_PASSWORD` values in `.env.<env>` instead; the Redis containers load that file, like Postgres and the backup job do.
 
-1. Generate: `openssl rand -hex 24` (any characters work; `start.sh` quotes them).
+1. Generate: `openssl rand -hex 24` (single-line only, no carriage returns or newlines; `start.sh` quotes other special characters).
 2. Patch the value in **both** sets: `vault kv patch -mount=secret zenflow/prod/api SESSION_REDIS_PASSWORD=...` and `zenflow/prod/session-redis` (same for the other instances; the session password also feeds `redis-exporter`).
 3. Deploy. The shared tier restarts Redis with the new password before the new app colour is up, so the colour still serving traffic cannot reach that Redis until the flip. Expect a short outage of sessions, rate limits, queues or SSE for that instance. Do it off-peak, and for the kill switch Redis expect the fail-safe defaults during the gap.
 4. Confirm: `docker exec -e REDISCLI_AUTH=... <container> redis-cli ping` returns `PONG` and `/api/v1/health` is green.

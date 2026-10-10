@@ -322,7 +322,10 @@ services:
     image: redis:8.8.0-alpine
     restart: unless-stopped
     env_file:
-      # This instance's password only (Vault set `session-redis`); start.sh refuses to run without it.
+      # host/sops/command providers put the password in .env.prod; Vault mode renders it into this
+      # instance's own set (`session-redis`) instead. start.sh refuses to run without one.
+      - path: .env.prod
+        required: false
       - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/session-redis/files.env
         required: false
     environment:
@@ -360,7 +363,10 @@ services:
     image: redis:8.8.0-alpine
     restart: unless-stopped
     env_file:
-      # This instance's password only (Vault set `redis-ratelimit`); start.sh refuses to run without it.
+      # host/sops/command providers put the password in .env.prod; Vault mode renders it into this
+      # instance's own set (`redis-ratelimit`) instead. start.sh refuses to run without one.
+      - path: .env.prod
+        required: false
       - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/redis-ratelimit/files.env
         required: false
     environment:
@@ -396,7 +402,10 @@ services:
     image: redis:8.8.0-alpine
     restart: unless-stopped
     env_file:
-      # This instance's password only (Vault set `redis-queue`); start.sh refuses to run without it.
+      # host/sops/command providers put the password in .env.prod; Vault mode renders it into this
+      # instance's own set (`redis-queue`) instead. start.sh refuses to run without one.
+      - path: .env.prod
+        required: false
       - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/redis-queue/files.env
         required: false
     environment:
@@ -433,7 +442,10 @@ services:
     image: redis:8.8.0-alpine
     restart: unless-stopped
     env_file:
-      # This instance's password only (Vault set `redis-killswitch`); start.sh refuses to run without it.
+      # host/sops/command providers put the password in .env.prod; Vault mode renders it into this
+      # instance's own set (`redis-killswitch`) instead. start.sh refuses to run without one.
+      - path: .env.prod
+        required: false
       - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/redis-killswitch/files.env
         required: false
     environment:
@@ -468,7 +480,10 @@ services:
     image: redis:8.8.0-alpine
     restart: unless-stopped
     env_file:
-      # This instance's password only (Vault set `redis-pubsub`); start.sh refuses to run without it.
+      # host/sops/command providers put the password in .env.prod; Vault mode renders it into this
+      # instance's own set (`redis-pubsub`) instead. start.sh refuses to run without one.
+      - path: .env.prod
+        required: false
       - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/redis-pubsub/files.env
         required: false
     environment:
@@ -598,6 +613,8 @@ services:
     # Scrapes the password-protected session Redis: reads the same Vault set as that instance.
     entrypoint: ["/bin/sh", "-c", 'REDIS_PASSWORD="$$SESSION_REDIS_PASSWORD" exec /redis_exporter']
     env_file:
+      - path: .env.prod
+        required: false
       - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/session-redis/files.env
         required: false
     environment:

@@ -479,7 +479,8 @@ jobs:
           for pair in session-redis:SESSION_REDIS_PASSWORD:zenflow-cache-prod \
                       redis-ratelimit:RATE_LIMIT_REDIS_PASSWORD:zenflow-cache-ratelimit-prod \
                       redis-queue:QUEUE_REDIS_PASSWORD:zenflow-cache-queue-prod \
-                      redis-killswitch:REDIS_KILLSWITCH_PASSWORD:zenflow-cache-killswitch-prod; do
+                      redis-killswitch:REDIS_KILLSWITCH_PASSWORD:zenflow-cache-killswitch-prod \
+                      redis-pubsub:REDIS_PUBSUB_PASSWORD:zenflow-cache-pubsub-prod; do
             IFS=: read -r svc var ctr <<<"$pair"
             printf "%s='%s'\n" "$var" "$pw" > "$secret_dir/$svc/files.env"
             dc up -d "$svc"
@@ -493,9 +494,25 @@ jobs:
             [ "$(docker exec -e REDISCLI_AUTH="$pw" "$ctr" redis-cli ping)" = PONG ]
             docker exec "$ctr" ls -l /tmp/auth.conf | grep -q '^-rw-------'
           done
+          # A restart reuses the container filesystem; the password file must be recreated cleanly.
+          docker restart zenflow-cache-prod
+          for i in $(seq 1 20); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' zenflow-cache-prod)" = healthy ] && break
+            sleep 2
+          done
+          [ "$(docker inspect -f '{{.State.Health.Status}}' zenflow-cache-prod)" = healthy ] \
+            || { docker logs zenflow-cache-prod; echo "::error::session-redis not healthy after restart"; exit 1; }
+          # redis-exporter scrapes the protected session Redis with the same Vault set.
+          dc up -d redis-exporter
+          for i in $(seq 1 15); do
+            docker exec zenflow-redis-exporter-prod wget -qO- http://127.0.0.1:9121/metrics 2>/dev/null | grep -q '^redis_up 1' && break
+            sleep 2
+          done
+          docker exec zenflow-redis-exporter-prod wget -qO- http://127.0.0.1:9121/metrics | grep -q '^redis_up 1' \
+            || { docker logs zenflow-redis-exporter-prod; echo "::error::redis-exporter cannot reach the protected Redis"; exit 1; }
           # No password rendered: the instance must not start open.
           : > "$secret_dir/redis-pubsub/files.env"
-          dc up -d redis-pubsub || true
+          dc up -d --force-recreate redis-pubsub || true
           sleep 5
           docker logs zenflow-cache-pubsub-prod 2>&1 | grep -q 'refusing to start without a password'
           ! docker exec zenflow-cache-pubsub-prod redis-cli ping
