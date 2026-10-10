@@ -143,8 +143,26 @@ describe("PushService", () => {
           url: "/calendar?session=s1",
         },
         tone: "default",
+        category: null,
       });
       expect(apns.send).toHaveBeenCalledWith(["i1"], expect.anything());
+    });
+
+    it("tags a sync-conflict push with the Reschedule category and the urgent tone", async () => {
+      const { service, apns } = await make({
+        devices: [{ platform: "IOS", pushToken: "i1", userId: "u1" }],
+      });
+
+      await service.sendToUser("u1", {
+        ...ROW,
+        eventName: "sync_conflict.lecture",
+        sessionId: null,
+      });
+
+      expect(apns.send).toHaveBeenCalledWith(
+        ["i1"],
+        expect.objectContaining({ tone: "urgent", category: "sync_conflict" }),
+      );
     });
 
     it("uses the /notifications url when the row has no session", async () => {

@@ -4,13 +4,13 @@ import {
   listNotifications,
   markNotificationActionTaken,
   markNotificationRead,
-  rescheduleConflicts,
   subscribeNotificationsStream,
 } from "@/api/notifications";
 import { getSessionDetails } from "@/api/tasks";
 import { useToast } from "@/components/ui/toast";
 import { useUserStore } from "@/hooks/use-user-store";
 import { notificationToastVisual } from "@/lib/notification-visual";
+import { rescheduleWithToast } from "@/lib/reschedule-toast";
 import { claimNotification, LOCAL_NOTIFICATION_SOURCE } from "@/lib/push";
 import { notifySessionsMutated } from "@/lib/session-cache";
 import {
@@ -18,6 +18,7 @@ import {
   type NotificationDto,
   pushChannelId,
   pushSoundFile,
+  pushCategoryFor,
   pushToneFor,
 } from "@zenflow/shared";
 import * as Notifications from "expo-notifications";
@@ -208,11 +209,11 @@ export async function jumpToSession(
     }
   } catch {
     toast({
-    title: t("Couldn't find that item"),
-    description: t("It's no longer on your calendar."),
-    variant: "destructive",
-    icon: "calendar-x",
-  });
+      title: t("Couldn't find that item"),
+      description: t("It's no longer on your calendar."),
+      variant: "destructive",
+      icon: "calendar-x",
+    });
   }
 }
 
@@ -237,11 +238,11 @@ export async function viewSessionOnCalendar(
     } as Href);
   } catch {
     toast({
-    title: t("Couldn't find that item"),
-    description: t("It's no longer on your calendar."),
-    variant: "destructive",
-    icon: "calendar-x",
-  });
+      title: t("Couldn't find that item"),
+      description: t("It's no longer on your calendar."),
+      variant: "destructive",
+      icon: "calendar-x",
+    });
   }
 }
 
@@ -323,46 +324,25 @@ export function useNotificationsSubscription(): void {
           duration: 8000,
           action: hasConflicts
             ? {
-                label: t("Reschedule them all"),
+                label: t("Reschedule"),
                 onPress: () => {
-                  void rescheduleConflicts(n.id)
-                    .then((res) => {
-                      const ok = res.rescheduled.length;
-                      const failed = res.failedSessionIds.length;
-                      currentToast({
-                        title: failed
-                          ? t("Rescheduled {ok}, {failed} left", { ok, failed })
-                          : t("Rescheduled {count} tasks", { count: ok }),
-                        description: failed
-                          ? t("The rest still overlap. Move them by hand.")
-                          : undefined,
-                        variant: failed ? "warning" : "success",
-                        icon: failed ? "calendar-clock" : "calendar-check",
-                      });
-                      void fetchNotifications("refresh");
-                    })
-                    .catch(() =>
-                      currentToast({
-                        title: t("Couldn't reschedule tasks"),
-                        description: t("Try again in a moment."),
-                        variant: "destructive",
-                        icon: "calendar-x",
-                      }),
-                    );
+                  void rescheduleWithToast(n.id, currentToast).then(() =>
+                    fetchNotifications("refresh"),
+                  );
                 },
               }
             : n.sessionId
-            ? {
-                label: t("View on calendar"),
-                onPress: () =>
-                  viewSessionOnCalendar(
-                    n.sessionId!,
-                    currentRouter,
-                    currentToast,
-                    n.id,
-                  ),
-              }
-            : undefined,
+              ? {
+                  label: t("View on calendar"),
+                  onPress: () =>
+                    viewSessionOnCalendar(
+                      n.sessionId!,
+                      currentRouter,
+                      currentToast,
+                      n.id,
+                    ),
+                }
+              : undefined,
         });
 
         // 2. System notification in Android notification shade / lock screen
@@ -374,9 +354,13 @@ export function useNotificationsSubscription(): void {
             content: {
               title: cleanTitle,
               body: n.content,
+              // The server push is suppressed when SSE wins, so the local copy
+              // must carry the conflict "Reschedule" category itself.
+              categoryIdentifier: pushCategoryFor(n.eventName) ?? undefined,
               data: {
                 sessionId: n.sessionId,
                 notificationId: n.id,
+                eventName: n.eventName,
                 source: LOCAL_NOTIFICATION_SOURCE,
               },
               sound: pushSoundFile(tone),

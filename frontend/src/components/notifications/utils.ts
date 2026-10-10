@@ -59,9 +59,9 @@ export function eventTimeLabel(n: NotificationDto, tz: string): string | null {
 
 /** Never reached for `REMINDER` — reminders never raise a sync conflict. */
 const CONFLICT_COPY: Partial<Record<NotificationCategory, string>> = {
-  ASSIGNMENT: "An assignment now overlaps your tasks",
-  EXAM: "An exam now overlaps your tasks",
-  LECTURE: "A class now overlaps your tasks",
+  ASSIGNMENT: "Clashes with an assignment",
+  EXAM: "Clashes with an exam",
+  LECTURE: "Clashes with a class",
 };
 
 /** True for a sync-conflict notification (#62). */

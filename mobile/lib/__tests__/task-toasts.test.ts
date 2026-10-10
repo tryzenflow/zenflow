@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+import type { Session } from "@zenflow/shared";
+import { showMovedToast } from "../move-toast";
 import {
   getSlotTakenError,
+  placementToastMessage,
   shouldSurfaceRescheduleHint,
   showBulkPickToast,
   showErrorToast,
@@ -68,6 +71,62 @@ describe("showErrorToast", () => {
     const toast = vi.fn();
     showErrorToast(toast, new Error("boom"), "Something went wrong");
     expect(toast.mock.calls[0][0].title).toBe("Something went wrong");
+  });
+});
+
+describe("placementToastMessage", () => {
+  const user = { timezone: "UTC" };
+
+  it("never puts the user's own title in the toast", () => {
+    const { message } = placementToastMessage(
+      { title: "A very long assignment title", scheduledStartTime: null } as Session,
+      user,
+    );
+    expect(message).not.toContain("A very long assignment title");
+    expect(splitToastMessage(message)).toEqual({
+      title: "Task created",
+      description: "No time found before its deadline.",
+    });
+  });
+
+  it("splits a scheduled placement into a brief title and the time", () => {
+    const { message } = placementToastMessage(
+      {
+        title: "x",
+        scheduledStartTime: "2026-10-12T09:00:00.000Z",
+        deadline: "2026-10-20T09:00:00.000Z",
+      } as Session,
+      user,
+    );
+    const { title, description } = splitToastMessage(message);
+    expect(title).toBe("Scheduled for 9:00 AM");
+    expect(description).toBe("Mon Oct 12");
+  });
+});
+
+describe("showMovedToast", () => {
+  it("leads with the time, keeps the date as the description", () => {
+    const toast = vi.fn();
+    showMovedToast(toast, {
+      first: false,
+      to: new Date(2026, 9, 12, 9, 0),
+      withTime: true,
+    });
+    const arg = toast.mock.calls[0][0];
+    expect(arg.title).toBe("Moved to 9:00 AM");
+    expect(arg.description).toBe("Mon, Oct 12");
+  });
+
+  it("puts the date in the title when there is no time", () => {
+    const toast = vi.fn();
+    showMovedToast(toast, {
+      first: false,
+      to: new Date(2026, 9, 12),
+      withTime: false,
+    });
+    const arg = toast.mock.calls[0][0];
+    expect(arg.title).toBe("Moved to Mon, Oct 12");
+    expect(arg.description).toBeUndefined();
   });
 });
 

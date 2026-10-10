@@ -150,6 +150,16 @@ Update the matching README/ADR when a change touches schema, endpoints, the sche
 
 The `docs` skill applies these rules.
 
+## User-facing copy
+
+Applies to notifications, push, toasts and empty states (EN source strings; VI mirrors them).
+
+- **Title** is the news in 2–5 words: `6 new exams`, `A new assignment`, `3 tasks clash with your timetable`.
+- **Body** is one short imperative or question that says what to do next, ≤ 6 words: `Plan your revision now.`, `Reschedule them now?`.
+- No separators (`·`, `—`, `|`) inside a title or body, no source prefix (`LMS · …`), no boilerplate (`You have…`, `Synced from DLU`, `we detected`). Name the source only when it adds meaning, inside a sentence.
+- Put the action on the notification (button, tap target), not in the sentence.
+- Every new or changed string needs its VI entry (`backend/src/notifications/localize-notification.ts`, `mobile/lib/i18n-vi.ts`) and an updated spec.
+
 ## Agents, skills, hooks
 
 Source of truth is `.agents/` (tool-neutral). After editing it run `pnpm sync:agents`; it generates `.claude/`, `.mcp.json` and `.codex/`. See [.agents/README.md](.agents/README.md).

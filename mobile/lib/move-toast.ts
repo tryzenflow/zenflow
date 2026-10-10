@@ -1,4 +1,4 @@
-import { format, t } from "@/lib/i18n";
+import { format, t } from "./i18n";
 import type { useToast } from "@/components/ui/toast";
 
 type Toast = ReturnType<typeof useToast>["toast"];
@@ -22,11 +22,14 @@ export function showMovedToast(
     });
     return;
   }
-  toast(
-    t("Moved to {when}", {
-      when: format(opts.to, opts.withTime ? "EEE, MMM d · HH:mm" : "EEE, MMM d"),
+  // The time is the news, so it leads the title; the date is the detail.
+  const date = format(opts.to, "EEE, MMM d");
+  toast({
+    title: t("Moved to {when}", {
+      when: opts.withTime ? format(opts.to, "HH:mm") : date,
     }),
-    "success",
-    { icon: "calendar-check" },
-  );
+    ...(opts.withTime && { description: date }),
+    variant: "success",
+    icon: "calendar-check",
+  });
 }

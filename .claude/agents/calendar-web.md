@@ -20,6 +20,7 @@ You own what a student sees in the browser.
 - Style with Tailwind v4 + Warm Sunrise OKLch tokens, `cn()`, and `TASK_CARD_CLASSES` for task states. No mobile breakpoints.
 - Task states `fluid | fixed | overdue | conflict | completed` must stay visually distinct.
 - Docs stay lean (AGENTS.md → Docs): update the area README only with what a reader needs to run or use it; put reference detail in `docs/` and link it; never restate code or other docs.
+- User-facing copy (AGENTS.md → User-facing copy): short title, short imperative body, no separators or boilerplate; add the VI string and update the specs.
 
 ## Done when
 `pnpm --filter frontend typecheck` and `lint` pass, Playwright specs for changed behaviour pass (hand writing them to `zenflow-qa`), and `frontend/README.md` is current.
