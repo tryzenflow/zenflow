@@ -171,9 +171,9 @@ jobs:
       - uses: ./.github/actions/setup
       - name: Generate throwaway .env.test
         run: .github/scripts/write-test-env.sh backend/.env.test
-      - name: Start Postgres, storage, Redis and mail (Mailpit)
+      - name: Start Postgres, storage, Redis, mail (Mailpit) and the bandit service
         working-directory: backend
-        run: docker compose --profile queue -f compose.test.yml up -d
+        run: docker compose --profile queue --profile bandit -f compose.test.yml up -d --build
       - name: Wait for Postgres
         working-directory: backend
         run: |
@@ -181,7 +181,15 @@ jobs:
             docker exec zenflow-test-db pg_isready -U ci -d zenflow-test && exit 0
             sleep 2
           done
-          docker compose --profile queue -f compose.test.yml logs postgres
+          docker compose --profile queue --profile bandit -f compose.test.yml logs postgres
+          exit 1
+      - name: Wait for the bandit service
+        run: |
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8100/ready && exit 0
+            sleep 2
+          done
+          docker logs zenflow-test-bandit
           exit 1
       # migrate deploy (not db push) so the e2e run also proves the migration
       # history applies cleanly from scratch.
@@ -193,11 +201,11 @@ jobs:
       - name: Dump compose logs on failure
         if: failure()
         working-directory: backend
-        run: docker compose --profile queue -f compose.test.yml logs --no-color
+        run: docker compose --profile queue --profile bandit -f compose.test.yml logs --no-color
       - name: Tear down
         if: always()
         working-directory: backend
-        run: docker compose --profile queue -f compose.test.yml down -v
+        run: docker compose --profile queue --profile bandit -f compose.test.yml down -v
 
   frontend-e2e:
     name: Frontend e2e (Playwright)
@@ -408,14 +416,14 @@ jobs:
             VAULT_ROLE_ID_FILE=vault-creds/role_id VAULT_SECRET_ID_FILE=vault-creds/secret_id \
             ops/vault/render-secrets.sh
           # Importer: routes secrets per consumer, leaves non-secrets in env, rejects unknown keys.
-          printf 'SESSION_SECRET=ci\nPOSTGRES_PASSWORD=db\nGRAFANA_ADMIN_PASSWORD=grafana\nBANDIT_SERVICE_TOKEN=ci\nLOG_LEVEL=info\n' > import.env
+          printf 'SESSION_SECRET=ci\nPOSTGRES_PASSWORD=db\nGF_SECURITY_ADMIN_PASSWORD=grafana\nBANDIT_SERVICE_TOKEN=ci\nLOG_LEVEL=info\n' > import.env
           imp() { VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=ci-root VAULT_ENV=dev ops/vault/import-dotenv.sh "$@"; }
           out=$(imp import.env --dry-run)
           grep -q '^grafana: GF_SECURITY_ADMIN_PASSWORD$' <<<"$out"
           grep -q '^postgres: POSTGRES_PASSWORD$' <<<"$out"
           grep -q '^backup: POSTGRES_PASSWORD$' <<<"$out"
           grep -q '^left in env.*LOG_LEVEL' <<<"$out"
-          for bad in DATABASE_URL=x BACKUP_S3_ACCESS_KEY=x CACHE_HOST=x SESSION_REDIS_PASSWORD=x NOT_A_KEY=x QUEUE_JOB_ATTEMPT=x; do
+          for bad in SESSION_REDIS_PASSWORD=x NOT_A_KEY=x QUEUE_JOB_ATTEMPT=x; do
             echo "$bad" > bad.env
             ! imp bad.env --dry-run
           done

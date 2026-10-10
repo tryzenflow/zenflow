@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { vi } from "vitest";
 
 /** Shared spies so tests can assert navigation: `import { router } from "expo-router"`. */
@@ -12,9 +13,9 @@ export const useRouter = () => router;
 export const useLocalSearchParams = vi.fn(() => ({}));
 export const useGlobalSearchParams = useLocalSearchParams;
 export const usePathname = () => "/";
-export const useFocusEffect = (cb: () => void) => {
-  // run once like a mounted focus
-  cb();
+/** Runs on mount (and when `cb` changes) like a screen gaining focus; never during render. */
+export const useFocusEffect = (cb: () => void | (() => void)) => {
+  useEffect(() => cb(), [cb]);
 };
 export const Redirect = () => null;
 export const Stack = Object.assign(() => null, { Screen: () => null });

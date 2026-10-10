@@ -37,3 +37,4 @@ export const scrollTo = () => {};
 export const measure = () => null;
 export const Extrapolation = { CLAMP: "clamp", EXTEND: "extend", IDENTITY: "identity" };
 export const ReduceMotion = { System: "system", Always: "always", Never: "never" };
+export const interpolateColor = (_v: number, _input: number[], output: string[]) => output[0];

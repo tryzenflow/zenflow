@@ -75,7 +75,10 @@ export interface Proc {
   exited: Promise<number | null>;
 }
 
-function childEnv(role: Role): NodeJS.ProcessEnv {
+function childEnv(
+  role: Role,
+  extra: NodeJS.ProcessEnv = {},
+): NodeJS.ProcessEnv {
   return {
     ...process.env,
     // Not "test": there the pub/sub clients are lazy and never connect
@@ -115,6 +118,7 @@ function childEnv(role: Role): NodeJS.ProcessEnv {
     OTP_VERIFY_IP_LIMIT: "1000",
     OTEL_SDK_DISABLED: "true",
     LOG_LEVEL: "info",
+    ...extra,
   };
 }
 
@@ -173,10 +177,14 @@ function track(role: string, child: ChildProcess): Proc {
   return { role, child, output, exited };
 }
 
-export async function startRole(role: Role): Promise<Proc> {
+/** `extraEnv` overrides the shared test env for this process (e.g. `BANDIT_SERVICE_URL`). */
+export async function startRole(
+  role: Role,
+  extraEnv: NodeJS.ProcessEnv = {},
+): Promise<Proc> {
   const child = spawn(process.execPath, [MAIN], {
     cwd: os.tmpdir(),
-    env: childEnv(role),
+    env: childEnv(role, extraEnv),
   });
   const proc = track(role, child);
   const live =
@@ -257,6 +265,18 @@ async function latestOtp(email: string): Promise<string> {
   );
 }
 
+const signedUp: string[] = [];
+
+/**
+ * Delete every student this file signed up (cascades to their sessions,
+ * integrations, schedules and notifications). Suites share one database, and a
+ * left-over connected student stays due for the next suite's ticker, so specs
+ * that connect accounts call this in `afterAll`.
+ */
+export async function removeStudents(prisma: PrismaClient): Promise<void> {
+  await prisma.user.deleteMany({ where: { id: { in: signedUp.splice(0) } } });
+}
+
 /** Real OTP login (mail read from Mailpit); the agent keeps the session cookie. */
 export async function signUp(label: string): Promise<Student> {
   const email = `queue-e2e-${label}-${Date.now()}@example.test`;
@@ -269,9 +289,11 @@ export async function signUp(label: string): Promise<Student> {
     .send({ email, otp })
     .expect(200);
   const setCookie = res.headers["set-cookie"] as unknown as string[];
+  const id = (res.body as { data: { id: string } }).data.id;
+  signedUp.push(id);
   return {
     email,
-    id: (res.body as { data: { id: string } }).data.id,
+    id,
     agent,
     cookie: setCookie[0].split(";")[0],
   };

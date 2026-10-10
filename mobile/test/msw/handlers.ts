@@ -19,5 +19,20 @@ export const handlers = [
   http.get(`${API}/integrations`, () =>
     HttpResponse.json({ data: { integrations: [] } }),
   ),
+  http.get(`${API}/sessions/deadline-options`, () =>
+    HttpResponse.json({
+      data: {
+        today: "2026-10-15T16:59:59.000Z",
+        tomorrow: "2026-10-16T16:59:59.000Z",
+        thisWeek: "2026-10-18T16:59:59.000Z",
+        nextWeek: "2026-10-25T16:59:59.000Z",
+        thisMonth: "2026-10-31T16:59:59.000Z",
+        noRush: "2026-12-31T16:59:59.000Z",
+      },
+    }),
+  ),
+  http.get(`${API}/sessions`, () => HttpResponse.json({ data: { sessions: [] } })),
+  http.get(`${API}/tags`, () => HttpResponse.json({ data: { tags: [] } })),
+  http.patch(`${API}/users/update/basic-info`, () => HttpResponse.json({ data: testUser })),
   http.patch(`${API}/users/me`, () => HttpResponse.json({ data: testUser })),
 ];

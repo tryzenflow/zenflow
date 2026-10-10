@@ -33,12 +33,6 @@ classify() {
     BANDIT_SERVICE_TOKEN_PREVIOUS) echo bandit ;;
     GF_SECURITY_ADMIN_PASSWORD|GF_SMTP_PASSWORD) echo grafana ;;
     BACKUP_S3_ACCESS_KEY_ID|BACKUP_S3_SECRET_ACCESS_KEY|BACKUP_AGE_IDENTITY) echo backup ;;
-    BACKUP_S3_ACCESS_KEY) echo "import-dotenv: BACKUP_S3_ACCESS_KEY is not read; rename it BACKUP_S3_ACCESS_KEY_ID" >&2; return 1 ;;
-    BACKUP_S3_SECRET_KEY) echo "import-dotenv: BACKUP_S3_SECRET_KEY is not read; rename it BACKUP_S3_SECRET_ACCESS_KEY" >&2; return 1 ;;
-    DATABASE_URL|MAIL_TRANSPORT|CACHE_URL|RATE_LIMIT_CACHE_URL|QUEUE_REDIS_URL|REDIS_KILLSWITCH_URL|REDIS_PUBSUB_URL)
-      echo "import-dotenv: $1 is no longer read; the app composes connections from parts (DB_HOST, POSTGRES_*, SESSION_REDIS_HOST, MAIL_HOST, ... see docs/backend/config.md)" >&2; return 1 ;;
-    CACHE_HOST|CACHE_PORT|CACHE_PASSWORD|RATE_LIMIT_CACHE_HOST|RATE_LIMIT_CACHE_PORT|RATE_LIMIT_CACHE_PASSWORD)
-      echo "import-dotenv: $1 was renamed: CACHE_* is now SESSION_REDIS_*, RATE_LIMIT_CACHE_* is now RATE_LIMIT_REDIS_*" >&2; return 1 ;;
     SESSION_REDIS_PASSWORD|RATE_LIMIT_REDIS_PASSWORD|QUEUE_REDIS_PASSWORD|REDIS_KILLSWITCH_PASSWORD|REDIS_PUBSUB_PASSWORD)
       echo "import-dotenv: $1 has no set: prod Redis runs without requirepass. Remove it, or add a redis set if you enable one" >&2; return 1 ;;
     # Known non-secrets: identifiers, hosts, ports, URLs without credentials, tunables.
@@ -88,10 +82,6 @@ emit_set() {
         # Unquoted: an inline comment starts at whitespace followed by '#'.
         value="${value%%[[:space:]]#*}"
         value="${value%"${value##*[![:space:]]}"}" ;;
-    esac
-    case "$key" in
-      GRAFANA_ADMIN_PASSWORD) key=GF_SECURITY_ADMIN_PASSWORD ;;
-      GRAFANA_SMTP_PASSWORD) key=GF_SMTP_PASSWORD ;;
     esac
     target="$(classify "$key")" || exit 2
     [[ " $target " = *" $wanted "* ]] && printf '%s\0%s\0' "$key" "$value"
