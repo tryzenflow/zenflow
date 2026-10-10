@@ -1,145 +1,191 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 1300" font-family="Helvetica, Arial, sans-serif">
-  <title>Zenflow — ingestion component diagram</title>
-  <defs>
-    <marker id="iArrOrange" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#FF6900"/>
-    </marker>
-    <marker id="iArrAmber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#F0B100"/>
-    </marker>
-    <marker id="iArrNeutral" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#2B2724" fill-opacity="0.5"/>
-    </marker>
-  </defs>
-
-  <rect x="0" y="0" width="1500" height="1300" fill="#FCFBFA"/>
-  <text x="30" y="32" font-size="20" font-weight="700" fill="#2B2724">Zenflow — ingestion components</text>
-
-  <!-- Panel IO-TOP -->
-  <rect x="40" y="90" width="1420" height="420" rx="14" fill="none" stroke="#2B2724" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="8 6"/>
-  <text x="60" y="116" font-size="13.5" font-weight="700" fill="#2B2724" opacity="0.8">Sync watchers driven by one rolling ticker</text>
-
-  <!-- Row1: cron + schedule -->
-  <rect x="90" y="150" width="260" height="80" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
-  <text x="220" y="182" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">Rolling ticker</text>
-  <text x="220" y="199" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">one-minute heartbeat</text>
-  <text x="220" y="213" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">the only trigger for ingestion</text>
-
-  <rect x="430" y="150" width="300" height="80" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
-  <text x="580" y="182" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">Ingestion schedule</text>
-  <text x="580" y="199" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">claims the most overdue</text>
-  <text x="580" y="213" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">sync targets</text>
-
-  <!-- Row2: watchers -->
-  <rect x="90" y="280" width="280" height="80" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="230" y="312" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">DKHP discovery</text>
-  <text x="230" y="332" text-anchor="middle" font-size="10" fill="#2B2724" opacity="0.7">registration history,</text>
-  <text x="230" y="346" text-anchor="middle" font-size="10" fill="#2B2724" opacity="0.7">once per semester</text>
-
-  <rect x="410" y="280" width="260" height="80" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="540" y="312" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">Timetable watcher</text>
-  <text x="540" y="332" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">needs discovery first</text>
-  <text x="540" y="346" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">uses cache and fanout</text>
-
-  <rect x="710" y="280" width="240" height="80" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="830" y="312" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">Exam watcher</text>
-  <text x="830" y="332" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">plain fetch</text>
-  <text x="830" y="346" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">no cache, no fanout</text>
-
-  <rect x="990" y="280" width="240" height="80" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="1110" y="312" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">LMS watcher</text>
-  <text x="1110" y="332" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">assignments and quizzes</text>
-  <text x="1110" y="346" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">uses cache and fanout</text>
-
-  <!-- Row3: clients -->
-  <rect x="410" y="410" width="260" height="80" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="540" y="442" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">Portal and DKHP client</text>
-  <text x="540" y="459" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">decrypts credentials, fetches</text>
-
-  <rect x="850" y="410" width="260" height="80" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="980" y="442" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">LMS client</text>
-  <text x="980" y="459" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">decrypts credentials, fetches</text>
-
-  <!-- Panel CORE -->
-  <rect x="40" y="580" width="1420" height="140" rx="14" fill="none" stroke="#2B2724" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="8 6"/>
-  <text x="60" y="606" font-size="13.5" font-weight="700" fill="#2B2724" opacity="0.8">Parsing and normalization</text>
-  <rect x="560" y="630" width="380" height="70" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="750" y="658" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">Parsers</text>
-  <text x="750" y="675" text-anchor="middle" font-size="10" fill="#2B2724" opacity="0.7">portal, DKHP and LMS payloads into calendar blocks</text>
-
-  <!-- Panel IO-BOTTOM -->
-  <rect x="40" y="790" width="1420" height="400" rx="14" fill="none" stroke="#2B2724" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="8 6"/>
-  <text x="60" y="816" font-size="13.5" font-weight="700" fill="#2B2724" opacity="0.8">Write-back and shared cache</text>
-
-  <!-- Row5: materializer + conflicts -->
-  <rect x="420" y="850" width="320" height="100" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
-  <text x="580" y="878" text-anchor="middle" font-size="13.5" font-weight="700" fill="#2B2724">Materializer</text>
-  <text x="580" y="895" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">writes calendar sessions behind</text>
-  <text x="580" y="908" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">a confirm gate, and sends a</text>
-  <text x="580" y="921" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">sync digest notification</text>
-
-  <rect x="820" y="850" width="260" height="100" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="950" y="890" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">Sync conflicts</text>
-  <text x="950" y="907" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">flags clashes between sources</text>
-
-  <!-- Row6: cache + fanout side path -->
-  <rect x="150" y="1000" width="280" height="90" rx="8" fill="#F5F3F0" stroke="#F0B100" stroke-width="2"/>
-  <text x="290" y="1030" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">Occurrence cache</text>
-  <text x="290" y="1047" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">shares one fetch across</text>
-  <text x="290" y="1060" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">classmates</text>
-
-  <rect x="470" y="1000" width="280" height="90" rx="8" fill="#F5F3F0" stroke="#F0B100" stroke-width="2"/>
-  <text x="610" y="1030" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">Occurrence fanout</text>
-  <text x="610" y="1047" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">pushes a live fetch's change</text>
-  <text x="610" y="1060" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">to confirmed classmates</text>
-
-  <!-- Arrows: primary pipeline (orange) -->
-  <path d="M350,190 L430,190" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
-
-  <path d="M460,230 L460,255 L230,255 L230,280" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
-  <path d="M530,230 L530,255 L540,255 L540,280" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
-  <path d="M630,230 L630,255 L830,255 L830,280" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
-  <path d="M700,230 L700,255 L1110,255 L1110,280" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
-  <rect x="525" y="238" width="112" height="15" fill="#FCFBFA"/>
-  <text x="581" y="249" text-anchor="middle" font-size="10" fill="#FF6900">claims due targets</text>
-
-  <path d="M230,360 L230,385 L500,385 L500,410" fill="none" stroke="#FF6900" stroke-width="2" marker-end="url(#iArrOrange)"/>
-  <path d="M370,320 L410,320" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
-  <path d="M540,360 L540,410" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
-  <path d="M830,360 L830,385 L620,385 L620,410" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
-  <path d="M1110,360 L1110,385 L1010,385 L1010,410" fill="none" stroke="#FF6900" stroke-width="2" marker-end="url(#iArrOrange)"/>
-
-  <path d="M500,490 L500,610 L700,610 L700,630" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
-  <path d="M980,490 L980,610 L820,610 L820,630" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
-
-  <path d="M750,700 L750,775 L580,775 L580,850" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
-  <rect x="620" y="762" width="82" height="15" fill="#FCFBFA"/>
-  <text x="661" y="773" text-anchor="middle" font-size="10.5" fill="#FF6900">parsed blocks</text>
-
-  <path d="M740,900 L820,900" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
-
-  <!-- decision gate: watchers consult the cache before fetching -->
-  <path d="M410,345 L380,345 L380,1000" fill="none" stroke="#2B2724" stroke-opacity="0.45" stroke-width="1.75" stroke-dasharray="6 5" marker-end="url(#iArrNeutral)"/>
-  <rect x="388" y="518" width="130" height="16" fill="#FCFBFA"/>
-  <text x="393" y="530" font-size="10" fill="#2B2724" opacity="0.75">cache or live fetch</text>
-
-  <!-- side path: cache + fanout into Materializer (amber, never a bulk write) -->
-  <path d="M300,1000 L300,970 L500,970 L500,950" fill="none" stroke="#F0B100" stroke-width="2.25" marker-end="url(#iArrAmber)"/>
-  <path d="M610,1000 L610,975 L640,975 L640,950" fill="none" stroke="#F0B100" stroke-width="2.25" marker-end="url(#iArrAmber)"/>
-  <rect x="790" y="964" width="270" height="18" fill="#FCFBFA"/>
-  <text x="800" y="977" font-size="11" fill="#F0B100" font-weight="600">changes always go through the materializer</text>
-  <path d="M1230,320 L1270,320 L1270,1045 L750,1045" fill="none" stroke="#2B2724" stroke-opacity="0.45" stroke-width="1.75" stroke-dasharray="6 5" marker-end="url(#iArrNeutral)"/>
-  <rect x="1278" y="662" width="130" height="16" fill="#FCFBFA"/>
-  <text x="1283" y="674" font-size="10" fill="#2B2724" opacity="0.75">cache or live fetch</text>
-
-  <!-- legend -->
-  <g transform="translate(40,1220)">
-    <line x1="0" y1="0" x2="34" y2="0" stroke="#FF6900" stroke-width="2.5"/>
-    <text x="42" y="4" font-size="11.5" fill="#2B2724">primary ingestion pipeline</text>
-    <line x1="270" y1="0" x2="304" y2="0" stroke="#F0B100" stroke-width="2.25"/>
-    <text x="312" y="4" font-size="11.5" fill="#2B2724">cache and fanout side path</text>
-    <line x1="640" y1="0" x2="674" y2="0" stroke="#2B2724" stroke-opacity="0.45" stroke-width="1.75" stroke-dasharray="6 5"/>
-    <text x="682" y="4" font-size="11.5" fill="#2B2724">cache or live fetch decision</text>
-  </g>
-  <text x="40" y="1262" font-size="11.5" fill="#2B2724" opacity="0.7">Every ingested change reaches the calendar through the materializer.</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1900 1300" font-family="Helvetica, Arial, sans-serif" role="img" aria-label="Zenflow ingestion and notifications component diagram: rolling ticker, fetch queues, fetch workers, watchers, materializer, notification rows, SSE pub/sub and push delivery">
+  <title>Zenflow ingestion and notifications component diagram: rolling ticker, fetch queues, fetch workers, watchers, materializer, notification rows, SSE pub/sub and push delivery</title>
+  <defs><marker id="aO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#FF6900"/></marker><marker id="aA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#F0B100"/></marker><marker id="aB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3B7EA1"/></marker><marker id="aN" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2B2724" fill-opacity="0.55"/></marker><marker id="aR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#C2410C"/></marker></defs>
+  <rect width="1900" height="1300" fill="#FCFBFA"/>
+  <text x="30" y="34" text-anchor="start" font-size="21" font-weight="700" fill="#2B2724">Zenflow — ingestion + notifications</text>
+  <text x="30" y="56" text-anchor="start" font-size="11" font-weight="400" fill="#2B2724" opacity="0.7">amber: pull from university   blue: queue job   orange: DB write   dashed: pub/sub</text>
+  <rect x="20" y="80" width="1860" height="610" rx="14" fill="none" stroke="#F0B100" stroke-width="1.8" stroke-dasharray="9 6"/>
+  <rect x="28" y="87" width="78.60000000000001" height="18" fill="#FCFBFA"/>
+  <text x="34" y="100" text-anchor="start" font-size="13" font-weight="700" fill="#F0B100">INGESTION</text>
+  <rect x="40" y="125" width="290" height="128" rx="8" fill="#FFF8E6" stroke="#F0B100" stroke-width="2"/>
+  <text x="185" y="178.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">IngestionTickerService</text>
+  <text x="185" y="194.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">every minute</text>
+  <text x="185" y="208.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">claims due rows</text>
+  <rect x="40" y="290" width="290" height="112" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="185" y="335.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">IngestionScheduleService</text>
+  <text x="185" y="351.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">claim (CAS)</text>
+  <text x="185" y="365.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">release · record</text>
+  <rect x="40" y="435" width="290" height="64" rx="8" fill="#F5F3F0" stroke="#CFC9C2" stroke-width="1.5"/>
+  <text x="185" y="463.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">IngestionSchedule</text>
+  <text x="185" y="479.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">nextDueAt per row</text>
+  <rect x="40" y="540" width="290" height="130" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
+  <text x="185" y="594.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">API · manual sync</text>
+  <text x="185" y="610.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">POST /sync</text>
+  <text x="185" y="624.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">cooldown · lock</text>
+  <path d="M185,253 L185,290" fill="none" stroke="#FF6900" stroke-width="2.2" marker-end="url(#aO)"/>
+  <rect x="194" y="265" width="42" height="15" rx="3" fill="#FCFBFA"/>
+  <text x="215" y="276" text-anchor="middle" font-size="10.5" font-weight="400" fill="#FF6900">claim</text>
+  <path d="M185,402 L185,435" fill="none" stroke="#FF6900" stroke-width="2.2" marker-end="url(#aO)"/>
+  <rect x="390" y="125" width="200" height="118" rx="8" fill="#EEF5F9" stroke="#3B7EA1" stroke-width="2"/>
+  <text x="490" y="173.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">portal-fetch</text>
+  <text x="490" y="189.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">concurrency 1</text>
+  <text x="490" y="203.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">1 start / 750 ms</text>
+  <rect x="390" y="275" width="200" height="118" rx="8" fill="#EEF5F9" stroke="#3B7EA1" stroke-width="2"/>
+  <text x="490" y="323.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">lms-fetch</text>
+  <text x="490" y="339.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">concurrency 1</text>
+  <text x="490" y="353.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">1 start / 750 ms</text>
+  <path d="M330,160 L390,160" fill="none" stroke="#3B7EA1" stroke-width="2.2" marker-end="url(#aB)"/>
+  <rect x="334" y="139" width="52" height="15" rx="3" fill="#FCFBFA"/>
+  <text x="360" y="150" text-anchor="middle" font-size="10.5" font-weight="400" fill="#3B7EA1">enqueue</text>
+  <path d="M330,200 L350,200 L350,310 L390,310" fill="none" stroke="#3B7EA1" stroke-width="2.2" marker-end="url(#aB)"/>
+  <path d="M330,585 L372,585 L372,230 L390,230" fill="none" stroke="#3B7EA1" stroke-width="2.2" marker-end="url(#aB)"/>
+  <rect x="347" y="509" width="50" height="15" rx="3" fill="#FCFBFA"/>
+  <text x="372" y="520" text-anchor="middle" font-size="10.5" font-weight="400" fill="#3B7EA1">manual</text>
+  <path d="M372,585 L372,380 L390,380" fill="none" stroke="#3B7EA1" stroke-width="2.2" marker-end="url(#aB)"/>
+  <rect x="650" y="125" width="260" height="226" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
+  <text x="780" y="220.5" text-anchor="middle" font-size="11.5" font-weight="700" fill="#2B2724">FetchProcessor</text>
+  <text x="780" y="236.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">kill switch</text>
+  <text x="780" y="250.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">breaker peek</text>
+  <text x="780" y="264.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">retry · park · DLQ</text>
+  <path d="M590,184 L650,184" fill="none" stroke="#3B7EA1" stroke-width="2.2" marker-end="url(#aB)"/>
+  <rect x="602" y="163" width="36" height="15" rx="3" fill="#FCFBFA"/>
+  <text x="620" y="174" text-anchor="middle" font-size="10.5" font-weight="400" fill="#3B7EA1">jobs</text>
+  <path d="M590,334 L620,334 L620,300 L650,300" fill="none" stroke="#3B7EA1" stroke-width="2.2" marker-end="url(#aB)"/>
+  <rect x="970" y="125" width="270" height="76" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1105" y="159.5" text-anchor="middle" font-size="11.5" font-weight="700" fill="#2B2724">EnrollmentDiscoveryService</text>
+  <text x="1105" y="175.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">sections · courses</text>
+  <rect x="970" y="213" width="270" height="76" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1105" y="247.5" text-anchor="middle" font-size="11.5" font-weight="700" fill="#2B2724">TimetableWatcherService</text>
+  <text x="1105" y="263.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">needs discovery</text>
+  <rect x="970" y="301" width="270" height="76" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1105" y="335.5" text-anchor="middle" font-size="11.5" font-weight="700" fill="#2B2724">ExamWatcherService</text>
+  <text x="1105" y="351.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">plain fetch</text>
+  <rect x="970" y="389" width="270" height="76" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1105" y="423.5" text-anchor="middle" font-size="11.5" font-weight="700" fill="#2B2724">LmsWatcherService</text>
+  <text x="1105" y="439.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">calendar</text>
+  <path d="M910,238 L970,238" fill="none" stroke="#FF6900" stroke-width="2.2" marker-end="url(#aO)"/>
+  <rect x="913" y="217" width="54" height="15" rx="3" fill="#FCFBFA"/>
+  <text x="940" y="228" text-anchor="middle" font-size="10.5" font-weight="400" fill="#FF6900">dispatch</text>
+  <rect x="1300" y="125" width="250" height="100" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1425" y="171.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">PortalAPIService</text>
+  <text x="1425" y="187.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">breaker dlu-portal</text>
+  <rect x="1300" y="301" width="250" height="100" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1425" y="347.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">LMSService</text>
+  <text x="1425" y="363.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">breaker dlu-lms</text>
+  <path d="M1240,163 L1300,163" fill="none" stroke="#F0B100" stroke-width="2.2" marker-end="url(#aA)"/>
+  <path d="M1240,339 L1300,339" fill="none" stroke="#F0B100" stroke-width="2.2" marker-end="url(#aA)"/>
+  <path d="M1240,251 L1270,251 L1270,175 L1300,175" fill="none" stroke="#F0B100" stroke-width="2.2" marker-end="url(#aA)"/>
+  <path d="M1240,251 L1270,251 L1270,351 L1300,351" fill="none" stroke="#F0B100" stroke-width="2.2" marker-end="url(#aA)"/>
+  <rect x="1620" y="125" width="230" height="100" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1735" y="171.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">DLU Portal + DKHP</text>
+  <text x="1735" y="187.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">timetable, exams</text>
+  <rect x="1620" y="301" width="230" height="100" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1735" y="347.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">Moodle LMS</text>
+  <text x="1735" y="363.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">assignments</text>
+  <path d="M1550,175 L1620,175" fill="none" stroke="#F0B100" stroke-width="2.2" marker-end="url(#aA)"/>
+  <rect x="1567" y="154" width="36" height="15" rx="3" fill="#FCFBFA"/>
+  <text x="1585" y="165" text-anchor="middle" font-size="10.5" font-weight="400" fill="#F0B100">pull</text>
+  <path d="M1550,351 L1620,351" fill="none" stroke="#F0B100" stroke-width="2.2" marker-end="url(#aA)"/>
+  <rect x="1567" y="330" width="36" height="15" rx="3" fill="#FCFBFA"/>
+  <text x="1585" y="341" text-anchor="middle" font-size="10.5" font-weight="400" fill="#F0B100">pull</text>
+  <rect x="1300" y="440" width="250" height="92" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1425" y="482.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">parse-*.ts</text>
+  <text x="1425" y="498.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">pure → ParsedBlock[]</text>
+  <rect x="970" y="490" width="270" height="96" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1105" y="534.5" text-anchor="middle" font-size="11.5" font-weight="700" fill="#2B2724">Cache + Fanout</text>
+  <text x="1105" y="550.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">off by default</text>
+  <path d="M1105,490 L1105,477" fill="none" stroke="#2B2724" stroke-width="2.2" stroke-opacity=".5" stroke-dasharray="4 4"/>
+  <rect x="650" y="400" width="260" height="200" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
+  <text x="780" y="475.5" text-anchor="middle" font-size="12" font-weight="700" fill="#2B2724">MaterializerService</text>
+  <text x="780" y="491.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">sole writer</text>
+  <text x="780" y="505.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">[user, key] upsert</text>
+  <text x="780" y="519.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">soft-delete</text>
+  <text x="780" y="533.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">digest</text>
+  <path d="M970,313 L940,313 L940,470 L910,470" fill="none" stroke="#FF6900" stroke-width="2.2" marker-end="url(#aO)"/>
+  <rect x="902" y="379" width="76" height="15" rx="3" fill="#FCFBFA"/>
+  <text x="940" y="390" text-anchor="middle" font-size="10.5" font-weight="400" fill="#FF6900">ParsedBlock[]</text>
+  <path d="M970,560 L945,560 L945,540 L910,540" fill="none" stroke="#2B2724" stroke-width="2.2" stroke-opacity=".5" stroke-dasharray="4 4" marker-end="url(#aN)"/>
+  <rect x="650" y="625" width="260" height="50" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="780" y="646.5" text-anchor="middle" font-size="11" font-weight="700" fill="#2B2724">SyncConflictsService</text>
+  <text x="780" y="662.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">overlap alerts</text>
+  <path d="M780,600 L780,625" fill="none" stroke="#FF6900" stroke-width="2.2" marker-end="url(#aO)"/>
+  <rect x="20" y="710" width="1860" height="570" rx="14" fill="none" stroke="#2B2724" stroke-width="1.8" stroke-dasharray="9 6"/>
+  <rect x="28" y="717" width="108.2" height="18" fill="#FCFBFA"/>
+  <text x="34" y="730" text-anchor="start" font-size="13" font-weight="700" fill="#2B2724">NOTIFICATIONS</text>
+  <rect x="40" y="760" width="300" height="170" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
+  <text x="190" y="827.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">NotificationsService</text>
+  <text x="190" y="843.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">create row</text>
+  <text x="190" y="857.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">announce()</text>
+  <text x="190" y="871.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">reconcile</text>
+  <path d="M780,675 L780,700 L190,700 L190,760" fill="none" stroke="#FF6900" stroke-width="2.2" marker-end="url(#aO)"/>
+  <rect x="435" y="685" width="90" height="15" rx="3" fill="#FCFBFA"/>
+  <text x="480" y="696" text-anchor="middle" font-size="10.5" font-weight="400" fill="#FF6900">create + notify</text>
+  <path d="M780,675 L780,700" fill="none" stroke="#FF6900" stroke-width="2.2"/>
+  <rect x="420" y="760" width="280" height="98" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="560" y="805.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">NotificationPubSub</text>
+  <text x="560" y="821.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">at-most-once</text>
+  <rect x="780" y="760" width="220" height="98" rx="8" fill="#F5F3F0" stroke="#CFC9C2" stroke-width="1.5"/>
+  <text x="890" y="805.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">redis-pubsub</text>
+  <text x="890" y="821.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">no persistence</text>
+  <rect x="1080" y="760" width="300" height="98" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
+  <text x="1230" y="805.5" text-anchor="middle" font-size="12" font-weight="700" fill="#2B2724">NotificationsController</text>
+  <text x="1230" y="821.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">SSE · inbox</text>
+  <rect x="1460" y="760" width="200" height="98" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1560" y="805.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">Web / Mobile</text>
+  <text x="1560" y="821.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">EventSource</text>
+  <path d="M340,809 L420,809" fill="none" stroke="#2B2724" stroke-width="2.2" stroke-opacity=".5" stroke-dasharray="6 4" marker-end="url(#aN)"/>
+  <path d="M700,809 L780,809" fill="none" stroke="#2B2724" stroke-width="2.2" stroke-opacity=".5" stroke-dasharray="6 4" marker-end="url(#aN)"/>
+  <rect x="716" y="788" width="48" height="15" rx="3" fill="#FCFBFA"/>
+  <text x="740" y="799" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.8">publish</text>
+  <path d="M1000,809 L1080,809" fill="none" stroke="#2B2724" stroke-width="2.2" stroke-opacity=".5" stroke-dasharray="6 4" marker-end="url(#aN)"/>
+  <rect x="1012" y="788" width="56" height="15" rx="3" fill="#FCFBFA"/>
+  <text x="1040" y="799" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.8">subscribe</text>
+  <path d="M1380,809 L1460,809" fill="none" stroke="#FF6900" stroke-width="2.2" marker-end="url(#aO)"/>
+  <rect x="1405" y="788" width="30" height="15" rx="3" fill="#FCFBFA"/>
+  <text x="1420" y="799" text-anchor="middle" font-size="10.5" font-weight="400" fill="#FF6900">SSE</text>
+  <rect x="420" y="930" width="280" height="100" rx="8" fill="#EEF5F9" stroke="#3B7EA1" stroke-width="2"/>
+  <text x="560" y="969.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">notify queue</text>
+  <text x="560" y="985.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">push · reminder</text>
+  <text x="560" y="999.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">delayed jobs</text>
+  <path d="M340,880 L380,880 L380,975 L420,975" fill="none" stroke="#3B7EA1" stroke-width="2.2" marker-end="url(#aB)"/>
+  <rect x="355" y="894" width="50" height="15" rx="3" fill="#FCFBFA"/>
+  <text x="380" y="905" text-anchor="middle" font-size="10.5" font-weight="400" fill="#3B7EA1">push ×2</text>
+  <rect x="780" y="930" width="220" height="100" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
+  <text x="890" y="969.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">NotifyProcessor</text>
+  <text x="890" y="985.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">kill switch</text>
+  <text x="890" y="999.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">push · reminder</text>
+  <path d="M700,980 L780,980" fill="none" stroke="#3B7EA1" stroke-width="2.2" marker-end="url(#aB)"/>
+  <rect x="722" y="959" width="36" height="15" rx="3" fill="#FCFBFA"/>
+  <text x="740" y="970" text-anchor="middle" font-size="10.5" font-weight="400" fill="#3B7EA1">jobs</text>
+  <rect x="1080" y="930" width="300" height="100" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1230" y="969.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">PushService</text>
+  <text x="1230" y="985.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">skip opt-out</text>
+  <text x="1230" y="999.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">prune dead tokens</text>
+  <path d="M1000,980 L1080,980" fill="none" stroke="#FF6900" stroke-width="2.2" marker-end="url(#aO)"/>
+  <rect x="1460" y="930" width="200" height="56" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1560" y="954.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">FCM</text>
+  <text x="1560" y="970.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">Android</text>
+  <rect x="1460" y="1000" width="200" height="56" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1560" y="1024.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">APNs</text>
+  <text x="1560" y="1040.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">iOS</text>
+  <path d="M1380,958 L1420,958 L1420,958 L1460,958" fill="none" stroke="#2B2724" stroke-width="2.2" stroke-opacity=".5" marker-end="url(#aN)"/>
+  <path d="M1380,1004 L1420,1004 L1420,1028 L1460,1028" fill="none" stroke="#2B2724" stroke-width="2.2" stroke-opacity=".5" marker-end="url(#aN)"/>
+  <rect x="780" y="1085" width="300" height="100" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
+  <text x="930" y="1124.5" text-anchor="middle" font-size="12" font-weight="700" fill="#2B2724">ReminderScheduler.fire</text>
+  <text x="930" y="1140.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">claim + row</text>
+  <text x="930" y="1154.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">one transaction</text>
+  <path d="M890,1030 L890,1085" fill="none" stroke="#3B7EA1" stroke-width="2.2" marker-end="url(#aB)"/>
+  <rect x="420" y="1085" width="300" height="100" rx="8" fill="#FFF8E6" stroke="#F0B100" stroke-width="2"/>
+  <text x="570" y="1124.5" text-anchor="middle" font-size="12" font-weight="700" fill="#2B2724">ReminderSweepService</text>
+  <text x="570" y="1140.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">every 5 min</text>
+  <text x="570" y="1154.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">arms jobs</text>
+  <path d="M570,1085 L570,1030" fill="none" stroke="#3B7EA1" stroke-width="2.2" marker-end="url(#aB)"/>
+  <rect x="582" y="1049" width="36" height="15" rx="3" fill="#FCFBFA"/>
+  <text x="600" y="1060" text-anchor="middle" font-size="10.5" font-weight="400" fill="#3B7EA1">arm</text>
+  <path d="M780,1135 L740,1135 L740,1215 L190,1215 L190,930" fill="none" stroke="#FF6900" stroke-width="2.2" marker-end="url(#aO)"/>
+  <rect x="442" y="1199" width="56" height="15" rx="3" fill="#FCFBFA"/>
+  <text x="470" y="1210" text-anchor="middle" font-size="10.5" font-weight="400" fill="#FF6900">announce</text>
+  <path d="M420,1135 L190,1135" fill="none" stroke="#2B2724" stroke-width="2.2" stroke-opacity=".5"/>
+  <text x="200" y="1128" text-anchor="start" font-size="10.5" font-weight="400" fill="#2B2724">reconcile</text>
+  <path d="M570,1085 L570,1070" fill="none" stroke="#3B7EA1" stroke-width="2.2"/>
 </svg>
