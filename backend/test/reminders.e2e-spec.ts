@@ -211,16 +211,9 @@ describe("the day a reminder is due", () => {
     expect(await fired(student, ids.moved)).toHaveLength(0);
   });
 
-  // KNOWN BUG, tracked in the follow-up task: deleting a session only sets
-  // `Session.deleted`, and ReminderSchedulerService neither skips deleted
-  // sessions when arming nor when firing, so the student is reminded about a
-  // class they removed. Remove `.failing` when it is fixed.
-  it.failing(
-    "does not remind about a session the student deleted",
-    async () => {
-      expect(await fired(student, ids.deleted)).toHaveLength(0);
-    },
-  );
+  it("does not remind about a session the student deleted", async () => {
+    expect(await fired(student, ids.deleted)).toHaveLength(0);
+  });
 
   it("does not fire again when the watcher restarts and sweeps again", async () => {
     await stop(procs.watcher);

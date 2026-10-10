@@ -95,6 +95,7 @@ export class ReminderSchedulerService {
       where: {
         session: {
           type: { not: "DND" },
+          deleted: false,
           ...(userId ? { userId } : {}),
           OR: [
             {
@@ -140,7 +141,7 @@ export class ReminderSchedulerService {
     now: Date,
     catchUpMs: number = REMINDER_CATCH_UP_MS,
   ) {
-    if (row.session.type === "DND") return null;
+    if (row.session.type === "DND" || row.session.deleted) return null;
     const start = pickReminderStart(
       this.candidateStarts(row, now),
       row.firedForStart,
