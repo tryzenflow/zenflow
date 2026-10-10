@@ -3,7 +3,8 @@
   "tag": "beta",
   "changesets": [
     "file-ids-queue-release",
-    "mobile-test-pyramid"
+    "mobile-test-pyramid",
+    "short-user-facing-copy"
   ],
   "initialVersions": {
     "backend": "0.0.0",
