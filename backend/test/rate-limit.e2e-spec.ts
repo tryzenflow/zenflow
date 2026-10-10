@@ -36,9 +36,10 @@ describe("OTP rate limiting (e2e)", () => {
     new Promise((resolve) => setTimeout(resolve, ms));
 
   beforeAll(async () => {
-    process.env.MAIL_TRANSPORT ??= "smtp://localhost:1025";
+    process.env.MAIL_HOST ??= "localhost";
+    process.env.MAIL_PORT ??= "1025";
     process.env.MAIL_FROM ??= "noreply@zenflow.test";
-    process.env.CACHE_URL ??= "redis://localhost:6379";
+    process.env.SESSION_REDIS_HOST ??= "localhost";
 
     // Small, fast-expiring windows so the test doesn't have to sleep long.
     // The email rule is given a much higher limit than the IP rule in each

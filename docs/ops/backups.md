@@ -23,7 +23,7 @@ Env lives in `.env.<env>` (see `backend/.env.example`):
 | Var | Notes |
 | --- | --- |
 | `BACKUP_S3_BUCKET`, `BACKUP_S3_REGION` | prod: the real bucket and its region |
-| `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY` | prod: IAM user with put + list only. Staging: the MinIO root key |
+| `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY` | prod: IAM user with put, list and get on `zenflow/prod/*` (no delete). Staging: the MinIO root key. Vault `backup` set |
 | `BACKUP_S3_ENDPOINT` | set by compose to MinIO in staging; leave unset in prod (AWS) |
 | `BACKUP_AGE_RECIPIENT` | age **public** keys, comma separated: the master key and the restore-test key |
 | `BACKUP_AGE_IDENTITY` | the restore-test **secret** key. Unset = restore test is not scheduled and its alert fires |
@@ -45,7 +45,7 @@ The age **master private key is held off the server** by: **alpha** (stored in a
 
 - Versioning on.
 - Retention is by age, set as an S3 lifecycle rule (the IAM user cannot delete, so the container never prunes in prod): expire current objects under `zenflow/prod/` after **14 days** and noncurrent versions after 7. At 3-hourly that is about 112 objects.
-- IAM user policy: `s3:PutObject`, `s3:ListBucket` on the bucket and `zenflow/prod/*` only. No delete, so a compromised host cannot erase history.
+- IAM user policy: `s3:PutObject`, `s3:GetObject`, `s3:ListBucket` on the bucket and `zenflow/prod/*` only. `GetObject` is what `restore-test.sh` needs to download the newest dump; the dumps are age-encrypted, so read access alone exposes nothing. No delete, so a compromised host cannot erase history.
 
 ## Operate
 
@@ -89,7 +89,7 @@ Contact point `zenflow-ops-email` (`alerting/contact-points.yml`) emails alphatr
 Prod Mailgun setup (Grafana only speaks SMTP, not the Mailgun API):
 1. Mailgun: add domain `alerts.alphatrann.com`; publish the SPF and DKIM DNS records it shows and wait for "verified".
 2. Domain settings > SMTP credentials: create/reset the password for `postmaster@alerts.alphatrann.com`.
-3. Vault `platform` set: `GF_SMTP_PASSWORD=<that password>`. The configured host is `smtp.mailgun.org:587`; edit `compose.prod.yml` for a different Mailgun region or sender.
+3. Vault `grafana` set: `GF_SMTP_PASSWORD=<that password>`. The configured host is `smtp.mailgun.org:587`; edit `compose.prod.yml` for a different Mailgun region or sender.
 4. Deploy, then Grafana > Alerting > Contact points > Test, and check Mailgun logs.
 
 Without the password alerts still fire in Grafana but no mail leaves. Gmail may route a new sender to spam at first; mark it as not spam.

@@ -4,8 +4,12 @@
 #   VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=... VAULT_ENV=prod \
 #     ./ops/vault/import-dotenv.sh .env.prod
 #
-# Imports into secret/zenflow/$VAULT_ENV/{api,bandit,platform}. It does not
-# source the dotenv file, print values, or write temporary plaintext files.
+# Imports SECRETS ONLY into one set per consumer under secret/zenflow/$VAULT_ENV/:
+# api, bandit, postgres, minio, grafana, backup (see secret_sets below; a secret a
+# few containers share is written to each of their sets). Known non-secret keys
+# stay in the env file (backend/env/<env>.env) and are only listed. An unknown key
+# is an error, so nothing lands in a set by default. It does not source the dotenv
+# file, print values, or write temporary plaintext files.
 # Inspect the resulting key names with --dry-run before importing.
 set -euo pipefail
 
@@ -16,6 +20,50 @@ dry_run="${2:-}"
 [ -r "$dotenv_file" ] || { echo "cannot read $dotenv_file" >&2; exit 2; }
 case "$dry_run" in ""|--dry-run) ;; *) echo "unknown option $dry_run" >&2; exit 2;; esac
 command -v curl >/dev/null && command -v jq >/dev/null || { echo "import-dotenv: curl and jq are required" >&2; exit 1; }
+
+# classify <KEY>: prints the sets a secret belongs to, "env" for a known
+# non-secret (stays in the env file), or fails with a hint for anything else.
+classify() {
+  case "$1" in
+    SESSION_SECRET|FILE_URL_SECRET|MAIL_PASSWORD|PORTAL_API_KEY|DKHP_API_KEY|FCM_SERVICE_ACCOUNT|APNS_KEY|APNS_KEY_ID|APNS_TEAM_ID) echo api ;;
+    MASTER_LMS_ENCRYPTION_KEY_V[0-9]*|MASTER_PORTAL_ENCRYPTION_KEY_V[0-9]*) echo api ;;
+    POSTGRES_PASSWORD) echo "api postgres backup" ;;
+    S3_ACCESS_KEY_ID|S3_SECRET_ACCESS_KEY) echo "api minio" ;;
+    BANDIT_SERVICE_TOKEN) echo "api bandit" ;;
+    BANDIT_SERVICE_TOKEN_PREVIOUS) echo bandit ;;
+    GF_SECURITY_ADMIN_PASSWORD|GF_SMTP_PASSWORD) echo grafana ;;
+    BACKUP_S3_ACCESS_KEY_ID|BACKUP_S3_SECRET_ACCESS_KEY|BACKUP_AGE_IDENTITY) echo backup ;;
+    BACKUP_S3_ACCESS_KEY) echo "import-dotenv: BACKUP_S3_ACCESS_KEY is not read; rename it BACKUP_S3_ACCESS_KEY_ID" >&2; return 1 ;;
+    BACKUP_S3_SECRET_KEY) echo "import-dotenv: BACKUP_S3_SECRET_KEY is not read; rename it BACKUP_S3_SECRET_ACCESS_KEY" >&2; return 1 ;;
+    DATABASE_URL|MAIL_TRANSPORT|CACHE_URL|RATE_LIMIT_CACHE_URL|QUEUE_REDIS_URL|REDIS_KILLSWITCH_URL|REDIS_PUBSUB_URL)
+      echo "import-dotenv: $1 is no longer read; the app composes connections from parts (DB_HOST, POSTGRES_*, SESSION_REDIS_HOST, MAIL_HOST, ... see docs/backend/config.md)" >&2; return 1 ;;
+    CACHE_HOST|CACHE_PORT|CACHE_PASSWORD|RATE_LIMIT_CACHE_HOST|RATE_LIMIT_CACHE_PORT|RATE_LIMIT_CACHE_PASSWORD)
+      echo "import-dotenv: $1 was renamed: CACHE_* is now SESSION_REDIS_*, RATE_LIMIT_CACHE_* is now RATE_LIMIT_REDIS_*" >&2; return 1 ;;
+    SESSION_REDIS_PASSWORD|RATE_LIMIT_REDIS_PASSWORD|QUEUE_REDIS_PASSWORD|REDIS_KILLSWITCH_PASSWORD|REDIS_PUBSUB_PASSWORD)
+      echo "import-dotenv: $1 has no set: prod Redis runs without requirepass. Remove it, or add a redis set if you enable one" >&2; return 1 ;;
+    # Known non-secrets: identifiers, hosts, ports, URLs without credentials, tunables.
+    DB_HOST|DB_PORT|DB_SCHEMA|DB_SSLMODE|POSTGRES_USER|POSTGRES_DB) echo env ;;
+    SESSION_REDIS_HOST|SESSION_REDIS_PORT|RATE_LIMIT_REDIS_HOST|RATE_LIMIT_REDIS_PORT|QUEUE_REDIS_HOST|QUEUE_REDIS_PORT|REDIS_KILLSWITCH_HOST|REDIS_KILLSWITCH_PORT|REDIS_PUBSUB_HOST|REDIS_PUBSUB_PORT) echo env ;;
+    MAIL_HOST|MAIL_PORT|MAIL_SECURE|MAIL_USER|MAIL_FROM) echo env ;;
+    S3_ENDPOINT|S3_REGION|S3_BUCKET|BACKUP_S3_BUCKET|BACKUP_S3_REGION|BACKUP_AGE_RECIPIENT|BACKUP_CRON|RESTORE_TEST_CRON|BACKUP_PRUNE_DAYS|BACKUP_MIN_BYTES) echo env ;;
+    CORS_ORIGIN|COOKIE_SECURE|COOKIE_SAMESITE|SESSION_TTL_MS|GRPC_SCHEDULER_URL|GRAFANA_ROOT_URL) echo env ;;
+    BANDIT_SERVICE_URL|PLACE_TIMEOUT_MS|PORTAL_API_URL|PORTAL_API_TIMEOUT_MS|DKHP_API_URL|LMS_URL|LMS_TIMEOUT_MS|DLU_TZ) echo env ;;
+    LOG_LEVEL|HTTP_SLOW_REQUEST_MS|NODE_ENV|ROLE|SWAGGER_ENABLED|BENCH_TIMING|SERVICE_VERSION|UPLOAD_TMP_DIR|PAIRWISE_SAMPLE_RATE) echo env ;;
+    RATE_LIMIT_STORE_TIMEOUT_MS|KILLSWITCH_CACHE_TTL_MS|REDIS_PUBSUB_TIMEOUT_MS|APNS_BUNDLE_ID|APNS_PRODUCTION) echo env ;;
+    OTEL_SERVICE_NAME|OTEL_EXPORTER_OTLP_ENDPOINT|OTEL_SDK_DISABLED|OTEL_TRACES_SAMPLER|OTEL_TRACES_SAMPLER_ARG|OTEL_METRIC_EXPORT_INTERVAL_MS|OTEL_LOG_LEVEL) echo env ;;
+    OTP_REQUEST_IP_WINDOW_SEC|OTP_REQUEST_IP_LIMIT|OTP_REQUEST_IP_HOURLY_WINDOW_SEC|OTP_REQUEST_IP_HOURLY_LIMIT|OTP_REQUEST_EMAIL_WINDOW_SEC|OTP_REQUEST_EMAIL_LIMIT) echo env ;;
+    OTP_VERIFY_IP_WINDOW_SEC|OTP_VERIFY_IP_LIMIT|OTP_VERIFY_EMAIL_WINDOW_SEC|OTP_VERIFY_EMAIL_LIMIT) echo env ;;
+    SYNC_MANUAL_WAIT_MS|SYNC_MANUAL_COOLDOWN_SEC) echo env ;;
+    INGESTION_ENABLED|INGESTION_REQUEST_DELAY_MS|INGESTION_PORTAL_DISCOVERY_PERIOD_MS|INGESTION_LMS_DISCOVERY_PERIOD_MS|INGESTION_TIMETABLE_PERIOD_MS|INGESTION_EXAM_PERIOD_MS|INGESTION_LMS_CALENDAR_PERIOD_MS) echo env ;;
+    INGESTION_TICK_MAX_BATCH|INGESTION_QUEUE_MAX_BACKLOG|INGESTION_TICK_BUDGET_MS|INGESTION_BREAKER_FAILURES|INGESTION_BREAKER_OPEN_MS|INGESTION_BREAKER_MAX_OPEN_MS) echo env ;;
+    INGESTION_OCCURRENCE_CACHE_ENABLED|INGESTION_CACHE_TTL_MS|INGESTION_DISCOVERY_MAX_AGE_MS|INGESTION_FULL_WALK_EVERY|INGESTION_FANOUT_MAX_STUDENTS|INGESTION_LMS_TERM_FILTER) echo env ;;
+    QUEUE_JOB_ATTEMPTS|QUEUE_BACKOFF_MS|QUEUE_ENQUEUE_TIMEOUT_MS|QUEUE_SHUTDOWN_TIMEOUT_MS) echo env ;;
+    QUEUE_PORTAL_FETCH_CONCURRENCY|QUEUE_LMS_FETCH_CONCURRENCY|QUEUE_NOTIFY_CONCURRENCY) echo env ;;
+    QUEUE_PORTAL_FETCH_RATE_MAX|QUEUE_PORTAL_FETCH_RATE_DURATION_MS|QUEUE_LMS_FETCH_RATE_MAX|QUEUE_LMS_FETCH_RATE_DURATION_MS|QUEUE_NOTIFY_RATE_MAX|QUEUE_NOTIFY_RATE_DURATION_MS) echo env ;;
+    PORT|WORKER_PORT|KILLSWITCH_ACTOR) echo env ;;
+    *) echo "import-dotenv: unknown key $1; add it to classify() in this script as a secret (with its sets) or a non-secret" >&2; return 1 ;;
+  esac
+}
 
 emit_set() {
   local wanted="$1" line key value target
@@ -41,14 +89,11 @@ emit_set() {
         value="${value%%[[:space:]]#*}"
         value="${value%"${value##*[![:space:]]}"}" ;;
     esac
-    target=api
     case "$key" in
-      POSTGRES_*|BACKUP_*) target=platform ;;
-      S3_ACCESS_KEY_ID|S3_SECRET_ACCESS_KEY|S3_BUCKET) target="api platform" ;;
-      GRAFANA_ADMIN_PASSWORD) key=GF_SECURITY_ADMIN_PASSWORD; target=platform ;;
-      GRAFANA_SMTP_PASSWORD) key=GF_SMTP_PASSWORD; target=platform ;;
-      BANDIT_SERVICE_TOKEN) target="api bandit" ;;
+      GRAFANA_ADMIN_PASSWORD) key=GF_SECURITY_ADMIN_PASSWORD ;;
+      GRAFANA_SMTP_PASSWORD) key=GF_SMTP_PASSWORD ;;
     esac
+    target="$(classify "$key")" || exit 2
     [[ " $target " = *" $wanted "* ]] && printf '%s\0%s\0' "$key" "$value"
   done < "$dotenv_file"
   return 0
@@ -79,6 +124,8 @@ put_set() {
   echo "imported $set"
 }
 
-put_set api
-put_set bandit
-put_set platform
+for set in api bandit postgres minio grafana backup; do put_set "$set"; done
+if [ "$dry_run" = --dry-run ]; then
+  printf 'left in env (not imported): '
+  payload_for env | jq -r '.data | keys[]' | paste -sd, -
+fi

@@ -1,4 +1,4 @@
-/** DI token for the `ioredis` client on the dedicated durable queue Redis (`QUEUE_REDIS_URL`). */
+/** DI token for the `ioredis` client on the dedicated durable queue Redis (`QUEUE_REDIS_HOST`). */
 export const QUEUE_REDIS = Symbol("QUEUE_REDIS");
 
 /** Suffix of the dead-letter queue that belongs to a queue: `<name>.dlq`. */

@@ -36,7 +36,7 @@ services:
 
   # Queue e2e stack (test/queue-flow.e2e-spec.ts): `docker compose --profile queue
   # -f compose.test.yml up -d`. Cache and rate-limit use 7379/7380 (the stack
-  # overrides CACHE_URL and RATE_LIMIT_CACHE_URL for its processes); queue/pubsub
+  # overrides SESSION_REDIS_HOST/PORT and RATE_LIMIT_REDIS_HOST/PORT for its processes); queue/pubsub
   # use 7381/7382, so nothing clashes with dev's 6379-6382 or the main e2e stack.
   session-redis:
     container_name: zenflow-test-cache

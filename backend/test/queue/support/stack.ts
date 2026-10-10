@@ -37,17 +37,25 @@ export const PORTS: Record<Role | "fake", number> = {
 
 export const API_URL = `http://127.0.0.1:${PORTS.api}`;
 export const FAKE_URL = `http://127.0.0.1:${PORTS.fake}`;
-export const CACHE_REDIS_URL = "redis://127.0.0.1:7379";
-export const RATE_LIMIT_REDIS_URL = "redis://127.0.0.1:7380";
-export const QUEUE_REDIS_URL =
-  process.env.QUEUE_REDIS_URL ?? "redis://127.0.0.1:7381";
-export const PUBSUB_REDIS_URL =
-  process.env.REDIS_PUBSUB_URL ?? "redis://127.0.0.1:7382";
+// Cache and rate-limit are fixed: the inherited .env.test points them at the main
+// e2e stack's 6379/6380, which other suites share. Only queue and pub/sub are
+// overridable (they are unset in .env.test).
+const SESSION_REDIS = { host: "127.0.0.1", port: 7379 };
+const RATE_LIMIT_REDIS = { host: "127.0.0.1", port: 7380 };
+const redisAt = (prefix: string, port: number) => ({
+  host: process.env[`${prefix}_HOST`] ?? "127.0.0.1",
+  port: Number(process.env[`${prefix}_PORT`] ?? port),
+});
+const PUBSUB_REDIS = redisAt("REDIS_PUBSUB", 7382);
+export const QUEUE_REDIS = redisAt("QUEUE_REDIS", 7381);
 const MAIL_API_URL =
   process.env.MAILHOG_URL ??
   process.env.MAIL_API_URL ??
   "http://127.0.0.1:8025";
-const MAIL_SMTP = process.env.QUEUE_E2E_SMTP ?? "smtp://127.0.0.1:1025";
+const MAIL_SMTP = {
+  host: process.env.QUEUE_E2E_SMTP_HOST ?? "127.0.0.1",
+  port: process.env.QUEUE_E2E_SMTP_PORT ?? "1025",
+};
 
 /** Tuning shared by every process: short, deterministic retry and breaker timings. */
 export const TUNING = {
@@ -78,11 +86,16 @@ function childEnv(role: Role): NodeJS.ProcessEnv {
     WORKER_PORT: String(PORTS[role]),
     // The compose queue profile publishes cache/rate-limit on 7379/7380; the
     // inherited .env.test values point at the main e2e stack's 6379/6380.
-    CACHE_URL: CACHE_REDIS_URL,
-    RATE_LIMIT_CACHE_URL: RATE_LIMIT_REDIS_URL,
-    QUEUE_REDIS_URL,
-    REDIS_PUBSUB_URL: PUBSUB_REDIS_URL,
-    MAIL_TRANSPORT: MAIL_SMTP,
+    SESSION_REDIS_HOST: SESSION_REDIS.host,
+    SESSION_REDIS_PORT: String(SESSION_REDIS.port),
+    RATE_LIMIT_REDIS_HOST: RATE_LIMIT_REDIS.host,
+    RATE_LIMIT_REDIS_PORT: String(RATE_LIMIT_REDIS.port),
+    QUEUE_REDIS_HOST: QUEUE_REDIS.host,
+    QUEUE_REDIS_PORT: String(QUEUE_REDIS.port),
+    REDIS_PUBSUB_HOST: PUBSUB_REDIS.host,
+    REDIS_PUBSUB_PORT: String(PUBSUB_REDIS.port),
+    MAIL_HOST: MAIL_SMTP.host,
+    MAIL_PORT: MAIL_SMTP.port,
     LMS_URL: FAKE_URL,
     PORTAL_API_URL: FAKE_URL,
     DKHP_API_URL: FAKE_URL,

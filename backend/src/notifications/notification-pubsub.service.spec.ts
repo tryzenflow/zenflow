@@ -16,10 +16,7 @@ class FakeRedis {
   publish = jest.fn().mockResolvedValue(1);
   subscribe = jest.fn().mockResolvedValue(1);
   disconnect = jest.fn();
-  constructor(
-    public url: string,
-    public opts: Record<string, unknown>,
-  ) {
+  constructor(public opts: Record<string, unknown>) {
     instances.push(this);
   }
   on(event: string, fn: Listener) {
@@ -30,9 +27,7 @@ class FakeRedis {
 
 jest.mock("ioredis", () => ({
   __esModule: true,
-  default: jest.fn(
-    (url: string, opts: Record<string, unknown>) => new FakeRedis(url, opts),
-  ),
+  default: jest.fn((opts: Record<string, unknown>) => new FakeRedis(opts)),
 }));
 
 const ROW = {
@@ -64,7 +59,7 @@ const make = async (cfg: Record<string, unknown>) => {
 describe("NotificationPubSub", () => {
   beforeEach(() => (instances.length = 0));
 
-  it("without REDIS_PUBSUB_URL emits locally and opens no connection", async () => {
+  it("without REDIS_PUBSUB_HOST emits locally and opens no connection", async () => {
     const ps = await make({});
     const seen = jest.fn();
     ps.emitter.on("e", seen);
@@ -76,7 +71,7 @@ describe("NotificationPubSub", () => {
   });
 
   it("publishes JSON to the channel instead of emitting locally", async () => {
-    const ps = await make({ REDIS_PUBSUB_URL: "redis://x:6382" });
+    const ps = await make({ REDIS_PUBSUB_HOST: "x", REDIS_PUBSUB_PORT: 6382 });
     const seen = jest.fn();
     ps.emitter.on("e", seen);
     await ps.publish("e", ROW);
@@ -88,7 +83,7 @@ describe("NotificationPubSub", () => {
   });
 
   it("the publisher fails fast (no offline queue, short timeout)", async () => {
-    await make({ REDIS_PUBSUB_URL: "redis://x", REDIS_PUBSUB_TIMEOUT_MS: 100 });
+    await make({ REDIS_PUBSUB_HOST: "x", REDIS_PUBSUB_TIMEOUT_MS: 100 });
     // Never lazy (even under NODE_ENV=test): a lazy publisher would reject its first publish.
     expect(instances[0].opts.lazyConnect).toBeUndefined();
     expect(instances[0].opts).toMatchObject({
@@ -99,7 +94,7 @@ describe("NotificationPubSub", () => {
   });
 
   it("falls back to a local emit and does not throw when Redis is down", async () => {
-    const ps = await make({ REDIS_PUBSUB_URL: "redis://x" });
+    const ps = await make({ REDIS_PUBSUB_HOST: "x" });
     instances[0].publish.mockRejectedValue(new Error("down"));
     const seen = jest.fn();
     ps.emitter.on("e", seen);
@@ -108,7 +103,7 @@ describe("NotificationPubSub", () => {
   });
 
   it("an HTTP process subscribes and re-emits with Dates revived", async () => {
-    const ps = await make({ REDIS_PUBSUB_URL: "redis://x", ROLE: "api" });
+    const ps = await make({ REDIS_PUBSUB_HOST: "x", ROLE: "api" });
     ps.onModuleInit();
     const sub = instances[1];
     sub.handlers.ready();
@@ -129,7 +124,7 @@ describe("NotificationPubSub", () => {
 
   it("a worker role never subscribes", async () => {
     const ps = await make({
-      REDIS_PUBSUB_URL: "redis://x",
+      REDIS_PUBSUB_HOST: "x",
       ROLE: "worker-notify",
     });
     ps.onModuleInit();
@@ -137,13 +132,13 @@ describe("NotificationPubSub", () => {
   });
 
   it("ignores a malformed message", async () => {
-    const ps = await make({ REDIS_PUBSUB_URL: "redis://x", ROLE: "all" });
+    const ps = await make({ REDIS_PUBSUB_HOST: "x", ROLE: "all" });
     ps.onModuleInit();
     expect(() => instances[1].handlers.message("c", "{nope")).not.toThrow();
   });
 
   it("closes both connections on destroy", async () => {
-    const ps = await make({ REDIS_PUBSUB_URL: "redis://x", ROLE: "api" });
+    const ps = await make({ REDIS_PUBSUB_HOST: "x", ROLE: "api" });
     ps.onModuleInit();
     ps.onApplicationShutdown();
     expect(instances.every((i) => i.disconnect.mock.calls.length === 1)).toBe(

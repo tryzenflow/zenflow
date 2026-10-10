@@ -49,7 +49,7 @@ const DEFAULT_ENQUEUE_TIMEOUT_MS = 2_000;
  * Producer side of every queue. One cached `Queue` (plus its dead-letter
  * `Queue`) per {@link QueueDefinition}, all on the shared queue Redis.
  *
- * Test fallback: with `NODE_ENV=test` and no `QUEUE_REDIS_URL` the module
+ * Test fallback: with `NODE_ENV=test` and no `QUEUE_REDIS_HOST` the module
  * provides no connection ({@link memory} is true). `enqueue` then only records
  * the job in {@link memoryJobs} (deduplicated by `jobId`, like Redis) and no
  * worker consumes it, so suites need no Redis.

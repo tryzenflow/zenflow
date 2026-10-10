@@ -3,6 +3,7 @@
 For: developers and operators setting up the API. Source of truth: the Joi schema in [`app.module.ts`](../../backend/src/app.module.ts) and [`.env.example`](../../backend/.env.example).
 
 - Copy `.env.example` to `.env.{dev,staging,prod,test}`. All vars are validated at boot (`@hapi/joi`).
+- Connections are composed from parts (host, port, user, password); no URL vars are read. The Prisma CLI is the one exception: `scripts/with-database-url.cjs` builds its `DATABASE_URL` from the same parts.
 - Any variable can be given as `FOO_FILE=/path` (contents become `FOO`; explicit `FOO` wins; see `src/common/config/file-secrets.ts`).
 - Deployed environments inject secrets from a managed store. Inventory, rotation, Vault (prod only): [secrets.md](../ops/secrets.md). CI/CD and rollback: [ci-cd.md](../ops/ci-cd.md).
 
@@ -10,14 +11,16 @@ For: developers and operators setting up the API. Source of truth: the Joi schem
 
 | Var | Default | Notes |
 | --- | --- | --- |
-| `DATABASE_URL` | none | Required. |
-| `CACHE_URL` | none | Required. Redis for sessions, OTP, cache. |
-| `RATE_LIMIT_CACHE_URL` | none | Required. Dedicated Redis for LimitKit; see [ADR-0005](../adr/0005-rate-limit-store-lru-rdb.md). |
+| `DB_HOST` / `DB_PORT` / `DB_SCHEMA` / `DB_SSLMODE` | none / 5432 / `public` / unset | `DB_HOST` required. Postgres is composed from parts in `src/common/config/connections.ts`; there is no `DATABASE_URL`. |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | none | Required. The same vars the Postgres container reads, so there is one password. |
+| `SESSION_REDIS_HOST` / `SESSION_REDIS_PORT` / `SESSION_REDIS_PASSWORD` | none / 6379 / unset | `SESSION_REDIS_HOST` required. Redis for sessions and OTP codes. |
+| `REDIS_KILLSWITCH_HOST` / `_PORT` / `_PASSWORD` | none / 6379 / unset | Host required in production ([kill switch](../ops/kill-switch.md)); unset elsewhere = fail-safe defaults only. |
+| `RATE_LIMIT_REDIS_HOST` / `_PORT` / `_PASSWORD` | none / 6379 / unset | Host required. Dedicated Redis for LimitKit; see [ADR-0005](../adr/0005-rate-limit-store-lru-rdb.md). |
 | `CORS_ORIGIN` | none | Required. |
 | `SESSION_SECRET` | none | Required. |
 | `SESSION_TTL_MS` | 604800000 (7 d) | Idle lifetime; rolling. Drives cookie `maxAge` and Redis TTL. |
 | `COOKIE_SECURE` / `COOKIE_SAMESITE` | `true` / `lax` | Cross-site prod needs `true` + `none`. |
-| `MAIL_TRANSPORT` / `MAIL_FROM` | none | Required. `MAIL_TRANSPORT` is an SMTP URI. |
+| `MAIL_HOST` / `MAIL_PORT` / `MAIL_SECURE` / `MAIL_USER` / `MAIL_PASSWORD` / `MAIL_FROM` | none / 587 / `false` / unset / unset / none | `MAIL_HOST` and `MAIL_FROM` required. No `MAIL_USER` = unauthenticated SMTP (Mailpit). |
 | `MASTER_LMS_ENCRYPTION_KEY_V1` / `MASTER_PORTAL_ENCRYPTION_KEY_V1` | none | Required. 64 hex chars (`openssl rand -hex 32`). Add `_V<n>` to rotate. |
 | `FILE_URL_SECRET` | none | Required, 32+ chars. HMAC for signed file URLs. Notes store no sig, so rotating needs no rewrite. |
 | `S3_ENDPOINT` | none | Required. `http://storage:9000` in compose; `http://localhost:9000` for host `start:dev`. |
@@ -33,13 +36,13 @@ For: developers and operators setting up the API. Source of truth: the Joi schem
 
 | Var | Default | Notes |
 | --- | --- | --- |
-| `QUEUE_REDIS_URL` | `redis://localhost:6381` | Required in production. BullMQ's dedicated Redis (`noeviction` + AOF, [ADR-0007](../adr/0007-bullmq-for-notification-queue.md)). With `NODE_ENV=test` and no value, jobs are recorded in memory and never consumed. |
+| `QUEUE_REDIS_HOST` / `_PORT` / `_PASSWORD` | `localhost` / 6381 (host unset) | Host required in production. BullMQ's dedicated Redis (`noeviction` + AOF, [ADR-0007](../adr/0007-bullmq-for-notification-queue.md)). With `NODE_ENV=test` and no host, jobs are recorded in memory and never consumed. |
 | `QUEUE_JOB_ATTEMPTS` / `QUEUE_BACKOFF_MS` | 5 / 5000 | Attempts per job and exponential backoff base; the last failure lands in `<queue>.dlq`. |
 | `QUEUE_ENQUEUE_TIMEOUT_MS` | 2000 | Every producer call (enqueue, getJob, remove, counts) rejects after this when the queue Redis is down. |
 | `QUEUE_SHUTDOWN_TIMEOUT_MS` | 25000 | Workers get this long to finish in-flight jobs on shutdown, then are force-closed. Keep below the stop grace period. |
 | `QUEUE_<Q>_CONCURRENCY` | queue default | `Q` = `PORTAL_FETCH`, `LMS_FETCH`, `NOTIFY`; per replica. |
 | `QUEUE_<Q>_RATE_MAX` / `_RATE_DURATION_MS` | notify 50 per 1000; `portal-fetch` / `lms-fetch` 1 per `INGESTION_REQUEST_DELAY_MS` (none if 0) | At most MAX jobs per DURATION across replicas. |
-| `REDIS_PUBSUB_URL` | none | Pub/sub Redis for SSE fan-out ([ADR-0018](../adr/0018-redis-pubsub-instance.md)). Unset = events stay in-process. |
+| `REDIS_PUBSUB_HOST` / `_PORT` / `_PASSWORD` | none / 6379 / unset | Pub/sub Redis for SSE fan-out ([ADR-0018](../adr/0018-redis-pubsub-instance.md)). Host unset = events stay in-process. |
 | `REDIS_PUBSUB_TIMEOUT_MS` | 250 | Publish gives up (and emits locally) after this. |
 
 ## Rate limits
@@ -107,4 +110,3 @@ Behaviour: [ingestion.md](ingestion.md).
 | `HTTP_SLOW_REQUEST_MS` | 1000 | Slower requests are always logged. |
 | `SERVICE_VERSION` | `package.json` version | Overrides version in logs and OTel. |
 | `GRAFANA_ADMIN_PASSWORD` / `GRAFANA_ROOT_URL` | `admin` / `http://localhost:3000` | Read by compose; see [observability](../../backend/observability/README.md). |
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `admin` / none / `zenflow` | Read by compose; must match `DATABASE_URL`. |

@@ -1,5 +1,6 @@
 import Redis from "ioredis";
 import { Logger } from "@nestjs/common";
+import type { RedisConnection } from "../common/config/connections";
 
 const logger = new Logger("QueueRedis");
 
@@ -9,8 +10,12 @@ const logger = new Logger("QueueRedis");
  * blocking command waits out a Redis restart instead of throwing. Workers
  * `duplicate()` this client for their blocking connection.
  */
-export function createQueueConnection(url: string, lazy = false): Redis {
-  const client = new Redis(url, {
+export function createQueueConnection(
+  connection: RedisConnection,
+  lazy = false,
+): Redis {
+  const client = new Redis({
+    ...connection,
     maxRetriesPerRequest: null,
     lazyConnect: lazy,
   });

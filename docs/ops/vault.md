@@ -18,19 +18,20 @@ Image `hashicorp/vault` is pinned in `compose.prod.yml`; bump deliberately (Depe
 | Item | Value |
 | --- | --- |
 | KV mount | v2 at `secret/` |
-| Secret sets | `secret/zenflow/<env>/api` (`api`, `migrations`), `bandit`, and `platform` (Postgres, backup, MinIO, Grafana) |
-| Keys | env var names (`SESSION_SECRET`, `DATABASE_URL`, `MASTER_LMS_ENCRYPTION_KEY_V1`, ...) |
-| Shared key | `BANDIT_SERVICE_TOKEN` is stored in both sets |
-| Policy `zenflow-api-<env>` | `read` on `secret/data/zenflow/<env>/*` only; no list, write or other environments |
+| Secret sets | one per consumer, `secret/zenflow/<env>/<set>`: `api` (Nest app: `api`, `watcher`, `worker-*`, `migrations`), `bandit`, `postgres`, `minio`, `grafana`, `backup` |
+| Keys | secrets only, by env var name (`SESSION_SECRET`, `POSTGRES_PASSWORD`, `MASTER_LMS_ENCRYPTION_KEY_V1`, ...). Hosts, ports, usernames and bucket names are not secrets and live in `backend/env/prod.env` |
+| Shared keys | written to every set that needs them: `POSTGRES_PASSWORD` (`api`, `postgres`, `backup`), `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` (`api`, `minio`), `BANDIT_SERVICE_TOKEN` (`api`, `bandit`) |
+| Policy `zenflow-api-<env>` | `read` on each set's `secret/data/zenflow/<env>/<set>` path, listed explicitly; no wildcard, list, write or other environments. A new set needs a line in `policy.hcl` and a re-run of `setup-approle.sh` |
 | AppRole `zenflow-api-<env>` | token TTL 10 min (max 30), `secret_id` valid 30 days |
 | Rendered files | `/run/zenflow/<env>/<set>/` on the host tmpfs: one file per key plus `files.env` |
-| API and Bandit delivery | `files.env` has `FOO_FILE=/run/secrets/zenflow/FOO`; `api` and `migrations` mount `api`, and Bandit mounts `bandit`, read-only |
-| Platform delivery | `platform/files.env` has direct values for images without `FOO_FILE` support; it is injected into Postgres, backup, MinIO, and Grafana |
+| API and Bandit delivery | `files.env` has `FOO_FILE=/run/secrets/zenflow/FOO`; the Nest roles and `migrations` mount `api`, Bandit mounts `bandit`, read-only |
+| Third-party delivery | `postgres`, `minio`, `grafana` and `backup` each get their own `files.env` with direct values (those images have no `FOO_FILE` support), injected only into that service |
 
 - `render-secrets.sh` logs in with the AppRole and writes the files; `file-secrets.ts` and `docker-entrypoint.sh` consume them.
 - Bandit reuses `docker-entrypoint.sh` (bind-mounted, entrypoint override in compose) because it reads plain env vars only.
-- Production has no `.env.prod`. All API configuration and secrets belong in `api`; `BANDIT_SERVICE_TOKEN` belongs in `bandit`; platform values belong in `platform`.
-- `platform` values are still exposed as container environment variables because the upstream images do not consistently support `FOO_FILE`. They are rendered only on host tmpfs, not written to a persistent dotenv file.
+- Non-secret settings are the committed `backend/env/prod.env`, which `deploy.sh` ships as `.env.prod` (600). Only secrets are in Vault. A key in both aborts the deploy: a plain `KEY` would beat the rendered `KEY_FILE` and silently ignore Vault.
+- The app composes its connections from parts (`DB_HOST`, `POSTGRES_*`, `SESSION_REDIS_HOST`, `MAIL_HOST`, ...), so a password exists once instead of inside a URL.
+- Plain-env sets are still exposed as container environment variables because the upstream images do not consistently support `FOO_FILE`. They are rendered only on host tmpfs.
 
 ## Test the render script locally
 
@@ -61,15 +62,19 @@ Its healthcheck treats sealed or uninitialised as "process up" (`sealedcode=200&
    V="docker exec -e VAULT_TOKEN zenflow-vault-prod vault"
    $V secrets enable -path=secret -version=2 kv
    # Copy every API value from the old .env.prod into this set before removing that file.
-   $V kv put -mount=secret zenflow/prod/api DATABASE_URL=... SESSION_SECRET=... S3_ACCESS_KEY_ID=... S3_SECRET_ACCESS_KEY=...   # read values from a prompt/file, not shell history
+   # Secrets only (hosts, users, bucket names are in backend/env/prod.env). Read values from a prompt/file, not shell history.
+   $V kv put -mount=secret zenflow/prod/api SESSION_SECRET=... FILE_URL_SECRET=... MASTER_LMS_ENCRYPTION_KEY_V1=... MASTER_PORTAL_ENCRYPTION_KEY_V1=... POSTGRES_PASSWORD=... MAIL_PASSWORD=... S3_ACCESS_KEY_ID=... S3_SECRET_ACCESS_KEY=... PORTAL_API_KEY=... BANDIT_SERVICE_TOKEN=...
    $V kv put -mount=secret zenflow/prod/bandit BANDIT_SERVICE_TOKEN=...
-   $V kv put -mount=secret zenflow/prod/platform POSTGRES_USER=... POSTGRES_PASSWORD=... POSTGRES_DB=... BACKUP_S3_BUCKET=... BACKUP_S3_ACCESS_KEY_ID=... BACKUP_S3_SECRET_ACCESS_KEY=... BACKUP_AGE_RECIPIENT=... BACKUP_AGE_IDENTITY=... S3_ACCESS_KEY_ID=... S3_SECRET_ACCESS_KEY=... S3_BUCKET=... GF_SECURITY_ADMIN_PASSWORD=... GF_SMTP_PASSWORD=...
+   $V kv put -mount=secret zenflow/prod/postgres POSTGRES_PASSWORD=...
+   $V kv put -mount=secret zenflow/prod/minio S3_ACCESS_KEY_ID=... S3_SECRET_ACCESS_KEY=...
+   $V kv put -mount=secret zenflow/prod/grafana GF_SECURITY_ADMIN_PASSWORD=... GF_SMTP_PASSWORD=...
+   $V kv put -mount=secret zenflow/prod/backup POSTGRES_PASSWORD=... BACKUP_S3_ACCESS_KEY_ID=... BACKUP_S3_SECRET_ACCESS_KEY=... BACKUP_AGE_IDENTITY=...
    sudo install -d -m 700 /etc/zenflow/vault
    docker run --rm --network container:zenflow-vault-prod -v $PWD/backend/ops/vault:/ops:ro \
      -v /etc/zenflow/vault:/creds -e VAULT_ADDR=http://127.0.0.1:8200 -e VAULT_TOKEN -e ENV_NAME=prod \
      hashicorp/vault:1.20.4 /ops/setup-approle.sh --role-id-file /creds/role_id --secret-id-file /creds/secret_id
    ```
-   If you already have `backend/.env.prod`, use the importer instead of retyping values. It maps the old Grafana variable names and splits keys into `api`, `bandit`, and `platform`:
+   If you already have a `.env.prod` in the new parts format, use the importer instead of retyping values. It writes each secret to every set that needs it, leaves non-secrets in the env file (listed in `--dry-run`), maps the old Grafana variable names, and **rejects** unknown keys, the removed URL vars and misnamed backup keys instead of guessing:
    ```bash
    export VAULT_ADDR=http://127.0.0.1:8200 VAULT_ENV=prod
    read -rs -p "Vault root token: " VAULT_TOKEN && export VAULT_TOKEN
@@ -78,10 +83,20 @@ Its healthcheck treats sealed or uninitialised as "process up" (`sealedcode=200&
    unset VAULT_TOKEN
    ```
 5. **Revoke the root token**: `vault token revoke -self`. Recreate one with `vault operator generate-root` (needs the shares) only for policy changes or a new environment.
-6. Set `SECRETS_PROVIDER=vault` on the GitHub Environment and deploy. Move any remaining API settings from `.env.prod` into `api`; do not delete the old file until the new containers are healthy.
-   - The deploy starts Vault, renders the API, Bandit and platform files, and starts services from those files.
+6. Set `SECRETS_PROVIDER=vault` on the GitHub Environment and deploy. Put every non-secret setting from the old `.env.prod` into `backend/env/prod.env` (reviewed in a PR); keep a copy of the old file until the new containers are healthy.
+   - The deploy ships `backend/env/prod.env` as `.env.prod`, starts Vault, renders the six sets, aborts if a key is in both, and starts services from those files. Replace every `REPLACE_ME` in `prod.env` first; the deploy refuses to ship it otherwise.
    - It fails with a clear message if Vault is sealed (HTTP 503) or uninitialised (501).
-7. Verify `docker compose -f compose.prod.yml ps` is healthy, then securely remove `backend/.env.prod` from the deploy host. It is no longer read in Vault mode.
+7. Verify `docker compose -f compose.prod.yml ps` is healthy. The `.env.prod` on the host is now the shipped non-secret file; securely delete any copy of the old one that held secrets.
+
+### Moving an existing Vault from `api` + `platform` to one set per consumer
+
+Done once, by the root-token holder (or `generate-root` with three shares):
+
+1. Convert the old `.env.prod` to parts: drop `DATABASE_URL` and `MAIL_TRANSPORT`, add `DB_HOST`, `POSTGRES_*`, `MAIL_*`, `*_HOST`, and rename the backup keys to `BACKUP_S3_ACCESS_KEY_ID` / `BACKUP_S3_SECRET_ACCESS_KEY`. Remove unused `*_PASSWORD` Redis vars.
+2. Re-run `setup-approle.sh` so the policy lists the new set paths.
+3. `import-dotenv.sh .env.prod --dry-run`, then for real. Old KV versions stay, so nothing is lost.
+4. Copy the non-secret keys into `backend/env/prod.env` and merge that PR, then deploy.
+5. After the stack is healthy, delete the retired set and keys: `vault kv metadata delete -mount=secret zenflow/prod/platform`, and `vault kv patch` the `api` set without `DATABASE_URL` / `MAIL_TRANSPORT` (or `kv put` the full new `api` set).
 
 ### After a Vault restart or host reboot
 
@@ -164,7 +179,7 @@ The runbooks in [secrets.md](secrets.md#rotation-runbooks) apply with two change
 | Secret | Vault specifics |
 | --- | --- |
 | `SESSION_SECRET` | patch, deploy; all users are logged out |
-| Database password | run the `ALTER USER` step, patch both `api/DATABASE_URL` and `platform/POSTGRES_PASSWORD`, then deploy; dynamic DB credentials are post-MVP |
+| Database password | run the `ALTER USER` step, patch `POSTGRES_PASSWORD` in all three sets (`api`, `postgres`, `backup`), then deploy; dynamic DB credentials are post-MVP |
 | Crypto master keys | add `MASTER_*_ENCRYPTION_KEY_V2` with `kv patch`, ship the code change, deploy |
 
 - Never `kv put` over a set without V1: `kv put` replaces all keys, and V1 must stay while rows reference it.

@@ -1,6 +1,7 @@
 import { Global, Logger, Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import Redis from "ioredis";
+import { redisOptions } from "../config/connections";
 import {
   KILLSWITCH_REDIS_CLIENT,
   RATE_LIMIT_REDIS_CLIENT,
@@ -10,7 +11,7 @@ import {
 const logger = new Logger("RedisModule");
 
 /**
- * Builds an `ioredis` client for the given connection URL.
+ * Builds an `ioredis` client for the `<prefix>_HOST` / `_PORT` / `_PASSWORD` settings.
  *
  * Deliberately synchronous — it never awaits a connection. `ioredis` queues
  * commands until it connects instead of requiring an explicit `.connect()`
@@ -29,11 +30,13 @@ const logger = new Logger("RedisModule");
  */
 function createRedisClient(
   configService: ConfigService,
-  urlKey: string,
+  prefix: string,
   fastFail = false,
 ): Redis {
   const isTest = configService.get<string>("NODE_ENV") === "test";
-  const client = new Redis(configService.get<string>(urlKey)!, {
+  const connection = redisOptions((key) => configService.get(key), prefix)!;
+  const client = new Redis({
+    ...connection,
     lazyConnect: isTest,
     // Fail fast instead of queueing/retrying: callers (rate limiter, in-flight
     // lock) fail open, so a down Redis must not stall requests.
@@ -58,11 +61,11 @@ function createRedisClient(
  * Redis instances so rate-limit counter churn can't evict or contend with
  * session/OTP data:
  *
- * - `REDIS_CLIENT`, connected to `CACHE_URL` — backs the session store in
+ * - `REDIS_CLIENT`, connected to `SESSION_REDIS_HOST` — backs the session store in
  *   `main.ts` (OTP codes live on the same physical Redis too, via
  *   `@nestjs/cache-manager`/keyv in `app.module.ts`, just through a
  *   different client library).
- * - `RATE_LIMIT_REDIS_CLIENT`, connected to `RATE_LIMIT_CACHE_URL` — backs
+ * - `RATE_LIMIT_REDIS_CLIENT`, connected to `RATE_LIMIT_REDIS_HOST` — backs
  *   the LimitKit rate limiter in `common/rate-limit/`.
  */
 @Global()
@@ -73,20 +76,20 @@ function createRedisClient(
       provide: REDIS_CLIENT,
       inject: [ConfigService],
       useFactory: (configService: ConfigService) =>
-        createRedisClient(configService, "CACHE_URL"),
+        createRedisClient(configService, "SESSION_REDIS"),
     },
     {
       provide: RATE_LIMIT_REDIS_CLIENT,
       inject: [ConfigService],
       useFactory: (configService: ConfigService) =>
-        createRedisClient(configService, "RATE_LIMIT_CACHE_URL", true),
+        createRedisClient(configService, "RATE_LIMIT_REDIS", true),
     },
     {
       provide: KILLSWITCH_REDIS_CLIENT,
       inject: [ConfigService],
       useFactory: (configService: ConfigService) =>
-        configService.get<string>("REDIS_KILLSWITCH_URL")
-          ? createRedisClient(configService, "REDIS_KILLSWITCH_URL", true)
+        configService.get<string>("REDIS_KILLSWITCH_HOST")
+          ? createRedisClient(configService, "REDIS_KILLSWITCH", true)
           : null,
     },
   ],

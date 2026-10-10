@@ -11,11 +11,12 @@ import {
   type FetchJobData,
   type NotifyJobData,
 } from "../../src/queue/queues";
+import { databaseUrl } from "../../src/common/config/connections";
 import { dlqName } from "../../src/queue/queue.constants";
 import { idempotencyKey } from "../../src/queue/queue.types";
 import {
   API_URL,
-  QUEUE_REDIS_URL,
+  QUEUE_REDIS,
   TUNING,
   connect,
   hasLine,
@@ -51,7 +52,9 @@ import {
 
 jest.setTimeout(240_000);
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  datasourceUrl: databaseUrl((key) => process.env[key]),
+});
 let redis: Redis;
 const queues: Record<string, Queue> = {};
 const procs: Partial<Record<Role | "fake", Proc>> = {};
@@ -132,7 +135,7 @@ beforeAll(async () => {
       "dist/main.js is missing: run `pnpm --filter backend build`",
     );
   }
-  redis = new Redis(QUEUE_REDIS_URL, { maxRetriesPerRequest: null });
+  redis = new Redis({ ...QUEUE_REDIS, maxRetriesPerRequest: null });
   // Start from empty queues so counts below belong to this run.
   for (const def of [PORTAL_FETCH_QUEUE, LMS_FETCH_QUEUE, NOTIFY_QUEUE]) {
     for (const name of [def.name, dlqName(def.name)]) {

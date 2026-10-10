@@ -213,7 +213,7 @@ jobs:
         working-directory: backend
         run: |
           for i in $(seq 1 30); do docker exec zenflow-test-db pg_isready -U ci -d zenflow-test && break; sleep 2; done
-          pnpm exec dotenv -e .env.test -- prisma migrate deploy
+          pnpm exec dotenv -e .env.test -- node scripts/with-database-url.cjs prisma migrate deploy
           pnpm build
           (pnpm exec dotenv -e .env.test -- env PORT=8000 node dist/main > ../api.log 2>&1 &)
           for i in $(seq 1 60); do curl -fs http://localhost:8000/api >/dev/null && exit 0; sleep 2; done
@@ -280,7 +280,7 @@ jobs:
         run: |
           docker compose -f compose.test.yml up -d
           for i in $(seq 1 30); do docker exec zenflow-test-db pg_isready -U ci -d zenflow-test && break; sleep 2; done
-          pnpm exec dotenv -e .env.test -- prisma migrate deploy
+          pnpm exec dotenv -e .env.test -- node scripts/with-database-url.cjs prisma migrate deploy
           pnpm build
           (pnpm exec dotenv -e .env.test -- env PORT=8000 node dist/main > ../api.log 2>&1 &)
           for i in $(seq 1 60); do curl -fs http://localhost:8000/api >/dev/null && exit 0; sleep 2; done
