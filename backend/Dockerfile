@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # ---- Base: pnpm via corepack (+ openssl for Prisma's musl engine on alpine) ----
-FROM node:20-alpine AS base
+FROM node:25-alpine AS base
 RUN apk add --no-cache openssl \
  && corepack enable \
  && corepack prepare pnpm@10.32.1 --activate
