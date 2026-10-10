@@ -218,7 +218,7 @@ describe("NotificationsScreen", () => {
       );
       seed([conflict()]);
       renderScreen(<NotificationsScreen />);
-      fireEvent.click(screen.getByText("Reschedule them all"));
+      fireEvent.click(screen.getByText("Reschedule"));
       await toastShown("Rescheduled 2 tasks");
     });
 
@@ -232,7 +232,7 @@ describe("NotificationsScreen", () => {
       );
       seed([conflict()]);
       renderScreen(<NotificationsScreen />);
-      fireEvent.click(screen.getByText("Reschedule them all"));
+      fireEvent.click(screen.getByText("Reschedule"));
       await toastShown("Rescheduled 1, 1 left");
       expect(screen.getAllByText("The rest still overlap. Move them by hand.").length).toBeGreaterThan(0);
     });
@@ -243,14 +243,14 @@ describe("NotificationsScreen", () => {
       );
       seed([conflict()]);
       renderScreen(<NotificationsScreen />);
-      fireEvent.click(screen.getByText("Reschedule them all"));
+      fireEvent.click(screen.getByText("Reschedule"));
       await toastShown("Couldn't reschedule tasks");
     });
 
     it("hides the action once it has been taken", () => {
       seed([{ ...conflict(), actionTakenAt: "2026-10-15T00:00:00.000Z" }]);
       renderScreen(<NotificationsScreen />);
-      expect(screen.queryByText("Reschedule them all")).toBeNull();
+      expect(screen.queryByText("Reschedule")).toBeNull();
     });
   });
 });

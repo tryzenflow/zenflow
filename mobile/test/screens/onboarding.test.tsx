@@ -126,7 +126,7 @@ describe("OnboardingScreen", () => {
     renderScreen(<OnboardingScreen />);
     fireEvent.change(screen.getByDisplayValue("Test User"), { target: { value: "Minh" } });
     fireEvent.click(primary());
-    await waitFor(() => expect(screen.getByText("Couldn't save. Try again.")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Couldn't save")).toBeTruthy());
     expect(screen.getByText("What should we call you?")).toBeTruthy();
   });
 
@@ -217,7 +217,7 @@ describe("OnboardingScreen", () => {
       renderScreen(<OnboardingScreen />);
       await skipTo("Where are you?");
       fireEvent.click(screen.getByText("Detected from device"));
-      await waitFor(() => expect(screen.getByText("Couldn't save. Try again.")).toBeTruthy());
+      await waitFor(() => expect(screen.getByText("Couldn't save")).toBeTruthy());
       fireEvent.click(primary());
       await waitFor(() => expect(screen.getByText("Where are you?")).toBeTruthy());
     });
@@ -280,7 +280,7 @@ describe("OnboardingScreen", () => {
       await next("You’re all set");
       server.use(http.patch(BASIC_INFO, () => HttpResponse.json({ message: "no" }, { status: 500 })));
       fireEvent.click(screen.getByText("Open my calendar"));
-      await waitFor(() => expect(screen.getByText("Couldn't save. Try again.")).toBeTruthy());
+      await waitFor(() => expect(screen.getByText("Couldn't save")).toBeTruthy());
       expect(screen.getByText("You’re all set")).toBeTruthy();
     });
   });

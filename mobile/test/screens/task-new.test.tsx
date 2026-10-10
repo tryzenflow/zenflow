@@ -113,7 +113,8 @@ describe("NewSessionScreen", () => {
         params: { date: "2026-10-15T03:00:00.000Z", flash: "new1" },
       }),
     );
-    await toastShown("Scheduled for Thu Oct 15, 10:00 AM");
+    await toastShown("Scheduled for 10:00 AM");
+    await toastShown("Thu Oct 15");
   });
 
   it("just goes back when the scheduler found no slot", async () => {
@@ -128,7 +129,7 @@ describe("NewSessionScreen", () => {
     await fillAndSubmit();
     await waitFor(() => expect(router.back).toHaveBeenCalled());
     expect(router.replace).not.toHaveBeenCalled();
-    await toastShown('"Revise graphs" created');
+    await toastShown("Task created");
   });
 
   it("offers both policies when the deadline can't be met, then retries with the chosen one", async () => {

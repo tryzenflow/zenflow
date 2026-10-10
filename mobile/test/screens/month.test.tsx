@@ -103,20 +103,31 @@ describe("MonthScreen", () => {
   });
 
   it("toasts when the month fails to load and nothing is cached", async () => {
-    server.use(http.get(`${API}/sessions`, () => HttpResponse.json({}, { status: 500 })));
+    server.use(http.get(`${API}/sessions`, () => HttpResponse.json({}, { status: 404 })));
     renderScreen(<MonthScreen />);
     await waitFor(() =>
-      expect(screen.getAllByText("Couldn't load this month's tasks").length).toBeGreaterThan(0),
+      expect(screen.getAllByText("Couldn't load this month").length).toBeGreaterThan(0),
     );
   });
 
-  it("uses the server's error message in the toast when it sends one", async () => {
+  it("uses the server's message for a client error", async () => {
     server.use(
       http.get(`${API}/sessions`, () =>
-        HttpResponse.json({ message: "Calendar is down" }, { status: 503 }),
+        HttpResponse.json({ message: "Calendar is locked" }, { status: 403 }),
       ),
     );
     renderScreen(<MonthScreen />);
-    await waitFor(() => expect(screen.getAllByText("Calendar is down").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText("Calendar is locked").length).toBeGreaterThan(0));
+  });
+
+  it("shows a generic message instead of a server error's body", async () => {
+    server.use(
+      http.get(`${API}/sessions`, () =>
+        HttpResponse.json({ message: "Internal server error" }, { status: 503 }),
+      ),
+    );
+    renderScreen(<MonthScreen />);
+    await waitFor(() => expect(screen.getAllByText("Try again shortly").length).toBeGreaterThan(0));
+    expect(screen.queryByText("Internal server error")).toBeNull();
   });
 });
