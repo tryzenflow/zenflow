@@ -119,7 +119,7 @@ export function NotificationRow({
               variant="outline"
               onClick={onRescheduleAll}
             >
-              Reschedule them all
+              Reschedule
             </Button>
           )}
         </div>

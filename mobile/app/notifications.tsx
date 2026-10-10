@@ -11,7 +11,7 @@ import {
 } from "@/components/Icons";
 import { Glass } from "@/components/ui/glass";
 import { Text } from "@/components/ui/text";
-import { rescheduleConflicts } from "@/api/notifications";
+import { rescheduleWithToast } from "@/lib/reschedule-toast";
 import { useToast } from "@/components/ui/toast";
 import {
   useNotificationsStore,
@@ -119,31 +119,9 @@ export default function NotificationsScreen() {
   const handleRescheduleAll = useCallback(
     async (n: NotificationDto) => {
       setReschedulingId(n.id);
-      try {
-        const res = await rescheduleConflicts(n.id);
-        const ok = res.rescheduled.length;
-        const failed = res.failedSessionIds.length;
-        toast({
-          title: failed
-            ? t("Rescheduled {ok}, {failed} left", { ok, failed })
-            : t("Rescheduled {count} tasks", { count: ok }),
-          description: failed
-            ? t("The rest still overlap. Move them by hand.")
-            : undefined,
-          variant: failed ? "warning" : "success",
-          icon: failed ? "calendar-clock" : "calendar-check",
-        });
-        void fetchNotifications("refresh");
-      } catch {
-        toast({
-          title: t("Couldn't reschedule tasks"),
-          description: t("Try again in a moment."),
-          variant: "destructive",
-          icon: "calendar-x",
-        });
-      } finally {
-        setReschedulingId(null);
-      }
+      await rescheduleWithToast(n.id, toast);
+      void fetchNotifications("refresh");
+      setReschedulingId(null);
     },
     [fetchNotifications, toast],
   );
@@ -578,7 +556,7 @@ function NotificationRowItem({
                   <RefreshCw size={12} color="#ffffff" />
                 )}
                 <Text className="text-[12px] font-semibold text-white">
-                  {t("Reschedule them all")}
+                  {t("Reschedule")}
                 </Text>
               </Pressable>
             )}

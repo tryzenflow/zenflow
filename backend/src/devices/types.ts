@@ -9,6 +9,8 @@ export interface PushMessage {
   body: string;
   data: PushDataPayload;
   tone: PushTone;
+  /** APNs category (action buttons); `null` for a plain push. */
+  category?: string | null;
 }
 
 /** What a sender hands back so {@link PushService} can log + prune. */

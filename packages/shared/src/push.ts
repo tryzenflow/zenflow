@@ -25,6 +25,17 @@ export function pushToneFor(eventName: string): PushTone {
   return "default";
 }
 
+/** iOS notification category that carries the conflict "Reschedule" button. */
+export const PUSH_CATEGORY_CONFLICT = "sync_conflict";
+
+/** Action identifier of that button (`NotificationResponse.actionIdentifier`). */
+export const PUSH_ACTION_RESCHEDULE = "reschedule";
+
+/** Event slug → action category, or `null` when the push has no buttons. */
+export function pushCategoryFor(eventName: string): string | null {
+  return eventName.startsWith("sync_conflict.") ? PUSH_CATEGORY_CONFLICT : null;
+}
+
 /**
  * Android channel id per tone. Channel sound is immutable once created, so
  * these are new ids (the legacy `"default"` channel keeps the system sound).

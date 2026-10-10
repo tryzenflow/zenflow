@@ -4,13 +4,13 @@ import {
   listNotifications,
   markNotificationActionTaken,
   markNotificationRead,
-  rescheduleConflicts,
   subscribeNotificationsStream,
 } from "@/api/notifications";
 import { getSessionDetails } from "@/api/tasks";
 import { useToast } from "@/components/ui/toast";
 import { useUserStore } from "@/hooks/use-user-store";
 import { notificationToastVisual } from "@/lib/notification-visual";
+import { rescheduleWithToast } from "@/lib/reschedule-toast";
 import { claimNotification, LOCAL_NOTIFICATION_SOURCE } from "@/lib/push";
 import { notifySessionsMutated } from "@/lib/session-cache";
 import {
@@ -323,32 +323,11 @@ export function useNotificationsSubscription(): void {
           duration: 8000,
           action: hasConflicts
             ? {
-                label: t("Reschedule them all"),
+                label: t("Reschedule"),
                 onPress: () => {
-                  void rescheduleConflicts(n.id)
-                    .then((res) => {
-                      const ok = res.rescheduled.length;
-                      const failed = res.failedSessionIds.length;
-                      currentToast({
-                        title: failed
-                          ? t("Rescheduled {ok}, {failed} left", { ok, failed })
-                          : t("Rescheduled {count} tasks", { count: ok }),
-                        description: failed
-                          ? t("The rest still overlap. Move them by hand.")
-                          : undefined,
-                        variant: failed ? "warning" : "success",
-                        icon: failed ? "calendar-clock" : "calendar-check",
-                      });
-                      void fetchNotifications("refresh");
-                    })
-                    .catch(() =>
-                      currentToast({
-                        title: t("Couldn't reschedule tasks"),
-                        description: t("Try again in a moment."),
-                        variant: "destructive",
-                        icon: "calendar-x",
-                      }),
-                    );
+                  void rescheduleWithToast(n.id, currentToast).then(() =>
+                    fetchNotifications("refresh"),
+                  );
                 },
               }
             : n.sessionId

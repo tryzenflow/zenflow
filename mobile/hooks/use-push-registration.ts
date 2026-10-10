@@ -7,6 +7,8 @@ import { getSessionDetails } from "@/api/tasks";
 import { useToast } from "@/components/ui/toast";
 import { usePushStatusStore } from "@/hooks/use-push-status-store";
 import { useUserStore } from "@/hooks/use-user-store";
+import { rescheduleWithToast } from "@/lib/reschedule-toast";
+import { PUSH_ACTION_RESCHEDULE, pushCategoryFor } from "@zenflow/shared";
 import { notificationToastVisual } from "@/lib/notification-visual";
 import {
   claimNotification,
@@ -16,6 +18,7 @@ import {
   isLocalNotification,
   notificationIdOf,
   pushOwner,
+  registerPushCategories,
 } from "@/lib/push";
 import type { Href } from "expo-router";
 
@@ -38,7 +41,9 @@ export function usePushRegistration(): void {
   const lastHandledResponseId = useRef<string | null>(null);
 
   useEffect(() => {
-    if (userId) void ensureAndroidChannel().catch(() => {});
+    if (!userId) return;
+    void ensureAndroidChannel().catch(() => {});
+    void registerPushCategories().catch(() => {});
   }, [userId, language]);
 
   // Apply the push rule (`decidePushAction`) on login / onboarding completion
@@ -69,6 +74,19 @@ export function usePushRegistration(): void {
       const data = response.notification.request.content.data as
         | Record<string, string>
         | undefined;
+      // iOS "Reschedule" button on a sync-conflict push: act without opening the app.
+      if (
+        response.actionIdentifier === PUSH_ACTION_RESCHEDULE &&
+        data?.notificationId
+      ) {
+        await rescheduleWithToast(data.notificationId, toast);
+        return;
+      }
+      // A conflict has no session to open: show the inbox row with its button.
+      if (data?.eventName && pushCategoryFor(data.eventName)) {
+        router.push("/notifications" as Href);
+        return;
+      }
       const sessionId = data?.sessionId;
       if (sessionId) {
         try {

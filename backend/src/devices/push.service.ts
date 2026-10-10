@@ -1,5 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { type PushDataPayload, pushToneFor } from "@zenflow/shared";
+import {
+  type PushDataPayload,
+  pushCategoryFor,
+  pushToneFor,
+} from "@zenflow/shared";
 import { type Notification } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
 import { ApnsSender } from "./apns.sender";
@@ -136,6 +140,7 @@ export class PushService {
       body: row.content,
       data: this.dataFor(row),
       tone: pushToneFor(row.eventName),
+      category: pushCategoryFor(row.eventName),
     };
 
     const settled = await Promise.allSettled([
