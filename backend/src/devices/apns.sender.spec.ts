@@ -100,6 +100,17 @@ describe("ApnsSender", () => {
     });
   });
 
+  it("sets the category only when the message has one", async () => {
+    send.mockResolvedValue({ sent: [{ device: "t1" }], failed: [] });
+    const sender = await make(FULL);
+
+    await sender.send(["t1"], MSG);
+    await sender.send(["t1"], { ...MSG, category: "sync_conflict" });
+
+    expect(send.mock.calls[0][0].category).toBeUndefined();
+    expect(send.mock.calls[1][0].category).toBe("sync_conflict");
+  });
+
   it("prunes tokens failed with 410 or an Unregistered/BadDeviceToken reason", async () => {
     send.mockResolvedValue({
       sent: [{ device: "ok" }],

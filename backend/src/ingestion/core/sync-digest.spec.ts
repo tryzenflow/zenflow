@@ -33,9 +33,7 @@ describe("digestNotifications", () => {
       ],
       NOW,
     );
-    expect(n.title).toBe(
-      "You have 2 new lectures, 1 change to your lectures, 1 lecture removed",
-    );
+    expect(n.title).toBe("2 new lectures, 1 lecture change, 1 lecture removed");
 
     const [onlyChanges] = digestNotifications(
       [
@@ -44,7 +42,7 @@ describe("digestNotifications", () => {
       ],
       NOW,
     );
-    expect(onlyChanges.title).toBe("You have 2 changes to your lectures");
+    expect(onlyChanges.title).toBe("2 lecture changes");
     expect(onlyChanges.eventName).toBe("lecture.group_updated");
   });
 
@@ -99,7 +97,7 @@ describe("digestNotifications", () => {
       NOW,
     );
     expect(n.sessionId).toBeNull();
-    expect(n.content).toContain("no longer on your calendar");
+    expect(n.content).toContain("gone from your calendar");
   });
 
   it("emits one row per type, exams first, grouping even a single change", () => {
@@ -115,7 +113,7 @@ describe("digestNotifications", () => {
       "exam.group_created",
       "lecture.group_created",
     ]);
-    expect(rows[0].title).toBe("You have a new exam");
+    expect(rows[0].title).toBe("A new exam");
     // A one-item row keeps its end instant for the inbox's "due" badge.
     expect(rows[0].eventEndsAt).toEqual(item().endsAt);
     expect(rows[1].eventEndsAt).toBeNull();
@@ -125,22 +123,18 @@ describe("digestNotifications", () => {
   it("uses an article only for a lone phrase, digits inside a list", () => {
     const title = (items: DigestItem[]) =>
       digestNotifications(items, NOW)[0].title;
-    expect(title([item({ type: "ASSIGNMENT" })])).toBe(
-      "You have a new assignment",
-    );
+    expect(title([item({ type: "ASSIGNMENT" })])).toBe("A new assignment");
     expect(
       title([item({ type: "EXAM", kind: "removed", sessionId: null })]),
-    ).toBe("You have an exam removed");
-    expect(title([item({ kind: "updated" })])).toBe(
-      "You have a change to your lectures",
-    );
+    ).toBe("An exam removed");
+    expect(title([item({ kind: "updated" })])).toBe("A lecture change");
     expect(
       title([
         item({ sessionId: "a" }),
         item({ sessionId: "b" }),
         item({ kind: "removed", sessionId: null }),
       ]),
-    ).toBe("You have 2 new lectures, 1 lecture removed");
+    ).toBe("2 new lectures, 1 lecture removed");
   });
 });
 
@@ -183,10 +177,7 @@ describe("SyncDigest", () => {
     );
 
     const titles = digestNotifications(d.drain(), NOW).map((n) => n.title);
-    expect(titles).toEqual([
-      "You have an assignment removed from LMS",
-      "You have 2 new lectures from the portal",
-    ]);
+    expect(titles).toEqual(["An assignment removed", "2 new lectures"]);
   });
 
   it("drops the source when a type's items came from different ones", () => {
@@ -195,6 +186,28 @@ describe("SyncDigest", () => {
     d.add(item({ sessionId: "b" }), "LMS");
 
     const [n] = digestNotifications(d.drain(), NOW);
-    expect(n.title).toBe("You have 2 new lectures");
+    expect(n.title).toBe("2 new lectures");
+  });
+
+  it("names LMS on an exam so it never matches the portal's exam row", () => {
+    const fromLms = new SyncDigest(NOW);
+    fromLms.add(item({ type: "EXAM", sessionId: "a" }), "LMS");
+    fromLms.add(item({ type: "EXAM", sessionId: "b" }), "LMS");
+    const fromPortal = new SyncDigest(NOW);
+    fromPortal.add(item({ type: "EXAM", sessionId: "c" }), "PORTAL");
+    fromPortal.add(item({ type: "EXAM", sessionId: "d" }), "PORTAL");
+
+    const [lms] = digestNotifications(fromLms.drain(), NOW);
+    const [portal] = digestNotifications(fromPortal.drain(), NOW);
+    expect(lms.title).toBe("2 new exams on LMS");
+    expect(portal.title).toBe("2 new exams");
+  });
+
+  it("does not name LMS on an assignment, its usual source", () => {
+    const d = new SyncDigest(NOW);
+    d.add(item({ type: "ASSIGNMENT" }), "LMS");
+    expect(digestNotifications(d.drain(), NOW)[0].title).toBe(
+      "A new assignment",
+    );
   });
 });

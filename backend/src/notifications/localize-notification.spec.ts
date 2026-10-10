@@ -183,4 +183,44 @@ describe("Vietnamese notification delivery", () => {
     };
     expect(localizeNotification(row, "VI_VN")).toEqual(row);
   });
+  it("translates the LMS source on a digest title", () => {
+    expect(
+      localizeNotification(
+        {
+          eventName: "exam.group_created",
+          title: "2 new exams on LMS",
+          content: "Plan your revision now.",
+        },
+        "VI_VN",
+      ).title,
+    ).toBe("2 lịch thi mới trên LMS");
+  });
+
+  it("translates the short digest and conflict copy", () => {
+    const digest = localizeNotification(
+      {
+        eventName: "lecture.group_created",
+        title: "2 new lectures, 1 lecture change, An exam removed",
+        content: "They're gone from your calendar.",
+      },
+      "VI_VN",
+    );
+    expect(digest.title).toBe(
+      "2 buổi học mới, 1 thay đổi về buổi học, 1 lịch thi đã xóa",
+    );
+    expect(digest.content).toBe("Các mục này đã biến mất khỏi lịch của bạn.");
+    expect(
+      localizeNotification(
+        {
+          eventName: "sync_conflict.exam",
+          title: "3 tasks clash with your exams",
+          content: "Reschedule them now?",
+        },
+        "VI_VN",
+      ),
+    ).toMatchObject({
+      title: "3 công việc trùng với lịch thi",
+      content: "Sắp xếp lại ngay?",
+    });
+  });
 });

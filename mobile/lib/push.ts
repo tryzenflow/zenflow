@@ -5,6 +5,8 @@ import {
   type DevicePlatform,
   type PushDataPayload,
   type PushTone,
+  PUSH_ACTION_RESCHEDULE,
+  PUSH_CATEGORY_CONFLICT,
   pushChannelId,
   pushSoundFile,
 } from "@zenflow/shared";
@@ -24,7 +26,6 @@ import { t } from "./i18n";
  * All of this is a no-op on web (no native push) and on a simulator without a
  * push capability; every entry point fails soft.
  */
-
 
 /**
  * `data.source` on the system notification the SSE handler posts itself
@@ -125,15 +126,39 @@ export async function ensureAndroidChannel(): Promise<void> {
   await Promise.all(
     TONES.map((tone) =>
       Notifications.setNotificationChannelAsync(pushChannelId(tone), {
-        name: t(tone === "urgent" ? "Urgent" : tone === "reminder" ? "Reminders" : "General"),
+        name: t(
+          tone === "urgent"
+            ? "Urgent"
+            : tone === "reminder"
+              ? "Reminders"
+              : "General",
+        ),
         importance: Notifications.AndroidImportance.MAX,
         sound: pushSoundFile(tone),
-        vibrationPattern: tone === "urgent" ? [0, 200, 120, 200] : [0, 250, 250, 250],
+        vibrationPattern:
+          tone === "urgent" ? [0, 200, 120, 200] : [0, 250, 250, 250],
         lightColor: "#f97316",
-        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        lockscreenVisibility:
+          Notifications.AndroidNotificationVisibility.PUBLIC,
       }),
     ),
   );
+}
+
+/**
+ * iOS action buttons: the sync-conflict push gets one "Reschedule" that runs
+ * in the background. Android shows no buttons on FCM notification messages, so
+ * a tap there opens the inbox instead (see `use-push-registration.ts`).
+ */
+export async function registerPushCategories(): Promise<void> {
+  if (Platform.OS !== "ios") return;
+  await Notifications.setNotificationCategoryAsync(PUSH_CATEGORY_CONFLICT, [
+    {
+      identifier: PUSH_ACTION_RESCHEDULE,
+      buttonTitle: t("Reschedule"),
+      options: { opensAppToForeground: false },
+    },
+  ]);
 }
 
 /**

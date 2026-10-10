@@ -18,8 +18,3 @@ export function findConflictingTaskIds(
     .map((t) => t.id)
     .sort();
 }
-
-/** "X conflict(s)" wording used by the notification copy. */
-export function conflictCountLabel(count: number): string {
-  return `${count} conflict${count === 1 ? "" : "s"}`;
-}
