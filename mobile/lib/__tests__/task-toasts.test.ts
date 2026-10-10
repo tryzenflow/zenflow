@@ -99,13 +99,13 @@ describe("placementToastMessage", () => {
       user,
     );
     const { title, description } = splitToastMessage(message);
-    expect(title).toBe("Scheduled");
-    expect(description).toBe("Mon Oct 12, 9:00 AM");
+    expect(title).toBe("Scheduled for 9:00 AM");
+    expect(description).toBe("Mon Oct 12");
   });
 });
 
 describe("showMovedToast", () => {
-  it("uses a brief title with the new date, no separators", () => {
+  it("leads with the time, keeps the date as the description", () => {
     const toast = vi.fn();
     showMovedToast(toast, {
       first: false,
@@ -113,8 +113,20 @@ describe("showMovedToast", () => {
       withTime: true,
     });
     const arg = toast.mock.calls[0][0];
-    expect(arg.title).toBe("Moved");
-    expect(arg.description).toBe("Mon, Oct 12, 9:00 AM");
+    expect(arg.title).toBe("Moved to 9:00 AM");
+    expect(arg.description).toBe("Mon, Oct 12");
+  });
+
+  it("puts the date in the title when there is no time", () => {
+    const toast = vi.fn();
+    showMovedToast(toast, {
+      first: false,
+      to: new Date(2026, 9, 12),
+      withTime: false,
+    });
+    const arg = toast.mock.calls[0][0];
+    expect(arg.title).toBe("Moved to Mon, Oct 12");
+    expect(arg.description).toBeUndefined();
   });
 });
 

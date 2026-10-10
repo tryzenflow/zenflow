@@ -22,12 +22,13 @@ export function showMovedToast(
     });
     return;
   }
+  // The time is the news, so it leads the title; the date is the detail.
+  const date = format(opts.to, "EEE, MMM d");
   toast({
-    title: t("Moved"),
-    description: format(
-      opts.to,
-      opts.withTime ? "EEE, MMM d, HH:mm" : "EEE, MMM d",
-    ),
+    title: t("Moved to {when}", {
+      when: opts.withTime ? format(opts.to, "HH:mm") : date,
+    }),
+    ...(opts.withTime && { description: date }),
     variant: "success",
     icon: "calendar-check",
   });

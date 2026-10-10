@@ -366,7 +366,7 @@ export default {
   "Nice! You moved a task.": "Tuyệt! Bạn đã chuyển một công việc.",
   "Zenflow learns from every move to place tasks better.":
     "Zenflow học từ mỗi lần bạn chuyển để xếp lịch tốt hơn.",
-  Moved: "Đã chuyển",
+  "Moved to {when}": "Đã chuyển sang {when}",
   "{title} · {count} of {total} have alternatives":
     "{title} · {count}/{total} buổi có thời gian khác",
   "Pick a time, then confirm.":
@@ -439,7 +439,8 @@ export default {
     "Đã cập nhật {applied}, bỏ qua {failed}",
   "Skipped ones clashed with another sitting and stayed put.":
     "Các buổi bị bỏ qua trùng với buổi khác nên giữ nguyên.",
-  "Scheduled late": "Đã xếp lịch trễ",
+  "Scheduled for {when}": "Đã xếp lịch {when}",
+  "Scheduled late for {when}": "Đã xếp lịch trễ {when}",
   "No time found before its deadline.": "Không có giờ trống trước hạn chót.",
   "Check your inbox": "Kiểm tra hộp thư nhé",
   "Welcome back": "Chào mừng bạn trở lại",

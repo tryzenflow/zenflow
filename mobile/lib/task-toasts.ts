@@ -131,12 +131,14 @@ export function placementToastMessage(
   }
 
   const qualifier = placementQualifier(task, { timezone: user.timezone });
-  const when = format(
-    zonedDate(task.scheduledStartTime, user.timezone),
-    "EEE MMM d, HH:mm",
-  );
-  const title = qualifier === "pastDeadline" ? t("Scheduled late") : t("Scheduled");
-  return { message: `${title}\n${when}`, variant: "success" };
+  const start = zonedDate(task.scheduledStartTime, user.timezone);
+  // The time is the news, so it leads the title; the date is the detail.
+  const when = format(start, "HH:mm");
+  const title =
+    qualifier === "pastDeadline"
+      ? t("Scheduled late for {when}", { when })
+      : t("Scheduled for {when}", { when });
+  return { message: `${title}\n${format(start, "EEE MMM d")}`, variant: "success" };
 }
 
 const POLICY_LABEL: Record<InfeasiblePolicy, string> = {
