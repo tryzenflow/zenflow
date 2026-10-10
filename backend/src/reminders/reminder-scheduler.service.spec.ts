@@ -20,6 +20,7 @@ function makeRow(over: {
   startsInMs: number;
   before?: number;
   type?: string;
+  deleted?: boolean;
   firedForStart?: Date | null;
 }) {
   return {
@@ -33,6 +34,7 @@ function makeRow(over: {
       title: "Standup",
       location: null,
       type: over.type ?? "LECTURE",
+      deleted: over.deleted ?? false,
       durationMinutes: 30,
       scheduledStartTime: new Date(NOW.getTime() + over.startsInMs),
       series: null,
@@ -122,6 +124,19 @@ describe("ReminderSchedulerService", () => {
       await service.sweep();
       expect(queue.enqueueBestEffort).not.toHaveBeenCalled();
       expect(ARM_HORIZON_MS).toBe(24 * HOUR);
+    });
+
+    it("only queries sessions that are not deleted, and arms none for a deleted one", async () => {
+      prisma.sessionReminder.findMany.mockResolvedValue([
+        makeRow({ startsInMs: 2 * HOUR, deleted: true }),
+      ]);
+      await service.sweep();
+      expect(prisma.sessionReminder.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { session: expect.objectContaining({ deleted: false }) },
+        }),
+      );
+      expect(queue.enqueueBestEffort).not.toHaveBeenCalled();
     });
 
     it("skips sessions that already started", async () => {
@@ -258,6 +273,14 @@ describe("ReminderSchedulerService", () => {
       const row = makeRow({ startsInMs: HOUR });
       prisma.sessionReminder.findUnique.mockResolvedValueOnce(row);
       prisma.sessionReminder.updateMany.mockResolvedValueOnce({ count: 0 });
+      await service.fire("r1", row.session.scheduledStartTime.getTime());
+      expect(notifications.create).not.toHaveBeenCalled();
+      expect(notifications.announce).not.toHaveBeenCalled();
+    });
+
+    it("never fires for a deleted session", async () => {
+      const row = makeRow({ startsInMs: HOUR, deleted: true });
+      prisma.sessionReminder.findUnique.mockResolvedValue(row);
       await service.fire("r1", row.session.scheduledStartTime.getTime());
       expect(notifications.create).not.toHaveBeenCalled();
       expect(notifications.announce).not.toHaveBeenCalled();
