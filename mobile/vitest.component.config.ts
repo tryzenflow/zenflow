@@ -24,6 +24,8 @@ export default defineConfig({
       { find: /^react-native-reanimated$/, replacement: path.resolve(__dirname, "test/mocks/reanimated.tsx") },
       { find: /^react-native-screens$/, replacement: path.resolve(__dirname, "test/mocks/screens.tsx") },
       { find: /^@react-native-community\/datetimepicker$/, replacement: path.resolve(__dirname, "test/mocks/datetimepicker.tsx") },
+      { find: /^react-native-webview$/, replacement: path.resolve(__dirname, "test/mocks/webview.tsx") },
+      { find: /^expo-file-system$/, replacement: path.resolve(__dirname, "test/mocks/expo-file-system.ts") },
       { find: /^@\//, replacement: `${path.resolve(__dirname)}/` },
     ],
   },
