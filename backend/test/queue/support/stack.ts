@@ -75,7 +75,10 @@ export interface Proc {
   exited: Promise<number | null>;
 }
 
-function childEnv(role: Role, extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+function childEnv(
+  role: Role,
+  extra: NodeJS.ProcessEnv = {},
+): NodeJS.ProcessEnv {
   return {
     ...process.env,
     // Not "test": there the pub/sub clients are lazy and never connect
@@ -262,6 +265,18 @@ async function latestOtp(email: string): Promise<string> {
   );
 }
 
+const signedUp: string[] = [];
+
+/**
+ * Delete every student this file signed up (cascades to their sessions,
+ * integrations, schedules and notifications). Suites share one database, and a
+ * left-over connected student stays due for the next suite's ticker, so specs
+ * that connect accounts call this in `afterAll`.
+ */
+export async function removeStudents(prisma: PrismaClient): Promise<void> {
+  await prisma.user.deleteMany({ where: { id: { in: signedUp.splice(0) } } });
+}
+
 /** Real OTP login (mail read from Mailpit); the agent keeps the session cookie. */
 export async function signUp(label: string): Promise<Student> {
   const email = `queue-e2e-${label}-${Date.now()}@example.test`;
@@ -274,9 +289,11 @@ export async function signUp(label: string): Promise<Student> {
     .send({ email, otp })
     .expect(200);
   const setCookie = res.headers["set-cookie"] as unknown as string[];
+  const id = (res.body as { data: { id: string } }).data.id;
+  signedUp.push(id);
   return {
     email,
-    id: (res.body as { data: { id: string } }).data.id,
+    id,
     agent,
     cookie: setCookie[0].split(";")[0],
   };

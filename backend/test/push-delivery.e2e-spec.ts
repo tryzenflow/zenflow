@@ -19,12 +19,11 @@ type Sender = {
   enabled: boolean;
   send: jest.Mock<Promise<SendResult>, [string[], PushMessage]>;
 };
+const acceptAll = (tokens: string[]): Promise<SendResult> =>
+  Promise.resolve({ sent: tokens.length, invalidTokens: [] });
 const sender = (enabled = true): Sender => ({
   enabled,
-  send: jest.fn(async (tokens: string[]) => ({
-    sent: tokens.length,
-    invalidTokens: [],
-  })),
+  send: jest.fn<Promise<SendResult>, [string[], PushMessage]>(acceptAll),
 });
 
 let prisma: PrismaService;
@@ -63,11 +62,13 @@ beforeEach(() => {
   apns.enabled = true;
   fcm.send.mockClear();
   apns.send.mockClear();
-  fcm.send.mockImplementation(async (tokens) => ({ sent: tokens.length, invalidTokens: [] }));
-  apns.send.mockImplementation(async (tokens) => ({ sent: tokens.length, invalidTokens: [] }));
+  fcm.send.mockImplementation(acceptAll);
+  apns.send.mockImplementation(acceptAll);
 });
 
-async function user(over: { allowNotifications?: boolean; lang?: "EN_US" | "VI_VN" } = {}) {
+async function user(
+  over: { allowNotifications?: boolean; lang?: "EN_US" | "VI_VN" } = {},
+) {
   return prisma.user.create({
     data: {
       name: "Push Student",
@@ -77,8 +78,11 @@ async function user(over: { allowNotifications?: boolean; lang?: "EN_US" | "VI_V
     },
   });
 }
-const device = (userId: string, platform: "ANDROID" | "IOS", token = randomUUID()) =>
-  prisma.userDevice.create({ data: { userId, platform, pushToken: token } });
+const device = (
+  userId: string,
+  platform: "ANDROID" | "IOS",
+  token = randomUUID(),
+) => prisma.userDevice.create({ data: { userId, platform, pushToken: token } });
 const note = (userId: string, over: Record<string, unknown> = {}) =>
   prisma.notification.create({
     data: {
@@ -109,7 +113,11 @@ describe("routing", () => {
     expect(fcm.send.mock.calls[0][1]).toMatchObject({
       title: "New assignment: Graph theory report",
       body: "Added from your LMS. Plan the work that leads up to it.",
-      data: { notificationId: n.id, eventName: "assignment.created", url: "/notifications" },
+      data: {
+        notificationId: n.id,
+        eventName: "assignment.created",
+        url: "/notifications",
+      },
     });
   });
 
@@ -173,7 +181,9 @@ describe("when not to send", () => {
 
   it("is a quiet no-op for a student with no devices", async () => {
     const u = await user();
-    await expect(push.sendToUser(u.id, await note(u.id))).resolves.toBeUndefined();
+    await expect(
+      push.sendToUser(u.id, await note(u.id)),
+    ).resolves.toBeUndefined();
     expect(fcm.send).not.toHaveBeenCalled();
     expect(apns.send).not.toHaveBeenCalled();
   });
@@ -183,7 +193,9 @@ describe("when not to send", () => {
     apns.enabled = false;
     const u = await user();
     await device(u.id, "ANDROID");
-    await expect(push.sendToUser(u.id, await note(u.id))).resolves.toBeUndefined();
+    await expect(
+      push.sendToUser(u.id, await note(u.id)),
+    ).resolves.toBeUndefined();
     expect(fcm.send).not.toHaveBeenCalled();
   });
 
@@ -203,14 +215,18 @@ describe("the message", () => {
     const u = await user({ lang: "VI_VN" });
     await device(u.id, "ANDROID");
     await push.sendToUser(u.id, await note(u.id));
-    expect(fcm.send.mock.calls[0][1].title).toBe("Bài tập mới: Graph theory report");
+    expect(fcm.send.mock.calls[0][1].title).toBe(
+      "Bài tập mới: Graph theory report",
+    );
   });
 
   it("is left as written for an English student", async () => {
     const u = await user({ lang: "EN_US" });
     await device(u.id, "ANDROID");
     await push.sendToUser(u.id, await note(u.id));
-    expect(fcm.send.mock.calls[0][1].title).toBe("New assignment: Graph theory report");
+    expect(fcm.send.mock.calls[0][1].title).toBe(
+      "New assignment: Graph theory report",
+    );
   });
 });
 
@@ -229,16 +245,18 @@ describe("dead tokens and failures", () => {
     await device(u.id, "ANDROID");
     await device(u.id, "ANDROID");
     fcm.send.mockResolvedValue({ sent: 1, invalidTokens: [] });
-    await expect(push.sendToUser(u.id, await note(u.id))).resolves.toBeUndefined();
+    await expect(
+      push.sendToUser(u.id, await note(u.id)),
+    ).resolves.toBeUndefined();
   });
 
   it("fails the job when a provider took nothing, so the queue retries it", async () => {
     const u = await user();
     await device(u.id, "ANDROID");
     fcm.send.mockResolvedValue({ sent: 0, invalidTokens: [] });
-    await expect(push.sendToUser(u.id, await note(u.id))).rejects.toBeInstanceOf(
-      PushProviderError,
-    );
+    await expect(
+      push.sendToUser(u.id, await note(u.id)),
+    ).rejects.toBeInstanceOf(PushProviderError);
   });
 
   it("still prunes one provider's dead tokens when the other one fails", async () => {
@@ -247,13 +265,15 @@ describe("dead tokens and failures", () => {
     const ios = await device(u.id, "IOS");
     fcm.send.mockResolvedValue({ sent: 0, invalidTokens: [dead.pushToken] });
     apns.send.mockResolvedValue({ sent: 0, invalidTokens: [] });
-    await expect(push.sendToUser(u.id, await note(u.id))).rejects.toBeInstanceOf(
-      PushProviderError,
-    );
+    await expect(
+      push.sendToUser(u.id, await note(u.id)),
+    ).rejects.toBeInstanceOf(PushProviderError);
     expect(await tokensOf(u.id)).toEqual([ios.pushToken]);
   });
 
   it("fails the job for a notification that doesn't exist (yet), so the retry finds it", async () => {
-    await expect(push.deliver(randomUUID(), { provider: "fcm" })).rejects.toThrow(/not found/);
+    await expect(
+      push.deliver(randomUUID(), { provider: "fcm" }),
+    ).rejects.toThrow(/not found/);
   });
 });

@@ -130,9 +130,9 @@ jobs:
       - uses: ./.github/actions/setup
       - name: Generate throwaway .env.test
         run: .github/scripts/write-test-env.sh backend/.env.test
-      - name: Start Postgres, storage, Redis and mail (Mailpit)
+      - name: Start Postgres, storage, Redis, mail (Mailpit) and the bandit service
         working-directory: backend
-        run: docker compose --profile queue -f compose.test.yml up -d
+        run: docker compose --profile queue --profile bandit -f compose.test.yml up -d --build
       - name: Wait for Postgres
         working-directory: backend
         run: |
@@ -140,7 +140,15 @@ jobs:
             docker exec zenflow-test-db pg_isready -U ci -d zenflow-test && exit 0
             sleep 2
           done
-          docker compose --profile queue -f compose.test.yml logs postgres
+          docker compose --profile queue --profile bandit -f compose.test.yml logs postgres
+          exit 1
+      - name: Wait for the bandit service
+        run: |
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8100/ready && exit 0
+            sleep 2
+          done
+          docker logs zenflow-test-bandit
           exit 1
       # migrate deploy (not db push) so the e2e run also proves the migration
       # history applies cleanly from scratch.
@@ -152,11 +160,11 @@ jobs:
       - name: Dump compose logs on failure
         if: failure()
         working-directory: backend
-        run: docker compose --profile queue -f compose.test.yml logs --no-color
+        run: docker compose --profile queue --profile bandit -f compose.test.yml logs --no-color
       - name: Tear down
         if: always()
         working-directory: backend
-        run: docker compose --profile queue -f compose.test.yml down -v
+        run: docker compose --profile queue --profile bandit -f compose.test.yml down -v
 
   frontend-e2e:
     name: Frontend e2e (Playwright)

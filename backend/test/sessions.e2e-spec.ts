@@ -1,6 +1,9 @@
 import request from "supertest";
+import { PrismaClient } from "../generated/prisma";
+import { connectDb } from "./queue/support/db";
 import {
   API_URL,
+  removeStudents,
   signUp,
   startRole,
   stop,
@@ -34,18 +37,23 @@ interface SessionDto {
   deadline: string | null;
   seriesId: string | null;
   late: boolean;
+  reminders?: number[];
   schedulingDegraded?: boolean;
   skippedReminders?: number[];
   sessions?: SessionDto[];
 }
 
 let api: Proc;
+let prisma: PrismaClient;
 
 beforeAll(async () => {
+  prisma = connectDb();
   api = await startRole("api");
 });
 afterAll(async () => {
   await stop(api);
+  await removeStudents(prisma);
+  await prisma.$disconnect();
 });
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -68,7 +76,11 @@ const task = (over: Record<string, unknown> = {}) => ({
   deadline: iso(Date.now() + 3 * DAY),
   ...over,
 });
-async function list(student: Student, view: "day" | "week" | "month", at: number) {
+async function list(
+  student: Student,
+  view: "day" | "week" | "month",
+  at: number,
+) {
   const res = await student.agent
     .get(SESSIONS)
     .query({ view, date: iso(at).slice(0, 10) })
@@ -80,7 +92,9 @@ describe("creating a TASK", () => {
   it("places it on the 15-minute grid before its deadline, on the fallback placer", async () => {
     const student = await signUp("place");
     const deadline = Date.now() + 3 * DAY;
-    const res = await create(student, task({ deadline: iso(deadline) })).expect(201);
+    const res = await create(student, task({ deadline: iso(deadline) })).expect(
+      201,
+    );
     const body = res.body as { success: boolean; message: string };
     expect(body.success).toBe(true);
     const session = data(res);
@@ -112,7 +126,9 @@ describe("creating a TASK", () => {
       }).expect(201),
     );
     const placed = data(
-      await create(student, task({ deadline: iso(Date.now() + DAY) })).expect(201),
+      await create(student, task({ deadline: iso(Date.now() + DAY) })).expect(
+        201,
+      ),
     );
     expect(overlaps(placed, lecture)).toBe(false);
   });
@@ -157,7 +173,8 @@ describe("creating a TASK", () => {
         { type: "LECTURE", title: "L", durationMinutes: 60 },
         /scheduledStartTime/,
       ));
-    it("rejects an unknown type", () => rejected(task({ type: "NAP" }), /type/));
+    it("rejects an unknown type", () =>
+      rejected(task({ type: "NAP" }), /type/));
   });
 });
 
@@ -210,7 +227,9 @@ describe("when the deadline cannot be met", () => {
 
   it("rejects an unknown policy", async () => {
     const student = await signUp("policy");
-    await create(student, { ...tight(), infeasiblePolicy: "SHRUG" }).expect(400);
+    await create(student, { ...tight(), infeasiblePolicy: "SHRUG" }).expect(
+      400,
+    );
   });
 });
 
@@ -243,8 +262,12 @@ describe("a TASK series", () => {
       ).expect(201),
     );
     const seriesId = created.sessions?.[0].seriesId as string;
-    const res = await student.agent.delete(`${SESSIONS}/series/${seriesId}`).expect(200);
-    expect(data<{ removedSessionIds: string[] }>(res).removedSessionIds).toHaveLength(3);
+    const res = await student.agent
+      .delete(`${SESSIONS}/series/${seriesId}`)
+      .expect(200);
+    expect(
+      data<{ removedSessionIds: string[] }>(res).removedSessionIds,
+    ).toHaveLength(3);
     expect(await list(student, "month", Date.now())).toEqual([]);
   });
 
@@ -256,12 +279,16 @@ describe("a TASK series", () => {
         task({ sessionCount: 3, deadline: iso(Date.now() + 6 * DAY) }),
       ).expect(201),
     );
-    const sittings = [...(created.sessions ?? [])].sort((a, b) => startOf(a) - startOf(b));
+    const sittings = [...(created.sessions ?? [])].sort(
+      (a, b) => startOf(a) - startOf(b),
+    );
     const seriesId = sittings[0].seriesId as string;
     await student.agent
       .delete(`${SESSIONS}/series/${seriesId}/from/${sittings[1].id}`)
       .expect(200);
-    const left = (await list(student, "month", Date.now())).filter((s) => s.type === "TASK");
+    const left = (await list(student, "month", Date.now())).filter(
+      (s) => s.type === "TASK",
+    );
     expect(left.map((s) => s.id)).toEqual([sittings[0].id]);
   });
 
@@ -269,12 +296,17 @@ describe("a TASK series", () => {
     const owner = await signUp("series-owner");
     const other = await signUp("series-other");
     const created = data(
-      await create(owner, task({ sessionCount: 2, deadline: iso(Date.now() + 5 * DAY) })).expect(201),
+      await create(
+        owner,
+        task({ sessionCount: 2, deadline: iso(Date.now() + 5 * DAY) }),
+      ).expect(201),
     );
     const seriesId = created.sessions?.[0].seriesId as string;
     const res = await other.agent.delete(`${SESSIONS}/series/${seriesId}`);
     expect([403, 404]).toContain(res.status);
-    expect((await list(owner, "month", Date.now())).filter((s) => s.type === "TASK")).toHaveLength(2);
+    expect(
+      (await list(owner, "month", Date.now())).filter((s) => s.type === "TASK"),
+    ).toHaveLength(2);
   });
 });
 
@@ -310,7 +342,9 @@ describe("a recurring fixed session", () => {
 
   it("rejects a malformed rule", async () => {
     const student = await signUp("rrule-bad");
-    await create(student, recurring({ rrule: "EVERY OTHER TUESDAY" })).expect(400);
+    await create(student, recurring({ rrule: "EVERY OTHER TUESDAY" })).expect(
+      400,
+    );
   });
 
   it("edits the whole series from one occurrence", async () => {
@@ -329,7 +363,9 @@ describe("a recurring fixed session", () => {
     const student = await signUp("rrule-one");
     await create(student, recurring()).expect(201);
     const all = await occurrences(student);
-    await student.agent.delete(`${SESSIONS}/${encodeURIComponent(all[1].id)}`).expect(200);
+    await student.agent
+      .delete(`${SESSIONS}/${encodeURIComponent(all[1].id)}`)
+      .expect(200);
     const left = await occurrences(student);
     expect(left.map((s) => s.id)).toEqual([all[0].id, all[2].id, all[3].id]);
   });
@@ -342,13 +378,18 @@ describe("a recurring fixed session", () => {
       .delete(`${SESSIONS}/series/${created.seriesId}/truncate`)
       .query({ from: all[2].scheduledStartTime })
       .expect(200);
-    expect((await occurrences(student)).map((s) => s.id)).toEqual([all[0].id, all[1].id]);
+    expect((await occurrences(student)).map((s) => s.id)).toEqual([
+      all[0].id,
+      all[1].id,
+    ]);
   });
 
   it("deleting the series removes every occurrence", async () => {
     const student = await signUp("rrule-all");
     const created = data(await create(student, recurring()).expect(201));
-    await student.agent.delete(`${SESSIONS}/series/${created.seriesId}`).expect(200);
+    await student.agent
+      .delete(`${SESSIONS}/series/${created.seriesId}`)
+      .expect(200);
     expect(await occurrences(student)).toEqual([]);
   });
 });
@@ -356,8 +397,17 @@ describe("a recurring fixed session", () => {
 describe("reminders", () => {
   it("applies the account default when none is given", async () => {
     const student = await signUp("rem-default");
-    const created = data(await create(student, task()).expect(201));
+    // A day out, so the default 10-minute reminder is never already due.
+    const created = data(
+      await create(student, {
+        type: "LECTURE",
+        title: "Tomorrow",
+        durationMinutes: 60,
+        scheduledStartTime: iso(nextSlot(DAY)),
+      }).expect(201),
+    );
     expect(created.reminders).toEqual([10]);
+    expect(created.skippedReminders).toBeUndefined();
   });
 
   it("reports a reminder that is already due instead of storing it", async () => {

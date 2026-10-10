@@ -3,6 +3,7 @@ import { connectDb, noteRows } from "./queue/support/db";
 import {
   FAKE_URL,
   connect,
+  removeStudents,
   signUp,
   sleep,
   startFake,
@@ -40,6 +41,7 @@ beforeAll(async () => {
 }, 180_000);
 afterAll(async () => {
   await Promise.all(procs.map((p) => stop(p)));
+  await removeStudents(prisma);
   await prisma.$disconnect();
 });
 afterEach(() => hide({ lms: false, exams: false, timetable: false }));
@@ -68,7 +70,8 @@ async function calendar(student: Student): Promise<SessionDto[]> {
         date: new Date(Date.now() + offset * DAY).toISOString().slice(0, 10),
       })
       .expect(200);
-    for (const s of (res.body as { data: { sessions: SessionDto[] } }).data.sessions) {
+    for (const s of (res.body as { data: { sessions: SessionDto[] } }).data
+      .sessions) {
       found.set(s.id, s);
     }
   }
@@ -86,7 +89,11 @@ const tally = (sessions: SessionDto[]) =>
   }, {});
 
 /** One manual sync of `provider`, waiting out the cooldown from the previous one. */
-async function sync(student: Student, provider: "PORTAL" | "LMS", cooldown = false) {
+async function sync(
+  student: Student,
+  provider: "PORTAL" | "LMS",
+  cooldown = false,
+) {
   if (cooldown) await sleep((TUNING.cooldownSec + 0.5) * 1000);
   const res = await student.agent.post(`/api/v1/integrations/${provider}/sync`);
   expect([201, 202]).toContain(res.status);
@@ -128,7 +135,12 @@ describe("the first sync", () => {
     const res = await sync(student, "PORTAL");
     expect(res.body).toMatchObject({
       success: true,
-      data: { provider: "PORTAL", connected: true, lastSyncStatus: "COMPLETED", failing: false },
+      data: {
+        provider: "PORTAL",
+        connected: true,
+        lastSyncStatus: "COMPLETED",
+        failing: false,
+      },
     });
   });
 
@@ -159,7 +171,14 @@ describe("the first sync", () => {
     const student = await connectedStudent("inbox");
     await syncAll(student);
     const res = await student.agent.get("/api/v1/notifications").expect(200);
-    const body = (res.body as { data: { notifications: { eventName: string; sentAt: string }[]; unreadCount: number } }).data;
+    const body = (
+      res.body as {
+        data: {
+          notifications: { eventName: string; sentAt: string }[];
+          unreadCount: number;
+        };
+      }
+    ).data;
     expect(body.notifications.length).toBeGreaterThan(0);
     expect(body.unreadCount).toBe(body.notifications.length);
     const times = body.notifications.map((n) => Date.parse(n.sentAt));
@@ -190,11 +209,17 @@ describe("syncing again", () => {
   it("does not bring back an item the student deleted", async () => {
     const student = await connectedStudent("own-delete");
     await syncAll(student);
-    const [victim] = (await ingested(student)).filter((s) => s.type === "ASSIGNMENT");
+    const [victim] = (await ingested(student)).filter(
+      (s) => s.type === "ASSIGNMENT",
+    );
     await student.agent.delete(`/api/v1/sessions/${victim.id}`).expect(200);
     await syncAll(student, true);
     expect((await calendar(student)).map((s) => s.id)).not.toContain(victim.id);
-    expect((await calendar(student)).some((s) => s.title === victim.title && s.type === "ASSIGNMENT")).toBe(false);
+    expect(
+      (await calendar(student)).some(
+        (s) => s.title === victim.title && s.type === "ASSIGNMENT",
+      ),
+    ).toBe(false);
   });
 });
 
@@ -279,7 +304,10 @@ describe("when a sync lands on the student's own task", () => {
   }
   const conflicts = (student: Student) =>
     prisma.notification.findMany({
-      where: { userId: student.id, eventName: { startsWith: "sync_conflict." } },
+      where: {
+        userId: student.id,
+        eventName: { startsWith: "sync_conflict." },
+      },
     });
 
   it("warns once, naming the task, and reschedules it on request", async () => {
@@ -302,7 +330,11 @@ describe("when a sync lands on the student's own task", () => {
     const res = await student.agent
       .post(`/api/v1/notifications/${rows[0].id}/reschedule-conflicts`)
       .expect(201);
-    const body = (res.body as { data: { rescheduled: { id: string }[]; failedSessionIds: string[] } }).data;
+    const body = (
+      res.body as {
+        data: { rescheduled: { id: string }[]; failedSessionIds: string[] };
+      }
+    ).data;
     expect(body.rescheduled.map((r) => r.id)).toEqual([taskId]);
     expect(body.failedSessionIds).toEqual([]);
 
@@ -319,7 +351,9 @@ describe("when a sync lands on the student's own task", () => {
     );
     expect(clashes).toEqual([]);
 
-    const after = await prisma.notification.findUniqueOrThrow({ where: { id: rows[0].id } });
+    const after = await prisma.notification.findUniqueOrThrow({
+      where: { id: rows[0].id },
+    });
     expect(after.actionTakenAt).not.toBeNull();
   });
 
@@ -331,10 +365,19 @@ describe("when a sync lands on the student's own task", () => {
       const r = await conflicts(student);
       return r.length > 0 && r;
     });
-    await student.agent.post(`/api/v1/notifications/${row.id}/reschedule-conflicts`).expect(201);
-    const before = (await calendar(student)).map((s) => [s.id, s.scheduledStartTime]);
-    await student.agent.post(`/api/v1/notifications/${row.id}/reschedule-conflicts`).expect(201);
-    expect((await calendar(student)).map((s) => [s.id, s.scheduledStartTime])).toEqual(before);
+    await student.agent
+      .post(`/api/v1/notifications/${row.id}/reschedule-conflicts`)
+      .expect(201);
+    const before = (await calendar(student)).map((s) => [
+      s.id,
+      s.scheduledStartTime,
+    ]);
+    await student.agent
+      .post(`/api/v1/notifications/${row.id}/reschedule-conflicts`)
+      .expect(201);
+    expect(
+      (await calendar(student)).map((s) => [s.id, s.scheduledStartTime]),
+    ).toEqual(before);
   });
 
   it("won't reschedule for another student's notification", async () => {
@@ -346,7 +389,9 @@ describe("when a sync lands on the student's own task", () => {
       const r = await conflicts(owner);
       return r.length > 0 && r;
     });
-    const res = await other.agent.post(`/api/v1/notifications/${row.id}/reschedule-conflicts`);
+    const res = await other.agent.post(
+      `/api/v1/notifications/${row.id}/reschedule-conflicts`,
+    );
     expect([403, 404]).toContain(res.status);
   });
 });

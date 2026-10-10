@@ -3,6 +3,7 @@ import { PrismaClient } from "../generated/prisma";
 import { connectDb, integrationOf } from "./queue/support/db";
 import {
   API_URL,
+  removeStudents,
   signUp,
   startFake,
   startRole,
@@ -35,13 +36,17 @@ beforeAll(async () => {
 afterAll(async () => {
   await stop(api);
   await stop(fake);
+  await removeStudents(prisma);
   await prisma.$disconnect();
 });
 
 const connectAs = (student: Student, over: Record<string, unknown> = {}) =>
-  student.agent
-    .post(INTEGRATIONS)
-    .send({ provider: "PORTAL", username: USERNAME, password: PASSWORD, ...over });
+  student.agent.post(INTEGRATIONS).send({
+    provider: "PORTAL",
+    username: USERNAME,
+    password: PASSWORD,
+    ...over,
+  });
 const statusOf = async (student: Student) =>
   (
     (await student.agent.get(INTEGRATIONS).expect(200)).body as {
@@ -61,7 +66,9 @@ describe("authentication", () => {
     ["DELETE", `${INTEGRATIONS}/PORTAL`],
     ["POST", `${INTEGRATIONS}/PORTAL/sync`],
   ])("%s %s needs a login", async (method, url) => {
-    const res = await request(API_URL)[method.toLowerCase() as "get"](url).send({});
+    const res = await request(API_URL)
+      [method.toLowerCase() as "get"](url)
+      .send({});
     expect(res.status).toBe(401);
   });
 });
@@ -81,7 +88,9 @@ describe("status", () => {
     const b = await signUp("status-b");
     await connectAs(a).expect(201);
     expect((await statusOf(b)).every((i) => !i.connected)).toBe(true);
-    expect((await statusOf(a)).find((i) => i.provider === "PORTAL")?.connected).toBe(true);
+    expect(
+      (await statusOf(a)).find((i) => i.provider === "PORTAL")?.connected,
+    ).toBe(true);
   });
 });
 
@@ -99,7 +108,9 @@ describe("connecting", () => {
     const listed = JSON.stringify((await student.agent.get(INTEGRATIONS)).body);
     expect(listed).not.toContain(PASSWORD);
     expect(listed).not.toContain(USERNAME);
-    expect((await statusOf(student)).find((i) => i.provider === "PORTAL")?.connected).toBe(true);
+    expect(
+      (await statusOf(student)).find((i) => i.provider === "PORTAL")?.connected,
+    ).toBe(true);
   });
 
   it("stores the credentials encrypted under a per-user key wrapped by the master key", async () => {
@@ -123,7 +134,9 @@ describe("connecting", () => {
     await connectAs(student).expect(201);
     const row = await integrationOf(prisma, student, "PORTAL");
     const kinds = (
-      await prisma.ingestionSchedule.findMany({ where: { integrationId: row.id } })
+      await prisma.ingestionSchedule.findMany({
+        where: { integrationId: row.id },
+      })
     ).map((s) => s.kind);
     expect(kinds.length).toBeGreaterThan(0);
     expect(new Set(kinds).size).toBe(kinds.length);
@@ -147,7 +160,9 @@ describe("connecting", () => {
     expect(after.id).toBe(before.id);
     expect(after.encryptedCredentials).not.toBe(before.encryptedCredentials);
     expect(after.iv).not.toBe(before.iv);
-    const schedules = await prisma.ingestionSchedule.count({ where: { integrationId: after.id } });
+    const schedules = await prisma.ingestionSchedule.count({
+      where: { integrationId: after.id },
+    });
     expect(schedules).toBeGreaterThan(0);
   });
 
@@ -189,7 +204,9 @@ describe("updating", () => {
       .patch(`${INTEGRATIONS}/PORTAL`)
       .send({ password: "a-new-password" })
       .expect(200);
-    expect(res.body).toMatchObject({ data: { provider: "PORTAL", connected: true } });
+    expect(res.body).toMatchObject({
+      data: { provider: "PORTAL", connected: true },
+    });
     const after = await integrationOf(prisma, student, "PORTAL");
     expect(after.encryptedCredentials).not.toBe(before.encryptedCredentials);
   });
@@ -209,7 +226,10 @@ describe("updating", () => {
 
   it("needs both fields the first time", async () => {
     const student = await signUp("update-first");
-    await student.agent.patch(`${INTEGRATIONS}/PORTAL`).send({ password: PASSWORD }).expect(400);
+    await student.agent
+      .patch(`${INTEGRATIONS}/PORTAL`)
+      .send({ password: PASSWORD })
+      .expect(400);
     expect(await rowCount(student)).toBe(0);
     await student.agent
       .patch(`${INTEGRATIONS}/PORTAL`)
@@ -220,7 +240,10 @@ describe("updating", () => {
 
   it("rejects an unknown provider", async () => {
     const student = await signUp("update-provider");
-    await student.agent.patch(`${INTEGRATIONS}/MOODLE`).send({ password: PASSWORD }).expect(400);
+    await student.agent
+      .patch(`${INTEGRATIONS}/MOODLE`)
+      .send({ password: PASSWORD })
+      .expect(400);
   });
 });
 
@@ -229,10 +252,18 @@ describe("disconnecting", () => {
     const student = await signUp("disconnect");
     await connectAs(student).expect(201);
     const row = await integrationOf(prisma, student, "PORTAL");
-    const res = await student.agent.delete(`${INTEGRATIONS}/PORTAL`).expect(200);
-    expect(res.body).toMatchObject({ data: { provider: "PORTAL", connected: false } });
+    const res = await student.agent
+      .delete(`${INTEGRATIONS}/PORTAL`)
+      .expect(200);
+    expect(res.body).toMatchObject({
+      data: { provider: "PORTAL", connected: false },
+    });
     expect(await rowCount(student)).toBe(0);
-    expect(await prisma.ingestionSchedule.count({ where: { integrationId: row.id } })).toBe(0);
+    expect(
+      await prisma.ingestionSchedule.count({
+        where: { integrationId: row.id },
+      }),
+    ).toBe(0);
     expect((await statusOf(student)).every((i) => !i.connected)).toBe(true);
   });
 

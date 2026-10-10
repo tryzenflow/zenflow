@@ -76,6 +76,16 @@ services:
     ports:
       - "7382:6379"
 
+  # Python placement service for test/sessions-bandit.e2e-spec.ts (the primary
+  # placement path); without it the API runs on the TS fallback.
+  # `docker compose --profile bandit -f compose.test.yml up -d --build`
+  bandit:
+    container_name: zenflow-test-bandit
+    profiles: ["bandit"]
+    build: ../services/bandit
+    ports:
+      - "8100:8000"
+
   mail:
     container_name: zenflow-test-mail
     profiles: ["queue"]
