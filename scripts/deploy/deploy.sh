@@ -66,7 +66,8 @@ if [ "${DRY_RUN:-0}" = "1" ]; then
 fi
 
 if [ "$DEPLOY_MODE" = "deploy" ]; then
-# 1. Secrets -> .env.<env> on the host (mode 600). Never written to the repo or logs.
+# 1. Secrets -> .env.<env> on the host (mode 600). Vault is the exception: it
+# renders only into /run/zenflow (tmpfs), never a .env.prod file.
 env_target="${DEPLOY_PATH}/backend/.env.${DEPLOY_ENV}"
 push_env() { ssh_run "umask 077 && mkdir -p '${DEPLOY_PATH}/backend' && cat > '${env_target}.new' && mv '${env_target}.new' '${env_target}'"; }
 case "$SECRETS_PROVIDER" in
@@ -75,9 +76,7 @@ case "$SECRETS_PROVIDER" in
              "${SOPS_FILE:-backend/secrets/${DEPLOY_ENV}.env.enc}" | push_env ;;
   command) bash -c "${SECRETS_COMMAND:?SECRETS_COMMAND required}" | push_env ;;
   vault)   # Secrets stay on the host: they are rendered from the Vault container into
-           # tmpfs *_FILE mounts during the remote steps. .env.<env> then holds only
-           # non-secret config; compose still needs the file to exist.
-           ssh_run "umask 077 && mkdir -p '${DEPLOY_PATH}/backend' && touch '${env_target}'"
+           # tmpfs mounts during the remote steps. No .env.prod file is needed.
            echo "==> Secrets: rendering from Vault on the host (see remote steps)" ;;
   *)       echo "unknown SECRETS_PROVIDER ${SECRETS_PROVIDER}" >&2; exit 2 ;;
 esac
@@ -112,8 +111,30 @@ env_name="$1"; tag="$2"; api="$3"; bandit="$4"; path="$5"
 provider="$6"; vault_addr="$7"; role_id_file="$8"; secret_id_file="$9"
 mode="${10}"; ttl="${11}"; min_free_mb="${12}"
 cd "$path/backend"
-# --env-file: ${VAR} interpolation (Grafana password/SMTP, backup schedules) reads .env.<env>, not just env_file.
-compose="docker compose --env-file .env.${env_name} -f compose.${env_name}.yml"
+if [ "$provider" = vault ]; then
+  # Bootstrap empty files only where none exist, so Compose can parse the full stack while
+  # starting Vault. An existing render is never truncated (a flip/rollback reuses it, and the
+  # renderer leaves files read-only); render-secrets.sh replaces them before app services start.
+  for f in "$role_id_file" "$secret_id_file"; do
+    [ -r "$f" ] || { echo "SECRETS_PROVIDER=vault: $f is not readable by $(id -un); the deploy user must own the AppRole creds" >&2; exit 1; }
+  done
+  [ -d /run/zenflow ] && [ -w /run/zenflow ] || [ "$(id -u)" = 0 ] || {
+    echo "SECRETS_PROVIDER=vault: /run/zenflow must exist and be writable by $(id -un) (e.g. sudo install -d -o $(id -un) -m 700 /run/zenflow)" >&2; exit 1; }
+  export ZENFLOW_SECRETS_DIR="/run/zenflow/${env_name}"
+  for set in api bandit platform; do
+    mkdir -p "$ZENFLOW_SECRETS_DIR/$set"
+    [ -e "$ZENFLOW_SECRETS_DIR/$set/files.env" ] || {
+      : > "$ZENFLOW_SECRETS_DIR/$set/files.env"
+      chmod 600 "$ZENFLOW_SECRETS_DIR/$set/files.env"
+    }
+  done
+fi
+# Vault has no persistent dotenv: it renders service env files under /run.
+if [ "$provider" = vault ]; then
+  compose="docker compose -f compose.${env_name}.yml"
+else
+  compose="docker compose --env-file .env.${env_name} -f compose.${env_name}.yml"
+fi
 workers="watcher worker-portal worker-lms worker-notify"
 mkdir -p state
 active="$(cat state/active 2>/dev/null || true)"
@@ -181,14 +202,6 @@ export "ZENFLOW_API_IMAGE_${IDLE}=$api" "ZENFLOW_BANDIT_IMAGE_${IDLE}=$bandit"
 export ZENFLOW_ACTIVE_COLOUR="$idle"
 $compose pull "api-$idle" "bandit-$idle" $workers migrations
 if [ "$provider" = "vault" ]; then
-  # The deploy account must own the AppRole creds and /run/zenflow (700, tmpfs) that
-  # compose reads env_file from; root is not required (see docs/ops/ci-cd.md).
-  for f in "$role_id_file" "$secret_id_file"; do
-    [ -r "$f" ] || { echo "SECRETS_PROVIDER=vault: $f is not readable by $(id -un); the deploy user must own the AppRole creds" >&2; exit 1; }
-  done
-  [ -d /run/zenflow ] && [ -w /run/zenflow ] || [ "$(id -u)" = 0 ] || {
-    echo "SECRETS_PROVIDER=vault: /run/zenflow must exist and be writable by $(id -un) (e.g. sudo install -d -o $(id -un) -m 700 /run/zenflow)" >&2; exit 1; }
-  export ZENFLOW_SECRETS_DIR="/run/zenflow/${env_name}"
   $compose up -d --no-build vault
   # Vault starts sealed after any restart; unsealing is a manual, human step.
   for i in $(seq 1 20); do
@@ -198,14 +211,17 @@ if [ "$provider" = "vault" ]; then
     sleep 3
   done
   VAULT_ADDR="$vault_addr" VAULT_ENV="$env_name" OUT_DIR="$ZENFLOW_SECRETS_DIR" \
+    SECRET_SETS="api bandit platform" PLAIN_ENV_SETS="platform" \
     VAULT_ROLE_ID_FILE="$role_id_file" VAULT_SECRET_ID_FILE="$secret_id_file" \
     ./ops/vault/render-secrets.sh
-  # An explicit KEY in .env.<env> would beat the rendered KEY_FILE, so drop any
-  # leftovers from a previous dotenv-based provider.
-  for f in "$ZENFLOW_SECRETS_DIR"/*/files.env; do
-    [ -f "$f" ] || continue
-    sed -n 's/_FILE=.*//p' "$f" | while read -r k; do sed -i "/^${k}=/d" ".env.${env_name}"; done
-  done
+  # An explicit KEY in a leftover .env.<env> would beat the rendered KEY_FILE, so drop any
+  # from a previous dotenv-based provider (the file is optional in Vault mode).
+  if [ -f ".env.${env_name}" ]; then
+    for f in "$ZENFLOW_SECRETS_DIR"/*/files.env; do
+      [ -f "$f" ] || continue
+      sed -n 's/_FILE=.*//p' "$f" | while read -r k; do sed -i "/^${k}=/d" ".env.${env_name}"; done
+    done
+  fi
 fi
 # Containers read *_FILE only at boot; the idle colour and the queue roles are always
 # recreated below, so they pick up a fresh render. The active colour keeps its loaded secrets.

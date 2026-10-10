@@ -89,7 +89,7 @@ Contact point `zenflow-ops-email` (`alerting/contact-points.yml`) emails alphatr
 Prod Mailgun setup (Grafana only speaks SMTP, not the Mailgun API):
 1. Mailgun: add domain `alerts.alphatrann.com`; publish the SPF and DKIM DNS records it shows and wait for "verified".
 2. Domain settings > SMTP credentials: create/reset the password for `postmaster@alerts.alphatrann.com`.
-3. `.env.prod`: `GRAFANA_SMTP_PASSWORD=<that password>`. Defaults already point at `smtp.mailgun.org:587`; for the EU region set `GRAFANA_SMTP_HOST=smtp.eu.mailgun.org:587`. Override `GRAFANA_SMTP_USER` / `GRAFANA_SMTP_FROM` only if they differ.
+3. Vault `platform` set: `GF_SMTP_PASSWORD=<that password>`. The configured host is `smtp.mailgun.org:587`; edit `compose.prod.yml` for a different Mailgun region or sender.
 4. Deploy, then Grafana > Alerting > Contact points > Test, and check Mailgun logs.
 
 Without the password alerts still fire in Grafana but no mail leaves. Gmail may route a new sender to spam at first; mark it as not spam.

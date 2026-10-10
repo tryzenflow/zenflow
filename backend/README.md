@@ -27,7 +27,7 @@ pnpm prisma:dev:migrate
 pnpm start:dev                               # http://localhost:8000, Swagger at /api
 ```
 
-Env: copy `.env.example` to `.env.dev` (and `.env.test`, `.env.staging`, `.env.prod`). Vars: [config.md](../docs/backend/config.md).
+Env: copy `.env.example` to `.env.dev` (and `.env.test`, `.env.staging`). Production uses Vault: [vault.md](../docs/ops/vault.md). Vars: [config.md](../docs/backend/config.md).
 
 ```bash
 pnpm typecheck           # tsc --noEmit

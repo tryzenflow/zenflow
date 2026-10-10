@@ -16,3 +16,8 @@ paths = [
   '''backend/src/devices/apns\.sender\.spec\.ts''',  # one synthetic private-key fixture
   '''packages/shared/contract/.*''',
 ]
+# Placeholder, not a credential: an earlier commit in the vault PR documented it; the docs no longer do.
+regexTarget = "line"
+regexes = [
+  '''VAULT_TOKEN=<initial-root-token>''',
+]

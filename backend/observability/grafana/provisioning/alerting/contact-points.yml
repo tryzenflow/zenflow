@@ -1,7 +1,7 @@
 apiVersion: 1
 
 # Where alerts go. Email needs Grafana SMTP: staging sends to Mailpit (see compose.staging.yml),
-# prod needs GRAFANA_SMTP_* in .env.prod (docs/ops/backups.md#alerts). Only the backup rules exist
+# prod gets GF_SMTP_PASSWORD from Vault's platform set (docs/ops/vault.md). Only the backup rules exist
 # today; revisit the default policy before adding unrelated alerts.
 contactPoints:
   - orgId: 1

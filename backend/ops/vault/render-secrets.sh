@@ -11,7 +11,9 @@
 # secret/zenflow/$VAULT_ENV/<set> and writes, under $OUT_DIR/<set>/:
 #   <KEY>        one file per key holding the raw value (no trailing newline)
 #   files.env    KEY_FILE=<MOUNT_PATH>/<KEY> lines (not secret) for compose env_file
-# OUT_DIR should live on tmpfs (/run/... on Linux) so values never hit disk.
+# PLAIN_ENV_SETS are written as plain KEY=value files for images that cannot
+# read KEY_FILE (Postgres, MinIO, backup and Grafana). OUT_DIR should live on
+# tmpfs (/run/... on Linux) so values never hit disk.
 # Needs curl and jq. Logs in with AppRole; nothing secret goes to argv or stdout.
 set -euo pipefail
 
@@ -20,6 +22,7 @@ VAULT_ADDR="${VAULT_ADDR:-http://127.0.0.1:8200}"
 ROLE_ID_FILE="${VAULT_ROLE_ID_FILE:-/etc/zenflow/vault/role_id}"
 SECRET_ID_FILE="${VAULT_SECRET_ID_FILE:-/etc/zenflow/vault/secret_id}"
 SECRET_SETS="${SECRET_SETS:-api bandit}"
+PLAIN_ENV_SETS="${PLAIN_ENV_SETS:-}"
 # Where each set is mounted inside containers (only used for files.env).
 MOUNT_PATH="${MOUNT_PATH:-/run/secrets/zenflow}"
 MOUNT=secret
@@ -48,6 +51,19 @@ mkdir -p "$parent"; chmod 700 "$parent"
 tmp=$(mktemp -d "$parent/.render.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 
+is_plain_set() {
+  case " $PLAIN_ENV_SETS " in *" $1 "*) return 0;; *) return 1;; esac
+}
+
+write_dotenv() {
+  local key="$1" value="$2"
+  case "$value" in *$'\n'*|*$'\r'*)
+    echo "render-secrets: $key in a plain env set contains a newline" >&2; exit 1;;
+  esac
+  value=${value//\'/\\\'}
+  printf "%s='%s'\n" "$key" "$value"
+}
+
 for set in $SECRET_SETS; do
   mkdir -p "$tmp/$set"
   body=$(vcurl "$token" "$VAULT_ADDR/v1/$MOUNT/data/zenflow/$VAULT_ENV/$set") \
@@ -56,9 +72,15 @@ for set in $SECRET_SETS; do
   # Key names become env var names; refuse anything else.
   for key in $(printf '%s' "$body" | jq -r '.data.data | keys[]'); do
     [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] || { echo "render-secrets: skipping invalid key name '$key' in $set" >&2; continue; }
-    printf '%s' "$body" | jq -j --arg k "$key" '.data.data[$k]' > "$tmp/$set/$key"
-    chmod 444 "$tmp/$set/$key" # parent dir is 700 root; containers may run as non-root
-    echo "${key}_FILE=$MOUNT_PATH/$key" >> "$tmp/$set/files.env"
+    if is_plain_set "$set"; then
+      value=$(printf '%s' "$body" | jq -r --arg k "$key" '.data.data[$k]')
+      printf '%s' "$value" > "$tmp/$set/$key"
+      write_dotenv "$key" "$value" >> "$tmp/$set/files.env"
+    else
+      printf '%s' "$body" | jq -j --arg k "$key" '.data.data[$k]' > "$tmp/$set/$key"
+      echo "${key}_FILE=$MOUNT_PATH/$key" >> "$tmp/$set/files.env"
+    fi
+    chmod 444 "$tmp/$set/$key" # the 700 parent protects files from other host users
   done
   chmod 444 "$tmp/$set/files.env"; chmod 755 "$tmp/$set"
 done

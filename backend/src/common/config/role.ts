@@ -34,9 +34,11 @@ const ROLES: readonly Role[] = [
 /** Every valid `ROLE` value (for the Joi schema). */
 export const ROLE_VALUES = ROLES;
 
-/** The env file `ConfigModule` loads; ROLE must be resolvable from it too. */
-export const envFilePath = (env: NodeJS.ProcessEnv = process.env): string =>
-  env.NODE_ENV === "production" ? ".env.prod" : ".env.dev";
+/** Local development loads `.env.dev`; production receives its values from Compose. */
+export const envFilePath = (
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined =>
+  env.NODE_ENV === "production" ? undefined : ".env.dev";
 
 /**
  * Resolved before Nest builds the module graph, i.e. before `ConfigModule`
@@ -45,7 +47,8 @@ export const envFilePath = (env: NodeJS.ProcessEnv = process.env): string =>
  */
 export function getRole(env: NodeJS.ProcessEnv = process.env): Role {
   if (env === process.env && env.ROLE === undefined) {
-    config({ path: envFilePath(env), quiet: true });
+    const path = envFilePath(env);
+    if (path) config({ path, quiet: true });
   }
   return parseRole(env.ROLE);
 }

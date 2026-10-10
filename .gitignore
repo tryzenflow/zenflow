@@ -2,6 +2,7 @@ node_modules/
 .playwright-mcp/
 .env.prod
 docker.prod.env
+ssh/
 
 # IDE / local tooling
 .idea/
