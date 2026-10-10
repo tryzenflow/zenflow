@@ -76,8 +76,12 @@ case "$SECRETS_PROVIDER" in
              "${SOPS_FILE:-backend/secrets/${DEPLOY_ENV}.env.enc}" | push_env ;;
   command) bash -c "${SECRETS_COMMAND:?SECRETS_COMMAND required}" | push_env ;;
   vault)   # Secrets stay on the host: they are rendered from the Vault container into
-           # tmpfs mounts during the remote steps. No .env.prod file is needed.
-           echo "==> Secrets: rendering from Vault on the host (see remote steps)" ;;
+           # tmpfs mounts during the remote steps. Only the NON-secret settings
+           # (backend/env/<env>.env, committed) are shipped, as .env.<env>.
+           [ -r "backend/env/${DEPLOY_ENV}.env" ] || { echo "backend/env/${DEPLOY_ENV}.env is missing (non-secret settings for SECRETS_PROVIDER=vault)" >&2; exit 2; }
+           ! grep -q REPLACE_ME "backend/env/${DEPLOY_ENV}.env" || { echo "backend/env/${DEPLOY_ENV}.env still has REPLACE_ME values" >&2; exit 2; }
+           echo "==> Secrets: rendering from Vault on the host; shipping non-secret backend/env/${DEPLOY_ENV}.env as ${env_target}"
+           push_env < "backend/env/${DEPLOY_ENV}.env" ;;
   *)       echo "unknown SECRETS_PROVIDER ${SECRETS_PROVIDER}" >&2; exit 2 ;;
 esac
 
@@ -111,6 +115,10 @@ env_name="$1"; tag="$2"; api="$3"; bandit="$4"; path="$5"
 provider="$6"; vault_addr="$7"; role_id_file="$8"; secret_id_file="$9"
 mode="${10}"; ttl="${11}"; min_free_mb="${12}"
 cd "$path/backend"
+# One Vault set per consumer (docs/ops/vault.md): *_FILE sets for the Node and
+# Bandit images, plain-env sets for the third-party images.
+secret_sets="api bandit"
+plain_sets="postgres minio grafana backup"
 if [ "$provider" = vault ]; then
   # Bootstrap empty files only where none exist, so Compose can parse the full stack while
   # starting Vault. An existing render is never truncated (a flip/rollback reuses it, and the
@@ -121,7 +129,7 @@ if [ "$provider" = vault ]; then
   [ -d /run/zenflow ] && [ -w /run/zenflow ] || [ "$(id -u)" = 0 ] || {
     echo "SECRETS_PROVIDER=vault: /run/zenflow must exist and be writable by $(id -un) (e.g. sudo install -d -o $(id -un) -m 700 /run/zenflow)" >&2; exit 1; }
   export ZENFLOW_SECRETS_DIR="/run/zenflow/${env_name}"
-  for set in api bandit platform; do
+  for set in $secret_sets $plain_sets; do
     mkdir -p "$ZENFLOW_SECRETS_DIR/$set"
     [ -e "$ZENFLOW_SECRETS_DIR/$set/files.env" ] || {
       : > "$ZENFLOW_SECRETS_DIR/$set/files.env"
@@ -129,12 +137,9 @@ if [ "$provider" = vault ]; then
     }
   done
 fi
-# Vault has no persistent dotenv: it renders service env files under /run.
-if [ "$provider" = vault ]; then
-  compose="docker compose -f compose.${env_name}.yml"
-else
-  compose="docker compose --env-file .env.${env_name} -f compose.${env_name}.yml"
-fi
+# .env.<env> holds the non-secret settings under every provider; Vault mode adds its
+# secrets as rendered files under /run.
+compose="docker compose --env-file .env.${env_name} -f compose.${env_name}.yml"
 workers="watcher worker-portal worker-lms worker-notify"
 mkdir -p state
 active="$(cat state/active 2>/dev/null || true)"
@@ -211,17 +216,20 @@ if [ "$provider" = "vault" ]; then
     sleep 3
   done
   VAULT_ADDR="$vault_addr" VAULT_ENV="$env_name" OUT_DIR="$ZENFLOW_SECRETS_DIR" \
-    SECRET_SETS="api bandit platform" PLAIN_ENV_SETS="platform" \
+    SECRET_SETS="$secret_sets" PLAIN_ENV_SETS="$plain_sets" \
     VAULT_ROLE_ID_FILE="$role_id_file" VAULT_SECRET_ID_FILE="$secret_id_file" \
     ./ops/vault/render-secrets.sh
-  # An explicit KEY in a leftover .env.<env> would beat the rendered KEY_FILE, so drop any
-  # from a previous dotenv-based provider (the file is optional in Vault mode).
-  if [ -f ".env.${env_name}" ]; then
-    for f in "$ZENFLOW_SECRETS_DIR"/*/files.env; do
-      [ -f "$f" ] || continue
-      sed -n 's/_FILE=.*//p' "$f" | while read -r k; do sed -i "/^${k}=/d" ".env.${env_name}"; done
+  # A plain KEY in .env.<env> beats the rendered KEY_FILE (file-secrets.ts,
+  # docker-entrypoint.sh), so a name in both would silently ignore Vault. Abort
+  # before anything restarts.
+  dup=""
+  for f in "$ZENFLOW_SECRETS_DIR"/*/files.env; do
+    [ -f "$f" ] || continue
+    for k in $(sed -n 's/^\([A-Z][A-Z0-9_]*\)_FILE=.*/\1/p; s/^\([A-Z][A-Z0-9_]*\)=.*/\1/p' "$f"); do
+      if grep -q "^${k}=" ".env.${env_name}" 2>/dev/null; then dup="$dup $k"; fi
     done
-  fi
+  done
+  [ -z "$dup" ] || { echo "keys in both .env.${env_name} and Vault:${dup}. Remove them from backend/env/${env_name}.env (secrets live only in Vault)." >&2; exit 1; }
 fi
 # Containers read *_FILE only at boot; the idle colour and the queue roles are always
 # recreated below, so they pick up a fresh render. The active colour keeps its loaded secrets.

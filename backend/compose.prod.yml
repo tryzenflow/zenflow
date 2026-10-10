@@ -50,10 +50,11 @@ services:
       otel-collector:
         condition: service_started
     env_file:
-      # Host/sops/command providers write this; absent under SECRETS_PROVIDER=vault.
+      # Non-secret settings. Vault mode: deploy.sh ships backend/env/prod.env as .env.prod; other providers write it with the secrets.
       - path: .env.prod
         required: false
-      # Rendered by ops/vault/render-secrets.sh under SECRETS_PROVIDER=vault; later entries win.
+      # Rendered by ops/vault/render-secrets.sh under SECRETS_PROVIDER=vault: KEY_FILE paths for this set only.
+      # deploy.sh aborts if a key is in both .env.prod and Vault (a plain KEY would beat its KEY_FILE).
       - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/api/files.env
         required: false
     environment:
@@ -245,7 +246,7 @@ services:
       postgres:
         condition: service_healthy
     env_file:
-      # Host/sops/command providers write this; absent under SECRETS_PROVIDER=vault.
+      # Non-secret settings. Vault mode: deploy.sh ships backend/env/prod.env as .env.prod; other providers write it with the secrets.
       - path: .env.prod
         required: false
       - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/api/files.env
@@ -262,10 +263,10 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql
     env_file:
-      # Host/sops/command providers write this; absent under SECRETS_PROVIDER=vault.
+      # Non-secret settings. Vault mode: deploy.sh ships backend/env/prod.env as .env.prod; other providers write it with the secrets.
       - path: .env.prod
         required: false
-      - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/platform/files.env
+      - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/postgres/files.env
         required: false
     networks:
       - db
@@ -277,7 +278,7 @@ services:
 
   # Separate cron process (busybox crond): encrypted pg_dump to S3 plus a restore test.
   # Prod: every 3 h, real S3 (leave BACKUP_S3_ENDPOINT unset); also snapshots Vault file storage.
-  # Keys come from Vault's platform set. See docs/ops/backups.md.
+  # Secrets come from Vault's backup set (own keys, POSTGRES_PASSWORD). See docs/ops/backups.md.
   backup:
     container_name: zenflow-backup-prod
     image: postgres:18.4-alpine
@@ -288,10 +289,10 @@ services:
       - -c
       - 'export BACKUP_CRON="$${BACKUP_CRON:-0 */3 * * *}" RESTORE_TEST_CRON="$${RESTORE_TEST_CRON:-0 4 * * 0}"; exec sh /opt/backup/entrypoint.sh'
     env_file:
-      # Host/sops/command providers write this; absent under SECRETS_PROVIDER=vault.
+      # Non-secret settings. Vault mode: deploy.sh ships backend/env/prod.env as .env.prod; other providers write it with the secrets.
       - path: .env.prod
         required: false
-      - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/platform/files.env
+      - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/backup/files.env
         required: false
     environment:
       BACKUP_ENV: prod
@@ -608,16 +609,16 @@ services:
     image: grafana/grafana:11.4.0
     restart: unless-stopped
     # Internet-facing through nginx: refuse to start without an admin password. Accepts
-    # GF_SECURITY_ADMIN_PASSWORD (Vault platform set) or the legacy GRAFANA_ADMIN_PASSWORD (.env.prod).
+    # GF_SECURITY_ADMIN_PASSWORD (Vault grafana set) or the legacy GRAFANA_ADMIN_PASSWORD (.env.prod).
     entrypoint:
       - sh
       - -c
       - 'export GF_SECURITY_ADMIN_PASSWORD="$${GF_SECURITY_ADMIN_PASSWORD:-$$GRAFANA_ADMIN_PASSWORD}" GF_SMTP_PASSWORD="$${GF_SMTP_PASSWORD:-$$GRAFANA_SMTP_PASSWORD}"; [ -n "$$GF_SECURITY_ADMIN_PASSWORD" ] || { echo "GF_SECURITY_ADMIN_PASSWORD (or GRAFANA_ADMIN_PASSWORD) is required" >&2; exit 1; }; exec /run.sh'
     env_file:
-      # Host/sops/command providers write this; absent under SECRETS_PROVIDER=vault.
+      # Non-secret settings. Vault mode: deploy.sh ships backend/env/prod.env as .env.prod; other providers write it with the secrets.
       - path: .env.prod
         required: false
-      - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/platform/files.env
+      - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/grafana/files.env
         required: false
     environment:
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-https://grafana.alphatrann.com}
@@ -716,10 +717,10 @@ services:
     volumes:
       - storage_data:/data
     env_file:
-      # Host/sops/command providers write this; absent under SECRETS_PROVIDER=vault.
+      # Non-secret settings. Vault mode: deploy.sh ships backend/env/prod.env as .env.prod; other providers write it with the secrets.
       - path: .env.prod
         required: false
-      - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/platform/files.env
+      - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/minio/files.env
         required: false
     networks:
       - storage

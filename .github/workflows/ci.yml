@@ -301,6 +301,8 @@ jobs:
           docker compose -f compose.staging.yml config --format json | jq -e '.services.backup != null'
           docker compose -f compose.prod.yml config --format json \
             | jq -e '.services.backup.volumes | any(.[]; .source == "vault_data" and .read_only == true)'
+          # One Vault set per consumer: no service mounts a shared "platform" set.
+          ! grep -n 'platform/files.env' compose.prod.yml
       # Blue-green (ADR-0013): both colours exist; the api/bandit templates are never started.
       - name: blue-green colours and deploy script
         working-directory: backend
@@ -332,22 +334,49 @@ jobs:
             sleep 2
           done
           vx() { docker exec -e VAULT_TOKEN=ci-root vault-smoke vault "$@"; }
-          vx kv put -mount=secret zenflow/dev/api SESSION_SECRET="$(openssl rand -hex 32)" BANDIT_SERVICE_TOKEN=ci >/dev/null
+          vx kv put -mount=secret zenflow/dev/api SESSION_SECRET="$(openssl rand -hex 32)" POSTGRES_PASSWORD=ci BANDIT_SERVICE_TOKEN=ci >/dev/null
           vx kv put -mount=secret zenflow/dev/bandit BANDIT_SERVICE_TOKEN=ci >/dev/null
-          vx kv put -mount=secret zenflow/dev/platform POSTGRES_PASSWORD=ci >/dev/null
+          vx kv put -mount=secret zenflow/dev/postgres POSTGRES_PASSWORD=ci >/dev/null
+          vx kv put -mount=secret zenflow/dev/minio S3_ACCESS_KEY_ID=ci S3_SECRET_ACCESS_KEY=ci >/dev/null
+          vx kv put -mount=secret zenflow/dev/grafana GF_SECURITY_ADMIN_PASSWORD=ci >/dev/null
+          vx kv put -mount=secret zenflow/dev/backup POSTGRES_PASSWORD=ci BACKUP_S3_SECRET_ACCESS_KEY=ci >/dev/null
           mkdir -m 777 vault-creds
           docker run --rm --network container:vault-smoke -v "$PWD/ops/vault:/ops:ro" -v "$PWD/vault-creds:/creds" \
             -e VAULT_ADDR=http://127.0.0.1:8200 -e VAULT_TOKEN=ci-root -e ENV_NAME=dev -e CRED_FILE_MODE=644 \
             "$V" sh /ops/setup-approle.sh --role-id-file /creds/role_id --secret-id-file /creds/secret_id
-          VAULT_ENV=dev OUT_DIR="$PWD/.secrets-rendered/dev" SECRET_SETS="api bandit platform" PLAIN_ENV_SETS=platform \
+          VAULT_ENV=dev OUT_DIR="$PWD/.secrets-rendered/dev" SECRET_SETS="api bandit" \
+            PLAIN_ENV_SETS="postgres minio grafana backup" \
             VAULT_ROLE_ID_FILE=vault-creds/role_id VAULT_SECRET_ID_FILE=vault-creds/secret_id \
             ops/vault/render-secrets.sh
           test -s .secrets-rendered/dev/api/SESSION_SECRET
           grep -q '^SESSION_SECRET_FILE=' .secrets-rendered/dev/api/files.env
-          grep -q "^POSTGRES_PASSWORD='ci'" .secrets-rendered/dev/platform/files.env
-          printf 'SESSION_SECRET=ci\nPOSTGRES_PASSWORD=db\nGRAFANA_ADMIN_PASSWORD=grafana\nBANDIT_SERVICE_TOKEN=ci\n' > import.env
-          VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=ci-root VAULT_ENV=dev \
-            ops/vault/import-dotenv.sh import.env --dry-run | grep -q '^platform: .*GF_SECURITY_ADMIN_PASSWORD'
+          grep -q "^POSTGRES_PASSWORD='ci'" .secrets-rendered/dev/postgres/files.env
+          # Isolation: each consumer's directory holds only its own keys.
+          r=.secrets-rendered/dev
+          ! test -e $r/api/GF_SECURITY_ADMIN_PASSWORD
+          ! test -e $r/grafana/SESSION_SECRET
+          ! test -e $r/postgres/S3_SECRET_ACCESS_KEY
+          ! test -e $r/minio/POSTGRES_PASSWORD
+          test "$(ls $r/postgres | sort | paste -sd' ')" = "POSTGRES_PASSWORD files.env"
+          # The renderer's policy lists explicit paths: an unlisted set is denied.
+          vx kv put -mount=secret zenflow/dev/unlisted X=1 >/dev/null
+          ! VAULT_ENV=dev OUT_DIR="$PWD/.secrets-rendered/x" SECRET_SETS=unlisted \
+            VAULT_ROLE_ID_FILE=vault-creds/role_id VAULT_SECRET_ID_FILE=vault-creds/secret_id \
+            ops/vault/render-secrets.sh
+          # Importer: routes secrets per consumer, leaves non-secrets in env, rejects unknown keys.
+          printf 'SESSION_SECRET=ci\nPOSTGRES_PASSWORD=db\nGRAFANA_ADMIN_PASSWORD=grafana\nBANDIT_SERVICE_TOKEN=ci\nLOG_LEVEL=info\n' > import.env
+          imp() { VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=ci-root VAULT_ENV=dev ops/vault/import-dotenv.sh "$@"; }
+          out=$(imp import.env --dry-run)
+          grep -q '^grafana: GF_SECURITY_ADMIN_PASSWORD$' <<<"$out"
+          grep -q '^postgres: POSTGRES_PASSWORD$' <<<"$out"
+          grep -q '^backup: POSTGRES_PASSWORD$' <<<"$out"
+          grep -q '^left in env.*LOG_LEVEL' <<<"$out"
+          for bad in DATABASE_URL=x BACKUP_S3_ACCESS_KEY=x CACHE_PASSWORD=x NOT_A_KEY=x; do
+            echo "$bad" > bad.env
+            ! imp bad.env --dry-run
+          done
+          # The committed non-secret prod env holds no secret and no unknown key.
+          ! imp env/prod.env --dry-run | grep -E '^(api|bandit|postgres|minio|grafana|backup):'
           # The shipped *_FILE expander turns the rendered file into an env var.
           out=$(SESSION_SECRET_FILE="$PWD/.secrets-rendered/dev/api/SESSION_SECRET" ./docker-entrypoint.sh sh -c 'echo ${#SESSION_SECRET}')
           [ "$out" = "64" ]
@@ -356,10 +385,10 @@ jobs:
         run: |
           docker rm -f vault-smoke # free 127.0.0.1:8200
           secret_dir="$RUNNER_TEMP/vault-files"
-          mkdir -p "$secret_dir"/{api,bandit,platform}
-          : > "$secret_dir/api/files.env"
-          : > "$secret_dir/bandit/files.env"
-          : > "$secret_dir/platform/files.env"
+          for set in api bandit postgres minio grafana backup; do
+            mkdir -p "$secret_dir/$set"
+            : > "$secret_dir/$set/files.env"
+          done
           ZENFLOW_SECRETS_DIR="$secret_dir" docker compose -p vcfg -f compose.prod.yml up -d vault
           for i in $(seq 1 20); do
             [ "$(docker inspect -f '{{.State.Health.Status}}' zenflow-vault-prod)" = healthy ] && break
