@@ -202,7 +202,10 @@ describe("S3FilesService", () => {
       const result = await service.download("f1", "u1", "bytes=10-19");
 
       expect(result.range).toEqual({ start: 10, end: 19 });
-      expect(mockSend.mock.calls.at(-1)?.[0].input.Range).toBe("bytes=10-19");
+      const sent = mockSend.mock.calls.at(-1) as [
+        { input: { Range?: string } },
+      ];
+      expect(sent[0].input.Range).toBe("bytes=10-19");
     });
 
     it("rejects a range past the end with 416", async () => {
