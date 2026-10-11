@@ -20,7 +20,7 @@ export function splitOversize<T extends { size?: number | null }>(
 /** "Title\nDescription" for a toast when the server refused an upload (413). */
 export function tooLargeToast(): string {
   return `${t("File too large")}\n${t("Each file can be up to {size} MB.", {
-    size: MAX_UPLOAD_BYTES / MB,
+    size: Math.round(MAX_UPLOAD_BYTES / MB),
   })}`;
 }
 

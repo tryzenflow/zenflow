@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  AUDIO_NAME_RE,
   MEDIA_OPEN_MESSAGE,
+  isFileUrl,
   mediaPlayerScript,
   noteMediaCss,
   parseOpenMediaMessage,
@@ -38,5 +40,20 @@ describe("mediaPlayerScript", () => {
   });
   it("themes for both color schemes", () => {
     expect(noteMediaCss("body", true, c)).not.toBe(noteMediaCss("body", false, c));
+  });
+});
+
+describe("audio links", () => {
+  it("tells signed file links from web pages and audio names from documents", () => {
+    expect(isFileUrl("https://api.x/api/v1/files/abc?sig=1")).toBe(true);
+    expect(isFileUrl("https://example.com/files")).toBe(false);
+    expect(AUDIO_NAME_RE.test("voice memo.M4A")).toBe(true);
+    expect(AUDIO_NAME_RE.test("notes.pdf")).toBe(false);
+  });
+
+  it("the player script turns an audio link into a player", () => {
+    const js = mediaPlayerScript({ offline: false, labels: { title: "t", hint: "h", retry: "r" } });
+    expect(js).toContain("AUDIO_NAME");
+    expect(js).toContain(String.raw`/\/files\/[^/?#]+\?/`);
   });
 });

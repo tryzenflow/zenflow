@@ -12,7 +12,7 @@ Dev-facing notes on what works offline and how to test it. Design rationale:
   and next month plus each day of this week (`lib/warm-calendar.ts`). Task details open from that
   cache (`findCachedSession`), notes included.
 - **Not cached.** Images, audio and video in notes. Offline they show a placeholder; a file that
-  fails to load shows it too, and tapping retries.
+  fails to load shows it too, and tapping retries. Link previews load by default.
 - **Settings.** Server-backed rows are greyed out; integrations show the last status seen.
   Dark mode and sign-out still work.
 

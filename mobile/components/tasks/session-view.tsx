@@ -33,6 +33,7 @@ import {
 import {
   type OpenMedia,
   mediaPlayerScript,
+  isFileUrl,
   noteMediaCss,
   parseOpenMediaMessage,
 } from "@/lib/note-media";
@@ -348,10 +349,7 @@ function NoteHtml({ html }: { html: string }) {
 
   // Link-only paragraphs become preview cards; fetch each target's Open Graph
   // metadata (title, description, cover image) and rebuild the page with it.
-  // Until a fetch settles the card is a skeleton of the final shape. Targets
-  // can be chosen by a course author, so nothing is fetched (and no IP is
-  // revealed) until the viewer asks for previews.
-  const [previewsOn, setPreviewsOn] = useState(false);
+  // Until a fetch settles the card is a skeleton of the final shape.
   const [previews, setPreviews] = useState<Record<string, LinkPreview>>({});
   const [settled, setSettled] = useState<Record<string, true>>({});
   const previewUrls = useMemo(
@@ -363,17 +361,16 @@ function NoteHtml({ html }: { html: string }) {
               /<p[^>]*>\s*<a [^>]*href="([^"]+)"[^>]*>[^<]*<\/a>\s*<\/p>/gi,
             ),
             (m) => m[1].replace(/&amp;/g, "&"),
-          ).filter((u) => /^https?:\/\//i.test(u)),
+          ).filter((u) => /^https?:\/\//i.test(u) && !isFileUrl(u)),
         ),
       ),
     [html],
   );
   const pendingUrls = useMemo(
-    () => (previewsOn ? previewUrls.filter((u) => !settled[u]) : []),
-    [previewsOn, previewUrls, settled],
+    () => previewUrls.filter((u) => !settled[u]),
+    [previewUrls, settled],
   );
   useEffect(() => {
-    if (!previewsOn) return;
     let cancelled = false;
     for (const url of previewUrls) {
       fetchLinkPreview(url).then((p) => {
@@ -385,7 +382,7 @@ function NoteHtml({ html }: { html: string }) {
     return () => {
       cancelled = true;
     };
-  }, [previewsOn, previewUrls]);
+  }, [previewUrls]);
 
   const reduceMotion = useReducedMotion();
   const webViewStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
@@ -404,7 +401,7 @@ function NoteHtml({ html }: { html: string }) {
     const { fg } = noteColors(isDarkColorScheme);
     const { fontFace, family } = noteFont(fontDataUri);
     return {
-      html: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><style>${fontFace} html, body { margin: 0; padding: 0; background: transparent; } body { color: ${fg}; font-family: ${family}; font-size: 16px; line-height: 1.55; word-wrap: break-word; } ${noteTypographyCss("body", isDarkColorScheme)} ${noteLinkCardCss("body", isDarkColorScheme, reduceMotion)} ${noteMediaCss("body", isDarkColorScheme, noteColors(isDarkColorScheme))}</style></head><body><div id="note">${html}</div><script>window.ZF_PREVIEWS = ${JSON.stringify(previews).replace(/</g, "\\u003c")}; window.ZF_PENDING = ${JSON.stringify(pendingUrls).replace(/</g, "\u003c")};</script></body></html>`,
+      html: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><style>${fontFace} html, body { margin: 0; padding: 0; background: transparent; } #note { display: flow-root; padding-bottom: 6px; } body { color: ${fg}; font-family: ${family}; font-size: 16px; line-height: 1.55; word-wrap: break-word; } ${noteTypographyCss("body", isDarkColorScheme)} ${noteLinkCardCss("body", isDarkColorScheme, reduceMotion)} ${noteMediaCss("body", isDarkColorScheme, noteColors(isDarkColorScheme))}</style></head><body><div id="note">${html}</div><script>window.ZF_PREVIEWS = ${JSON.stringify(previews).replace(/</g, "\\u003c")}; window.ZF_PENDING = ${JSON.stringify(pendingUrls).replace(/</g, "\u003c")};</script></body></html>`,
     };
   }, [html, isDarkColorScheme, fontDataUri, previews, pendingUrls, reduceMotion]);
   // The page is rebuilt when connectivity flips, so media swaps to / from placeholders.
@@ -495,13 +492,6 @@ function NoteHtml({ html }: { html: string }) {
         </Animated.View>
       </View>
       <MediaViewer media={viewing} onClose={() => setViewing(null)} />
-      {previewUrls.length > 0 && !previewsOn && (
-        <Pressable onPress={() => setPreviewsOn(true)} hitSlop={8}>
-          <Text className="text-[13px] font-medium text-primary">
-            {t("Load link previews")}
-          </Text>
-        </Pressable>
-      )}
     </View>
   );
 }

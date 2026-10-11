@@ -417,9 +417,8 @@ export function DescriptionFieldEditor({
     if (fileMetadata.mimetype.startsWith("image/")) {
       return `<img src="${src}" alt="${name}" style="max-width: 100%;"/>`;
     }
-    if (fileMetadata.mimetype.startsWith("audio/")) {
-      return `<audio controls src="${src}" style="max-width: 100%;"></audio>`;
-    }
+    // Audio is a link like any document (the editor can't draw an <audio> node);
+    // the read-only view plays it.
     if (fileMetadata.mimetype.startsWith("video/")) {
       return `<video controls src="${src}" style="max-width: 100%;"></video>`;
     }
