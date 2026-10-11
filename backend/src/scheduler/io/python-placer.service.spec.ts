@@ -202,7 +202,10 @@ describe("PythonPlacer.placeSingle (python answers)", () => {
     expect(res.divergent).toBe(false);
     expect(res.alternativeSlot).toBeNull();
     expect(experiment.recordProposal).toHaveBeenCalledWith(
-      expect.objectContaining({ pairwiseShown: false, pairwisePositions: null }),
+      expect.objectContaining({
+        pairwiseShown: false,
+        pairwisePositions: null,
+      }),
     );
   });
 
