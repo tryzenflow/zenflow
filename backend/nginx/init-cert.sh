@@ -10,7 +10,7 @@
 # and MinIO certs BEFORE deploying an nginx.prod.conf that references them, or nginx will not start.
 set -euo pipefail
 : "${LE_EMAIL:?set LE_EMAIL}"
-domain="${DOMAIN:-zenflow-api.alphatrann.com}"
+domain="${DOMAIN:-zenflow.alphatrann.com}"
 if [ -n "$(docker compose -f compose.prod.yml ps -q --status running nginx)" ]; then
   docker compose -f compose.prod.yml run --rm --entrypoint certbot certbot \
     certonly --webroot -w /var/www/certbot --non-interactive --agree-tos -m "$LE_EMAIL" -d "$domain"
