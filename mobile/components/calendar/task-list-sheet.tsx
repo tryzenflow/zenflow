@@ -58,6 +58,10 @@ interface SessionListSheetProps {
   onReschedule?: (task: Session) => void;
 }
 
+// Module-level so the sheet gets the same array on every render; an inline
+// literal is a new `snapPoints` prop each time `open()` sets state.
+const SNAP_POINTS = ["62%"];
+
 export const SessionListSheet = forwardRef<
   SessionListSheetHandle,
   SessionListSheetProps
@@ -83,7 +87,10 @@ export const SessionListSheet = forwardRef<
         setSessions(nextSessions);
         dayRef.current = nextDay;
         dragRef.current = drag;
-        bottomSheet.open();
+        // Present on the next frame, after the state above has committed, so
+        // the re-render lands before the open animation starts instead of in
+        // the middle of it (where it can reorder the scrim and the sheet).
+        requestAnimationFrame(() => bottomSheet.open());
       },
       close: () => bottomSheet.close(),
     }),
@@ -179,7 +186,7 @@ export const SessionListSheet = forwardRef<
         // Short enough to leave the top weeks of the grid visible above it, so a
         // task can be dragged onto a day you can see (and the checklist demo can
         // point at one).
-        snapPoints={["62%"]}
+        snapPoints={SNAP_POINTS}
         enableDynamicSizing={false}
         // Lets `close()` mean "animate away but stay mounted" — required for
         // drag-out-of-the-sheet to survive the sheet closing. See
