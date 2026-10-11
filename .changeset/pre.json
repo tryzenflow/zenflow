@@ -3,6 +3,7 @@
   "tag": "beta",
   "changesets": [
     "file-ids-queue-release",
+    "mobile-login-glass-splash",
     "mobile-test-pyramid",
     "short-user-facing-copy"
   ],
