@@ -28,12 +28,19 @@ import {
   noteLinkCardCss,
   noteTypographyCss,
 } from "@/lib/note-html";
-import { useReducedMotion } from "@/lib/motion";
+import { NoteSkeleton } from "@/components/tasks/note-skeleton";
+import { DURATION, timeTo, useReducedMotion } from "@/lib/motion";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { fromRrule, zonedDate } from "@zenflow/core";
 import type { Session } from "@zenflow/shared";
 import { type ReactNode, memo, useEffect, useMemo, useState } from "react";
 import { Linking, Pressable, View } from "react-native";
+import Animated, {
+  FadeOut,
+  LinearTransition,
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
 const WEEKDAYS: Record<string, string> = {
@@ -309,6 +316,10 @@ function NoteHtml({ html }: { html: string }) {
   const { isDarkColorScheme } = useColorScheme();
   const { toast } = useToast();
   const [height, setHeight] = useState(40);
+  // The WebView paints late and then resizes to the note; hold it invisible
+  // behind a skeleton until its first height arrives, then fade it in.
+  const [ready, setReady] = useState(false);
+  const fade = useSharedValue(0);
   const [fontDataUri, setFontDataUri] = useState<string | null>(null);
 
   useEffect(() => {
@@ -367,6 +378,18 @@ function NoteHtml({ html }: { html: string }) {
   }, [previewsOn, previewUrls]);
 
   const reduceMotion = useReducedMotion();
+  const webViewStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
+  function markReady() {
+    if (ready) return;
+    setReady(true);
+    fade.value = timeTo(1, reduceMotion);
+  }
+  // Never leave the skeleton up if the page never reports a height.
+  useEffect(() => {
+    const timer = setTimeout(markReady, 2500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const source = useMemo(() => {
     const { fg } = noteColors(isDarkColorScheme);
     const { fontFace, family } = noteFont(fontDataUri);
@@ -403,6 +426,7 @@ function NoteHtml({ html }: { html: string }) {
       const data = JSON.parse(raw) as { type?: string; height?: number };
       if (data.type === HEIGHT_MESSAGE && typeof data.height === "number") {
         setHeight(Math.max(24, data.height));
+        markReady();
       }
     } catch {
       // not ours
@@ -411,18 +435,37 @@ function NoteHtml({ html }: { html: string }) {
 
   return (
     <View className="gap-2">
-      <WebView
-        originWhitelist={["*"]}
-        source={source}
-        style={{ height, backgroundColor: "transparent" }}
-        scrollEnabled={false}
-        // iOS needs the view itself non-opaque for the transparent page to show the sheet behind.
-        opaque={false}
-        injectedJavaScript={injected}
-        onMessage={onMessage}
-        // Links are routed through `handleNoteLinkMessage`; never navigate in-place.
-        onShouldStartLoadWithRequest={(req) => req.url === "about:blank"}
-      />
+      <View style={{ minHeight: ready ? undefined : 124 }}>
+        {!ready && (
+          <Animated.View
+            exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.fast)}
+            className="absolute inset-x-0 top-1"
+            pointerEvents="none"
+          >
+            <NoteSkeleton />
+          </Animated.View>
+        )}
+        <Animated.View
+          style={webViewStyle}
+          layout={
+            reduceMotion ? undefined : LinearTransition.duration(DURATION.base)
+          }
+        >
+          <WebView
+            originWhitelist={["*"]}
+            source={source}
+            style={{ height, backgroundColor: "transparent" }}
+            scrollEnabled={false}
+            // iOS needs the view itself non-opaque for the transparent page to show the sheet behind.
+            opaque={false}
+            injectedJavaScript={injected}
+            onMessage={onMessage}
+            onError={markReady}
+            // Links are routed through `handleNoteLinkMessage`; never navigate in-place.
+            onShouldStartLoadWithRequest={(req) => req.url === "about:blank"}
+          />
+        </Animated.View>
+      </View>
       {previewUrls.length > 0 && !previewsOn && (
         <Pressable onPress={() => setPreviewsOn(true)} hitSlop={8}>
           <Text className="text-[13px] font-medium text-primary">

@@ -1,13 +1,14 @@
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
 import { Maximize2 } from "@/components/Icons";
+import { NoteSkeleton } from "@/components/tasks/note-skeleton";
 import { Text } from "@/components/ui/text";
 import { getBaseURL } from "@/lib/api-client";
 import { resolveNoteFileUrls } from "@/lib/file-link";
 import { noteSnippet } from "@/lib/note-html";
 import { cn } from "@/lib/utils";
 import { Suspense, lazy, useEffect, useState } from "react";
-import { ActivityIndicator, Modal, Pressable, View } from "react-native";
+import { Modal, Pressable, View } from "react-native";
 
 // The editor (tentap + tiptap + WebView) is the heaviest module in the form.
 // It is only needed once the modal opens, so it is loaded then instead of
@@ -70,8 +71,8 @@ export function DescriptionField({
       >
         <Suspense
           fallback={
-            <View className="flex-1 items-center justify-center bg-background">
-              <ActivityIndicator />
+            <View className="flex-1 bg-background px-5 pt-16">
+              <NoteSkeleton />
             </View>
           }
         >
