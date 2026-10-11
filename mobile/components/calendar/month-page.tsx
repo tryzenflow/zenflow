@@ -1,4 +1,5 @@
 import { t } from "@/lib/i18n";
+import { useScreenFocusedRef } from "@/hooks/use-screen-focused-ref";
 import { useLanguage } from "@/hooks/use-language";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import { format } from "@/lib/i18n";
@@ -242,11 +243,14 @@ export const MonthPage = memo(function MonthPage({
   // it's already mounted and foregrounded when a mutation lands (e.g. a
   // background sync's create/update/remove reported over the notifications
   // SSE stream), not just the next time the user re-focuses the screen.
+  // Skipped while the Month tab is hidden (it stays mounted): the freshness
+  // the mutation expired makes the focus reload above refetch on return.
+  const screenFocused = useScreenFocusedRef();
   useEffect(() => {
     return subscribeToSessionMutations(() => {
-      refetch();
+      if (screenFocused.current) refetch();
     });
-  }, [refetch]);
+  }, [refetch, screenFocused]);
 
   const tasksByDate = useMemo(
     () => groupSessionsByDate(sessions ?? [], tz),

@@ -344,6 +344,7 @@ function DescriptionFieldEditor({
   useEffect(() => {
     if (initialValue === valueRef.current) return;
     valueRef.current = initialValue;
+    setIsEmpty(isNoteEmpty(initialValue));
     editor.setContent(initialValue);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialValue]);
@@ -441,6 +442,9 @@ function DescriptionFieldEditor({
     const html = await editor.getHTML();
     const fullHtml = `${html} <a href="${escapeHtml(url)}">${title}</a>`;
     valueRef.current = fullHtml;
+    // `setContent` doesn't fire the editor's `onChange`, so refresh the
+    // template overlay's visibility here too.
+    setIsEmpty(isNoteEmpty(fullHtml));
     editor.setContent(fullHtml);
     onChange(fullHtml);
     setLinkOpen(false);
@@ -483,6 +487,10 @@ function DescriptionFieldEditor({
         html += fileEmbedMarkup(fileMetadata);
       }
       valueRef.current = html;
+      // Uploads go in via `setContent`, which doesn't fire the editor's
+      // `onChange` — without this the "Start with a template" cards stayed
+      // over a note that now holds the uploaded file/image.
+      setIsEmpty(isNoteEmpty(html));
       editor.setContent(html);
       onChange(html);
     } catch {

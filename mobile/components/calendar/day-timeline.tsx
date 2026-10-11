@@ -1,4 +1,5 @@
 import { useConnectivity } from "@/lib/connectivity";
+import { useScreenFocusedRef } from "@/hooks/use-screen-focused-ref";
 import { navigateOnce } from "@/lib/nav";
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
@@ -324,9 +325,14 @@ export function DayTimeline({
   // revalidates immediately instead of waiting for the next focus-driven
   // `refreshKey` bump.
   const [mutationTick, setMutationTick] = useState(0);
+  // Not while the Week tab is hidden: the expired freshness makes the
+  // focus-driven `refreshKey` bump revalidate when it comes back.
+  const screenFocused = useScreenFocusedRef();
   useEffect(() => {
-    return subscribeToSessionMutations(() => setMutationTick((t) => t + 1));
-  }, []);
+    return subscribeToSessionMutations(() => {
+      if (screenFocused.current) setMutationTick((t) => t + 1);
+    });
+  }, [screenFocused]);
   const [dragSnap, setDragSnap] = useState<{ startMin: number } | null>(null);
   // Only a create / reschedule / teleport (the screen-level `flashSessionId`)
   // plays the "just landed" flash — a within-day drag drop no longer flashes

@@ -331,11 +331,21 @@ function Toast({
   useEffect(() => {
     if (!running) return;
     const remaining = Math.max(duration * (1 - progress.value), 100);
-    progress.value = withTiming(1, {
-      duration: remaining,
-      easing: Easing.linear,
-    });
-    const timer = setTimeout(() => dismiss(0), remaining);
+    // The exit fade starts from the bar's own UI-thread completion, not only
+    // from the JS timer below: after a save the JS thread is busy navigating
+    // and refetching, and a late timer left a finished bar sitting on screen.
+    // `onHide` is idempotent, so the (later) timer is just the fallback.
+    progress.value = withTiming(
+      1,
+      { duration: remaining, easing: Easing.linear },
+      (finished) => {
+        if (!finished) return;
+        opacity.value = withTiming(0, { duration: EXIT_DURATION }, (done) => {
+          if (done) runOnJS(hide)();
+        });
+      },
+    );
+    const timer = setTimeout(() => dismiss(0), remaining + 600);
     return () => {
       clearTimeout(timer);
       cancelAnimation(progress);
