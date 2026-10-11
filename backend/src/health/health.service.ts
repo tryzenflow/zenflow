@@ -1,5 +1,5 @@
 import { HeadBucketCommand, S3Client } from "@aws-sdk/client-s3";
-import { Inject, Injectable, Optional } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import IORedis, { type Redis } from "ioredis";
 import { createTransport } from "nodemailer";
@@ -26,6 +26,8 @@ export interface HealthReport {
 
 @Injectable()
 export class HealthService {
+  private readonly logger = new Logger(HealthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
@@ -169,6 +171,14 @@ export class HealthService {
     );
     const checks = Object.fromEntries(entries);
     const ok = entries.every(([, c]) => c.status === "up");
+    // The 503 body is reduced to a generic message by AllExceptionsFilter, so
+    // name the failing dependencies here or nobody can tell which one it was.
+    if (!ok) {
+      const down = entries
+        .filter(([, c]) => c.status === "down")
+        .map(([name, c]) => `${name}: ${c.error}`);
+      this.logger.warn(`health check failed: ${down.join("; ")}`);
+    }
     return { status: ok ? "ok" : "error", checks };
   }
 }

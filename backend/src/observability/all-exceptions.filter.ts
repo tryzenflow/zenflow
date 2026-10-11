@@ -74,7 +74,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     status: number;
     message: string;
     errors?: string[];
-    extra?: { code?: string; options?: unknown };
+    extra?: { code?: string; options?: unknown; data?: unknown };
   } {
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
@@ -89,11 +89,22 @@ export class AllExceptionsFilter implements ExceptionFilter {
         };
       }
       // Machine-readable `code` (+ `options`) of deliberate business errors
-      // (409 SCHEDULE_INFEASIBLE, 503 SCHEDULER_DEGRADED) must reach clients.
-      const { code, options } = body as { code?: unknown; options?: unknown };
+      // (409 SCHEDULE_INFEASIBLE, 503 SCHEDULER_DEGRADED) must reach clients,
+      // as must the `data` report of a failed health check (503 /health).
+      const { code, options, data } = body as {
+        code?: unknown;
+        options?: unknown;
+        data?: unknown;
+      };
       const extra =
-        typeof code === "string"
-          ? { code, ...(options !== undefined ? { options } : {}) }
+        typeof code === "string" || data !== undefined
+          ? {
+              ...(typeof code === "string" ? { code } : {}),
+              ...(typeof code === "string" && options !== undefined
+                ? { options }
+                : {}),
+              ...(data !== undefined ? { data } : {}),
+            }
           : undefined;
       return {
         status,
