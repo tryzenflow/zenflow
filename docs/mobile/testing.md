@@ -46,7 +46,7 @@ Still to write:
 
 1. **Notification permission** – prompt only once per login, grant registers the device (`POST /devices`), deny does not, blocked state opens system settings.
 2. **Session expiry** – any 401/403 clears the user and redirects to login.
-3. **Offline calendar** – cached week/month render with the stale glyph instead of an error toast.
+3. **Offline calendar** – cached week/month render with the stale glyph instead of an error toast; editing is hidden (see [offline.md](offline.md) for the toggle).
 
 ## E2E (Maestro)
 

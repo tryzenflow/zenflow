@@ -1,6 +1,12 @@
+import { describeUploadError, splitOversize, tooLargeToast } from "@/lib/upload-limits";
+import { showSplitToast } from "@/lib/task-toasts";
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
-import { getFileMetadata, uploadFiles } from "@/api/files";
+import {
+  type PickedFilePart,
+  getFileMetadata,
+  uploadFiles,
+} from "@/api/files";
 import {
   Bold,
   Check,
@@ -421,9 +427,12 @@ export function DescriptionFieldEditor({
   }
 
   async function embedUploaded(
-    parts: { uri: string; name: string; mimeType: string }[],
+    allParts: PickedFilePart[],
     failureMessage: string,
   ) {
+    const { ok: parts, tooLarge } = splitOversize(allParts);
+    if (tooLarge.length > 0) showSplitToast(toast, tooLargeToast(), "destructive", Upload);
+    if (parts.length === 0) return;
     try {
       const uploaded = await uploadFiles(parts);
 
@@ -439,7 +448,12 @@ export function DescriptionFieldEditor({
       setIsEmpty(isNoteEmpty(html));
       editor.setContent(html);
       onChange(html);
-    } catch {
+    } catch (error) {
+      const refused = describeUploadError(error);
+      if (refused) {
+        showSplitToast(toast, refused, "destructive", Upload);
+        return;
+      }
       toast({
         title: failureMessage,
         description: t("Check your connection and try again."),
@@ -473,6 +487,7 @@ export function DescriptionFieldEditor({
         uri: asset.uri,
         name: asset.name,
         mimeType: asset.mimeType ?? "application/octet-stream",
+        size: asset.size,
       })),
       t("Couldn't upload file"),
     );
@@ -502,13 +517,14 @@ export function DescriptionFieldEditor({
     if (result.canceled) return;
 
     await embedUploaded(
-      result.assets.map((asset) =>
-        toImageUploadPart({
+      result.assets.map((asset) => ({
+        ...toImageUploadPart({
           uri: asset.uri,
           name: asset.fileName,
           mimeType: asset.mimeType,
         }),
-      ),
+        size: asset.fileSize,
+      })),
       t("Couldn't upload image"),
     );
   }

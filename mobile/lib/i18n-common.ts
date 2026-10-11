@@ -13,6 +13,12 @@ export default {
   General: "Thông báo chung",
   Reminders: "Nhắc nhở",
   Offline: "Ngoại tuyến",
+  "File too large": "Tệp quá lớn",
+  "Each file can be up to {size} MB.": "Mỗi tệp tối đa {size} MB.",
+  "Storage full": "Đã đầy dung lượng",
+  "Remove files from your notes, or use smaller ones.":
+    "Hãy xoá bớt tệp trong ghi chú, hoặc dùng tệp nhỏ hơn.",
+  Close: "Đóng",
   "Available online": "Chỉ xem được khi có mạng",
   "Reconnect to play this file.": "Hãy kết nối mạng để phát tệp này.",
   "Couldn't load. Tap to retry.": "Không tải được. Chạm để thử lại.",

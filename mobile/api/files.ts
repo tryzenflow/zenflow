@@ -7,6 +7,8 @@ export interface PickedFilePart {
   uri: string;
   name: string;
   mimeType: string;
+  /** Bytes, when the picker knows it (checked against the upload cap first). */
+  size?: number | null;
 }
 
 /**
