@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Drives the issue #77 staging load test. No worktrees/variants: it tests whatever image
-// backend/compose.staging.yml builds.
+// backend/compose.staging.yml builds, plus loadtest/staging/compose.loadtest.yml (raised OTP limits).
 //
 //   node loadtest/staging/orchestrate.js up                  # build + start the stack, wait for health
 //   node loadtest/staging/orchestrate.js seed                # seed users via the API (+ cookies.json), take a DB snapshot
@@ -19,6 +19,7 @@ const path = require("path");
 
 const ROOT = path.resolve(__dirname, "../..");
 const BACKEND = path.join(ROOT, "backend");
+const LOADTEST_OVERLAY = path.join(__dirname, "compose.loadtest.yml");
 const RESULTS = path.join(__dirname, "results");
 const COOKIES = path.join(RESULTS, "cookies.json");
 const SNAPSHOT = path.join(RESULTS, "seed.dump");
@@ -28,7 +29,7 @@ const PG = "zenflow-db-staging";
 const PROM = "zenflow-prometheus-staging";
 const SEED = { light: +(process.env.SEED_LIGHT || 900), medium: +(process.env.SEED_MEDIUM || 450), heavy: +(process.env.SEED_HEAVY || 150) };
 
-const compose = (...args) => sh("docker", ["compose", "--env-file", ".env.staging", "-f", "compose.staging.yml", ...args], { cwd: BACKEND });
+const compose = (...args) => sh("docker", ["compose", "--env-file", ".env.staging", "-f", "compose.staging.yml", "-f", LOADTEST_OVERLAY, ...args], { cwd: BACKEND });
 
 function sh(cmd, args, opts = {}) {
   const r = spawnSync(cmd, args, { stdio: opts.capture ? ["ignore", "pipe", "inherit"] : "inherit", encoding: "utf8", ...opts });

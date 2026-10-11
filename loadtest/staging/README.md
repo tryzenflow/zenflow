@@ -1,20 +1,22 @@
 # Staging load test (issue #77)
 
-For developers. k6 against `backend/compose.staging.yml` (prod-like stack, observability, fake DLU upstream).
+For developers. k6 against `backend/compose.staging.yml` (prod-like stack, observability). `compose.loadtest.yml` is the overlay `orchestrate.js` adds: raised OTP limits and the fake DLU upstream.
 No worktrees or A/B/C variants: it tests whatever image staging builds. SLOs and results: [docs/benchmarks](../../docs/benchmarks/2026-10-staging-loadtest.md).
 
 ## Prerequisites
 
 - k6 >= 1.x, Docker (Colima) with CPU/RAM for the caps below plus the observability stack.
 - `backend/.env.staging` (git-ignored): the full API env (`backend/.env.example`) plus `GRAFANA_ADMIN_PASSWORD`.
-- Raise the OTP rate limits there so one k6 IP can log users in.
-- Point `LMS_URL` / `PORTAL_API_URL` at `fake-dlu`, never a real DLU host.
+- Keep the standard OTP rate limits there: `compose.loadtest.yml` (added by `orchestrate.js`) raises them for the test only.
+- Real `LMS_URL` / `PORTAL_API_URL` are fine there: the overlay pins ingestion to `fake-dlu`, so the test never reaches a real DLU host.
 
 | Service | Cap |
 | --- | --- |
 | api | 4 CPU / 4 GB |
 | postgres 18 (`pg_stat_statements`) | 4 CPU / 8 GB |
-| bandit | 2 CPU / 2 GB |
+| bandit | 2 CPU / 3 GB |
+| watcher | 2 CPU / 3 GB |
+| worker-portal, worker-lms | 1 CPU / 2 GB each |
 
 Grafana: <http://localhost:3000> (admin / `GRAFANA_ADMIN_PASSWORD`). Mail UI (Mailpit): <http://localhost:8025>.
 

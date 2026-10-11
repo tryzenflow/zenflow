@@ -28,10 +28,6 @@ services:
       - mail
       - storage
       - o11y
-      - upstream
-    volumes:
-      # Legacy local uploads; kept mounted only until scripts/migrate-files-to-s3.ts has run.
-      - uploads:/app/uploads
     depends_on:
       storage:
         condition: service_started
@@ -60,17 +56,10 @@ services:
       SWAGGER_ENABLED: "true"
       OTEL_SDK_DISABLED: "false"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      # Pinned here, not left to .env.staging: a missing value would fall back to the REAL DLU hosts, and the load
-      # test drives hundreds of synthetic accounts. These must only ever point at fake-dlu.
       QUEUE_REDIS_HOST: redis-queue
       REDIS_KILLSWITCH_HOST: redis-killswitch
       REDIS_PUBSUB_HOST: redis-pubsub
-      LMS_URL: http://fake-dlu:4100
-      PORTAL_API_URL: http://fake-dlu:4100
-      PORTAL_API_KEY: fake-portal-key
-      # Load test knob: 0 = each placement runs exactly one algorithm (see scheduler/constants.ts). Prod leaves it unset (=1).
-      PAIRWISE_SAMPLE_RATE: ${PAIRWISE_SAMPLE_RATE:-1}
-    # Caps keep the load test fair: no service can starve the others on a big host.
+    # Caps keep one service from starving the others (6 vCPU / 12 GB host).
     cpus: 4
     mem_limit: 4g
     deploy:
@@ -130,7 +119,7 @@ services:
     deploy:
       replicas: 1
     cpus: 2
-    mem_limit: 2g
+    mem_limit: 3g
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5001/health/live').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
       interval: 15s
@@ -153,7 +142,7 @@ services:
     deploy:
       replicas: 1
     cpus: 1
-    mem_limit: 1g
+    mem_limit: 2g
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5001/health/live').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
       interval: 15s
@@ -176,7 +165,7 @@ services:
     deploy:
       replicas: 1
     cpus: 1
-    mem_limit: 1g
+    mem_limit: 2g
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5001/health/live').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
       interval: 15s
@@ -207,24 +196,6 @@ services:
       retries: 3
       start_period: 30s
 
-  # Stand-in for lms.dlu.edu.vn / portal-api.dlu.edu.vn so ingestion can be load
-  # tested without touching the real university. Any credentials work except the
-  # password "wrongpass". Stats: GET /_/stats, reset: POST /_/reset.
-  fake-dlu:
-    container_name: zenflow-fake-dlu-staging
-    image: node:24-alpine
-    # The server imports fake-dlu-fixtures (CJS __dirname, extensionless import), which Node's native type stripping
-    # cannot run, so use the workspace's ts-node from a read-only repo mount.
-    working_dir: /repo/backend
-    command: ["node", "/repo/node_modules/ts-node/dist/bin.js", "--transpile-only", "scripts/fake-dlu-server.ts"]
-    environment:
-      FAKE_DLU_PORT: "4100"
-    volumes:
-      - ..:/repo:ro
-    expose:
-      - "4100"
-    networks:
-      - upstream
 
   bandit:
     profiles: ["template"]
@@ -239,7 +210,7 @@ services:
       - bandit
       - o11y
     cpus: 2
-    mem_limit: 2g
+    mem_limit: 3g
 
   bandit-blue:
     extends:
@@ -713,10 +684,24 @@ services:
       - ./nginx/sse.conf:/etc/nginx/zenflow/sse.conf:ro
       - ./nginx/grafana.conf:/etc/nginx/zenflow/grafana.conf:ro
     depends_on:
-      - grafana
+      grafana:
+        condition: service_started
+      state-init:
+        condition: service_completed_successfully
     networks:
       - edge
       - o11y
+
+  # Local `compose up` bootstrap: seeds the nginx upstream (state/ is git-ignored, written by
+  # deploy.sh) with the blue colour when it is missing. Never overwrites; deploy.sh skips it.
+  state-init:
+    image: nginx:1.28-alpine
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - '[ -s /state/upstream.api.conf ] || echo "server api-blue:8000;" > /state/upstream.api.conf'
+    volumes:
+      - ./state:/state
+    restart: "no"
 
   storage:
     container_name: zenflow-storage-staging
@@ -769,13 +754,9 @@ networks:
     internal: true
   o11y:
     driver: bridge
-  upstream:
-    driver: bridge
-    internal: true
 volumes:
   storage_data:
   postgres_data:
-  uploads:
   tempo_data:
   loki_data:
   alloy_data:

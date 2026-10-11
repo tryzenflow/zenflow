@@ -1,0 +1,62 @@
+# Load-test overlay for backend/compose.staging.yml; orchestrate.js adds it with `-f`.
+# Plain staging keeps the standard rate limits and talks to the real DLU hosts from .env.staging.
+x-loadtest-env: &loadtest-env
+  # One k6 IP logs hundreds of users in, so lift the OTP limits (defaults: docs/backend/config.md).
+  OTP_REQUEST_IP_LIMIT: "100000"
+  OTP_REQUEST_IP_HOURLY_LIMIT: "100000"
+  OTP_REQUEST_EMAIL_LIMIT: "100000"
+  OTP_VERIFY_IP_LIMIT: "100000"
+  OTP_VERIFY_EMAIL_LIMIT: "100000"
+  # 0 = each placement runs exactly one algorithm (scheduler/constants.ts); the default 1 runs both.
+  PAIRWISE_SAMPLE_RATE: ${PAIRWISE_SAMPLE_RATE:-1}
+  # Pinned, not left to .env.staging: the test drives hundreds of synthetic accounts, so ingestion
+  # must only ever reach fake-dlu, never the real DLU.
+  LMS_URL: http://fake-dlu:4100
+  PORTAL_API_URL: http://fake-dlu:4100
+  PORTAL_API_KEY: fake-portal-key
+
+x-fake-dlu-net: &fake-dlu-net
+  networks:
+    - upstream
+
+# `extends` is resolved before overlays merge, so each service that uses these needs its own entry.
+services:
+  api-blue:
+    environment: *loadtest-env
+    <<: *fake-dlu-net
+  api-green:
+    environment: *loadtest-env
+    <<: *fake-dlu-net
+  watcher:
+    environment: *loadtest-env
+    <<: *fake-dlu-net
+  worker-portal:
+    environment: *loadtest-env
+    <<: *fake-dlu-net
+  worker-lms:
+    environment: *loadtest-env
+    <<: *fake-dlu-net
+
+  # Stand-in for lms.dlu.edu.vn / portal-api.dlu.edu.vn so ingestion can be load
+  # tested without touching the real university. Any credentials work except the
+  # password "wrongpass". Stats: GET /_/stats, reset: POST /_/reset.
+  fake-dlu:
+    container_name: zenflow-fake-dlu-staging
+    image: node:24-alpine
+    # The server imports fake-dlu-fixtures (CJS __dirname, extensionless import), which Node's native type stripping
+    # cannot run, so use the workspace's ts-node from a read-only repo mount.
+    working_dir: /repo/backend
+    command: ["node", "/repo/node_modules/ts-node/dist/bin.js", "--transpile-only", "scripts/fake-dlu-server.ts"]
+    environment:
+      FAKE_DLU_PORT: "4100"
+    volumes:
+      - ..:/repo:ro   # relative to backend/ (the project directory), not this file
+    expose:
+      - "4100"
+    networks:
+      - upstream
+
+networks:
+  upstream:
+    driver: bridge
+    internal: true
