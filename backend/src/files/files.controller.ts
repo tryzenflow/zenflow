@@ -14,6 +14,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
+import { MAX_UPLOAD_BYTES } from "@zenflow/shared";
 import { type Request, type Response } from "express";
 import { type User } from "../../generated/prisma";
 import { CookieAuthGuard } from "../auth/guards";
@@ -35,7 +36,7 @@ export class FilesController {
   @UseInterceptors(
     FilesUploadInterceptor({
       fieldName: "files",
-      limits: { fileSize: Math.pow(1024, 2) * 100 },
+      limits: { fileSize: MAX_UPLOAD_BYTES },
       maxFilesCount: 5,
     }),
   )

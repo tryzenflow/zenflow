@@ -8,8 +8,14 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  PayloadTooLargeException,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { MAX_UPLOAD_BYTES, MAX_USER_STORAGE_BYTES } from "@zenflow/shared";
 import { Prisma } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadFileDto } from "./dto";
@@ -47,6 +53,7 @@ export class S3FilesService implements FilesService {
   async upload(uploadFilesDto: UploadFileDto[], userId: string) {
     const uploadedKeys: string[] = [];
     try {
+      await this.assertWithinLimits(uploadFilesDto, userId);
       const data: Prisma.FileCreateManyInput[] = [];
       for (const dto of uploadFilesDto) {
         const key = `${userId}/${randomUUID()}`;
@@ -75,6 +82,25 @@ export class S3FilesService implements FilesService {
         uploadFilesDto.map((dto) => rm(dto.path, { force: true })),
       );
     }
+  }
+
+  /** Rejects before any S3 write; the caller's `finally` removes the temp files. */
+  private async assertWithinLimits(dtos: UploadFileDto[], userId: string) {
+    if (dtos.some((d) => d.size > MAX_UPLOAD_BYTES))
+      throw new PayloadTooLargeException({
+        success: false,
+        message: "File too large",
+      });
+    const incoming = dtos.reduce((sum, d) => sum + d.size, 0);
+    const { _sum } = await this.prisma.file.aggregate({
+      where: { userId },
+      _sum: { size: true },
+    });
+    if ((_sum.size ?? 0) + incoming > MAX_USER_STORAGE_BYTES)
+      throw new PayloadTooLargeException({
+        success: false,
+        message: "Storage full",
+      });
   }
 
   async findOne(id: string, userId?: string) {

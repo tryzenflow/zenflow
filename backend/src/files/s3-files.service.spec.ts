@@ -2,9 +2,10 @@ import { Readable } from "stream";
 import { mkdtemp, writeFile, access } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
-import { NotFoundException } from "@nestjs/common";
+import { NotFoundException, PayloadTooLargeException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Test } from "@nestjs/testing";
+import { MAX_UPLOAD_BYTES, MAX_USER_STORAGE_BYTES } from "@zenflow/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { FILES_SERVICE, type FilesService } from "./files.service";
 import { S3FilesService } from "./s3-files.service";
@@ -41,6 +42,7 @@ describe("S3FilesService", () => {
       findUnique: jest.fn(),
       findMany: jest.fn(),
       deleteMany: jest.fn(),
+      aggregate: jest.fn().mockResolvedValue({ _sum: { size: null } }),
     },
   };
   const config = {
@@ -98,6 +100,50 @@ describe("S3FilesService", () => {
 
     expect(mockSend).toHaveBeenCalledTimes(1); // DeleteObject for the one key
     expect(await exists(dto.path)).toBe(false);
+  });
+
+  describe("upload limits", () => {
+    it("rejects a file over the per-file limit and removes the temp file", async () => {
+      const dto = {
+        ...(await tempUpload("big.bin")),
+        size: MAX_UPLOAD_BYTES + 1,
+      };
+
+      await expect(service.upload([dto], "u1")).rejects.toThrow(
+        "File too large",
+      );
+      expect(mockDone).not.toHaveBeenCalled();
+      expect(await exists(dto.path)).toBe(false);
+    });
+
+    it("rejects when the upload would exceed the user quota", async () => {
+      const dto = await tempUpload("c.txt");
+      prisma.file.aggregate.mockResolvedValue({
+        _sum: { size: MAX_USER_STORAGE_BYTES - 3 },
+      });
+
+      const err: unknown = await service.upload([dto], "u1").catch((e) => e);
+
+      expect(err).toBeInstanceOf(PayloadTooLargeException);
+      expect((err as PayloadTooLargeException).message).toBe("Storage full");
+      expect(prisma.file.aggregate).toHaveBeenCalledWith({
+        where: { userId: "u1" },
+        _sum: { size: true },
+      });
+      expect(mockDone).not.toHaveBeenCalled();
+      expect(prisma.file.createManyAndReturn).not.toHaveBeenCalled();
+      expect(await exists(dto.path)).toBe(false);
+    });
+
+    it("allows an upload that exactly fills the quota", async () => {
+      const dto = await tempUpload("d.txt");
+      prisma.file.aggregate.mockResolvedValue({
+        _sum: { size: MAX_USER_STORAGE_BYTES - dto.size },
+      });
+      prisma.file.createManyAndReturn.mockResolvedValue([{ id: "1" }]);
+
+      await expect(service.upload([dto], "u1")).resolves.toHaveLength(1);
+    });
   });
 
   it("only deletes rows owned by the caller", async () => {
