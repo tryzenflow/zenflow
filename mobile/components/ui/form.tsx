@@ -160,15 +160,13 @@ const FormMessage = React.forwardRef<
   // the app's <Text> component, so it never picks up the Geist font family —
   // resolve it the same way <Text> does and apply it explicitly.
   const mergedClassName = cn(
-    "min-w-0 flex-1 text-sm font-sans font-medium text-destructive ml-2",
+    "text-sm font-sans font-medium text-destructive ml-2",
     className,
   );
 
   return (
-    <View className="flex flex-row items-start mt-2">
-      <View className="mt-[2px]">
-        <AlertCircle className="text-destructive" size={16} />
-      </View>
+    <View className="flex flex-row items-center mt-2">
+      <AlertCircle className="text-destructive" size={16} />
       <Animated.Text
         entering={FadeInDown}
         exiting={FadeOut.duration(275)}
