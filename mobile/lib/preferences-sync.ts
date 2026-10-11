@@ -123,10 +123,11 @@ export function timezonePickerValue(p: SyncedPrefs): string {
 /** Settings edits waiting for a connection (the API's own shape, IANA zone resolved). */
 export type PendingPrefs = Pick<
   UpdateUserInput,
-  "lang" | "timezone" | "defaultReminderMinutes" | "allowNotifications"
+  "name" | "lang" | "timezone" | "defaultReminderMinutes" | "allowNotifications"
 >;
 
 const PENDING_KEYS = [
+  "name",
   "lang",
   "timezone",
   "defaultReminderMinutes",

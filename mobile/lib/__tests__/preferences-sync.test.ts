@@ -101,7 +101,7 @@ describe("offline queue", () => {
       lang: "vi",
       timezone: "UTC",
     });
-    expect(parsePending(JSON.stringify({ lang: "en", name: "x" }))).toEqual({
+    expect(parsePending(JSON.stringify({ lang: "en", foo: "x" }))).toEqual({
       lang: "en",
     });
     expect(parsePending("not json")).toEqual({});

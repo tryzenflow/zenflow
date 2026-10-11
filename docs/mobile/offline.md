@@ -16,7 +16,7 @@ Dev-facing notes on what works offline and how to test it. Design rationale:
   still has cached; a file that
   fails to load shows it too, and tapping retries. Link previews load by default.
 - **Settings.** Language, timezone, default reminder and notifications can be changed offline: they
-  apply at once, wait in `lib/pending-prefs.ts` and sync on reconnect or foreground. Profile, tags
+  apply at once, wait in `lib/pending-prefs.ts` and sync on reconnect or foreground. So can the profile name (the email is shown locked and never changes). Tags
   and integrations are greyed out (integrations show the last status seen). Dark mode and sign-out
   still work.
 
@@ -31,3 +31,8 @@ use the in-app switch:
 
 Other options: `adb shell svc wifi disable` (Android emulator, host and API stay up), or stop the
 API (exercises the failed-refresh path, not the offline guard).
+
+## Server down
+
+A 401/403 signs you out only if `GET /health/ready` answers OK (`sessionIsDead`). While the server is
+unwell (Postgres or Redis down) the saved session, user (name, email) and calendar stay in use.

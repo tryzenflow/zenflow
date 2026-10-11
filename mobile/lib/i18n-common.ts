@@ -13,6 +13,7 @@ export default {
   General: "Thông báo chung",
   Reminders: "Nhắc nhở",
   Offline: "Ngoại tuyến",
+  "Profile saved on this device": "Đã lưu hồ sơ trên thiết bị này",
   "File too large": "Tệp quá lớn",
   "Each file can be up to {size} MB.": "Mỗi tệp tối đa {size} MB.",
   "Storage full": "Đã đầy dung lượng",

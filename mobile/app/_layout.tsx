@@ -5,13 +5,14 @@ import { setLanguage } from "@/lib/i18n";
 import { me } from "@/api/auth";
 import { PortalHost } from "@/components/primitives/portal";
 import { ToastProvider } from "@/components/ui/toast";
+import { sessionIsDead } from "@/lib/session-guard";
 import { useDevOfflineToggle } from "@/hooks/use-dev-offline-toggle";
 import { useConnectivityWatch } from "@/hooks/use-connectivity-watch";
 import { useNotificationsSubscription } from "@/hooks/use-notifications";
 import { usePushRegistration } from "@/hooks/use-push-registration";
 import { useUserStore } from "@/hooks/use-user-store";
 import { setAndroidNavigationBar } from "@/lib/android-navigation-bar";
-import { restoreSessionCookie } from "@/lib/api-client";
+import { restoreSessionCookie, serverIsReady } from "@/lib/api-client";
 import { NAV_THEME } from "@/lib/constants";
 import { routeForSession } from "@/lib/onboarding";
 import {
@@ -158,13 +159,14 @@ export default function RootLayout() {
         else await clearCachedSessionUser();
       } catch (err) {
         const status = isAxiosError(err) ? err.response?.status : undefined;
-        if (status === 401 || status === 403) {
-          // Server answered 401/403: the session is dead.
+        const refused = status === 401 || status === 403;
+        if (sessionIsDead(status, refused && (await serverIsReady()))) {
+          // A healthy server refused the session: it is dead.
           setUser(null);
           await clearCachedSessionUser();
         } else {
-          // Offline / timeout / 5xx: fall back to the cached user and keep
-          // the saved calendar.
+          // Offline / timeout / 5xx, or a 401/403 from a server that is itself
+          // unwell: fall back to the cached user and keep the saved calendar.
           const cached = await cachedRead;
           if (cached) setUser(cached);
         }
