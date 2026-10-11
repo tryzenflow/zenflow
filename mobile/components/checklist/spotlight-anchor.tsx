@@ -12,12 +12,12 @@ import {
 } from "react-native";
 
 /** Let the screen settle (a sheet closing, a tab switching) before measuring. */
-const SETTLE_MS = 450;
+const SETTLE_MS = 200;
 const RETRY_MS = 300;
 const MAX_TRIES = 10;
 /** After the first measure: this many unchanged re-measures, this far apart. */
 const SETTLE_CHECKS = 2;
-const SETTLE_CHECK_MS = 300;
+const SETTLE_CHECK_MS = 200;
 
 /** The anchor is a plain native view (no NativeWind wrapper) that only gets measured. */
 const RAW_VIEW = { cssInterop: false } as object;

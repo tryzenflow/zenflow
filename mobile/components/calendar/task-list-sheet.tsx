@@ -78,6 +78,11 @@ export const SessionListSheet = forwardRef<
   // Read inside the pan callbacks, which are built once per row and must not
   // capture the day the sheet happened to be showing on that render.
   const dayRef = useRef<Date | null>(null);
+  // A drag-out leaves the modal mounted at index -1 (see `handleRowDragStart`).
+  // Re-presenting that same instance is what can leave the scrim painting over
+  // the sheet, so the next `open()` after a drag mounts a fresh modal instead.
+  const [sheetKey, setSheetKey] = useState(0);
+  const draggedRef = useRef(false);
 
   useImperativeHandle(
     ref,
@@ -87,6 +92,10 @@ export const SessionListSheet = forwardRef<
         setSessions(nextSessions);
         dayRef.current = nextDay;
         dragRef.current = drag;
+        if (draggedRef.current) {
+          draggedRef.current = false;
+          setSheetKey((k) => k + 1);
+        }
         // Present on the next frame, after the state above has committed, so
         // the re-render lands before the open animation starts instead of in
         // the middle of it (where it can reorder the scrim and the sheet).
@@ -118,6 +127,7 @@ export const SessionListSheet = forwardRef<
       const dragDay = dayRef.current;
       if (!dragDay || !dragRef.current) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      draggedRef.current = true;
       bottomSheet.ref.current?.close();
       dragRef.current.start(task, dragDay, absoluteX, absoluteY);
     },
@@ -182,6 +192,7 @@ export const SessionListSheet = forwardRef<
   return (
     <BottomSheet>
       <BottomSheetContent
+        key={sheetKey}
         ref={bottomSheet.ref}
         // Short enough to leave the top weeks of the grid visible above it, so a
         // task can be dragged onto a day you can see (and the checklist demo can
