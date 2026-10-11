@@ -7,6 +7,7 @@ import {
   findCachedSession,
   getCachedDaySessions,
   isDayCacheFresh,
+  getSavedDaySessions,
   setCachedDaySessions,
 } from "../session-cache";
 
@@ -94,5 +95,15 @@ describe("findCachedSession", () => {
     expect(findCachedSession("s1")?.id).toBe("s1");
     expect(findCachedSession("m1")?.id).toBe("m1");
     expect(findCachedSession("nope")).toBeUndefined();
+  });
+});
+
+describe("getSavedDaySessions", () => {
+  it("uses the day's own entry, else the month it falls in", () => {
+    setCachedDaySessions("month:2026-10", [{ id: "m1" } as Session]);
+    expect(getSavedDaySessions("2026-10-12")?.map((s) => s.id)).toEqual(["m1"]);
+    setCachedDaySessions("2026-10-12", [{ id: "d1" } as Session]);
+    expect(getSavedDaySessions("2026-10-12")?.map((s) => s.id)).toEqual(["d1"]);
+    expect(getSavedDaySessions("2026-11-02")).toBeUndefined();
   });
 });

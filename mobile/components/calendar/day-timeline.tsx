@@ -25,6 +25,7 @@ import { showMovedToast } from "@/lib/move-toast";
 import {
   fetchDaySessions,
   getCachedDaySessions,
+  getSavedDaySessions,
   isDayCacheFresh,
   sameSessions,
   setCachedDaySessions,
@@ -409,7 +410,7 @@ export function DayTimeline({
         if (cancelled) return;
         // Read the cache again: the warm-up may have filled this day while the
         // request was in flight.
-        const saved = getCachedDaySessions(dayKey);
+        const saved = getSavedDaySessions(dayKey);
         if (saved != null) {
           setSessions((prev) => (sameSessions(prev, saved) ? prev : saved));
           useConnectivity.getState().setStale(dayKey, true);
@@ -422,17 +423,6 @@ export function DayTimeline({
       cancelled = true;
     };
   }, [dayKey, refreshKey, mutationTick]);
-
-  // Saved tasks for this day (prefetched offline) beat the error screen; an
-  // empty day we can't refresh (offline, or its last refresh failed) gets it.
-  const dayStale = useConnectivity((s) => s.staleKeys.has(dayKey));
-  useEffect(() => {
-    if (tasks.length > 0) {
-      if (error) setError(false);
-    } else if (!loading && (offline || dayStale)) {
-      setError(true);
-    }
-  }, [error, tasks, loading, offline, dayStale]);
 
   useEffect(() => {
     onStateChange?.(loading ? "loading" : error ? "error" : "ready");
@@ -457,7 +447,7 @@ export function DayTimeline({
       useConnectivity.getState().setStale(format(date, "yyyy-MM-dd"), false);
     } catch {
       const key = format(date, "yyyy-MM-dd");
-      const saved = getCachedDaySessions(key);
+      const saved = getSavedDaySessions(key);
       if (saved) {
         setSessions((prev) => (sameSessions(prev, saved) ? prev : saved));
         useConnectivity.getState().setStale(key, true);
@@ -469,6 +459,17 @@ export function DayTimeline({
     const blocks = tasksToBlocks(tasks);
     return eventsForDay(blocks, date, tz);
   }, [tasks, date, tz]);
+
+  // Saved tasks for this day (prefetched offline) beat the error screen; an
+  // empty day we can't refresh (offline, or its last refresh failed) gets it.
+  const dayStale = useConnectivity((s) => s.staleKeys.has(dayKey));
+  useEffect(() => {
+    if (segments.length > 0) {
+      if (error) setError(false);
+    } else if (!loading && (offline || dayStale)) {
+      setError(true);
+    }
+  }, [error, segments, loading, offline, dayStale]);
 
   const layout = useMemo(() => getOverlapLayout(segments), [segments]);
 
