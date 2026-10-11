@@ -4,6 +4,7 @@ import { Text } from "@/components/ui/text";
 import { useLastCreated } from "@/hooks/use-last-created";
 import { useSpotlight } from "@/hooks/use-spotlight";
 import { dateKey, isOutsideMonth } from "@/lib/month-date-math";
+import { isFutureTask } from "@/lib/nearest-day";
 import type { Session } from "@zenflow/shared";
 import { isSameDay } from "date-fns";
 import { forwardRef, memo, useEffect, useMemo, useRef } from "react";
@@ -86,6 +87,7 @@ export const MonthGrid = memo(
     const lastCreatedId = useLastCreated((s) => s.id);
     const { openDayKey, moveDayKey, targetKey } = useMemo(() => {
       const inMonth = days.filter((d) => !isOutsideMonth(d, monthDate));
+      const nowMs = Date.now();
       const openDay =
         inMonth.find((d) => isSameDay(d, today)) ??
         new Date(monthDate.getFullYear(), monthDate.getMonth(), 15);
@@ -94,7 +96,9 @@ export const MonthGrid = memo(
       for (const d of inMonth) {
         const key = dateKey(d);
         const list = tasksByDate.get(key);
-        if (!list?.length) continue;
+        // Only days holding a task that can still be moved: a lecture-only or
+        // past day has nothing to drag, so the demo would have no row to point at.
+        if (!list?.some((t) => isFutureTask(t, nowMs))) continue;
         first ??= key;
         if (lastCreatedId && list.some((t) => t.id === lastCreatedId)) {
           created = key;

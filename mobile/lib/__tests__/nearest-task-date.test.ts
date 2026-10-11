@@ -6,6 +6,7 @@ const session = (type: Session["type"], iso: string) =>
   ({ id: `${type}-${iso}`, type, scheduledStartTime: iso }) as Session;
 
 const from = new Date(2026, 9, 8); // Oct 8
+const now = Date.UTC(2026, 9, 1); // everything below is in the future
 
 describe("nearestDayWithTask", () => {
   it("ignores lectures, assignments and exams", () => {
@@ -14,7 +15,7 @@ describe("nearestDayWithTask", () => {
       session("ASSIGNMENT", "2026-10-09T03:00:00.000Z"),
       session("EXAM", "2026-10-10T03:00:00.000Z"),
     ];
-    expect(nearestDayWithTask(sessions, from, "UTC")).toBeNull();
+    expect(nearestDayWithTask(sessions, from, "UTC", now)).toBeNull();
   });
 
   it("finds the nearest task day past a timetable", () => {
@@ -23,7 +24,7 @@ describe("nearestDayWithTask", () => {
       session("TASK", "2026-10-12T03:00:00.000Z"),
       session("TASK", "2026-10-20T03:00:00.000Z"),
     ];
-    const day = nearestDayWithTask(sessions, from, "UTC");
+    const day = nearestDayWithTask(sessions, from, "UTC", now);
     expect(day?.getDate()).toBe(12);
   });
 
@@ -32,6 +33,6 @@ describe("nearestDayWithTask", () => {
       session("TASK", "2026-10-06T03:00:00.000Z"),
       session("TASK", "2026-10-10T03:00:00.000Z"),
     ];
-    expect(nearestDayWithTask(sessions, from, "UTC")?.getDate()).toBe(10);
+    expect(nearestDayWithTask(sessions, from, "UTC", now)?.getDate()).toBe(10);
   });
 });

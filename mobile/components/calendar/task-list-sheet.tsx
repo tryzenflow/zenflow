@@ -15,6 +15,7 @@ import {
 } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
 import { isContinuationEntry } from "@/lib/month-date-math";
+import { isFutureTask } from "@/lib/nearest-day";
 import { isSessionPastDeadline } from "@/lib/overdue";
 import { deriveState } from "@/lib/task-card";
 import { cn } from "@/lib/utils";
@@ -72,7 +73,7 @@ export const SessionListSheet = forwardRef<
   const [sessions, setSessions] = useState<Session[]>([]);
   // The "Move a task to another day" demo points at a plain task, never a
   // timetable lecture or exam.
-  const firstTaskIndex = sessions.findIndex((s) => s.type === "TASK");
+  const firstTaskIndex = sessions.findIndex((s) => isFutureTask(s));
   const sessionCount = sessions.length;
   const dragRef = useRef<MonthDragHandle | null>(null);
   // Read inside the pan callbacks, which are built once per row and must not

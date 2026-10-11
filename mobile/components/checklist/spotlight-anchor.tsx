@@ -12,7 +12,7 @@ import {
 } from "react-native";
 
 /** Let the screen settle (a sheet closing, a tab switching) before measuring. */
-const SETTLE_MS = 200;
+const SETTLE_MS = 0;
 const RETRY_MS = 300;
 const MAX_TRIES = 10;
 /** After the first measure: this many unchanged re-measures, this far apart. */

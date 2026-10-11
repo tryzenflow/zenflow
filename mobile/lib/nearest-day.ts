@@ -15,8 +15,24 @@ function dayNumber(day: Date): number {
 }
 
 /**
+ * A task the user can still move: it has a start and that start is in the
+ * future. Past tasks and ones already in progress (started, not over) are left
+ * alone by the Getting started demos.
+ */
+export function isFutureTask(
+  s: Pick<Session, "type" | "scheduledStartTime">,
+  now: number = Date.now(),
+): boolean {
+  return (
+    s.type === "TASK" &&
+    !!s.scheduledStartTime &&
+    Date.parse(s.scheduledStartTime) > now
+  );
+}
+
+/**
  * The day closest to `from` (ties go to the future) that has at least one
- * *task*, from `sessions`. Lectures, assignments, exams and DND blocks are not
+ * *future task* (see {@link isFutureTask}), from `sessions`. Lectures, assignments, exams and DND blocks are not
  * tasks: the Getting started steps (move, hold, drag) need something the user
  * can actually move, and pointing at a timetable entry would teach nothing.
  */
@@ -24,8 +40,9 @@ export function nearestDayWithTask(
   sessions: Session[],
   from: Date,
   tz: string,
+  now: number = Date.now(),
 ): Date | null {
-  const tasks = sessions.filter((s) => s.type === "TASK");
+  const tasks = sessions.filter((s) => isFutureTask(s, now));
   const days = groupSessionsByDate(tasks, tz);
   const origin = dayNumber(from);
   let best: { date: Date; dist: number; future: boolean } | null = null;

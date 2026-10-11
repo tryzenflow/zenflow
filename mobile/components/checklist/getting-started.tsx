@@ -132,7 +132,7 @@ export function GettingStarted() {
         if (foundTask) useSpotlight.getState().clear();
         else show("create-task");
       }, 8000);
-    }, 150);
+    }, 0);
   };
 
   if (!visible) return null;
