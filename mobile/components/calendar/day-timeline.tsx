@@ -283,15 +283,25 @@ export function DayTimeline({
 
   // When it's today, the displayed day follows the live clock so the header
   // date auto-advances across midnight instead of freezing on yesterday.
+  //
+  // Keyed on the live *calendar day*, not `now`: every consumer of `date` only
+  // reads the day, and a new `Date` per 30s clock tick used to invalidate the
+  // segments / overlap layout / peek strip and re-render every block on every
+  // mounted page, hidden ones included.
+  const liveWall = toZonedTime(now, tz);
+  const liveDayKey =
+    liveWall.getFullYear() * 10_000 +
+    liveWall.getMonth() * 100 +
+    liveWall.getDate();
   const date = useMemo(() => {
-    if (!propDate) return toZonedTime(now, tz);
-    const live = toZonedTime(now, tz);
+    if (!propDate) return liveWall;
     const sameDay =
-      live.getFullYear() === propDate.getFullYear() &&
-      live.getMonth() === propDate.getMonth() &&
-      live.getDate() === propDate.getDate();
-    return sameDay ? live : propDate;
-  }, [propDate, now, tz]);
+      liveWall.getFullYear() === propDate.getFullYear() &&
+      liveWall.getMonth() === propDate.getMonth() &&
+      liveWall.getDate() === propDate.getDate();
+    return sameDay ? liveWall : propDate;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [propDate, liveDayKey, tz]);
   const [hourHeight, setHourHeight] = useState(HOUR_HEIGHT_DEFAULT);
   const totalHeight = hourHeight * 24;
   const contentWidth = screenWidth - GUTTER_WIDTH - rightInset;

@@ -761,7 +761,10 @@ function ToastProvider({
 }) {
   const [messages, setMessages] = useState<ToastMessage[]>([]);
 
-  const toast: ToastFn = (
+  // Stable identities (they only touch `setMessages`): the context value below
+  // must not change per render, or every `useToast()` consumer — and every
+  // effect/callback listing `toast` as a dependency — re-runs on each toast.
+  const toast = useCallback(((
     ...args: [ToastInput] | ToastPositionalArgs
   ): void => {
     const {
@@ -794,9 +797,10 @@ function ToastProvider({
         description,
       },
     ]);
-  };
+  }) as ToastFn, []);
 
-  const confirm: ToastContextProps["confirm"] = (message, options) => {
+  const confirm = useCallback<ToastContextProps["confirm"]>(
+    (message, options) => {
     const { variant = "warning", ...rest } = options;
     setMessages((prev) => [
       ...prev,
@@ -808,11 +812,17 @@ function ToastProvider({
         confirm: rest,
       },
     ]);
-  };
+    },
+    [],
+  );
 
-  const removeToast = (id: number) => {
+  const removeToast = useCallback((id: number) => {
     setMessages((prev) => prev.filter((message) => message.id !== id));
-  };
+  }, []);
+  const contextValue = useMemo(
+    () => ({ toast, confirm, removeToast }),
+    [toast, confirm, removeToast],
+  );
 
   const [expanded, setExpanded] = useState(false);
 
@@ -912,7 +922,7 @@ function ToastProvider({
   );
 
   return (
-    <ToastContext.Provider value={{ toast, confirm, removeToast }}>
+    <ToastContext.Provider value={contextValue}>
       {children}
       {/* iOS: a native modal / sheet is its own view controller, so only a
           full-window overlay can paint over it. Mounted while a toast is up. */}
