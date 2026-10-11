@@ -49,6 +49,10 @@ COPY --from=builder /app/deploy/package.json ./package.json
 COPY --from=builder /app/backend/dist ./dist
 COPY --from=builder /app/backend/prisma ./prisma
 COPY --from=builder /app/backend/generated ./generated
+# Intermediate CA for lms.dlu.edu.vn (certs/lms-ca.pem). NODE_EXTRA_CA_CERTS adds it to Node's
+# default trust store for every process; it does not replace the system CAs.
+COPY --from=builder /app/backend/certs/lms-ca.pem ./certs/lms-ca.pem
+ENV NODE_EXTRA_CA_CERTS=/app/certs/lms-ca.pem
 # The migrations service runs the Prisma CLI through this wrapper, which composes
 # DATABASE_URL from DB_HOST/POSTGRES_* (the app itself never reads a URL var).
 COPY --from=builder /app/backend/scripts/with-database-url.cjs ./scripts/with-database-url.cjs
