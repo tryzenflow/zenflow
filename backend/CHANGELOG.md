@@ -1,5 +1,13 @@
 # backend
 
+## 0.1.0-beta.5
+
+### Patch Changes
+
+- 57edeed: Uploaded videos play on iOS: `GET /files/:id` now answers byte-range requests (206) and sends `Content-Length` and `Accept-Ranges`. A file that fails to load says so instead of reading like an offline message.
+- 992225c: `GET /health` now also checks object storage (bucket), the SMTP relay, and the kill-switch and pub/sub Redis when they are configured. `/health/ready` is unchanged.
+  - @zenflow/shared@0.1.0-beta.5
+
 ## 0.1.0-beta.4
 
 ### Patch Changes
