@@ -28,8 +28,6 @@ services:
       - storage
     volumes:
       - ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/api:/run/secrets/zenflow:ro
-      # Legacy local uploads; kept mounted only until scripts/migrate-files-to-s3.ts has run.
-      - uploads:/app/uploads
     depends_on:
       storage:
         condition: service_started
@@ -850,7 +848,6 @@ volumes:
   postgres_data:
   letsencrypt:
   certbot_webroot:
-  uploads:
   tempo_data:
   loki_data:
   alloy_data:

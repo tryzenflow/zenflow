@@ -17,5 +17,4 @@ Uploads were written to the API host's disk (`uploads/` volume) and streamed bac
 - Signed file URLs for embeds (#89): `FILE_URL_SECRET` HMAC, see `backend/src/files/file-url-signer.service.ts`. Notes store the sig-less `/api/v1/files/<id>`; the API signs on read and strips on save (#146, `note-files.service.ts`).
 
 ## Consequences
-- Run `backend/src/files/migrate-to-s3.cli.ts` (compiled into the image) before dropping the `uploads` volume.
-- It uploads legacy disk files and rewrites `path`; it is idempotent.
+- The API has no local-disk file storage: the `uploads` volume and the one-off disk-to-S3 migration CLI are gone.

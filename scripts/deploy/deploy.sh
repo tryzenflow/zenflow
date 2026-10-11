@@ -234,8 +234,8 @@ fi
 # Containers read *_FILE only at boot; the idle colour and the queue roles are always
 # recreated below, so they pick up a fresh render. The active colour keeps its loaded secrets.
 
-# Shared tier: everything except the colours, the queue roles, nginx and the one-shot migrations.
-shared="$($compose config --services | grep -Ev '^(api|bandit)-(blue|green)$|^(watcher|worker-.*)$|^(nginx|migrations)$' | tr '\n' ' ')"
+# Shared tier: everything except the colours, the queue roles, nginx and the one-shot migrations/state-init.
+shared="$($compose config --services | grep -Ev '^(api|bandit)-(blue|green)$|^(watcher|worker-.*)$|^(nginx|migrations|state-init)$' | tr '\n' ' ')"
 $compose up -d --no-build --remove-orphans $shared
 # Migrations run once for both colours, so they must be backward compatible (ADR-0013).
 $compose run --rm migrations

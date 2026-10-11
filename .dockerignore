@@ -25,7 +25,6 @@ assets
 
 # Local env files & secrets — provided at runtime via compose env_file, never baked in
 **/*.env*
-**/uploads
 **/*.log
 # Encrypted (SOPS) deploy secrets are applied by the deploy script, not the image
 **/secrets
