@@ -46,6 +46,20 @@ export function DuskIcon({ color, size = 22 }: IconProps) {
   );
 }
 
+/** Cloud struck through: no connection (offline toast). */
+export function CloudOffIcon({ color, size = 22 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M7.5 18.5h9.2a4 4 0 0 0 1-7.9 6 6 0 0 0-10.9-1.1A4.5 4.5 0 0 0 7.5 18.5z"
+        stroke={color}
+        {...STROKE}
+      />
+      <Line x1={4} y1={4} x2={20} y2={20} stroke={color} {...STROKE} />
+    </Svg>
+  );
+}
+
 /** Calendar page with a sun dot: jump to today. */
 export function TodayIcon({ color, size = 22 }: IconProps) {
   return (
@@ -72,6 +86,16 @@ export function SyncedIcon({ color, size = 22 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M5 12.5l4.2 4.2L19 7" stroke={color} {...STROKE} />
+    </Svg>
+  );
+}
+
+/** Exclamation mark: a sync or save that failed (red, unlike the green check). */
+export function SyncFailedIcon({ color, size = 22 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Line x1={12} y1={5} x2={12} y2={13.5} stroke={color} {...STROKE} />
+      <Circle cx={12} cy={18.5} r={1.4} fill={color} />
     </Svg>
   );
 }

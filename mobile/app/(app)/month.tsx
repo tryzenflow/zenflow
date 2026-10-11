@@ -25,6 +25,7 @@ import {
 } from "@/components/calendar/update-recurring-sheet";
 import { TodayButton } from "@/components/calendar/today-button";
 import { GettingStarted } from "@/components/checklist/getting-started";
+import { useOffline } from "@/hooks/use-offline";
 import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { Text } from "@/components/ui/text";
 import { completeStep } from "@/hooks/use-checklist";
@@ -54,6 +55,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 export default function MonthScreen() {
   useLanguage();
   const router = useRouter();
+  const offline = useOffline();
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
 
@@ -282,7 +284,7 @@ export default function MonthScreen() {
       />
       <UpdateRecurringSheet ref={updateScopeSheetRef} />
 
-      <CreateSessionFab tz={tz} />
+      {!offline && <CreateSessionFab tz={tz} />}
     </View>
   );
 }

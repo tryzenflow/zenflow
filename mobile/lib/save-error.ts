@@ -5,6 +5,10 @@ import { isAxiosError } from "axios";
 export const SAVE_TIMEOUT_MS = 30_000;
 
 // "Title\nDescription" (see `splitToastMessage`): title <= 5 words, verb-first.
+/** `AxiosError.code` of a write refused locally because the device is offline. */
+export const OFFLINE_ERROR_CODE = "ERR_OFFLINE";
+export const OFFLINE_ERROR_MESSAGE =
+  "You're offline\nReconnect to save changes. Nothing was sent.";
 export const NETWORK_ERROR_MESSAGE =
   "Check your connection\nCouldn't reach the server. Try again in a moment.";
 export const TIMEOUT_ERROR_MESSAGE =
@@ -36,6 +40,7 @@ export function describeSaveError(error: unknown, fallback: string): string {
   if (!isAxiosError(error)) return fallback;
   const res = error.response;
   if (!res) {
+    if (error.code === OFFLINE_ERROR_CODE) return OFFLINE_ERROR_MESSAGE;
     const timedOut =
       error.code === "ECONNABORTED" ||
       error.code === "ETIMEDOUT" ||

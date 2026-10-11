@@ -36,6 +36,7 @@ import {
 import { type ListRenderItemInfo, Pressable, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
+import { useOffline } from "@/hooks/use-offline";
 import type { MonthDragHandle } from "./month-page";
 import { sessionTypeIcon } from "./session-type-badge";
 
@@ -309,6 +310,7 @@ const SessionListRow = memo(function SessionListRow({
   onReschedule?: (task: Session) => void;
 }) {
   useLanguage();
+  const offline = useOffline();
   const state = deriveState(task);
   const TypeIcon = sessionTypeIcon(task.type);
   const late = isSessionPastDeadline(task);
@@ -360,7 +362,7 @@ const SessionListRow = memo(function SessionListRow({
         // stops the pan from ever activating; the `onStart` bail-out below is
         // a second guard in case a row is ever reused for a different task
         // across a re-render without this memo re-running.
-        .enabled(!continuation)
+        .enabled(!continuation && !offline)
         .runOnJS(true)
         .onStart((e) => {
           const c = latest.current;
@@ -381,7 +383,7 @@ const SessionListRow = memo(function SessionListRow({
           if (!success) latest.current.dragRef.current?.cancel();
         }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [continuation],
+    [continuation, offline],
   );
 
   return (
@@ -436,7 +438,7 @@ const SessionListRow = memo(function SessionListRow({
             )}
           </View>
         </View>
-        {onReschedule && !continuation && (
+        {onReschedule && !continuation && !offline && (
           <Pressable
             onPress={() => onReschedule(task)}
             hitSlop={8}

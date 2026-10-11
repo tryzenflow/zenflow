@@ -63,7 +63,7 @@ Drag, resize and reschedule are all `PATCH /sessions/:id` (a `MOVE` signal). The
 | --- | --- | --- |
 | GET | `/tags` | The user's tags for the combobox. |
 | POST | `/tags/bulk` | Idempotent bulk create (skips duplicates). |
-| POST | `/files/upload` | Multipart, up to 100 MB x 5. |
+| POST | `/files/upload` | Multipart, up to 10 MB x 5; 30 MB total per user (413 `File too large` / `Storage full`). See [ADR-0021](../adr/0021-upload-limits.md). |
 | POST | `/files/remove` | Delete a file. |
 | GET | `/files/metadata/:id` | File metadata. |
 | GET | `/files/:id` | Download (API proxies S3). |

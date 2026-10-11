@@ -12,19 +12,29 @@ export function isOnline(s: NetState): boolean {
 }
 
 interface ConnectivityState {
-  /** Device-level reachability from NetInfo. */
+  /** Device-level reachability from NetInfo (forced false by the dev toggle). */
   online: boolean;
+  /** Dev-only: pretend the device is offline whatever NetInfo says. */
+  forcedOffline: boolean;
+  /** Raw NetInfo reachability, kept so the dev toggle can restore it. */
+  netOnline: boolean;
   /** Cache keys (day / `month:…`) whose last refresh failed, so saved data is on screen. */
   staleKeys: ReadonlySet<string>;
   setOnline: (online: boolean) => void;
+  setForcedOffline: (forced: boolean) => void;
   setStale: (key: string, stale: boolean) => void;
   clearStale: () => void;
 }
 
 export const useConnectivity = create<ConnectivityState>((set) => ({
   online: true,
+  forcedOffline: false,
+  netOnline: true,
   staleKeys: new Set(),
-  setOnline: (online) => set({ online }),
+  setOnline: (netOnline) =>
+    set((s) => ({ netOnline, online: netOnline && !s.forcedOffline })),
+  setForcedOffline: (forcedOffline) =>
+    set((s) => ({ forcedOffline, online: s.netOnline && !forcedOffline })),
   setStale: (key, stale) =>
     set((s) => {
       if (s.staleKeys.has(key) === stale) return s;

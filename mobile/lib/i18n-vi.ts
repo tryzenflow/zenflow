@@ -397,6 +397,8 @@ export default {
     "Kiểm tra kết nối\nChưa kết nối được máy chủ. Bạn thử lại sau ít phút nhé.",
   "Try saving again\nThe server was slow, so your changes may not be saved. Check your connection and retry.":
     "Thử lưu lại\nMáy chủ phản hồi chậm nên thay đổi có thể chưa được lưu. Bạn kiểm tra kết nối rồi thử lại nhé.",
+  "You're offline\nReconnect to save changes. Nothing was sent.":
+    "Bạn đang ngoại tuyến\nHãy kết nối mạng để lưu thay đổi. Chưa có gì được gửi đi.",
   "Shrink your note\nIt's too large to save. Remove large images and try again.":
     "Giảm dung lượng ghi chú\nGhi chú quá lớn để lưu. Bạn xóa bớt ảnh lớn rồi thử lại nhé.",
   "Try again shortly\nSomething went wrong on our end.":

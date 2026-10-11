@@ -30,6 +30,7 @@ import { memo, useCallback, useEffect, useState } from "react";
 import { BlurView } from "expo-blur";
 import { Platform, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { useOffline } from "@/hooks/use-offline";
 import Svg, { Path } from "react-native-svg";
 import Animated, {
   Easing,
@@ -305,7 +306,9 @@ function SessionBlockImpl({
   // gesture as TASK now; a series/recurring touch is disambiguated by the
   // scope-confirmation sheet upstream (see `update-recurring-sheet.tsx`),
   // not by locking the gesture out here.
-  const isInteractive = !isSplit;
+  // Offline there is nothing to write: drag and long-press are off, tap still opens.
+  const offline = useOffline();
+  const isInteractive = !isSplit && !offline;
   // …but every block (incl. a recurring lecture/exam/DND occurrence) is
   // tappable, so it can open its edit screen — the surface for "delete just
   // this occurrence".

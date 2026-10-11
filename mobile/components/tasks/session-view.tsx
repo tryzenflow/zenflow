@@ -1,3 +1,5 @@
+import { MediaViewer } from "@/components/tasks/media-viewer";
+import { useOffline } from "@/hooks/use-offline";
 import { useLanguage } from "@/hooks/use-language";
 import { format, t } from "@/lib/i18n";
 import {
@@ -28,6 +30,12 @@ import {
   noteLinkCardCss,
   noteTypographyCss,
 } from "@/lib/note-html";
+import {
+  type OpenMedia,
+  mediaPlayerScript,
+  noteMediaCss,
+  parseOpenMediaMessage,
+} from "@/lib/note-media";
 import { NoteSkeleton } from "@/components/tasks/note-skeleton";
 import { DURATION, timeTo, useReducedMotion } from "@/lib/motion";
 import { useColorScheme } from "@/lib/useColorScheme";
@@ -315,6 +323,8 @@ export const SessionView = memo(SessionViewImpl, (a, b) => {
 function NoteHtml({ html }: { html: string }) {
   const { isDarkColorScheme } = useColorScheme();
   const { toast } = useToast();
+  const offline = useOffline();
+  const [viewing, setViewing] = useState<OpenMedia | null>(null);
   const [height, setHeight] = useState(40);
   // The WebView paints late and then resizes to the note; hold it invisible
   // behind a skeleton until its first height arrives, then fade it in.
@@ -394,11 +404,21 @@ function NoteHtml({ html }: { html: string }) {
     const { fg } = noteColors(isDarkColorScheme);
     const { fontFace, family } = noteFont(fontDataUri);
     return {
-      html: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><style>${fontFace} html, body { margin: 0; padding: 0; background: transparent; } body { color: ${fg}; font-family: ${family}; font-size: 16px; line-height: 1.55; word-wrap: break-word; } ${noteTypographyCss("body", isDarkColorScheme)} ${noteLinkCardCss("body", isDarkColorScheme, reduceMotion)}</style></head><body><div id="note">${html}</div><script>window.ZF_PREVIEWS = ${JSON.stringify(previews).replace(/</g, "\\u003c")}; window.ZF_PENDING = ${JSON.stringify(pendingUrls).replace(/</g, "\u003c")};</script></body></html>`,
+      html: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><style>${fontFace} html, body { margin: 0; padding: 0; background: transparent; } body { color: ${fg}; font-family: ${family}; font-size: 16px; line-height: 1.55; word-wrap: break-word; } ${noteTypographyCss("body", isDarkColorScheme)} ${noteLinkCardCss("body", isDarkColorScheme, reduceMotion)} ${noteMediaCss("body", isDarkColorScheme, noteColors(isDarkColorScheme))}</style></head><body><div id="note">${html}</div><script>window.ZF_PREVIEWS = ${JSON.stringify(previews).replace(/</g, "\\u003c")}; window.ZF_PENDING = ${JSON.stringify(pendingUrls).replace(/</g, "\u003c")};</script></body></html>`,
     };
   }, [html, isDarkColorScheme, fontDataUri, previews, pendingUrls, reduceMotion]);
+  // The page is rebuilt when connectivity flips, so media swaps to / from placeholders.
+  const sourceKey = offline ? "offline" : "online";
 
   const injected = `${LINK_TAP_SCRIPT}
+    ${mediaPlayerScript({
+      offline,
+      labels: {
+        title: t("Available online"),
+        hint: t("Reconnect to play this file."),
+        retry: t("Couldn't load. Tap to retry."),
+      },
+    })}
     ${LINK_CARD_SCRIPT}
     (function() {
       function post() {
@@ -410,7 +430,7 @@ function NoteHtml({ html }: { html: string }) {
       }
       post();
       window.addEventListener('load', post);
-      document.querySelectorAll('img, video').forEach(function(m) {
+      document.querySelectorAll('img, video, audio').forEach(function(m) {
         m.addEventListener('load', post);
         m.addEventListener('loadedmetadata', post);
       });
@@ -422,6 +442,11 @@ function NoteHtml({ html }: { html: string }) {
   function onMessage(event: WebViewMessageEvent) {
     const raw = event.nativeEvent.data;
     if (handleNoteLinkMessage(raw, toast)) return;
+    const media = parseOpenMediaMessage(raw);
+    if (media) {
+      setViewing(media);
+      return;
+    }
     try {
       const data = JSON.parse(raw) as { type?: string; height?: number };
       if (data.type === HEIGHT_MESSAGE && typeof data.height === "number") {
@@ -452,7 +477,10 @@ function NoteHtml({ html }: { html: string }) {
           }
         >
           <WebView
+            key={sourceKey}
             originWhitelist={["*"]}
+            allowsInlineMediaPlayback
+            mediaPlaybackRequiresUserAction
             source={source}
             style={{ height, backgroundColor: "transparent" }}
             scrollEnabled={false}
@@ -466,6 +494,7 @@ function NoteHtml({ html }: { html: string }) {
           />
         </Animated.View>
       </View>
+      <MediaViewer media={viewing} onClose={() => setViewing(null)} />
       {previewUrls.length > 0 && !previewsOn && (
         <Pressable onPress={() => setPreviewsOn(true)} hitSlop={8}>
           <Text className="text-[13px] font-medium text-primary">

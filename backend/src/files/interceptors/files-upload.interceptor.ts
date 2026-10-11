@@ -13,7 +13,7 @@ interface FilesUploadInterceptorOptions {
 }
 
 /**
- * Buffers multipart uploads to a temp directory (not memory — up to 5×100 MB
+ * Buffers multipart uploads to a temp directory (not memory — up to 5×10 MB
  * per request); `FilesService.upload` moves them to storage and removes them.
  */
 export function FilesUploadInterceptor(

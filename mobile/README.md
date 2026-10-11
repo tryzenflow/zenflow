@@ -41,6 +41,7 @@ Tests are layered (unit, component with MSW, Maestro e2e); how to run each is in
 | `EXPO_APPLE_TEAM_ID`    | Apple team for local device builds (set by `pnpm ios:personal-team`)          |
 
 - A loopback API host is rewritten to the dev machine's LAN address on device/emulator ([`lib/api-client.ts`](lib/api-client.ts)).
+- Offline behaviour and how to simulate it (dev menu *Toggle offline*): [docs/mobile/offline.md](../docs/mobile/offline.md).
 - Android push needs `google-services.json` next to `app.config.ts` (absent: push inert).
 - iOS push needs the `expo-notifications` plugin, a backend APNs key and a real device.
 

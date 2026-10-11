@@ -42,6 +42,7 @@ import {
 // version remains, under its own subpath. `renderRightActions`/
 // `onSwipeableOpen` here don't use the (progress, translation) worklet args
 // it now passes, so the zero-arg callback signatures below still type-check.
+import { useOffline } from "@/hooks/use-offline";
 import Swipeable, {
   type SwipeableMethods,
 } from "react-native-gesture-handler/ReanimatedSwipeable";
@@ -76,6 +77,7 @@ export default function NotificationsScreen() {
   const [reschedulingId, setReschedulingId] = useState<string | null>(null);
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
 
+  const offline = useOffline();
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
@@ -285,7 +287,7 @@ export default function NotificationsScreen() {
                 </View>
               )}
             </View>
-            {items.length > 0 && (
+            {items.length > 0 && !offline && (
               <Pressable
                 onPress={() => setIsSelecting(true)}
                 hitSlop={8}
@@ -417,6 +419,7 @@ function NotificationRowItem({
   onRescheduleAll: () => void;
 }) {
   useLanguage();
+  const offline = useOffline();
   const swipeableRef = useRef<SwipeableMethods>(null);
   const { Icon, tint, iconColor } = notificationVisual(n.eventName);
   const unread = !n.readAt;
@@ -450,7 +453,7 @@ function NotificationRowItem({
       friction={2}
       overshootRight={false}
       rightThreshold={40}
-      enabled={!isSelecting}
+      enabled={!isSelecting && !offline}
       renderRightActions={renderRightActions}
       onSwipeableOpen={() => onDismiss()}
     >
@@ -548,7 +551,7 @@ function NotificationRowItem({
               )}
             </View>
 
-            {hasConflicts && !isSelecting && (
+            {hasConflicts && !isSelecting && !offline && (
               <Pressable
                 onPress={onRescheduleAll}
                 disabled={rescheduling}

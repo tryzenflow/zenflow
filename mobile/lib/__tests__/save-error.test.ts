@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   NETWORK_ERROR_MESSAGE,
+  OFFLINE_ERROR_CODE,
+  OFFLINE_ERROR_MESSAGE,
   SERVER_ERROR_MESSAGE,
   TIMEOUT_ERROR_MESSAGE,
   TOO_LARGE_ERROR_MESSAGE,
@@ -25,6 +27,11 @@ describe("extractServerMessage", () => {
 });
 
 describe("describeSaveError", () => {
+  it("names a locally refused offline write", () => {
+    const e = axiosErr({ code: OFFLINE_ERROR_CODE });
+    expect(describeSaveError(e, "fb")).toBe(OFFLINE_ERROR_MESSAGE);
+  });
+
   it("uses the server message for a 4xx", () => {
     const e = axiosErr({ response: { status: 400, data: { message: "Bad title" } } });
     expect(describeSaveError(e, "fb")).toBe("Bad title");
