@@ -22,13 +22,12 @@ export function showMovedToast(
     });
     return;
   }
-  // The time is the news, so it leads the title; the date is the detail.
+  // Date and time both matter, so they share the title: "Moved to Tue, Oct 14, 09:00".
   const date = format(opts.to, "EEE, MMM d");
   toast({
     title: t("Moved to {when}", {
-      when: opts.withTime ? format(opts.to, "HH:mm") : date,
+      when: opts.withTime ? `${date}, ${format(opts.to, "HH:mm")}` : date,
     }),
-    ...(opts.withTime && { description: date }),
     variant: "success",
     icon: "calendar-check",
   });

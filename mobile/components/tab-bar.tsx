@@ -148,13 +148,11 @@ export function AppTabBar({
   // button comes and goes (it is hidden on Settings), and the pill must follow.
   const rowWidth = useSharedValue(0);
   const onSettings = state.routes[state.index]?.name === "settings";
-  const fabRoom = useSharedValue(onSettings ? 0 : 1);
-  useEffect(() => {
-    fabRoom.value = springTo(onSettings ? 0 : 1, reduceMotion);
-  }, [onSettings, reduceMotion, fabRoom]);
-  const barStyle = useAnimatedStyle(() => ({
-    right: BAR_MARGIN + fabRoom.value * (BAR_RIGHT_MARGIN - BAR_MARGIN),
-  }));
+  // `right` is a plain style, not animated: animating a layout prop runs a
+  // Fabric relayout (and a blur re-render inside `Glass`) every frame of the
+  // tab switch, exactly while the incoming screen is mounting. The bar snaps
+  // between the narrow (create button beside it) and wide (Settings) width.
+  const barRight = onSettings ? BAR_MARGIN : BAR_RIGHT_MARGIN;
 
   // Fractional tab index the pill and every tab's styling derive from. It
   // springs toward the focused tab, so a mid-flight tap retargets smoothly.
@@ -242,8 +240,8 @@ export function AppTabBar({
           shadowOpacity: isDarkColorScheme ? 0.4 : 0.14,
           shadowRadius: 18,
           shadowOffset: { width: 0, height: 10 },
+          right: barRight,
         },
-        barStyle,
       ]}
     >
       <Glass radius={BAR_RADIUS} clear style={{ flex: 1 }}>

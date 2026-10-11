@@ -1,4 +1,6 @@
 import { useConnectivity } from "@/lib/connectivity";
+import { useScreenFocusedRef } from "@/hooks/use-screen-focused-ref";
+import { navigateOnce } from "@/lib/nav";
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { locale } from "@/lib/i18n";
@@ -245,6 +247,8 @@ interface DayTimelineProps {
   flashSessionId?: string | null;
 }
 
+const FALLBACK_BLOCK_LAYOUT = { column: 0, columns: 1, conflict: false };
+
 export function DayTimeline({
   date: propDate,
   onSessionPress,
@@ -282,15 +286,25 @@ export function DayTimeline({
 
   // When it's today, the displayed day follows the live clock so the header
   // date auto-advances across midnight instead of freezing on yesterday.
+  //
+  // Keyed on the live *calendar day*, not `now`: every consumer of `date` only
+  // reads the day, and a new `Date` per 30s clock tick used to invalidate the
+  // segments / overlap layout / peek strip and re-render every block on every
+  // mounted page, hidden ones included.
+  const liveWall = toZonedTime(now, tz);
+  const liveDayKey =
+    liveWall.getFullYear() * 10_000 +
+    liveWall.getMonth() * 100 +
+    liveWall.getDate();
   const date = useMemo(() => {
-    if (!propDate) return toZonedTime(now, tz);
-    const live = toZonedTime(now, tz);
+    if (!propDate) return liveWall;
     const sameDay =
-      live.getFullYear() === propDate.getFullYear() &&
-      live.getMonth() === propDate.getMonth() &&
-      live.getDate() === propDate.getDate();
-    return sameDay ? live : propDate;
-  }, [propDate, now, tz]);
+      liveWall.getFullYear() === propDate.getFullYear() &&
+      liveWall.getMonth() === propDate.getMonth() &&
+      liveWall.getDate() === propDate.getDate();
+    return sameDay ? liveWall : propDate;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [propDate, liveDayKey, tz]);
   const [hourHeight, setHourHeight] = useState(HOUR_HEIGHT_DEFAULT);
   const totalHeight = hourHeight * 24;
   const contentWidth = screenWidth - GUTTER_WIDTH - rightInset;
@@ -313,9 +327,14 @@ export function DayTimeline({
   // revalidates immediately instead of waiting for the next focus-driven
   // `refreshKey` bump.
   const [mutationTick, setMutationTick] = useState(0);
+  // Not while the Week tab is hidden: the expired freshness makes the
+  // focus-driven `refreshKey` bump revalidate when it comes back.
+  const screenFocused = useScreenFocusedRef();
   useEffect(() => {
-    return subscribeToSessionMutations(() => setMutationTick((t) => t + 1));
-  }, []);
+    return subscribeToSessionMutations(() => {
+      if (screenFocused.current) setMutationTick((t) => t + 1);
+    });
+  }, [screenFocused]);
   const [dragSnap, setDragSnap] = useState<{ startMin: number } | null>(null);
   // Only a create / reschedule / teleport (the screen-level `flashSessionId`)
   // plays the "just landed" flash — a within-day drag drop no longer flashes
@@ -455,6 +474,12 @@ export function DayTimeline({
   const hasMidnightCrossing = useMemo(
     () => segments.some((s) => s.continues),
     [segments],
+  );
+
+  // Overlaps cascade: later columns draw on top, offset left.
+  const cascadeStep = Math.min(
+    CASCADE_MAX_STEP,
+    contentWidth * CASCADE_STEP_RATIO,
   );
 
   const bottomInset = contentBottomInset ?? (showHeader ? tabBarOverlay : 0);
@@ -774,10 +799,12 @@ export function DayTimeline({
     }
     const start = new Date(date);
     start.setHours(0, startMin, 0, 0);
-    router.push({
-      pathname: "/task/new",
-      params: { start: zonedWallClockToUtc(start, tz).toISOString() },
-    } as Href);
+    navigateOnce(() =>
+      router.push({
+        pathname: "/task/new",
+        params: { start: zonedWallClockToUtc(start, tz).toISOString() },
+      } as Href),
+    );
   }, [date, isToday, router, tz]);
 
   const handleReschedule = useCallback(
@@ -1207,16 +1234,10 @@ export function DayTimeline({
                 )}
 
                 {segments.map((segment) => {
-                  const blockLayout = layout.get(segment.segmentId) ?? {
-                    column: 0,
-                    columns: 1,
-                    conflict: false,
-                  };
-                  // Overlaps cascade: later columns draw on top, offset left.
-                  const cascadeStep = Math.min(
-                    CASCADE_MAX_STEP,
-                    contentWidth * CASCADE_STEP_RATIO,
-                  );
+                  // Stable fallback identity: an inline literal per segment per
+                  // render defeats `SessionBlock`'s memo.
+                  const blockLayout =
+                    layout.get(segment.segmentId) ?? FALLBACK_BLOCK_LAYOUT;
                   const leftOffsetPx =
                     BLOCK_GUTTER + blockLayout.column * cascadeStep;
                   const blockWidthPx =

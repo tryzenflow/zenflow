@@ -1,4 +1,5 @@
 import { useLanguage } from "@/hooks/use-language";
+import { navigateOnce } from "@/lib/nav";
 import { t } from "@/lib/i18n";
 import { Plus } from "@/components/Icons";
 import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
@@ -64,7 +65,9 @@ export function CreateSessionFab({ tz }: { tz: string }) {
       className="absolute z-[35]"
     >
       <Pressable
-        onPress={() => router.push(createSessionAtNowHref(tz))}
+        onPress={() =>
+          navigateOnce(() => router.push(createSessionAtNowHref(tz)))
+        }
         accessibilityRole="button"
         accessibilityLabel={t("New task")}
         testID="fab.new-task"

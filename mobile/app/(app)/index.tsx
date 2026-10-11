@@ -1,4 +1,5 @@
 import { NextUpPill } from "@/components/calendar/next-up-pill";
+import { navigateOnce } from "@/lib/nav";
 import type { DayStatus } from "@/lib/day-status";
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
@@ -391,7 +392,9 @@ export default function WeekScreen() {
     (taskId: string) => {
       // A recurring occurrence id ("<seriesId>::<startISO>") must be encoded to
       // survive the route path.
-      router.push(`/task/${encodeURIComponent(taskId)}/edit` as Href);
+      navigateOnce(() =>
+        router.push(`/task/${encodeURIComponent(taskId)}/edit` as Href),
+      );
     },
     [router],
   );
@@ -423,14 +426,16 @@ export default function WeekScreen() {
         differenceInCalendarDays(zonedDate(start, tz), zonedNow(tz)),
       );
       const sessions = Math.max(1, Math.floor(daysUntil / 2));
-      router.push({
-        pathname: "/task/new",
-        params: {
-          deadline: start,
-          sessions: String(sessions),
-          title: t("Prepare for {title}", { title: session.title }),
-        },
-      } as Href);
+      navigateOnce(() =>
+        router.push({
+          pathname: "/task/new",
+          params: {
+            deadline: start,
+            sessions: String(sessions),
+            title: t("Prepare for {title}", { title: session.title }),
+          },
+        } as Href),
+      );
     },
     [tz, router],
   );

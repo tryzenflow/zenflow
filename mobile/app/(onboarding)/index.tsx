@@ -49,6 +49,7 @@ import { DEVICE_TIMEZONE } from "@/lib/preferences-sync";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   AppState,
   KeyboardAvoidingView,
   Linking,
@@ -349,10 +350,16 @@ export default function OnboardingScreen() {
     }
   };
   const dluConnected = integrations.some((i) => i.connected);
-  const device = deviceTimezone();
+  const device = useMemo(() => deviceTimezone(), []);
+  // The offset math behind `filterTimezones` builds an `Intl.DateTimeFormat`
+  // per zone (hundreds of ms of synchronous JS) — only pay it on the step that
+  // lists zones, not at screen mount where it delayed everything after it.
   const zones = useMemo(
-    () => filterTimezones(allTimezones(), tzQuery, TZ_LIMIT, device),
-    [tzQuery, device],
+    () =>
+      step === "timezone"
+        ? filterTimezones(allTimezones(), tzQuery, TZ_LIMIT, device)
+        : [],
+    [step, tzQuery, device],
   );
 
   async function run(fn: () => Promise<undefined | false>) {
@@ -424,16 +431,28 @@ export default function OnboardingScreen() {
     return "failed";
   }
 
+  // A ref, not `busy`: taps queued behind a busy JS thread all see the same
+  // stale `busy === false` closure and would each start a request.
+  const notifPending = useRef(false);
+
   async function enableNotifications() {
+    if (notifPending.current) return;
+    notifPending.current = true;
     setBusy(true);
-    const result = await turnOnNotifications();
-    setBusy(false);
-    if (result === "on" || result === "saved") go();
-    else setBlocked(result === "blocked");
+    try {
+      const result = await turnOnNotifications();
+      setBusy(false);
+      if (result === "on" || result === "saved") go();
+      else setBlocked(result === "blocked");
+    } finally {
+      notifPending.current = false;
+      setBusy(false);
+    }
   }
 
   async function toggleNotifications() {
-    if (busy) return;
+    if (notifPending.current) return;
+    notifPending.current = true;
     setBusy(true);
     try {
       if (notif.active) {
@@ -442,6 +461,7 @@ export default function OnboardingScreen() {
       }
       setBlocked((await turnOnNotifications()) === "blocked");
     } finally {
+      notifPending.current = false;
       setBusy(false);
     }
   }
@@ -475,7 +495,11 @@ export default function OnboardingScreen() {
       disabled={busy || disabled}
       onPress={onPress}
     >
-      <Text className="font-semibold text-primary-foreground">{label}</Text>
+      {busy ? (
+        <ActivityIndicator testID="onboarding.busy" />
+      ) : (
+        <Text className="font-semibold text-primary-foreground">{label}</Text>
+      )}
     </Button>
   );
   const ghost = (label: string, onPress: () => void) => (
@@ -566,6 +590,7 @@ export default function OnboardingScreen() {
                 testID="onboarding.notifications-switch"
                 className={cn(
                   "h-[26px] w-[46px] justify-center rounded-full px-[3px]",
+                  busy && "opacity-60",
                   notif.active
                     ? "items-end bg-primary"
                     : "items-start bg-muted",

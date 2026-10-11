@@ -1,4 +1,5 @@
 import axios from "axios";
+import { resetNavLock } from "@/lib/nav";
 import { act, cleanup, configure, getConfig } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, vi } from "vitest";
 import { setLanguage } from "@/lib/i18n";
@@ -38,6 +39,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  resetNavLock();
   server.resetHandlers();
 });
 afterAll(() => server.close());

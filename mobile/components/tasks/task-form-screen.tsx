@@ -1,4 +1,5 @@
 import { useLanguage } from "@/hooks/use-language";
+import { safeBack } from "@/lib/nav";
 import { t } from "@/lib/i18n";
 import { Eye, Pencil, X } from "@/components/Icons";
 import { SunriseBackdrop } from "@/components/brand/sunrise-backdrop";
@@ -208,7 +209,7 @@ export function SessionFormScreen({
           {editSwitch && <ModeToggle {...editSwitch} />}
           <Pressable
             testID="task.close"
-            onPress={() => router.back()}
+            onPress={() => safeBack(router)}
             accessibilityLabel={t("Close")}
             className="h-10 w-10 items-center justify-center"
           >

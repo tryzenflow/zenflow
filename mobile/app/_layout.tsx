@@ -55,6 +55,10 @@ export {
   ErrorBoundary,
 } from "expo-router";
 
+// A deep link / push tap that cold-starts straight into a modal still gets the
+// calendar underneath, so closing it has somewhere to go back to.
+export const unstable_settings = { anchor: "(app)" };
+
 SplashScreen.preventAutoHideAsync();
 
 /**
@@ -115,12 +119,19 @@ export default function RootLayout() {
   React.useEffect(() => {
     (async () => {
       setLoading(true);
-      let cached: Awaited<ReturnType<typeof readCachedSessionUser>> = null;
+      // The cached user is only the offline fallback: read it alongside the
+      // preferences / cookie restore and `/auth/me` instead of in front of them.
+      const cachedRead = readCachedSessionUser().catch((err) => {
+        console.warn("[_layout] Session cache read error:", err);
+        return null;
+      });
       try {
-        const cachedPrefs = await loadPreferences();
+        // Independent reads; only `me()` below needs the cookie restored.
+        const [cachedPrefs] = await Promise.all([
+          loadPreferences(),
+          restoreSessionCookie(),
+        ]);
         setLanguage(cachedPrefs.language);
-        await restoreSessionCookie();
-        cached = await readCachedSessionUser();
       } catch (err) {
         console.warn("[_layout] Session cache read error:", err);
       }
@@ -139,10 +150,11 @@ export default function RootLayout() {
           // Server answered 401/403: the session is dead.
           setUser(null);
           await clearCachedSessionUser();
-        } else if (cached) {
+        } else {
           // Offline / timeout / 5xx: fall back to the cached user and keep
           // the saved calendar.
-          setUser(cached);
+          const cached = await cachedRead;
+          if (cached) setUser(cached);
         }
       } finally {
         setLoading(false);
@@ -171,14 +183,16 @@ export default function RootLayout() {
 
   // Keep the splash screen up until BOTH fonts and the local session are resolved
   React.useEffect(() => {
-    console.log(
-      "[_layout] fontsLoaded:",
-      fontsLoaded,
-      "fontError:",
-      fontError,
-      "loading:",
-      loading,
-    );
+    if (__DEV__) {
+      console.log(
+        "[_layout] fontsLoaded:",
+        fontsLoaded,
+        "fontError:",
+        fontError,
+        "loading:",
+        loading,
+      );
+    }
     if (
       (fontsLoaded || fontError) &&
       !loading &&
@@ -255,8 +269,11 @@ export default function RootLayout() {
                   name="task/new"
                   options={{ presentation: "modal" }}
                 />
+                {/* `getId`: opening the same session twice (double tap) focuses
+                    the existing modal instead of stacking a second one. */}
                 <Stack.Screen
                   name="task/[id]/edit"
+                  getId={({ params }) => String(params?.id ?? "")}
                   options={{ presentation: "modal" }}
                 />
                 {/* The ingestion inbox — LMS / portal notifications. */}

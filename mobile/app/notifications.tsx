@@ -1,4 +1,5 @@
 import { t } from "@/lib/i18n";
+import { safeBack } from "@/lib/nav";
 import { useLanguage } from "@/hooks/use-language";
 import { dateFnsLocale, format, locale } from "@/lib/i18n";
 import {
@@ -203,7 +204,7 @@ export default function NotificationsScreen() {
     <View className="flex-1 justify-end">
       {/* Tap the dimmed area above to close. */}
       <Pressable
-        onPress={() => router.back()}
+        onPress={() => safeBack(router)}
         accessibilityLabel={t("Close")}
         className="absolute inset-0 bg-black/40"
       />
@@ -261,7 +262,7 @@ export default function NotificationsScreen() {
         ) : (
           <>
             <Pressable
-              onPress={() => router.back()}
+              onPress={() => safeBack(router)}
               accessibilityLabel={t("Back")}
               hitSlop={8}
               className="size-9 items-center justify-center rounded-full active:bg-muted"

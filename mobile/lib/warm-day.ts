@@ -1,11 +1,12 @@
 import { listSessions } from "@/api/tasks";
 import { fetchDaySessions } from "@/lib/session-cache";
+import { warmWeekTypes } from "@/lib/week-day-types-cache";
 import { zonedDate } from "@zenflow/core";
 import { format } from "date-fns";
 
 /** Longest we hold the form open for the landing day; past it we navigate and
  * let the calendar's own skeleton cover the rest. */
-const WARM_TIMEOUT_MS = 2500;
+const WARM_TIMEOUT_MS = 1200;
 
 /**
  * Load the day a create/edit is about to teleport the calendar to, so it opens
@@ -19,8 +20,10 @@ export async function warmLandingDay(iso: string, tz: string): Promise<void> {
   const load = fetchDaySessions(format(date, "yyyy-MM-dd"), () =>
     listSessions("day", date).then((res) => res.sessions),
   ).catch(() => undefined);
+  // The header's dot row for the landing week loads alongside the day.
+  const week = warmWeekTypes(date, tz);
   await Promise.race([
-    load,
+    Promise.all([load, week]),
     new Promise((resolve) => setTimeout(resolve, WARM_TIMEOUT_MS)),
   ]);
 }

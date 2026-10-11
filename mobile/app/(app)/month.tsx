@@ -1,4 +1,5 @@
 import { t } from "@/lib/i18n";
+import { navigateOnce } from "@/lib/nav";
 import { useLanguage } from "@/hooks/use-language";
 import { updateSession } from "@/api/tasks";
 import { ChevronLeft, ChevronRight } from "@/components/Icons";
@@ -136,7 +137,9 @@ export default function MonthScreen() {
   function openSessionFromSheet(task: Session) {
     // A recurring occurrence's id is "<seriesId>::<startISO>" — encode it so
     // the `::` / `:` survive the route path (Expo Router decodes the param).
-    router.push(`/task/${encodeURIComponent(task.id)}/edit` as Href);
+    navigateOnce(() =>
+      router.push(`/task/${encodeURIComponent(task.id)}/edit` as Href),
+    );
   }
 
   // Day sheet's per-row "Move" button → the "Move to…" sheet, stacked on top.
@@ -162,7 +165,6 @@ export default function MonthScreen() {
         scope,
         skipConflicting,
       });
-      completeStep("move-day");
       setReloadToken((n) => n + 1);
       taskListSheetRef.current?.close();
     },

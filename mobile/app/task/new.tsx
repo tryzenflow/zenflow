@@ -16,6 +16,7 @@ import { useLastCreated } from "@/hooks/use-last-created";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
 import { setPendingSlotPick } from "@/lib/pending-slot-pick";
+import { goToCalendar, safeBack } from "@/lib/nav";
 import { warmLandingDay } from "@/lib/warm-day";
 import { divergentSittings } from "@/lib/series-alternatives";
 import {
@@ -41,7 +42,7 @@ import {
   DEFAULT_REMINDER_MINUTES,
 } from "@zenflow/shared";
 
-import { type Href, useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo } from "react";
 
 const DEFAULT_DURATION = 60;
@@ -244,10 +245,7 @@ function NewSessionForm() {
           tz,
         });
         await warmLandingDay(response.primarySlot, tz);
-        router.replace({
-          pathname: "/",
-          params: { date: response.primarySlot, flash: response.id },
-        } as Href);
+        goToCalendar(router, { date: response.primarySlot, flash: response.id });
         return;
       }
 
@@ -264,10 +262,10 @@ function NewSessionForm() {
           tz,
         });
         await warmLandingDay(series[0].primarySlot, tz);
-        router.replace({
-          pathname: "/",
-          params: { date: series[0].primarySlot, flash: series[0].session.id },
-        } as Href);
+        goToCalendar(router, {
+          date: series[0].primarySlot,
+          flash: series[0].session.id,
+        });
         return;
       }
 
@@ -293,15 +291,12 @@ function NewSessionForm() {
       // unscheduled — nothing to jump to, so just pop back.
       if (response.scheduledStartTime) {
         await warmLandingDay(response.scheduledStartTime, tz);
-        router.replace({
-          pathname: "/",
-          params: {
-            date: response.scheduledStartTime,
-            flash: response.id,
-          },
-        } as Href);
+        goToCalendar(router, {
+          date: response.scheduledStartTime,
+          flash: response.id,
+        });
       } else {
-        router.back();
+        safeBack(router);
       }
     };
     await withInfeasibleRetry(

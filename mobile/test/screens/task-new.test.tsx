@@ -83,7 +83,7 @@ describe("NewSessionScreen", () => {
     fireEvent.click(screen.getByTestId("task.save"));
     await toastShown("Session name is required");
     expect(posts).toEqual([]);
-    expect(router.replace).not.toHaveBeenCalled();
+    expect(router.dismissTo).not.toHaveBeenCalled();
   });
 
   it("defaults the deadline to 'No rush' once the options load", async () => {
@@ -108,7 +108,7 @@ describe("NewSessionScreen", () => {
       tags: [],
     });
     await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith({
+      expect(router.dismissTo).toHaveBeenCalledWith({
         pathname: "/",
         params: { date: "2026-10-15T03:00:00.000Z", flash: "new1" },
       }),
@@ -128,7 +128,7 @@ describe("NewSessionScreen", () => {
     renderScreen(<NewSessionScreen />);
     await fillAndSubmit();
     await waitFor(() => expect(router.back).toHaveBeenCalled());
-    expect(router.replace).not.toHaveBeenCalled();
+    expect(router.dismissTo).not.toHaveBeenCalled();
     await toastShown("Task created");
   });
 
@@ -160,11 +160,11 @@ describe("NewSessionScreen", () => {
     await fillAndSubmit();
     await toastShown("Accept conflicts");
     expect(screen.getAllByText("Accept late deadline").length).toBeGreaterThan(0);
-    expect(router.replace).not.toHaveBeenCalled();
+    expect(router.dismissTo).not.toHaveBeenCalled();
     fireEvent.click(screen.getAllByText("Accept late deadline")[0]);
     await waitFor(() => expect(calls).toBe(2));
     expect(posts[1]).toMatchObject({ infeasiblePolicy: "ACCEPT_LATE_DEADLINE" });
-    await waitFor(() => expect(router.replace).toHaveBeenCalled());
+    await waitFor(() => expect(router.dismissTo).toHaveBeenCalled());
   });
 
   it("hands a divergent placement to the week view's slot-pick sheet", async () => {
@@ -184,7 +184,7 @@ describe("NewSessionScreen", () => {
     renderScreen(<NewSessionScreen />);
     await fillAndSubmit();
     await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith({
+      expect(router.dismissTo).toHaveBeenCalledWith({
         pathname: "/",
         params: { date: "2026-10-15T03:00:00.000Z", flash: "new4" },
       }),
@@ -202,7 +202,7 @@ describe("NewSessionScreen", () => {
     renderScreen(<NewSessionScreen />);
     await fillAndSubmit();
     await waitFor(() => expect(screen.queryAllByText(/Too many sessions today|Couldn't create the session/).length).toBeGreaterThan(0));
-    expect(router.replace).not.toHaveBeenCalled();
+    expect(router.dismissTo).not.toHaveBeenCalled();
     expect(router.back).not.toHaveBeenCalled();
   });
 });

@@ -202,11 +202,15 @@ export async function requestPermission(): Promise<PushPermission | null> {
   try {
     // Android 13+ shows no prompt (and the request can hang) until a channel exists.
     await ensureAndroidChannel().catch(() => {});
-    return normalizePermission(
+    const t0 = Date.now();
+    debugLog("push", "requestPermissionsAsync: call");
+    const result = normalizePermission(
       await Notifications.requestPermissionsAsync({
         ios: { allowAlert: true, allowBadge: true, allowSound: true },
       }),
     );
+    debugLog("push", `requestPermissionsAsync: ${result} +${Date.now() - t0}ms`);
+    return result;
   } catch {
     return null;
   }

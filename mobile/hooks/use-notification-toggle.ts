@@ -32,8 +32,7 @@ import { Linking } from "react-native";
  *  - Logout unregisters the device but keeps allowNotifications, so the next
  *    login prompts again.
  */
-export function useNotificationToggle() {
-  const { prefs, update } = usePreferences();
+export function useNotificationState() {
   const { toast } = useToast();
   const allow = useUserStore((s) => s.user?.allowNotifications);
   const permission = usePushStatusStore((s) => s.permission);
@@ -83,12 +82,21 @@ export function useNotificationToggle() {
 
   const active = deriveNotificationsActive(allow, permission);
   return {
-    prefs,
-    update,
     setEnabled,
     active,
     permissionGranted: permission === "granted",
     /** OS permission has been read (gates UI that depends on `active`). */
     ready: permission !== null,
   };
+}
+
+/**
+ * `useNotificationState` plus the preferences (`prefs`/`update`) for screens
+ * that also edit them (onboarding). `usePreferences` is a per-instance hook
+ * (hydration + AsyncStorage on every user change), so callers that only need
+ * the notification switch should use `useNotificationState` instead.
+ */
+export function useNotificationToggle() {
+  const { prefs, update } = usePreferences();
+  return { prefs, update, ...useNotificationState() };
 }

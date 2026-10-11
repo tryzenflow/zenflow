@@ -7,7 +7,7 @@ import { DluAccountsSection } from "@/components/settings/dlu-accounts-section";
 import { FinishSetupCard } from "@/components/settings/finish-setup-card";
 import { TagsRow } from "@/components/settings/tags-row";
 import { usePushStatusStore } from "@/hooks/use-push-status-store";
-import { useNotificationToggle } from "@/hooks/use-notification-toggle";
+import { useNotificationState } from "@/hooks/use-notification-toggle";
 import { PreferencesSection } from "@/components/settings/preferences-section";
 import { ProfileRow } from "@/components/settings/profile-row";
 import { SettingsSectionLabel } from "@/components/settings/settings-header";
@@ -35,14 +35,15 @@ export default function SettingsScreen() {
   const router = useRouter();
   const user = useUserStore((s) => s.user);
   const setUser = useUserStore((s) => s.setUser);
-  const { setIntegrations, setLoading } = useIntegrationStore();
+  const setIntegrations = useIntegrationStore((s) => s.setIntegrations);
+  const setLoading = useIntegrationStore((s) => s.setLoading);
   const { isDarkColorScheme, setColorScheme } = useColorScheme();
   const [loggingOut, setLoggingOut] = useState(false);
   const scrollRef = useRef<{
     scrollTo: (o: { y: number; animated: boolean }) => void;
   }>(null);
   const dluY = useRef(0);
-  const notif = useNotificationToggle();
+  const notif = useNotificationState();
   const integrations = useIntegrationStore((s) => s.integrations);
   const integrationsLoading = useIntegrationStore((s) => s.loading);
   const dluConnected = integrations.some((i) => i.connected);

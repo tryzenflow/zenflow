@@ -17,7 +17,7 @@ export default function AppTabsLayout() {
     // read as almost nothing against the near-white background.
     <Tabs
       tabBar={(props) => <AppTabBar {...props} />}
-      screenOptions={{ headerShown: false }}
+      screenOptions={{ headerShown: false, freezeOnBlur: true }}
     >
       <Tabs.Screen
         name="index"

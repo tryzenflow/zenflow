@@ -468,10 +468,11 @@ function SessionBlockImpl({
     };
   });
 
+  // `liftProgress` already eases 0 -> 1 over the same 150ms off `isDragging`
+  // (see the reaction above) — reading it avoids starting a new `withTiming`
+  // inside the style worklet on every frame, per block, on every mounted page.
   const footprintStyle = useAnimatedStyle(() => ({
-    opacity: withTiming(interpolate(isDragging.value, [0, 1], [0, 1]), {
-      duration: 150,
-    }),
+    opacity: liftProgress.value,
   }));
 
   // A session nested inside another block's range stacks on top of it,
