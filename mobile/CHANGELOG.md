@@ -1,5 +1,20 @@
 # mobile
 
+## 0.1.0-beta.5
+
+### Minor Changes
+
+- 7576bd1: Offline read-only mode: the calendar cache is warmed for this week and the surrounding months, task details open offline, create/edit/delete are hidden, integrations are greyed out with a red failed-sync style, and there is a dev "Toggle offline" menu item. Notes get a themed audio/video player, a zoomable image/video viewer and offline media placeholders. Link previews load by default, link and audio cards are no longer cut off at the bottom, and the audio speed chip keeps a fixed width so the waveform doesn't shift. In the editor an audio upload is a link like any document and video plays with the default controls; the themed player is view-only. Uploads are capped at 20 MB per file and 100 MB per user, and the too-large toast shows the right size.
+
+### Patch Changes
+
+- 57edeed: Uploaded videos play on iOS: `GET /files/:id` now answers byte-range requests (206) and sends `Content-Length` and `Accept-Ranges`. A file that fails to load says so instead of reading like an offline message.
+- f42aca6: Offline polish: the week header's dots come from saved days, the offline toast shows once per spell, the offline glyph is a cloud with a slash, and the tab bar uses the full width when the create button is hidden. Language, timezone, default reminder and notifications can be changed offline and sync on reconnect. Offline media gets a placeholder per type (grey image box, disabled audio player with its waveform, dark video box with a disabled play button). Audio and video uploads are links in the editor and play in the viewer, and documents show as file cards there. A server that is down no longer signs you out (a 401/403 counts only when `/health/ready` is OK), and the profile name can be edited offline and syncs later. Audio shows a progress bar instead of a made-up waveform, and a day never opened takes its tasks from the saved month. The login logo casts an orange shadow and the background gradients drift further and faster. Document cards show the file size under the name.
+- 1f9a99c: Mobile: refuse create/edit/delete while offline with a clear toast, announce going offline, give the offline toast a dark-blue cloud-off icon, and describe what "Synced" refreshed.
+- 14fe285: Restore the saved light/dark/system theme on launch instead of resetting to light.
+  - @zenflow/shared@0.1.0-beta.5
+  - @zenflow/core@0.1.0-beta.5
+
 ## 0.1.0-beta.4
 
 ### Patch Changes

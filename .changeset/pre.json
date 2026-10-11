@@ -5,9 +5,15 @@
     "ab-gap-primary-text-note-skeleton",
     "checklist-day-sheet-spotlight",
     "file-ids-queue-release",
+    "file-range-requests",
     "glass-login-staging-exporter",
+    "health-all-dependencies",
     "mobile-nav-and-lag",
     "mobile-test-pyramid",
+    "offline-follow-ups",
+    "offline-guard-toasts",
+    "offline-readonly-media",
+    "restore-saved-theme",
     "short-user-facing-copy"
   ],
   "initialVersions": {
