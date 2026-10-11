@@ -407,8 +407,13 @@ export function DayTimeline({
         // Saved data on screen: keep showing it and flag offline (a quiet
         // glyph) instead of replacing the day with the error state.
         if (cancelled) return;
-        if (cached != null) useConnectivity.getState().setStale(dayKey, true);
-        else setError(true);
+        // Read the cache again: the warm-up may have filled this day while the
+        // request was in flight.
+        const saved = getCachedDaySessions(dayKey);
+        if (saved != null) {
+          setSessions((prev) => (sameSessions(prev, saved) ? prev : saved));
+          useConnectivity.getState().setStale(dayKey, true);
+        } else setError(true);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -417,6 +422,11 @@ export function DayTimeline({
       cancelled = true;
     };
   }, [dayKey, refreshKey, mutationTick]);
+
+  // Saved tasks for this day (prefetched offline) beat the error screen.
+  useEffect(() => {
+    if (error && tasks.length > 0) setError(false);
+  }, [error, tasks]);
 
   useEffect(() => {
     onStateChange?.(loading ? "loading" : error ? "error" : "ready");
@@ -442,8 +452,10 @@ export function DayTimeline({
     } catch {
       const key = format(date, "yyyy-MM-dd");
       const saved = getCachedDaySessions(key);
-      if (saved) useConnectivity.getState().setStale(key, true);
-      else setError(true);
+      if (saved) {
+        setSessions((prev) => (sameSessions(prev, saved) ? prev : saved));
+        useConnectivity.getState().setStale(key, true);
+      } else setError(true);
     }
   }, [date]);
 
