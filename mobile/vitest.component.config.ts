@@ -14,7 +14,6 @@ export default defineConfig({
       { find: /^nativewind$/, replacement: path.resolve(__dirname, "test/mocks/nativewind.ts") },
       { find: /^react-native-svg$/, replacement: path.resolve(__dirname, "test/mocks/svg.tsx") },
       { find: /^lucide-react-native$/, replacement: path.resolve(__dirname, "test/mocks/icons.tsx") },
-      { find: /^phosphor-react-native$/, replacement: path.resolve(__dirname, "test/mocks/icons.tsx") },
       { find: /^react-native-mmkv$/, replacement: path.resolve(__dirname, "test/mocks/mmkv.ts") },
       { find: /^(expo-linear-gradient|expo-haptics|expo)$/, replacement: path.resolve(__dirname, "test/mocks/expo-simple.tsx") },
       { find: /^react-native-gesture-handler$/, replacement: path.resolve(__dirname, "test/mocks/gesture-handler.tsx") },
@@ -43,6 +42,6 @@ export default defineConfig({
     setupFiles: ["./vitest.setup.ts", "./test/setup.component.tsx"],
     env: { EXPO_PUBLIC_API_URL: "http://api.test" },
     css: false,
-    server: { deps: { inline: [/react-native/, /nativewind/, /lucide-react-native/, /phosphor-react-native/] } },
+    server: { deps: { inline: [/react-native/, /nativewind/, /lucide-react-native/] } },
   },
 });
