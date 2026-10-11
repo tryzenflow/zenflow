@@ -122,7 +122,9 @@ describe("S3FilesService", () => {
         _sum: { size: MAX_USER_STORAGE_BYTES - 3 },
       });
 
-      const err: unknown = await service.upload([dto], "u1").catch((e) => e);
+      const err: unknown = await service
+        .upload([dto], "u1")
+        .catch((e: unknown) => e);
 
       expect(err).toBeInstanceOf(PayloadTooLargeException);
       expect((err as PayloadTooLargeException).message).toBe("Storage full");
