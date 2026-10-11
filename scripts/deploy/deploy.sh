@@ -109,6 +109,8 @@ remote_args=$(printf ' %q' \
   "$SECRETS_PROVIDER" "${VAULT_ADDR:-http://127.0.0.1:8200}" \
   "${VAULT_ROLE_ID_FILE:-/etc/zenflow/vault/role_id}" "${VAULT_SECRET_ID_FILE:-/etc/zenflow/vault/secret_id}" \
   "$DEPLOY_MODE" "$OLD_COLOUR_TTL" "$MIN_FREE_MB")
+# The script arrives on stdin (bash -s), so any command that reads stdin (compose run/exec)
+# would swallow the rest of it and the remote shell would exit 0 early: give those </dev/null.
 ssh_run "bash -s${remote_args}" <<'REMOTE'
 set -euo pipefail
 env_name="$1"; tag="$2"; api="$3"; bandit="$4"; path="$5"
@@ -151,7 +153,7 @@ save_images() {
   env | grep -E '^ZENFLOW_(API|BANDIT)_IMAGE_(BLUE|GREEN)=' | sort > state/images.env.new
   mv state/images.env.new state/images.env
 }
-reload_nginx() { $compose exec -T nginx sh -c 'nginx -t && nginx -s reload'; }
+reload_nginx() { $compose exec -T nginx sh -c 'nginx -t && nginx -s reload' </dev/null; }
 point_nginx_at() {
   printf 'server api-%s:8000;\n' "$1" > state/upstream.api.conf.new
   mv state/upstream.api.conf.new state/upstream.api.conf
@@ -238,7 +240,7 @@ fi
 shared="$($compose config --services | grep -Ev '^(api|bandit)-(blue|green)$|^(watcher|worker-.*)$|^(nginx|migrations|state-init)$' | tr '\n' ' ')"
 $compose up -d --no-build --remove-orphans $shared
 # Migrations run once for both colours, so they must be backward compatible (ADR-0013).
-$compose run --rm migrations
+$compose run --rm -T migrations </dev/null
 
 # Start the idle colour at one replica and gate it before it gets traffic.
 stop_idle() { $compose stop "api-$idle" "bandit-$idle" || true; }
@@ -252,7 +254,7 @@ for i in $(seq 1 40); do
 done
 [ -n "$healthy" ] || { echo "api-$idle never became healthy (/api/v1/health/ready)" >&2; $compose logs --tail 50 "api-$idle" >&2 || true; stop_idle; exit 1; }
 # Smoke: full dependency report (adds the queue/ratelimit Redis and bandit-$idle).
-if ! $compose exec -T "api-$idle" node -e "fetch('http://127.0.0.1:8000/api/v1/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"; then
+if ! $compose exec -T "api-$idle" node -e "fetch('http://127.0.0.1:8000/api/v1/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))" </dev/null; then
   echo "smoke request /api/v1/health failed on api-$idle" >&2; $compose logs --tail 50 "api-$idle" "bandit-$idle" >&2 || true; stop_idle; exit 1
 fi
 
