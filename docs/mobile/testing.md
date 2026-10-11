@@ -82,7 +82,7 @@ Install Maestro first: <https://docs.maestro.dev/getting-started/installing-maes
 
 Builds run on GitHub runners via `expo prebuild` (no Expo/EAS account). It is not part of the required `ci-ok` check.
 
-The default (`e2e`) variant bakes in the emulator-host API URL and allows cleartext HTTP (`plugins/withE2eCleartext.js`, enabled only by `ZENFLOW_E2E=1`). For a build pointed at a real API run the workflow manually with `variant: release` and an `api_url`.
+The default (`e2e`) variant bakes in the emulator-host API URL and allows cleartext HTTP (`plugins/withE2eCleartext.js`, enabled only by `ZENFLOW_E2E=1`). For a build pointed at a real API run the workflow manually with `variant: release`; it defaults to `https://zenflow.alphatrann.com/api/v1` unless you pass an `api_url`.
 
 ### Android artifact: `.apk`
 
