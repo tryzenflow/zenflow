@@ -6,9 +6,9 @@ import { useSpotlight } from "@/hooks/use-spotlight";
 import { dateKey, isOutsideMonth } from "@/lib/month-date-math";
 import type { Session } from "@zenflow/shared";
 import { isSameDay } from "date-fns";
-import { forwardRef, memo, useEffect, useMemo, useRef } from "react";
+import { forwardRef, memo, useEffect, useMemo, useRef, useState } from "react";
 import { View, type ViewInstance } from "react-native";
-import { MonthCell } from "./month-cell";
+import { CELL_HEIGHT, MonthCell } from "./month-cell";
 
 // Monday-first — matches `WEEK_STARTS_ON` in `@/lib/month-date-math`.
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -133,9 +133,13 @@ export const MonthGrid = memo(
       onOpenMoveDay(day, list);
     }, [moveRequested, moveDayKey, tasksByDate, days, onOpenMoveDay]);
     useLanguage();
-    // Rows share the grid's height equally (`flex-1`), so the month always fits
-    // and is the right size on the first frame (no measure-then-snap).
+    // Rows share the grid's height equally, so the month always fits.
+    const [gridHeight, setGridHeight] = useState(0);
     const weekRows = chunkIntoWeeks(days);
+    const rowHeight =
+      gridHeight > 0
+        ? Math.max(CELL_HEIGHT / 2, (gridHeight - 2) / weekRows.length)
+        : CELL_HEIGHT;
     return (
       <View className="flex-1 px-3 pt-2">
         <View className="flex-row">
@@ -151,7 +155,10 @@ export const MonthGrid = memo(
 
         <View
           ref={ref}
-          onLayout={onGridLayout}
+          onLayout={(e) => {
+            setGridHeight(e.nativeEvent.layout.height);
+            onGridLayout();
+          }}
           className="flex-1 overflow-hidden rounded-xl border-l border-t border-border"
         >
           {/* Plain rows of `View`s, NOT a `FlatList numColumns={7}`. This grid
@@ -163,7 +170,11 @@ export const MonthGrid = memo(
               is detached (switching tabs): "addViewAt: failed to insert view
               […] the specified child already has a parent". */}
           {weekRows.map((week) => (
-            <View key={dateKey(week[0])} className="flex-1 flex-row">
+            <View
+              key={dateKey(week[0])}
+              style={{ height: rowHeight }}
+              className="flex-row"
+            >
               {week.map((day) => {
                 const key = dateKey(day);
                 return (

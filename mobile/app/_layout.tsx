@@ -17,7 +17,6 @@ import {
   clearCachedSessionUser,
   readCachedSessionUser,
 } from "@/lib/session";
-import { AnimatedSplash } from "@/components/brand/animated-splash";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { isAxiosError } from "axios";
@@ -164,8 +163,6 @@ export default function RootLayout() {
   // Safety net only for a redirect that never settles; it starts once the
   // session has resolved, so a slow `/auth/me` can't trip it early.
   const [splashTimedOut, setSplashTimedOut] = React.useState(false);
-  // The native splash has lifted: the in-app overlay may fade out.
-  const [splashDone, setSplashDone] = React.useState(false);
   React.useEffect(() => {
     if (loading) return;
     const t = setTimeout(() => setSplashTimedOut(true), 1500);
@@ -196,7 +193,6 @@ export default function RootLayout() {
           SplashScreen.hideAsync().catch((err) => {
             console.warn("[_layout] SplashScreen.hideAsync warning:", err);
           });
-          setSplashDone(true);
         }),
       );
       return () => {
@@ -295,7 +291,6 @@ export default function RootLayout() {
       </ToastProvider>
 
       <PortalHost />
-      <AnimatedSplash dark={isDarkColorScheme} done={splashDone} />
     </GestureHandlerRootView>
   );
 }

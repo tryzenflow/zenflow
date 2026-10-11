@@ -1,6 +1,5 @@
 import { CircleUserRound, Mail } from "@/components/Icons";
 import { BackIcon, WaitIcon } from "@/components/brand/icons";
-import { GrainOverlay } from "@/components/brand/grain-overlay";
 import { SunriseBackdrop } from "@/components/brand/sunrise-backdrop";
 import { Glass } from "@/components/ui/glass";
 import { NAV_THEME } from "@/lib/constants";
@@ -283,7 +282,6 @@ export default function LoginScreen() {
   return (
     <View className="flex-1 bg-background px-5">
       <SunriseBackdrop dark={isDarkColorScheme} />
-      <GrainOverlay dark={isDarkColorScheme} />
       <View
         className="absolute right-5 z-10"
         style={{ top: insets.top + 8 }}
@@ -316,7 +314,7 @@ export default function LoginScreen() {
             elevation: 6,
           }}
         >
-        <Glass frosted radius={24} intensity={60} style={{ padding: 18, borderWidth: 1 }}>
+        <Glass radius={24} style={{ padding: 18, borderWidth: 1 }}>
         <Form {...form}>
           {stage === "email" ? (
             <View>
@@ -337,7 +335,7 @@ export default function LoginScreen() {
                     value={field.value}
                     onBlur={field.onBlur}
                     onChange={field.onChange}
-                    className="h-[50px] rounded-xl border-glass-edge/35 bg-glass/20 px-4 dark:border-glass-edge/25 dark:bg-glass/[0.05] web:focus-visible:border-ring web:focus-visible:ring-ring/50 web:focus-visible:ring-[3px]"
+                    className="h-[50px] rounded-xl border-glass-edge/35 bg-glass/70 px-4 dark:border-glass-edge/25 dark:bg-glass/[0.07] web:focus-visible:border-ring web:focus-visible:ring-ring/50 web:focus-visible:ring-[3px]"
                   />
                 )}
               />
@@ -413,7 +411,7 @@ export default function LoginScreen() {
                   <ActivityIndicator
                     className="mr-2"
                     size="small"
-                    color={muted}
+                    color="black"
                   />
                   <Text className="text-[14px] text-muted-foreground">
                     {t("Verifying code…")}
