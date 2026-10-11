@@ -15,6 +15,7 @@ import {
 } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
 import { isContinuationEntry } from "@/lib/month-date-math";
+import { isFutureTask } from "@/lib/nearest-day";
 import { isSessionPastDeadline } from "@/lib/overdue";
 import { deriveState } from "@/lib/task-card";
 import { cn } from "@/lib/utils";
@@ -58,6 +59,10 @@ interface SessionListSheetProps {
   onReschedule?: (task: Session) => void;
 }
 
+// Module-level so the sheet gets the same array on every render; an inline
+// literal is a new `snapPoints` prop each time `open()` sets state.
+const SNAP_POINTS = ["62%"];
+
 export const SessionListSheet = forwardRef<
   SessionListSheetHandle,
   SessionListSheetProps
@@ -68,12 +73,17 @@ export const SessionListSheet = forwardRef<
   const [sessions, setSessions] = useState<Session[]>([]);
   // The "Move a task to another day" demo points at a plain task, never a
   // timetable lecture or exam.
-  const firstTaskIndex = sessions.findIndex((s) => s.type === "TASK");
+  const firstTaskIndex = sessions.findIndex((s) => isFutureTask(s));
   const sessionCount = sessions.length;
   const dragRef = useRef<MonthDragHandle | null>(null);
   // Read inside the pan callbacks, which are built once per row and must not
   // capture the day the sheet happened to be showing on that render.
   const dayRef = useRef<Date | null>(null);
+  // A drag-out leaves the modal mounted at index -1 (see `handleRowDragStart`).
+  // Re-presenting that same instance is what can leave the scrim painting over
+  // the sheet, so the next `open()` after a drag mounts a fresh modal instead.
+  const [sheetKey, setSheetKey] = useState(0);
+  const draggedRef = useRef(false);
 
   useImperativeHandle(
     ref,
@@ -83,7 +93,14 @@ export const SessionListSheet = forwardRef<
         setSessions(nextSessions);
         dayRef.current = nextDay;
         dragRef.current = drag;
-        bottomSheet.open();
+        if (draggedRef.current) {
+          draggedRef.current = false;
+          setSheetKey((k) => k + 1);
+        }
+        // Present on the next frame, after the state above has committed, so
+        // the re-render lands before the open animation starts instead of in
+        // the middle of it (where it can reorder the scrim and the sheet).
+        requestAnimationFrame(() => bottomSheet.open());
       },
       close: () => bottomSheet.close(),
     }),
@@ -111,6 +128,7 @@ export const SessionListSheet = forwardRef<
       const dragDay = dayRef.current;
       if (!dragDay || !dragRef.current) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      draggedRef.current = true;
       bottomSheet.ref.current?.close();
       dragRef.current.start(task, dragDay, absoluteX, absoluteY);
     },
@@ -175,11 +193,12 @@ export const SessionListSheet = forwardRef<
   return (
     <BottomSheet>
       <BottomSheetContent
+        key={sheetKey}
         ref={bottomSheet.ref}
         // Short enough to leave the top weeks of the grid visible above it, so a
         // task can be dragged onto a day you can see (and the checklist demo can
         // point at one).
-        snapPoints={["62%"]}
+        snapPoints={SNAP_POINTS}
         enableDynamicSizing={false}
         // Lets `close()` mean "animate away but stay mounted" — required for
         // drag-out-of-the-sheet to survive the sheet closing. See

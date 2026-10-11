@@ -91,6 +91,7 @@ export function GettingStarted() {
     sheet.close();
     let step = blockedBy ?? tapped;
     let jump: (() => void) | null = null;
+    let foundTask = false;
     // Steps that need a task: find the nearest day (week) / month that has one
     // — starting from where the user is, so a day that already has a task
     // stays put — and move there before pointing at it. Only when there is
@@ -105,6 +106,7 @@ export function GettingStarted() {
       const day = await findNearestTaskDate(from, tz);
       if (day) {
         step = tapped;
+        foundTask = true;
         if (month) {
           if (format(day, "yyyy-MM") !== format(from, "yyyy-MM")) {
             jump = () => useCalendarJump.getState().jumpMonth(day);
@@ -124,10 +126,13 @@ export function GettingStarted() {
       // Nothing to point at (the task was deleted, say): point at + instead.
       setTimeout(() => {
         const { step: current, shown, show } = useSpotlight.getState();
-        if (current === step && !shown && step !== "create-task")
-          show("create-task");
+        if (current !== step || shown || step === "create-task") return;
+        // A task was found, so "create a task" would be wrong: the control
+        // just wasn't measurable in time. Drop the request, don't redirect.
+        if (foundTask) useSpotlight.getState().clear();
+        else show("create-task");
       }, 8000);
-    }, 320);
+    }, 0);
   };
 
   if (!visible) return null;
