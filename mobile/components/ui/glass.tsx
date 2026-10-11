@@ -16,6 +16,7 @@ export function Glass({
   radius,
   intensity = 45,
   clear = false,
+  frosted = false,
   style,
   children,
 }: {
@@ -23,13 +24,20 @@ export function Glass({
   intensity?: number;
   /** More transparent, for floating chrome over content (tab bar, pills, toasts). */
   clear?: boolean;
+  /** Glassmorphism over a backdrop: very see-through on every platform (blur on
+   * iOS and web, a light tint elsewhere) so the colours behind show through. */
+  frosted?: boolean;
   style?: ComponentProps<typeof View>["style"];
   children?: ReactNode;
 }) {
   const { isDarkColorScheme } = useColorScheme();
   const blurred = Platform.OS === "ios";
 
-  const tint = isDarkColorScheme
+  const tint = frosted
+    ? isDarkColorScheme
+      ? "rgba(36, 28, 22, 0.26)"
+      : "rgba(255, 252, 248, 0.18)"
+    : isDarkColorScheme
     ? blurred
       ? clear
         ? "rgba(36, 28, 22, 0.5)"
@@ -45,7 +53,10 @@ export function Glass({
     : "rgba(255, 150, 70, 0.34)";
   const sheen: [string, string] = isDarkColorScheme
     ? ["rgba(255, 170, 100, 0.10)", "rgba(255, 170, 100, 0)"]
-    : ["rgba(255, 255, 255, 0.85)", "rgba(255, 255, 255, 0)"];
+    : [
+        frosted ? "rgba(255, 255, 255, 0.22)" : "rgba(255, 255, 255, 0.85)",
+        "rgba(255, 255, 255, 0)",
+      ];
 
   return (
     <View
@@ -56,6 +67,13 @@ export function Glass({
           borderWidth: StyleSheet.hairlineWidth,
           borderColor: edge,
           backgroundColor: tint,
+          // `backdrop-filter` is web-only; native uses `BlurView` below.
+          ...(frosted && Platform.OS === "web"
+            ? ({
+                backdropFilter: "blur(22px) saturate(1.4)",
+                WebkitBackdropFilter: "blur(22px) saturate(1.4)",
+              } as object)
+            : null),
         },
         style,
       ]}

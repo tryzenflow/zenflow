@@ -314,7 +314,7 @@ export default function LoginScreen() {
             elevation: 6,
           }}
         >
-        <Glass radius={24} style={{ padding: 18, borderWidth: 1 }}>
+        <Glass frosted radius={24} intensity={60} style={{ padding: 18, borderWidth: 1 }}>
         <Form {...form}>
           {stage === "email" ? (
             <View>
@@ -335,7 +335,7 @@ export default function LoginScreen() {
                     value={field.value}
                     onBlur={field.onBlur}
                     onChange={field.onChange}
-                    className="h-[50px] rounded-xl border-glass-edge/35 bg-glass/70 px-4 dark:border-glass-edge/25 dark:bg-glass/[0.07] web:focus-visible:border-ring web:focus-visible:ring-ring/50 web:focus-visible:ring-[3px]"
+                    className="h-[50px] rounded-xl border-glass-edge/35 bg-glass/10 px-4 dark:border-glass-edge/25 dark:bg-glass/[0.03] web:focus-visible:border-ring web:focus-visible:ring-ring/50 web:focus-visible:ring-[3px]"
                   />
                 )}
               />
