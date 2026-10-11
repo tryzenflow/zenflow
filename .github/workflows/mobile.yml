@@ -198,7 +198,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: zenflow-android-apk
           path: dist
@@ -263,7 +263,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: zenflow-ios-simulator-app
           path: dist
