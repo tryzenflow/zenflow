@@ -93,11 +93,21 @@ export function normalizeTagName(raw: string): string | null {
 
 const sameTag = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
-/** Initial ticked set: the user's existing tags if any (resume), else the defaults. */
+/**
+ * Initial ticked set. Resuming (existing tags include a suggestion the user
+ * already saved) keeps exactly those; otherwise the defaults, plus any other
+ * existing tags (e.g. created by an LMS/portal sync during onboarding).
+ */
 export function initialTagSelection(existing: readonly string[]): string[] {
-  return existing.length > 0
-    ? [...existing]
-    : DEFAULT_TICKED_TAGS.map((name) => t(name));
+  const resumed = existing.some((e) =>
+    SUGGESTED_TAGS.some((name) => sameTag(t(name), e)),
+  );
+  if (resumed) return [...existing];
+  const defaults = DEFAULT_TICKED_TAGS.map((name) => t(name));
+  return [
+    ...defaults,
+    ...existing.filter((e) => !defaults.some((d) => sameTag(d, e))),
+  ];
 }
 
 /** Suggestions followed by any other (existing/custom) selected tags. */

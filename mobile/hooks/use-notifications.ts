@@ -306,6 +306,9 @@ export function useNotificationsSubscription(): void {
           notifySessionsMutated();
         }
 
+        // Onboarding stays quiet: inbox only, no toast or system notification.
+        if (!useUserStore.getState().user?.onboardedAt) return;
+
         // The native push for this same notification may have been
         // presented already — then this is a duplicate: inbox only.
         if (!claimNotification(n.id, "sse")) return;

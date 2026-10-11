@@ -164,7 +164,8 @@ export const MonthCell = memo(function MonthCell({
     [sessions],
   );
   // Measured height decides how many pills fit; the fixed cap is only the
-  // first-frame fallback.
+  // first-frame fallback, and those pills stay invisible until measured so the
+  // count never visibly flips after layout.
   const [cellHeight, setCellHeight] = useState<number | null>(null);
   const { visible, overflowCount } = splitCellSessions(
     bySeverity,
@@ -226,6 +227,7 @@ export const MonthCell = memo(function MonthCell({
       ) : (
         <Animated.View
           entering={hadSkeletonRef.current ? FadeIn.duration(200) : undefined}
+          style={cellHeight == null ? { opacity: 0 } : undefined}
           className={cn("mt-1 gap-[3px]", outside && "opacity-60")}
         >
           {visible.map((task) => (

@@ -1,4 +1,5 @@
 import { useReducedMotion } from "@/lib/motion";
+import { LinearGradient } from "expo-linear-gradient";
 import { useEffect } from "react";
 import { StyleSheet, View, useWindowDimensions } from "react-native";
 import Animated, {
@@ -109,6 +110,76 @@ function BlobLayer({
   );
 }
 
+const FLOW_COLORS: [string, string, string, string, string] = [
+  "#FF8E3E",
+  "#F0B100",
+  "#FFD9A0",
+  "#D8F999",
+  "#FFA66B",
+];
+const FLOW_COLORS_DARK: [string, string, string, string, string] = [
+  "#5A2A0C",
+  "#4A3406",
+  "#2E1A0C",
+  "#2A3512",
+  "#4E2210",
+];
+
+/**
+ * A slowly sliding, turning gradient well larger than the screen, so the base
+ * colour itself keeps moving under the blobs. Static under Reduce Motion.
+ */
+function FlowLayer({ dark, intensity }: { dark: boolean; intensity: number }) {
+  const { width, height } = useWindowDimensions();
+  const reduceMotion = useReducedMotion();
+  const t = useSharedValue(0);
+
+  useEffect(() => {
+    if (reduceMotion) {
+      t.value = 0;
+      return;
+    }
+    t.value = withRepeat(
+      withTiming(1, { duration: 18000, easing: Easing.inOut(Easing.sin) }),
+      -1,
+      true,
+    );
+  }, [reduceMotion, t]);
+
+  const side = Math.max(width, height) * 2.2;
+  const style = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: -width * 0.35 * t.value },
+      { translateY: height * 0.18 * t.value },
+      { rotate: `${-14 + 28 * t.value}deg` },
+    ],
+  }));
+
+  return (
+    <Animated.View
+      collapsable={false}
+      style={[
+        {
+          position: "absolute",
+          width: side,
+          height: side,
+          left: (width - side) / 2,
+          top: (height - side) / 2,
+          opacity: Math.min(1, (dark ? 0.55 : 0.6) * intensity),
+        },
+        style,
+      ]}
+    >
+      <LinearGradient
+        colors={dark ? FLOW_COLORS_DARK : FLOW_COLORS}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+    </Animated.View>
+  );
+}
+
 /** `intensity` scales every glow (1 = login; the form screens use less so content stays calm). */
 export function SunriseBackdrop({
   dark = false,
@@ -119,6 +190,7 @@ export function SunriseBackdrop({
 }) {
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <FlowLayer dark={dark} intensity={intensity} />
       {BLOBS.map((b) => (
         <BlobLayer key={b.id} blob={b} dark={dark} intensity={intensity} />
       ))}
