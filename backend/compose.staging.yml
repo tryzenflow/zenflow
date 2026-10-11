@@ -652,7 +652,7 @@ services:
     networks:
       - o11y
 
-  # Postgres connections / locks / pg_stat_* for the load test (Prometheus job
+  # Postgres connections / locks / pg_stat_* (Prometheus job
   # `postgres-exporter`). The API's Prisma pool exposes no metrics of its own.
   postgres-exporter:
     container_name: zenflow-postgres-exporter-staging
