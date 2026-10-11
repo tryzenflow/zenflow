@@ -33,6 +33,10 @@ presentation position randomized 50/50. Recorded (`SlotProposal.pairwiseShown`,
 `pairwisePositions`, `chosenByUser`) for the win-rate metric only — **not** a LinUCB weight
 update (§4).
 
+A pair is only offered when the two starts are at least `MIN_ALTERNATIVE_GAP_MINUTES` (60)
+apart; closer picks (9:00 vs 9:15) aren't a real choice. They are still recorded, with
+`pairwiseShown = false`.
+
 The sampled fraction is `PAIRWISE_SAMPLE_RATE` (`backend/src/scheduler/constants.ts`), currently `1`:
 every placement computes both policies and the roll only picks which result is applied, so
 latency does not differ by assigned policy. The environment variable of the same name overrides it

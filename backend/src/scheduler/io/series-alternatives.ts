@@ -1,3 +1,4 @@
+import { MIN_ALTERNATIVE_GAP_MINUTES } from "../constants";
 import { MS_PER_MINUTE, overlapsAny, type Interval } from "../core/slot";
 
 /** One series sitting as seen by {@link selectSeriesAlternatives}. */
@@ -16,7 +17,8 @@ export interface SeriesSittingPair {
  * Which sittings of a pairwise-sampled `TASK` series surface their
  * alternative (#58). Pure presentation filter over the two plans Python
  * returned — no ranking. A sitting qualifies when its other-plan start
- * differs from the applied one and that alternative interval overlaps
+ * is at least `minGapMs` from the applied one (closer isn't a real choice)
+ * and that alternative interval overlaps
  * neither `fixedOccupied` nor any OTHER sitting's applied interval (the
  * other plan's ledger is independent of the applied one, so this can
  * happen). The first `max` qualifying sittings by index are returned, in
@@ -26,6 +28,7 @@ export function selectSeriesAlternatives(
   sittings: SeriesSittingPair[],
   fixedOccupied: Interval[],
   max: number,
+  minGapMs: number = MIN_ALTERNATIVE_GAP_MINUTES * MS_PER_MINUTE,
 ): number[] {
   const applied: Interval[] = sittings.map((s) => ({
     start: s.appliedStartMs,
@@ -34,7 +37,8 @@ export function selectSeriesAlternatives(
   const shown: number[] = [];
   for (let i = 0; i < sittings.length && shown.length < max; i++) {
     const { otherStartMs, appliedStartMs, durationMinutes } = sittings[i];
-    if (otherStartMs === null || otherStartMs === appliedStartMs) continue;
+    if (otherStartMs === null) continue;
+    if (Math.abs(otherStartMs - appliedStartMs) < minGapMs) continue;
     const end = otherStartMs + durationMinutes * MS_PER_MINUTE;
     const siblings = applied.filter((_, j) => j !== i);
     if (overlapsAny(siblings, otherStartMs, end)) continue;
