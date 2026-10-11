@@ -35,7 +35,7 @@ import { useIntegrationStore } from "@/hooks/use-integration-store";
 import { cn } from "@/lib/utils";
 import type { IntegrationProvider, IntegrationStatus } from "@zenflow/shared";
 import { isAxiosError } from "axios";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -135,8 +135,9 @@ const SETTLE_MAX_POLLS = 40;
 async function settleStatus(
   provider: IntegrationProvider,
   update: (provider: IntegrationProvider, status: IntegrationStatus) => void,
+  isActive: () => boolean = () => true,
 ): Promise<void> {
-  for (let i = 0; i < SETTLE_MAX_POLLS; i++) {
+  for (let i = 0; i < SETTLE_MAX_POLLS && isActive(); i++) {
     try {
       const fresh = (await listIntegrations()).find(
         (s) => s.provider === provider,
@@ -229,6 +230,15 @@ export function DluAccountsSection({
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const passwordRef = useRef<React.ElementRef<typeof BottomSheetInput>>(null);
+  // Stops the status poll once the section unmounts (it otherwise keeps hitting
+  // `GET /integrations` every 3s, up to 2 minutes, from a screen nobody sees).
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Per provider, so syncing one account never locks the other's button.
@@ -330,7 +340,7 @@ export function DluAccountsSection({
       // run, or a background sync we had not seen). If the server is still
       // mid-run — we gave up waiting, it did not — keep re-reading until it
       // settles, so the row never stays on "Syncing…".
-      void settleStatus(provider, updateIntegration);
+      void settleStatus(provider, updateIntegration, () => mountedRef.current);
     } finally {
       setSyncing((current) => current.filter((p) => p !== provider));
     }
