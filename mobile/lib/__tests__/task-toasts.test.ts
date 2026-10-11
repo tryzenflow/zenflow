@@ -105,7 +105,7 @@ describe("placementToastMessage", () => {
 });
 
 describe("showMovedToast", () => {
-  it("leads with the time, keeps the date as the description", () => {
+  it("puts the date and the time together in the title", () => {
     const toast = vi.fn();
     showMovedToast(toast, {
       first: false,
@@ -113,8 +113,8 @@ describe("showMovedToast", () => {
       withTime: true,
     });
     const arg = toast.mock.calls[0][0];
-    expect(arg.title).toBe("Moved to 9:00 AM");
-    expect(arg.description).toBe("Mon, Oct 12");
+    expect(arg.title).toBe("Moved to Mon, Oct 12, 9:00 AM");
+    expect(arg.description).toBeUndefined();
   });
 
   it("puts the date in the title when there is no time", () => {

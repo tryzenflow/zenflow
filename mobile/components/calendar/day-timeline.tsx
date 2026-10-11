@@ -247,6 +247,8 @@ interface DayTimelineProps {
   flashSessionId?: string | null;
 }
 
+const FALLBACK_BLOCK_LAYOUT = { column: 0, columns: 1, conflict: false };
+
 export function DayTimeline({
   date: propDate,
   onSessionPress,
@@ -472,6 +474,12 @@ export function DayTimeline({
   const hasMidnightCrossing = useMemo(
     () => segments.some((s) => s.continues),
     [segments],
+  );
+
+  // Overlaps cascade: later columns draw on top, offset left.
+  const cascadeStep = Math.min(
+    CASCADE_MAX_STEP,
+    contentWidth * CASCADE_STEP_RATIO,
   );
 
   const bottomInset = contentBottomInset ?? (showHeader ? tabBarOverlay : 0);
@@ -1226,16 +1234,10 @@ export function DayTimeline({
                 )}
 
                 {segments.map((segment) => {
-                  const blockLayout = layout.get(segment.segmentId) ?? {
-                    column: 0,
-                    columns: 1,
-                    conflict: false,
-                  };
-                  // Overlaps cascade: later columns draw on top, offset left.
-                  const cascadeStep = Math.min(
-                    CASCADE_MAX_STEP,
-                    contentWidth * CASCADE_STEP_RATIO,
-                  );
+                  // Stable fallback identity: an inline literal per segment per
+                  // render defeats `SessionBlock`'s memo.
+                  const blockLayout =
+                    layout.get(segment.segmentId) ?? FALLBACK_BLOCK_LAYOUT;
                   const leftOffsetPx =
                     BLOCK_GUTTER + blockLayout.column * cascadeStep;
                   const blockWidthPx =

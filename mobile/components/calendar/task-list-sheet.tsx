@@ -25,6 +25,8 @@ import * as Haptics from "expo-haptics";
 import {
   type RefObject,
   forwardRef,
+  memo,
+  useCallback,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -67,6 +69,7 @@ export const SessionListSheet = forwardRef<
   // The "Move a task to another day" demo points at a plain task, never a
   // timetable lecture or exam.
   const firstTaskIndex = sessions.findIndex((s) => s.type === "TASK");
+  const sessionCount = sessions.length;
   const dragRef = useRef<MonthDragHandle | null>(null);
   // Read inside the pan callbacks, which are built once per row and must not
   // capture the day the sheet happened to be showing on that render.
@@ -103,17 +106,71 @@ export const SessionListSheet = forwardRef<
    * mounted at index -1, so the handler survives the whole drag; a later
    * `present()` re-opens it.
    */
-  const handleRowDragStart = (
-    task: Session,
-    absoluteX: number,
-    absoluteY: number,
-  ) => {
-    const dragDay = dayRef.current;
-    if (!dragDay || !dragRef.current) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    bottomSheet.ref.current?.close();
-    dragRef.current.start(task, dragDay, absoluteX, absoluteY);
-  };
+  const handleRowDragStart = useCallback(
+    (task: Session, absoluteX: number, absoluteY: number) => {
+      const dragDay = dayRef.current;
+      if (!dragDay || !dragRef.current) return;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      bottomSheet.ref.current?.close();
+      dragRef.current.start(task, dragDay, absoluteX, absoluteY);
+    },
+    [bottomSheet.ref],
+  );
+
+  // The screen's callbacks are read at press time so the row callbacks below
+  // keep one identity for the sheet's whole life.
+  const callbacks = useRef({ onSelectSession, onReschedule });
+  callbacks.current = { onSelectSession, onReschedule };
+  const handleRowPress = useCallback(
+    (item: Session) => {
+      bottomSheet.close();
+      callbacks.current.onSelectSession(item);
+    },
+    [bottomSheet],
+  );
+  const handleRowReschedule = useCallback(
+    (item: Session) => callbacks.current.onReschedule?.(item),
+    [],
+  );
+  const hasReschedule = !!onReschedule;
+
+  const keyExtractor = useCallback((item: unknown) => (item as Session).id, []);
+  const renderItem = useCallback(
+    ({ item: rawItem, index }: ListRenderItemInfo<unknown>) => {
+      const item = rawItem as Session;
+      return (
+        <View
+          className={cn(
+            "overflow-hidden border-x border-border bg-card",
+            index === 0 && "rounded-t-2xl border-t",
+            index === sessionCount - 1 && "rounded-b-2xl border-b",
+            index > 0 && "border-t border-t-border",
+          )}
+        >
+          {index === firstTaskIndex ? (
+            <SpotlightAnchor step="move-day" ignoreFocus />
+          ) : null}
+          <SessionListRow
+            task={item}
+            tz={tz}
+            onPress={handleRowPress}
+            onDragStart={handleRowDragStart}
+            dragRef={dragRef}
+            onReschedule={hasReschedule ? handleRowReschedule : undefined}
+          />
+        </View>
+      );
+    },
+    [
+      sessionCount,
+      firstTaskIndex,
+      tz,
+      handleRowPress,
+      handleRowDragStart,
+      handleRowReschedule,
+      hasReschedule,
+    ],
+  );
 
   return (
     <BottomSheet>
@@ -166,7 +223,7 @@ export const SessionListSheet = forwardRef<
         )}
         <BottomSheetFlatList
           data={sessions}
-          keyExtractor={(item) => (item as Session).id}
+          keyExtractor={keyExtractor}
           contentContainerClassName="px-5 pt-4"
           className="py-0"
           ListEmptyComponent={
@@ -179,39 +236,7 @@ export const SessionListSheet = forwardRef<
               </Text>
             </View>
           }
-          renderItem={({
-            item: rawItem,
-            index,
-          }: ListRenderItemInfo<unknown>) => {
-            const item = rawItem as Session;
-            return (
-              <View
-                className={cn(
-                  "overflow-hidden border-x border-border bg-card",
-                  index === 0 && "rounded-t-2xl border-t",
-                  index === sessions.length - 1 && "rounded-b-2xl border-b",
-                  index > 0 && "border-t border-t-border",
-                )}
-              >
-                {index === firstTaskIndex ? <SpotlightAnchor step="move-day" ignoreFocus /> : null}
-                <SessionListRow
-                  task={item}
-                  tz={tz}
-                  onPress={() => {
-                    bottomSheet.close();
-                    onSelectSession(item);
-                  }}
-                  onDragStart={handleRowDragStart}
-                  dragRef={dragRef}
-                  onReschedule={
-                    onReschedule && !isContinuationEntry(item)
-                      ? () => onReschedule(item)
-                      : undefined
-                  }
-                />
-              </View>
-            );
-          }}
+          renderItem={renderItem}
         />
       </BottomSheetContent>
     </BottomSheet>
@@ -244,7 +269,10 @@ function summarize(tasks: Session[]): string {
   return count;
 }
 
-function SessionListRow({
+// Memoized with stable callbacks (they take the task, so no per-row closure):
+// opening the sheet or a parent re-render no longer re-renders every row and
+// rebuilds its gesture config.
+const SessionListRow = memo(function SessionListRow({
   task,
   tz,
   onPress,
@@ -254,10 +282,12 @@ function SessionListRow({
 }: {
   task: Session;
   tz: string;
-  onPress: () => void;
+  onPress: (task: Session) => void;
   onDragStart: (task: Session, absoluteX: number, absoluteY: number) => void;
   dragRef: RefObject<MonthDragHandle | null>;
-  onReschedule?: () => void;
+  /** Shown unless the row is a midnight continuation (same session as the
+   * previous day's row, not independently movable). */
+  onReschedule?: (task: Session) => void;
 }) {
   useLanguage();
   const state = deriveState(task);
@@ -338,7 +368,7 @@ function SessionListRow({
   return (
     <GestureDetector gesture={pan}>
       <Pressable
-        onPress={onPress}
+        onPress={() => onPress(task)}
         className="flex-row items-center gap-[13px] px-4 py-3.5"
       >
         {/* Start over end, joined by a short rule — reads as a span. */}
@@ -387,9 +417,9 @@ function SessionListRow({
             )}
           </View>
         </View>
-        {onReschedule && (
+        {onReschedule && !continuation && (
           <Pressable
-            onPress={onReschedule}
+            onPress={() => onReschedule(task)}
             hitSlop={8}
             accessibilityLabel={t("Move {title}", { title: task.title })}
             className="h-9 w-9 flex-none items-center justify-center rounded-full bg-muted"
@@ -400,4 +430,4 @@ function SessionListRow({
       </Pressable>
     </GestureDetector>
   );
-}
+});

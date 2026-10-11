@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { TimePickerInline } from "@/components/ui/time-picker";
 import { useToast } from "@/components/ui/toast";
+import { completeStep } from "@/hooks/use-checklist";
+import { showMovedToast } from "@/lib/move-toast";
 import { isPastDeadlineDrop } from "@/lib/overdue";
 import {
   getSeriesKind,
@@ -96,7 +98,7 @@ export const RescheduleSheet = forwardRef<
 >(({ tz, onConfirm, onMoved, onRequestScopedUpdate }, ref) => {
   useLanguage();
   const sheet = useBottomSheet();
-  const { confirm } = useToast();
+  const { confirm, toast } = useToast();
   const [session, setSession] = useState<Session | null>(null);
   // `date` carries the tz wall clock in its local fields (InlineDateField's
   // convention); `startMinutes`/`endMinutes` are minutes-of-day for the two
@@ -173,6 +175,12 @@ export const RescheduleSheet = forwardRef<
         scope,
         skipConflicting,
       );
+      // Same confirmation a drag-and-drop move gets.
+      showMovedToast(toast, {
+        first: completeStep("move-day"),
+        to: zonedDate(pickedISO, tz),
+        withTime: true,
+      });
       onMoved?.(session, pickedISO);
       sheet.close();
     } finally {

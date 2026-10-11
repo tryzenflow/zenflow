@@ -165,7 +165,6 @@ export default function MonthScreen() {
         scope,
         skipConflicting,
       });
-      completeStep("move-day");
       setReloadToken((n) => n + 1);
       taskListSheetRef.current?.close();
     },
