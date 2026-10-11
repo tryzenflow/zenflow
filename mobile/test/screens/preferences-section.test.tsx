@@ -9,6 +9,7 @@ import { renderScreen } from "@/test/utils/render";
 
 const toggle = vi.hoisted(() => ({ active: false, setEnabled: vi.fn(async () => true) }));
 vi.mock("@/hooks/use-notification-toggle", () => ({
+  useNotificationState: () => toggle,
   useNotificationToggle: () => toggle,
 }));
 

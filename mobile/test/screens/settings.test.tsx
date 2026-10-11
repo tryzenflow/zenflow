@@ -15,7 +15,7 @@ vi.mock("@/components/settings/tags-row", () => ({ TagsRow: () => null }));
 vi.mock("@/components/settings/preferences-section", () => ({ PreferencesSection: () => null }));
 vi.mock("@/components/settings/profile-row", () => ({ ProfileRow: () => null }));
 vi.mock("@/hooks/use-notification-toggle", () => ({
-  useNotificationToggle: () => ({ ready: false, active: false, setEnabled: vi.fn() }),
+  useNotificationState: () => ({ ready: false, active: false, setEnabled: vi.fn() }),
 }));
 vi.mock("@/hooks/use-push-status-store", () => ({
   usePushStatusStore: { getState: () => ({ unregisterOnLogout: vi.fn(async () => {}) }) },
