@@ -1,4 +1,5 @@
 import { updateBasicInfo } from "@/api/users";
+import { debugLog } from "@/lib/debug-log";
 import { useUserStore } from "@/hooks/use-user-store";
 import {
   dropPushRegistration,
@@ -31,6 +32,13 @@ type Action = {
   /** Logout: unregister this device only; the preference is kept. */
   unregisterOnLogout: () => Promise<void>;
 };
+
+/**
+ * `enable()` in flight. Taps queued behind a busy JS thread would otherwise run
+ * `enable()` several times at once (several `requestPermissionsAsync` calls),
+ * and `sync()` must not race an explicit enable's PATCH.
+ */
+let enabling: Promise<boolean> | null = null;
 
 /** User id we already showed the system prompt for in this login/session. */
 let promptedFor: string | null = null;
@@ -80,6 +88,7 @@ export const usePushStatusStore = create<State & Action>((set) => ({
   sync: async () => {
     const user = useUserStore.getState().user;
     if (!user) return;
+    if (enabling) return;
     let permission = await readPermission();
     set({ permission });
     let action = decidePushAction({
@@ -88,6 +97,7 @@ export const usePushStatusStore = create<State & Action>((set) => ({
       onboarded: user.onboardedAt !== null,
       alreadyPrompted: promptedFor === user.id,
     });
+    if (enabling) return;
     if (action === "prompt") {
       promptedFor = user.id;
       permission = await requestPermission();
@@ -101,20 +111,32 @@ export const usePushStatusStore = create<State & Action>((set) => ({
       );
     } else if (action === "disable") await saveAllow(false);
   },
-  enable: async () => {
-    const user = useUserStore.getState().user;
-    if (user) promptedFor = user.id; // an explicit ask counts as this login's prompt
-    let permission = await readPermission();
-    if (permission !== "granted") permission = await requestPermission();
-    set({ permission });
-    if (permission !== "granted") {
-      await saveAllow(false);
-      return false;
-    }
-    if (!(await saveAllow(true))) return false;
-    // Keep allowNotifications true on failure (the user's intent): the next
-    // launch/foreground sync retries. But don't report success.
-    return register();
+  enable: () => {
+    enabling ??= (async () => {
+      const t0 = Date.now();
+      debugLog("push", "enable: start");
+      try {
+        const user = useUserStore.getState().user;
+        if (user) promptedFor = user.id; // an explicit ask counts as this login's prompt
+        let permission = await readPermission();
+        debugLog("push", `enable: read=${permission} +${Date.now() - t0}ms`);
+        if (permission !== "granted") permission = await requestPermission();
+        debugLog("push", `enable: ask=${permission} +${Date.now() - t0}ms`);
+        set({ permission });
+        if (permission !== "granted") {
+          await saveAllow(false);
+          return false;
+        }
+        if (!(await saveAllow(true))) return false;
+        debugLog("push", `enable: saved +${Date.now() - t0}ms`);
+        // Keep allowNotifications true on failure (the user's intent): the next
+        // launch/foreground sync retries. But don't report success.
+        return await register();
+      } finally {
+        enabling = null;
+      }
+    })();
+    return enabling;
   },
   disable: async () => {
     await saveAllow(false);
