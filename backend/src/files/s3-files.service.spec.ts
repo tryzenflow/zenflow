@@ -182,7 +182,7 @@ describe("S3FilesService", () => {
   });
 
   describe("download", () => {
-    const row = { id: "f1", path: "u1/k", originalName: "a.txt" };
+    const row = { id: "f1", path: "u1/k", originalName: "a.txt", size: 100 };
 
     it("returns the row and the object body stream", async () => {
       const body = Readable.from(["data"]);
@@ -193,6 +193,24 @@ describe("S3FilesService", () => {
 
       expect(result.file).toBe(row);
       expect(result.stream).toBe(body);
+    });
+
+    it("asks S3 for just the requested bytes", async () => {
+      prisma.file.findUnique.mockResolvedValue(row);
+      mockSend.mockResolvedValue({ Body: Readable.from(["d"]) });
+
+      const result = await service.download("f1", "u1", "bytes=10-19");
+
+      expect(result.range).toEqual({ start: 10, end: 19 });
+      expect(mockSend.mock.calls.at(-1)?.[0].input.Range).toBe("bytes=10-19");
+    });
+
+    it("rejects a range past the end with 416", async () => {
+      prisma.file.findUnique.mockResolvedValue(row);
+
+      await expect(
+        service.download("f1", "u1", "bytes=500-"),
+      ).rejects.toMatchObject({ status: 416 });
     });
 
     it("throws NotFound when the object is missing in the bucket", async () => {

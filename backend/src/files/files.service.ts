@@ -1,4 +1,5 @@
 import { Readable } from "stream";
+import { ByteRange } from "./byte-range";
 import { UploadFileDto } from "./dto";
 import { File } from "../../generated/prisma";
 
@@ -20,8 +21,10 @@ export interface FilesService {
   findOne(id: string, userId?: string): Promise<File | null>;
   remove(keys: string[], userId: string): Promise<void>;
   getMetadata(id: string, userId: string): Promise<UploadFilesResponse>;
+  /** `rangeHeader` is the raw `Range` request header; `range` is set for a partial response. */
   download(
     id: string,
     userId?: string,
-  ): Promise<{ file: File; stream: Readable }>;
+    rangeHeader?: string,
+  ): Promise<{ file: File; stream: Readable; range: ByteRange | null }>;
 }

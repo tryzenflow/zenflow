@@ -9,6 +9,8 @@ import {
 } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import {
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
@@ -19,6 +21,7 @@ import { MAX_UPLOAD_BYTES, MAX_USER_STORAGE_BYTES } from "@zenflow/shared";
 import { Prisma } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadFileDto } from "./dto";
+import { parseByteRange } from "./byte-range";
 import { FilesService } from "./files.service";
 
 /**
@@ -115,8 +118,15 @@ export class S3FilesService implements FilesService {
     return file;
   }
 
-  async download(id: string, userId?: string) {
+  async download(id: string, userId?: string, rangeHeader?: string) {
     const file = await this.findOne(id, userId);
+    const range = parseByteRange(rangeHeader, file.size);
+    if (range === "unsatisfiable") {
+      throw new HttpException(
+        { success: false, message: "Range not satisfiable" },
+        HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE,
+      );
+    }
     const notFound = new NotFoundException({
       success: false,
       message: "Cannot find file content",
@@ -124,14 +134,18 @@ export class S3FilesService implements FilesService {
     let body: unknown;
     try {
       ({ Body: body } = await this.s3.send(
-        new GetObjectCommand({ Bucket: this.bucket, Key: file.path }),
+        new GetObjectCommand({
+          Bucket: this.bucket,
+          Key: file.path,
+          ...(range && { Range: `bytes=${range.start}-${range.end}` }),
+        }),
       ));
     } catch (err) {
       if ((err as { name?: string }).name === "NoSuchKey") throw notFound;
       throw err;
     }
     if (!(body instanceof Readable)) throw notFound;
-    return { file, stream: body };
+    return { file, stream: body, range };
   }
 
   async remove(keys: string[], userId: string) {
