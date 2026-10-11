@@ -44,7 +44,7 @@ type ReminderRow = Prisma.SessionReminderGetPayload<{
  * Arms and fires session reminders on the `notify` queue (ADR-0007).
  *
  * Arming enqueues one delayed `reminder` job per reminder occurrence, job id
- * `reminder_<id>_<startMs>`, so arming again (the 5-minute sweep, a
+ * `reminder_<id>_<startMs>`, so arming again (the 1-minute sweep, a
  * `syncUser`) is a no-op. Nothing is cancelled: a deleted reminder, a moved
  * session or a stale job is dropped when it fires, because {@link fire}
  * re-reads the DB and only delivers if the plan is still valid for the start
@@ -71,7 +71,7 @@ export class ReminderSchedulerService {
 
   // ---- arming -------------------------------------------------------------
 
-  /** Arm everything due within {@link ARM_HORIZON_MS} (watcher: bootstrap + every 5 min). */
+  /** Arm everything due within {@link ARM_HORIZON_MS} (watcher: bootstrap + every minute). */
   async sweep(): Promise<void> {
     try {
       await this.syncScope();

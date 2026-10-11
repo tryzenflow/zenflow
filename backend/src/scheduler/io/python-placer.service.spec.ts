@@ -181,6 +181,34 @@ describe("PythonPlacer.placeSingle (python answers)", () => {
     );
   });
 
+  it("a pairwise alternative closer than the minimum gap is not offered", async () => {
+    const lin = START + 15 * 60_000;
+    const r = member({
+      appliedPolicy: "LINUCB",
+      startMs: lin,
+      linucb: {
+        startMs: lin,
+        score: 2,
+        selectedArm: "MORNING",
+        featureVector: [0.1],
+        weights: { wL: 1, wS: 0 },
+      },
+    });
+    const { placer, experiment } = await make({
+      place: ok([r]),
+      assign: { primaryPolicy: "LINUCB", pairwiseShown: true },
+    });
+    const res = await placer.placeSingle(user, task, "create", now);
+    expect(res.divergent).toBe(false);
+    expect(res.alternativeSlot).toBeNull();
+    expect(experiment.recordProposal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pairwiseShown: false,
+        pairwisePositions: null,
+      }),
+    );
+  });
+
   it("an ACCEPTED_LAST_RESORT answer is written and flagged", async () => {
     const r = member({
       outcome: "ACCEPTED_LAST_RESORT",

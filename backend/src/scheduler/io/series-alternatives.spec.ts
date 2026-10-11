@@ -29,7 +29,19 @@ describe("selectSeriesAlternatives", () => {
   });
 
   it("ignores its own applied slot when checking overlap", () => {
-    expect(selectSeriesAlternatives([sit(0, 30 * 60_000)], [], 5)).toEqual([0]);
+    expect(selectSeriesAlternatives([sit(0, H)], [], 5)).toEqual([0]);
+  });
+
+  it("drops an alternative closer than the minimum gap (60 min)", () => {
+    const m = 60_000;
+    const sittings = [
+      sit(0, 15 * m),
+      sit(D, D - 30 * m),
+      sit(2 * D, 2 * D + 59 * m),
+      sit(3 * D, 3 * D + 60 * m),
+      sit(4 * D, 4 * D - 60 * m),
+    ];
+    expect(selectSeriesAlternatives(sittings, [], 5)).toEqual([3, 4]);
   });
 
   it("drops an alternative overlapping fixedOccupied", () => {

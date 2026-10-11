@@ -26,6 +26,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import {
   MAX_SCAN_DAYS,
   MAX_SERIES_ALTERNATIVES,
+  MIN_ALTERNATIVE_GAP_MINUTES,
   SCAN_CAP_DAYS,
 } from "../constants";
 import {
@@ -260,16 +261,19 @@ export class PythonPlacer {
 
     const heuristicMs = r.heuristic?.startMs ?? null;
     const linucb = r.linucb;
-    const effectivePairwise = assignment.pairwiseShown && linucb !== null;
     const rawAlternative =
       assignment.primaryPolicy === SchedulingModel.LINUCB
         ? heuristicMs
         : (linucb?.startMs ?? null);
+    // Only a pair far enough apart is a real choice; closer ones stay
+    // recorded but unshown (`pairwiseShown = false`) so analysis ignores them.
     const divergent =
-      effectivePairwise &&
+      assignment.pairwiseShown &&
+      linucb !== null &&
       rawAlternative !== null &&
       start !== null &&
-      rawAlternative !== start;
+      Math.abs(rawAlternative - start) >=
+        MIN_ALTERNATIVE_GAP_MINUTES * MS_PER_MINUTE;
 
     const slotProposalId = await this.experiment.recordProposal({
       userId: user.id,
@@ -291,8 +295,8 @@ export class PythonPlacer {
       featureVector: linucb?.featureVector ?? [],
       selectedArm: linucb?.selectedArm ?? null,
       weights: linucb?.weights ?? null,
-      pairwiseShown: effectivePairwise,
-      pairwisePositions: effectivePairwise
+      pairwiseShown: divergent,
+      pairwisePositions: divergent
         ? { primaryPosition: Math.random() < 0.5 ? "first" : "second" }
         : null,
       placementSource: PlacementSource.PYTHON,

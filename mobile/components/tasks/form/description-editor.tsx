@@ -26,6 +26,7 @@ import { useToast } from "@/components/ui/toast";
 import { getBaseURL } from "@/lib/api-client";
 import { escapeHtml } from "@/lib/file-link";
 import { loadGeistWebviewFontDataUri } from "@/lib/geist-webview-font";
+import { DURATION, timeTo, useReducedMotion } from "@/lib/motion";
 import {
   LINK_TAP_SCRIPT,
   handleNoteLinkMessage,
@@ -67,8 +68,14 @@ import {
   StyleSheet,
   View,
 } from "react-native";
+import Animated, {
+  FadeOut,
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { WebViewMessageEvent } from "react-native-webview";
+import { NoteSkeleton } from "../note-skeleton";
 import { AudioBridge, VideoBridge } from "./media-bridges";
 
 // A light tint of the brand orange (`--brand-orange`); note text on it stays
@@ -183,6 +190,13 @@ export function DescriptionFieldEditor({
   const [linkOpen, setLinkOpen] = useState(false);
   const linkAnchorRef = useRef("");
   const [isEmpty, setIsEmpty] = useState(() => isNoteEmpty(initialValue));
+  // The WebView boots after the modal slides in. Until its first `onLoad`
+  // a skeleton covers the editor and the toolbar stays hidden, so the note
+  // and the bar fade in together instead of popping in piecemeal.
+  const [ready, setReady] = useState(false);
+  const reduceMotion = useReducedMotion();
+  const barFade = useSharedValue(0);
+  const barStyle = useAnimatedStyle(() => ({ opacity: barFade.value }));
   // "selection": a text range is selected (or sits in a link) -> URL only, applied to that
   // text. "insert": nothing selected -> title + URL inserted as a new link at the end.
   const [linkMode, setLinkMode] = useState<"selection" | "insert">("insert");
@@ -555,10 +569,21 @@ export function DescriptionFieldEditor({
               editor.setContent(valueRef.current);
             }
             if (!disabled) editor.focus("end");
+            setReady(true);
+            barFade.value = timeTo(1, reduceMotion);
           }}
           onMessage={handleWebviewMessage}
           exclusivelyUseCustomOnMessage={false}
         />
+        {!ready && !isEmpty && (
+          <Animated.View
+            exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.base)}
+            pointerEvents="none"
+            className="absolute inset-0 bg-background px-5 pt-5"
+          >
+            <NoteSkeleton />
+          </Animated.View>
+        )}
         {isEmpty && !disabled && (
           <View
             pointerEvents="box-none"
@@ -596,9 +621,12 @@ export function DescriptionFieldEditor({
 
       {/* Floating glass bar (iOS Notes style): rides above the keyboard,
           same translucent fill / hairline border / sheen as the Next up pill. */}
-      <View
-        pointerEvents="box-none"
-        style={{ position: "absolute", left: 28, right: 28, bottom: barBottom }}
+      <Animated.View
+        pointerEvents={ready ? "box-none" : "none"}
+        style={[
+          { position: "absolute", left: 28, right: 28, bottom: barBottom },
+          barStyle,
+        ]}
       >
         {linkOpen && (
           <View className="mb-2 gap-1.5 rounded-2xl border border-glass-edge/35 bg-glass/70 dark:border-glass-edge/25 dark:bg-glass/[0.07] p-2.5">
@@ -758,7 +786,7 @@ export function DescriptionFieldEditor({
             </ScrollView>
           </View>
         </View>
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -788,12 +816,17 @@ function ToolbarButton({
         // Light amber active-state fill (this bar's own accent, distinct
         // from the app's `bg-primary`) reads clearly against a white bar —
         // the old `bg-white/25`-on-dark-pill treatment would be invisible
-        // here since the bar itself is now white.
+        // here since the bar itself is now white. The fill is the same in
+        // both schemes, so the icon below stays dark rather than following
+        // the theme (near-white `text-foreground` in dark mode vanishes on it).
         active && "bg-amber-100",
         disabled && "opacity-40",
       )}
     >
-      <Icon size={21} className="text-foreground/70" />
+      <Icon
+        size={21}
+        className={active ? "text-amber-950" : "text-foreground/70"}
+      />
     </Pressable>
   );
 }

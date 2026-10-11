@@ -138,6 +138,15 @@ export const PAIRWISE_SAMPLE_RATE = Number.isFinite(pairwiseFromEnv)
  */
 export const MAX_SERIES_ALTERNATIVES = 5;
 
+/**
+ * Smallest start-time gap (minutes) between the applied slot and the other
+ * policy's pick for the pair to be offered as an A/B choice. Slots sit on a
+ * 15-minute grid, so anything closer (9:00 vs 9:15) isn't a real decision for
+ * the user. Closer pairs are still recorded in `SlotProposal`, with
+ * `pairwiseShown = false`.
+ */
+export const MIN_ALTERNATIVE_GAP_MINUTES = 60;
+
 /** Most flexible tasks one displacement may move (capped cascade, issue #62 B). */
 export const MAX_DISPLACED_TASKS = 6;
 /** New-task candidate slots simulated per displacement window (min-displacement search). */
