@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLanguage } from "@/hooks/use-language";
 import { loadPreferences } from "@/lib/preferences";
 import { setLanguage } from "@/lib/i18n";
@@ -97,7 +98,7 @@ export default function RootLayout() {
     GeistMono: require("../assets/fonts/GeistMono-Regular.ttf"),
     "GeistMono-Medium": require("../assets/fonts/GeistMono-Medium.ttf"),
   });
-  const { colorScheme, isDarkColorScheme } = useColorScheme();
+  const { colorScheme, isDarkColorScheme, setColorScheme } = useColorScheme();
   const setUser = useUserStore((s) => s.setUser);
   const setLoading = useUserStore((s) => s.setLoading);
   const loading = useUserStore((s) => s.loading);
@@ -127,11 +128,20 @@ export default function RootLayout() {
       });
       try {
         // Independent reads; only `me()` below needs the cookie restored.
-        const [cachedPrefs] = await Promise.all([
+        const [cachedPrefs, storedTheme] = await Promise.all([
           loadPreferences(),
+          AsyncStorage.getItem("theme").catch(() => null),
           restoreSessionCookie(),
         ]);
         setLanguage(cachedPrefs.language);
+        // Written by the theme pickers; NativeWind forgets it on restart.
+        if (
+          storedTheme === "light" ||
+          storedTheme === "dark" ||
+          storedTheme === "system"
+        ) {
+          setColorScheme(storedTheme);
+        }
       } catch (err) {
         console.warn("[_layout] Session cache read error:", err);
       }
