@@ -77,6 +77,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { NowIndicator } from "./now-indicator";
 import { SessionBlock } from "./task-block";
+import { useOffline } from "@/hooks/use-offline";
 import { TimeGutter } from "./time-gutter";
 import type {
   PendingSessionUpdate,
@@ -270,6 +271,7 @@ export function DayTimeline({
   flashSessionId = null,
 }: DayTimelineProps) {
   useLanguage();
+  const offline = useOffline();
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const { confirm, toast } = useToast();
   // Bumped whenever a drop settles, so a block whose start didn't change
@@ -1206,7 +1208,7 @@ export function DayTimeline({
                   />
                 ))}
 
-                {segments.length === 0 && !loading && (
+                {segments.length === 0 && !loading && !offline && (
                   <Pressable
                     onPress={openNewTaskForm}
                     accessibilityRole="button"

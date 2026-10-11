@@ -154,6 +154,15 @@ export function setCachedDaySessions(
   disk?.save(dayKey, sessions, now);
 }
 
+/** A session by id from any cached day or month (offline detail view). */
+export function findCachedSession(id: string): Session | undefined {
+  for (const entry of cache.values()) {
+    const hit = entry.sessions.find((s) => s.id === id);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
 /** True when `dayKey` is cached and the cache entry is younger than
  * {@link DAY_CACHE_TTL_MS}. */
 export function isDayCacheFresh(dayKey: string): boolean {

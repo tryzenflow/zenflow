@@ -75,6 +75,23 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Dev only: with the "Toggle offline" dev-menu item on, fail every request like
+// a dead network so the stale-cache paths run too (simulators ignore the
+// host's link conditioner, and the guard below covers writes only).
+if (__DEV__) {
+  api.interceptors.request.use((config) => {
+    if (
+      useConnectivity.getState().forcedOffline &&
+      !config.url?.includes("/auth/")
+    ) {
+      return Promise.reject(
+        new AxiosError("Network Error", "ERR_NETWORK", config),
+      );
+    }
+    return config;
+  });
+}
+
 /**
  * In-memory copy of the raw `name=value` session cookie pair, persisted via
  * `cacheSessionCookie` so it survives app restarts. Restored once at startup

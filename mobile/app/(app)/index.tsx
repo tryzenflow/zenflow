@@ -40,6 +40,7 @@ import {
 } from "@/components/calendar/week-pager";
 import { NotificationBell } from "@/components/notification-bell";
 import { GettingStarted } from "@/components/checklist/getting-started";
+import { useOffline } from "@/hooks/use-offline";
 import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { completeStep } from "@/hooks/use-checklist";
 import { useCalendarJump } from "@/hooks/use-calendar-jump";
@@ -83,6 +84,7 @@ import { useToast } from "@/components/ui/toast";
 export default function WeekScreen() {
   useLanguage();
   const router = useRouter();
+  const offline = useOffline();
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
   const { toast } = useToast();
@@ -546,7 +548,7 @@ export default function WeekScreen() {
         onPress={() => commitFocusedDate(zonedNow(tz))}
       />
 
-      {timelineState === "ready" && <CreateSessionFab tz={tz} />}
+      {timelineState === "ready" && !offline && <CreateSessionFab tz={tz} />}
 
       <BlockActionsSheet
         ref={blockActionsSheetRef}

@@ -5,6 +5,7 @@ import { setLanguage } from "@/lib/i18n";
 import { me } from "@/api/auth";
 import { PortalHost } from "@/components/primitives/portal";
 import { ToastProvider } from "@/components/ui/toast";
+import { useDevOfflineToggle } from "@/hooks/use-dev-offline-toggle";
 import { useConnectivityWatch } from "@/hooks/use-connectivity-watch";
 import { useNotificationsSubscription } from "@/hooks/use-notifications";
 import { usePushRegistration } from "@/hooks/use-push-registration";
@@ -81,6 +82,7 @@ function NotificationsSubscriber() {
   useLanguage();
   useNotificationsSubscription();
   useConnectivityWatch();
+  useDevOfflineToggle();
   return null;
 }
 

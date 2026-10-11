@@ -1,3 +1,4 @@
+import { findCachedSession } from "@/lib/session-cache";
 import { t } from "@/lib/i18n";
 import { goToCalendar, safeBack } from "@/lib/nav";
 import { warmLandingDay } from "@/lib/warm-day";
@@ -97,8 +98,7 @@ function EditSessionForm() {
   const loading = !task || form.formState.isSubmitting || deleting;
 
   useEffect(() => {
-    getSessionDetails(id)
-      .then((res) => {
+    const applySession = (res: Session) => {
         setSession(res);
         const common = {
           type: res.type as SessionFormType,
@@ -133,8 +133,17 @@ function EditSessionForm() {
             rrule: res.rrule ?? undefined,
           });
         }
+    };
+    // Offline (or just slow): the calendar cache already holds the full
+    // session, note included, so show it at once and refresh on top.
+    const cachedSession = findCachedSession(id);
+    if (cachedSession) applySession(cachedSession);
+    getSessionDetails(id)
+      .then((res) => {
+        if (!cachedSession || !form.formState.isDirty) applySession(res);
       })
       .catch((error) => {
+        if (cachedSession) return;
         showErrorToast(
           toast,
           error,
