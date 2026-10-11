@@ -703,7 +703,7 @@
   "response": {
     "contractVersion": 1,
     "requestId": "00000000-0000-4000-8000-000000000002-3",
-    "paramsVersion": "py-arms6-v1-435641c70fc5",
+    "paramsVersion": "py-arms6-v2-8e5b44eb039e",
     "results": [
       {
         "id": "s0",
@@ -714,7 +714,7 @@
           "score": 1.0
         },
         "linucb": {
-          "startMs": 1789983000000,
+          "startMs": 1789981200000,
           "score": 1.2862147711946288,
           "selectedArm": "MORNING",
           "featureVector": [
@@ -731,7 +731,7 @@
             "wS": 0.0
           }
         },
-        "startMs": 1789983000000,
+        "startMs": 1789981200000,
         "moves": [],
         "late": false,
         "conflicting": false
@@ -745,7 +745,7 @@
           "score": 1.0
         },
         "linucb": {
-          "startMs": 1790069400000,
+          "startMs": 1790067600000,
           "score": 1.2846068720193777,
           "selectedArm": "MORNING",
           "featureVector": [
@@ -762,7 +762,7 @@
             "wS": 0.0
           }
         },
-        "startMs": 1790069400000,
+        "startMs": 1790067600000,
         "moves": [],
         "late": false,
         "conflicting": false
@@ -776,7 +776,7 @@
           "score": 1.0
         },
         "linucb": {
-          "startMs": 1790155800000,
+          "startMs": 1790154000000,
           "score": 1.2830415658387366,
           "selectedArm": "MORNING",
           "featureVector": [
@@ -793,19 +793,19 @@
             "wS": 0.0
           }
         },
-        "startMs": 1790155800000,
+        "startMs": 1790154000000,
         "moves": [],
         "late": false,
         "conflicting": false
       }
     ],
     "timingsMs": {
-      "decode": 0.094,
-      "context": 0.021,
-      "predict": 0.095,
-      "scan": 0.582,
+      "decode": 0.601,
+      "context": 0.077,
+      "predict": 0.397,
+      "scan": 2.571,
       "displace": 0.0,
-      "total": 0.94
+      "total": 4.597
     }
   }
 }

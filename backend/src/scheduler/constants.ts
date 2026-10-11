@@ -96,9 +96,9 @@ export const BANDIT_MODEL_VERSION = "linucb-d7-v1";
  * `services/bandit/src/core/constants.py`, which prefixes the Python
  * `paramsVersion` stored as `SlotProposal.modelVersion`. Bump both when the arm
  * hours change: delayed rewards from proposals made under another layout are
- * dropped, so an old 17:00 `EVENING` proposal cannot reward the new 18:00-22:00 arm.
+ * dropped, so an old 17:00 `EVENING` proposal cannot reward the new 16:00-21:00 arm.
  */
-export const ARM_LAYOUT = "arms6-v1";
+export const ARM_LAYOUT = "arms6-v2";
 
 /** `true` when a proposal's `modelVersion` was stamped under the current arm layout. */
 export function isCurrentModelVersion(

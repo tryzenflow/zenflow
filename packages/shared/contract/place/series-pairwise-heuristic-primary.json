@@ -703,7 +703,7 @@
   "response": {
     "contractVersion": 1,
     "requestId": "00000000-0000-4000-8000-000000000002-3",
-    "paramsVersion": "py-arms6-v1-435641c70fc5",
+    "paramsVersion": "py-arms6-v2-8e5b44eb039e",
     "results": [
       {
         "id": "s0",
@@ -714,7 +714,7 @@
           "score": 1.0
         },
         "linucb": {
-          "startMs": 1789983000000,
+          "startMs": 1789981200000,
           "score": 1.2862147711946288,
           "selectedArm": "MORNING",
           "featureVector": [
@@ -745,7 +745,7 @@
           "score": 1.0
         },
         "linucb": {
-          "startMs": 1790069400000,
+          "startMs": 1790067600000,
           "score": 1.2846068720193777,
           "selectedArm": "MORNING",
           "featureVector": [
@@ -776,7 +776,7 @@
           "score": 1.0
         },
         "linucb": {
-          "startMs": 1790155800000,
+          "startMs": 1790154000000,
           "score": 1.2830415658387366,
           "selectedArm": "MORNING",
           "featureVector": [
@@ -800,12 +800,12 @@
       }
     ],
     "timingsMs": {
-      "decode": 0.205,
-      "context": 0.023,
-      "predict": 0.107,
-      "scan": 0.641,
+      "decode": 0.369,
+      "context": 0.152,
+      "predict": 0.426,
+      "scan": 2.669,
       "displace": 0.0,
-      "total": 1.142
+      "total": 4.901
     }
   }
 }
