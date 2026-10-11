@@ -58,7 +58,16 @@ describe("tags", () => {
       "Assignment",
       "Project",
     ]);
-    expect(initialTagSelection(["Thesis"])).toEqual(["Thesis"]);
+    // Sync-created tags (LMS/portal) don't count as resuming: defaults stay ticked.
+    expect(initialTagSelection(["Thesis"])).toEqual([
+      "Study",
+      "Exam",
+      "Assignment",
+      "Project",
+      "Thesis",
+    ]);
+    // Resuming with saved suggestions keeps exactly those.
+    expect(initialTagSelection(["Lab", "Thesis"])).toEqual(["Lab", "Thesis"]);
   });
   it("toggles case-insensitively", () => {
     expect(toggleTag(["Study"], "study")).toEqual([]);

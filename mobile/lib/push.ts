@@ -200,7 +200,13 @@ function normalizePermission(p: {
 export async function requestPermission(): Promise<PushPermission | null> {
   if (Platform.OS === "web") return null;
   try {
-    return normalizePermission(await Notifications.requestPermissionsAsync());
+    // Android 13+ shows no prompt (and the request can hang) until a channel exists.
+    await ensureAndroidChannel().catch(() => {});
+    return normalizePermission(
+      await Notifications.requestPermissionsAsync({
+        ios: { allowAlert: true, allowBadge: true, allowSound: true },
+      }),
+    );
   } catch {
     return null;
   }
@@ -222,7 +228,13 @@ export async function registerThisDevice(
   }
   try {
     await ensureAndroidChannel();
-    const t = await Notifications.getDevicePushTokenAsync();
+    // The native token fetch can stall forever (no Play Services / FCM); bound it.
+    const t = await Promise.race([
+      Notifications.getDevicePushTokenAsync(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("push token timed out")), 15_000),
+      ),
+    ]);
     const platform: DevicePlatform = t.type === "ios" ? "IOS" : "ANDROID";
     const token = String(t.data);
     if (!isCurrent()) {
