@@ -3,8 +3,15 @@ import { warmCalendar } from "@/lib/warm-calendar";
 import { notifySessionsMutated } from "@/lib/session-cache";
 import NetInfo from "@react-native-community/netinfo";
 import { useUserStore } from "@/hooks/use-user-store";
+import { usePushStatusStore } from "@/hooks/use-push-status-store";
+import { flushPendingPrefs } from "@/lib/pending-prefs";
 import { useEffect } from "react";
 import { AppState } from "react-native";
+
+/** Send settings changed offline; a notifications change then re-registers the device. */
+async function syncPendingPrefs(): Promise<void> {
+  if (await flushPendingPrefs()) void usePushStatusStore.getState().sync();
+}
 
 /**
  * Mount once (root layout). Mirrors NetInfo into `useConnectivity` and, on the
@@ -19,8 +26,12 @@ export function useConnectivityWatch(): void {
   useEffect(() => {
     if (!userId) return;
     void warmCalendar();
+    void syncPendingPrefs();
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") void warmCalendar();
+      if (state === "active") {
+        void warmCalendar();
+        void syncPendingPrefs();
+      }
     });
     return () => sub.remove();
   }, [userId]);
@@ -40,6 +51,7 @@ export function useConnectivityWatch(): void {
       if (s.online && !wasOnline) {
         notifySessionsMutated();
         void warmCalendar();
+        void syncPendingPrefs();
       }
       wasOnline = s.online;
     });

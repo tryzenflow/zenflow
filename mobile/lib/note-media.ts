@@ -12,8 +12,9 @@ export function isFileUrl(url: string): boolean {
   return /\/files\/[^/?#]+\?/.test(url);
 }
 
-/** Audio uploads are saved as a plain link; the viewer turns them into a player. */
+/** Audio and video uploads are saved as a plain link; the viewer turns them into a player. */
 export const AUDIO_NAME_RE = /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac|weba)$/i;
+export const VIDEO_NAME_RE = /\.(mp4|m4v|mov|webm|ogv|3gp)$/i;
 
 /** A media tap posted by `mediaPlayerScript`; null for any other message. */
 export function parseOpenMediaMessage(raw: string): OpenMedia | null {
@@ -79,14 +80,18 @@ export function mediaPlayerScript(opts: {
     function place(el, node) { el.parentNode.insertBefore(node, el); }
     function placeholder(el, anchor) {
       anchor = anchor || el;
+      // One placeholder per media element: repeated error events must not stack them.
+      if (anchor.__zfBox) return;
       var box = document.createElement('div');
       box.className = 'zf-off';
       box.innerHTML = ICON.dusk + '<div><b>' + L.title + '</b><span>' + (OFFLINE ? L.hint : L.retry) + '</span></div>';
       place(anchor, box);
+      anchor.__zfBox = box;
       anchor.style.display = 'none';
       box.addEventListener('click', function() {
         if (OFFLINE) return;
         box.remove();
+        anchor.__zfBox = null;
         anchor.style.display = '';
         el.addEventListener('error', function() { placeholder(el, anchor); }, { once: true });
         if (el.load) el.load(); else { var s = el.src; el.src = ''; el.src = s; }
@@ -94,6 +99,8 @@ export function mediaPlayerScript(opts: {
     }
     var current = null;
     function only(el) { if (current && current !== el) current.pause(); current = el; }
+    // play() rejects (not throws) when the file can't start; the error event shows the placeholder.
+    function start(el) { only(el); var r = el.play(); if (r && r.catch) r.catch(function() {}); }
     function seekFrom(e, node, media) {
       var r = node.getBoundingClientRect();
       var p = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
@@ -105,14 +112,18 @@ export function mediaPlayerScript(opts: {
       node.addEventListener('pointermove', function(e) { if (down) seekFrom(e, node, media); });
       ['pointerup', 'pointercancel', 'pointerleave'].forEach(function(n) { node.addEventListener(n, function() { down = false; }); });
     }
-    // The editor stores an audio upload as a link to the file (like any document); play it here.
+    // The editor stores an audio/video upload as a link to the file (like any document); play it here.
     var AUDIO_NAME = ${AUDIO_NAME_RE.toString()};
+    var VIDEO_NAME = ${VIDEO_NAME_RE.toString()};
     document.querySelectorAll('#note p').forEach(function(p) {
       var links = p.querySelectorAll('a');
       if (links.length !== 1 || p.textContent.trim() !== links[0].textContent.trim()) return;
       var href = links[0].getAttribute('href') || '';
-      if (!/\\/files\\/[^/?#]+\\?/.test(href) || !AUDIO_NAME.test(links[0].textContent.trim())) return;
-      var el = document.createElement('audio');
+      var name = links[0].textContent.trim();
+      if (!/\\/files\\/[^/?#]+\\?/.test(href)) return;
+      var kind = AUDIO_NAME.test(name) ? 'audio' : VIDEO_NAME.test(name) ? 'video' : '';
+      if (!kind) return;
+      var el = document.createElement(kind);
       el.src = href;
       el.setAttribute('controls', '');
       p.parentNode.replaceChild(el, p);
@@ -135,13 +146,13 @@ export function mediaPlayerScript(opts: {
         for (var i = 0; i < hits.length; i++) hits[i].className = i < Math.round(p * hits.length) ? 'zf-hit' : '';
         cur.textContent = fmt(a.currentTime);
       }
-      box.querySelector('.zf-play').addEventListener('click', function() { if (a.paused) { only(a); a.play(); } else a.pause(); });
+      box.querySelector('.zf-play').addEventListener('click', function() { if (a.paused) start(a); else a.pause(); });
       a.addEventListener('play', function() { box.classList.add('zf-on'); });
       a.addEventListener('pause', function() { box.classList.remove('zf-on'); });
       a.addEventListener('ended', function() { box.classList.remove('zf-on'); a.currentTime = 0; paint(); });
       a.addEventListener('timeupdate', paint);
       a.addEventListener('loadedmetadata', function() { dur.textContent = fmt(a.duration); });
-      a.addEventListener('error', function() { placeholder(a, box); });
+      a.addEventListener('error', function() { if (a.error) placeholder(a, box); });
       var rates = [1, 1.25, 1.5, 2], ri = 0;
       spd.addEventListener('click', function() { ri = (ri + 1) % rates.length; a.playbackRate = rates[ri]; spd.textContent = rates[ri] + 'x'; });
       drag(wave, a);
@@ -157,17 +168,19 @@ export function mediaPlayerScript(opts: {
       box.appendChild(v);
       box.insertAdjacentHTML('beforeend', '<button class="zf-play zf-vplay" aria-label="Play">' + ICON.play + '</button><div class="zf-vbar"><span class="zf-cur">0:00</span><div class="zf-track"><b></b></div><button class="zf-expand" aria-label="Expand">' + ICON.expand + '</button></div>');
       var cur = box.querySelector('.zf-cur'), fill = box.querySelector('.zf-track b'), track = box.querySelector('.zf-track');
-      function toggle() { if (v.paused) { only(v); v.play(); } else v.pause(); }
+      function toggle() { if (v.paused) start(v); else v.pause(); }
       box.querySelector('.zf-vplay').addEventListener('click', toggle);
       v.addEventListener('click', toggle);
       v.addEventListener('play', function() { box.classList.add('zf-on'); });
       v.addEventListener('pause', function() { box.classList.remove('zf-on'); });
       v.addEventListener('timeupdate', function() { cur.textContent = fmt(v.currentTime); fill.style.width = (v.duration ? v.currentTime / v.duration * 100 : 0) + '%'; });
-      v.addEventListener('error', function() { placeholder(v, box); });
+      v.addEventListener('error', function() { if (v.error) placeholder(v, box); });
       box.querySelector('.zf-expand').addEventListener('click', function() { v.pause(); post({ type: ${JSON.stringify(MEDIA_OPEN_MESSAGE)}, kind: 'video', src: v.currentSrc || v.src }); });
       drag(track, v);
     });
     document.querySelectorAll('#note img').forEach(function(img) {
+      // Offline an image may still be in the WebView's cache; show the placeholder anyway.
+      if (OFFLINE) return placeholder(img);
       // Injected after load, so a failure may already have happened.
       if (img.complete && img.naturalWidth === 0) return placeholder(img);
       img.addEventListener('error', function() { placeholder(img); });

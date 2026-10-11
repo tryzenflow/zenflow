@@ -179,8 +179,8 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        <PreferencesSection />
         <OfflineLock>
-          <PreferencesSection />
           <TagsRow />
         </OfflineLock>
 

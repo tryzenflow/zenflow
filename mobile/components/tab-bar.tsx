@@ -2,6 +2,7 @@ import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
 import { Glass } from "@/components/ui/glass";
 import { resolveGeistFontFamily } from "@/components/ui/text";
 import { useLanguage } from "@/hooks/use-language";
+import { useOffline } from "@/hooks/use-offline";
 import { NAV_THEME } from "@/lib/constants";
 import { springTo, useReducedMotion } from "@/lib/motion";
 import {
@@ -152,7 +153,9 @@ export function AppTabBar({
   // Fabric relayout (and a blur re-render inside `Glass`) every frame of the
   // tab switch, exactly while the incoming screen is mounting. The bar snaps
   // between the narrow (create button beside it) and wide (Settings) width.
-  const barRight = onSettings ? BAR_MARGIN : BAR_RIGHT_MARGIN;
+  // No create button beside the bar on Settings or offline: use the full width.
+  const offline = useOffline();
+  const barRight = onSettings || offline ? BAR_MARGIN : BAR_RIGHT_MARGIN;
 
   // Fractional tab index the pill and every tab's styling derive from. It
   // springs toward the focused tab, so a mid-flight tap retargets smoothly.

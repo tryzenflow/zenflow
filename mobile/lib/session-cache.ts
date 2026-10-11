@@ -1,3 +1,4 @@
+import { format } from "date-fns";
 import type { Session } from "@zenflow/shared";
 import type { SessionDisk } from "./session-disk";
 
@@ -152,6 +153,11 @@ export function setCachedDaySessions(
   const now = Date.now();
   cache.set(dayKey, { sessions, fetchedAt: now, savedAt: now });
   disk?.save(dayKey, sessions, now);
+}
+
+/** Sessions of the cached month containing `date` (`'month:YYYY-MM'`), if any. */
+export function getCachedMonthSessions(date: Date): Session[] | undefined {
+  return cache.get(`month:${format(date, "yyyy-MM")}`)?.sessions;
 }
 
 /** A session by id from any cached day or month (offline detail view). */
