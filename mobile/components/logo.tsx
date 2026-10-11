@@ -9,13 +9,35 @@ import Svg, {
   Stop,
 } from "react-native-svg";
 
+const GLOW = {
+  borderRadius: 999,
+  backgroundColor: "#F0B100",
+  shadowColor: "#FF6900",
+  shadowOpacity: 0.4,
+  shadowRadius: 16,
+  shadowOffset: { width: 0, height: 8 },
+  elevation: 10,
+} as const;
+
 /**
  * Zenflow sunrise mark — ported from frontend/src/components/logo.tsx (react-native-svg
  * instead of inline <svg>; no CSS hover/breathe animation on native, static mark).
  */
-export function Logo({ className }: { className?: string }) {
+export function Logo({
+  className,
+  glow = false,
+}: {
+  className?: string;
+  /** Orange drop shadow, as in mockups/login.html (`shadow-lg shadow-brand-orange/30`). */
+  glow?: boolean;
+}) {
   return (
-    <View className={cn("aspect-square", className)}>
+    <View
+      className={cn("aspect-square", className)}
+      // A shadow needs an opaque layer to be cast from: the mark's own circle
+      // is vector content, so back it with a matching disc.
+      style={glow ? GLOW : undefined}
+    >
       <Svg viewBox="0 0 260 260" width="100%" height="100%" fill="none">
         <Circle cx={130} cy={130} r={130} fill="url(#zenflow-sunrise)" />
         <Path

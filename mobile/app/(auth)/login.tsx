@@ -290,7 +290,7 @@ export default function LoginScreen() {
       </View>
       <View className="flex-1 justify-center">
         <View className="items-center gap-3.5 pb-[26px]">
-          <Logo className="h-[60px] w-[60px] rounded-full shadow-lg shadow-brand-orange/30" />
+          <Logo glow className="h-[60px] w-[60px] rounded-full" />
           <View className="items-center gap-1">
             <Text className="text-[22px] font-bold tracking-[-0.02em]">
               {stage === "email" ? t("Login to Zenflow") : t("Enter your code")}
