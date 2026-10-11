@@ -1,4 +1,4 @@
-import { DuskIcon, SyncedIcon } from "@/components/brand/icons";
+import { CloudOffIcon, DuskIcon, SyncedIcon } from "@/components/brand/icons";
 import { Glass } from "@/components/ui/glass";
 import { type ToastIcon, useToast } from "@/components/ui/toast";
 import { selectOffline, useConnectivity } from "@/lib/connectivity";
@@ -13,18 +13,26 @@ import { Pressable, View } from "react-native";
 
 // The toast renders its icon through the lucide contract (`size`); ours are
 // plain SVG with a fixed colour, so adapt them.
-const OfflineToastIcon = (({ size }: { size?: number }) => (
-  <DuskIcon size={size} color="#F0B101" />
-)) as unknown as ToastIcon;
+// Dark navy on light toasts, a lighter blue on dark ones so it stays legible.
+const OFFLINE_BLUE = { light: "#1E3A8A", dark: "#93C5FD" };
+const OfflineToastIcon = (({ size }: { size?: number }) => {
+  const { isDarkColorScheme } = useColorScheme();
+  return (
+    <CloudOffIcon
+      size={size}
+      color={isDarkColorScheme ? OFFLINE_BLUE.dark : OFFLINE_BLUE.light}
+    />
+  );
+}) as unknown as ToastIcon;
 const SyncedToastIcon = (({ size }: { size?: number }) => (
   <SyncedIcon size={size} color="#10B981" />
 )) as unknown as ToastIcon;
 
 /**
  * Offline is dusk, not an error: a small sun-under-horizon glyph while the
- * device is offline or showing saved data. Tap for two short lines (what and
- * since when); on reconnect it clears with a one-line "Synced". Renders
- * nothing while online.
+ * device is offline or showing saved data. Going offline raises a toast saying
+ * so; tap the glyph for what and since when; on reconnect it clears with a
+ * "Back online" toast saying what was refreshed. Renders nothing while online.
  */
 export function OfflineIndicator({ dayKey }: { dayKey: string }) {
   const offline = useConnectivity(selectOffline);
@@ -34,10 +42,24 @@ export function OfflineIndicator({ dayKey }: { dayKey: string }) {
 
   useEffect(() => {
     if (offline) {
+      if (wasOffline.current) return;
       wasOffline.current = true;
+      toast({
+        title: t("You're offline"),
+        description: t(
+          "Showing saved days. Changes can't be saved until you reconnect.",
+        ),
+        icon: OfflineToastIcon,
+        variant: "info",
+      });
     } else if (wasOffline.current) {
       wasOffline.current = false;
-      toast({ title: t("Synced"), icon: SyncedToastIcon, variant: "success" });
+      toast({
+        title: t("Back online"),
+        description: t("Your calendar and tasks are up to date."),
+        icon: SyncedToastIcon,
+        variant: "success",
+      });
     }
   }, [offline, toast]);
 

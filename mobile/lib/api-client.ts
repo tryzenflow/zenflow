@@ -1,8 +1,10 @@
 import { t } from "./i18n";
-import axios, { isAxiosError } from "axios";
+import axios, { AxiosError, isAxiosError } from "axios";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { useUserStore } from "@/hooks/use-user-store";
+import { useConnectivity } from "@/lib/connectivity";
+import { OFFLINE_ERROR_CODE } from "@/lib/save-error";
 import { clearDaySessionCache } from "@/lib/session-cache";
 import { resetTimelineScroll } from "@/lib/timeline-scroll";
 import {
@@ -51,6 +53,26 @@ export const api = axios.create({
   baseURL: resolveBaseURL(),
   withCredentials: true,
   timeout: 8000,
+});
+
+// There is no offline write queue, so a create/edit/delete while the device is
+// offline would either hang to the timeout or (on a simulator, where the host
+// network ignores the link conditioner) silently succeed. Refuse it up front;
+// `describeSaveError` turns the code into an "offline" toast. Auth stays open
+// (sign-out must always work).
+api.interceptors.request.use((config) => {
+  const method = (config.method ?? "get").toLowerCase();
+  const mutating = method !== "get" && method !== "head";
+  if (
+    mutating &&
+    !useConnectivity.getState().online &&
+    !config.url?.includes("/auth/")
+  ) {
+    return Promise.reject(
+      new AxiosError("Offline", OFFLINE_ERROR_CODE, config),
+    );
+  }
+  return config;
 });
 
 /**

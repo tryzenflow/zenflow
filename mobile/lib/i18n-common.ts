@@ -18,7 +18,12 @@ export default {
   Hour: "Giờ",
   Minute: "Phút",
   "+{count} more": "+{count} nữa",
-  Synced: "Đã đồng bộ",
+  "Back online": "Đã có mạng trở lại",
+  "Your calendar and tasks are up to date.":
+    "Lịch và công việc của bạn đã được cập nhật.",
+  "You're offline": "Bạn đang ngoại tuyến",
+  "Showing saved days. Changes can't be saved until you reconnect.":
+    "Đang hiện lịch đã lưu. Bạn cần có mạng để lưu thay đổi.",
   "Saved {time}": "Đã lưu {time}",
   "Showing saved days": "Đang hiện lịch đã lưu",
   Urgent: "Khẩn cấp",
