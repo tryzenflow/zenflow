@@ -20,9 +20,9 @@
 | `EARLY_MORNING` | 00-08 |
 | `MORNING` | 08-11 |
 | `MIDDAY` | 11-14 |
-| `AFTERNOON` | 14-16 |
-| `EVENING` | 16-21 |
-| `NIGHT` | 21-24 |
+| `AFTERNOON` | 14-17 |
+| `EVENING` | 17-20 |
+| `NIGHT` | 20-24 |
 
 No waking arm starts before 08:00, and `EARLY_MORNING` stays last in every seeded tie order.
 
@@ -40,7 +40,7 @@ score = Σ_arm overlap × armScore + wP × preference(slot) + wS × stability
 - No warm start: the per-arm prior seeded from the default matrix is removed. With the preference term in place, cold arms tie and the default matrix alone puts the first picks in 09:00-11:00; seeding the arms as well was slower to learn in the simulator (kept rate, drag, and about 19 placements to find `MIDDAY` in the closed-loop test).
 - The matrix learning rate `PREFERENCE_LEARNING_RATE` goes from 0.1 to 0.2 (backend and Python) so the matrix adapts fast enough to compete with LinUCB.
 
-**Contract:** `BANDIT_MODEL_VERSION` is now `linucb-d7-v1`; `PLACEMENT_CONTRACT_VERSION` stays 1 because the request and response shapes do not change and nothing is deployed yet. Wipe `BanditArmState`. Delayed rewards from proposals made under another arm layout are dropped: the Python `paramsVersion` (stored as `SlotProposal.modelVersion`) is prefixed with `ARM_LAYOUT` (`arms6-v2`, mirrored in `backend/src/scheduler/constants.ts`), and Nest ignores a reward whose proposal does not carry the current layout. Bump `ARM_LAYOUT` whenever the arm hours change. The API and bandit deploy together ([ADR-0013](0013-blue-green-deploy.md)).
+**Contract:** `BANDIT_MODEL_VERSION` is now `linucb-d7-v1`; `PLACEMENT_CONTRACT_VERSION` stays 1 because the request and response shapes do not change and nothing is deployed yet. Wipe `BanditArmState`. Delayed rewards from proposals made under another arm layout are dropped: the Python `paramsVersion` (stored as `SlotProposal.modelVersion`) is prefixed with `ARM_LAYOUT` (`arms6-v3`, mirrored in `backend/src/scheduler/constants.ts`), and Nest ignores a reward whose proposal does not carry the current layout. Bump `ARM_LAYOUT` whenever the arm hours change. The API and bandit deploy together ([ADR-0013](0013-blue-green-deploy.md)).
 
 ## Consequences
 - The default user's first suggestion is never before 09:00 and never in 11-14 or 16-19.

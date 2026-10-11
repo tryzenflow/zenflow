@@ -281,9 +281,9 @@ def test_default_matrix_keeps_a_cold_pick_in_waking_study_hours() -> None:
     [
         ("MORNING", 60, 9 * 60),  # [08:00, 11:00) centre 09:30 -> 09:00-10:00
         ("MIDDAY", 60, 12 * 60),  # [11:00, 14:00) centre 12:30
-        ("AFTERNOON", 60, 14 * 60 + 30),  # [14:00, 16:00) centre 15:00
-        ("EVENING", 90, 17 * 60 + 45),  # [16:00, 21:00) centre 18:30
-        ("NIGHT", 120, 21 * 60 + 30),  # [21:00, 24:00) centre 22:30
+        ("AFTERNOON", 60, 15 * 60),  # [14:00, 17:00) centre 15:30
+        ("EVENING", 90, 17 * 60 + 45),  # [17:00, 20:00) centre 18:30
+        ("NIGHT", 120, 21 * 60),  # [20:00, 24:00) centre 22:00
     ],
 )
 def test_winning_band_places_the_task_at_its_centre(

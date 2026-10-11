@@ -11,9 +11,9 @@ ARM_BANDS: tuple[tuple[str, int, int], ...] = (
     ("EARLY_MORNING", 0, 480),
     ("MORNING", 480, 660),
     ("MIDDAY", 660, 840),
-    ("AFTERNOON", 840, 960),
-    ("EVENING", 960, 1260),
-    ("NIGHT", 1260, 1440),
+    ("AFTERNOON", 840, 1020),
+    ("EVENING", 1020, 1200),
+    ("NIGHT", 1200, 1440),
 )
 
 
