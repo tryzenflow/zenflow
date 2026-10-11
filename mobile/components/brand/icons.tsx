@@ -90,6 +90,16 @@ export function SyncedIcon({ color, size = 22 }: IconProps) {
   );
 }
 
+/** Exclamation mark: a sync or save that failed (red, unlike the green check). */
+export function SyncFailedIcon({ color, size = 22 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Line x1={12} y1={5} x2={12} y2={13.5} stroke={color} {...STROKE} />
+      <Circle cx={12} cy={18.5} r={1.4} fill={color} />
+    </Svg>
+  );
+}
+
 /** Soft chevron pointing back. */
 export function BackIcon({ color, size = 22 }: IconProps) {
   return (

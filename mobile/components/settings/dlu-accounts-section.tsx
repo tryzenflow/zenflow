@@ -19,6 +19,7 @@ import {
   RefreshCw,
   Unlink,
 } from "@/components/Icons";
+import { SyncFailedIcon } from "@/components/brand/icons";
 import { SettingsSectionLabel } from "@/components/settings/settings-header";
 import {
   BottomSheet,
@@ -64,9 +65,11 @@ type SheetMode = "connect" | "update";
 function ProviderIcon({
   provider,
   connected,
+  failing,
 }: {
   provider: IntegrationProvider;
   connected: boolean;
+  failing: boolean;
 }) {
   useLanguage();
   const Icon = provider === "LMS" ? GraduationCap : CreditCard;
@@ -74,15 +77,32 @@ function ProviderIcon({
     <View
       className={cn(
         "size-[38px] shrink-0 items-center justify-center rounded-xl",
-        connected ? "bg-emerald-500/15" : "bg-muted",
+        failing
+          ? "bg-destructive/15"
+          : connected
+            ? "bg-emerald-500/15"
+            : "bg-muted",
       )}
     >
       <Icon
         size={18}
-        className={connected ? "text-emerald-600" : "text-muted-foreground"}
+        className={
+          failing
+            ? "text-destructive"
+            : connected
+              ? "text-emerald-600"
+              : "text-muted-foreground"
+        }
       />
-      {connected && (
-        <View className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-card bg-emerald-500" />
+      {failing ? (
+        // A red "!" badge, not the green dot: the last sync did not go through.
+        <View className="absolute -bottom-1 -right-1 size-4 items-center justify-center rounded-full border-2 border-card bg-destructive">
+          <SyncFailedIcon size={10} color="#ffffff" />
+        </View>
+      ) : (
+        connected && (
+          <View className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-card bg-emerald-500" />
+        )
       )}
     </View>
   );
@@ -409,7 +429,11 @@ export function DluAccountsSection({
               )}
             >
               <View className="flex-row items-center gap-[13px]">
-                <ProviderIcon provider={provider} connected={connected} />
+                <ProviderIcon
+                  provider={provider}
+                  connected={connected}
+                  failing={subtitle.tone === "error"}
+                />
                 <View className="min-w-0 flex-1">
                   <Text className="text-[15px] font-semibold" numberOfLines={1}>
                     {PROVIDER_LABEL[provider]}

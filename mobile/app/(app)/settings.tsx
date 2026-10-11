@@ -25,12 +25,20 @@ import { resetTimelineScroll } from "@/lib/timeline-scroll";
 import { useColorScheme } from "@/lib/useColorScheme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { type Href, useRouter } from "expo-router";
+import {
+  loadIntegrationCache,
+  saveIntegrationCache,
+} from "@/lib/integration-cache";
+import { OfflineIndicator } from "@/components/offline-indicator";
+import { OfflineLock } from "@/components/offline-lock";
+import { useOffline } from "@/hooks/use-offline";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /** Single flat Settings screen — mirrors mockups/settings.html exactly. */
 export default function SettingsScreen() {
+  const offline = useOffline();
   useLanguage();
   const router = useRouter();
   const user = useUserStore((s) => s.user);
@@ -50,18 +58,24 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     let mounted = true;
+    const userId = user?.id;
     listIntegrations()
       .then((integrations) => {
         if (mounted) setIntegrations(integrations);
+        if (userId) void saveIntegrationCache(userId, integrations);
       })
-      .catch(() => {})
+      .catch(async () => {
+        // Offline: show the last status we saw instead of "Not connected".
+        const saved = userId ? await loadIntegrationCache(userId) : null;
+        if (mounted && saved) setIntegrations(saved);
+      })
       .finally(() => {
         if (mounted) setLoading(false);
       });
     return () => {
       mounted = false;
     };
-  }, [setIntegrations, setLoading]);
+  }, [setIntegrations, setLoading, user?.id]);
 
   function toggleDarkMode() {
     const next = isDarkColorScheme ? "light" : "dark";
@@ -100,16 +114,19 @@ export default function SettingsScreen() {
         className="border-b border-border bg-background px-6 pb-4"
         style={{ paddingTop: insets.top + 16 }}
       >
-        <Text className="text-xl font-bold tracking-tight">
-          {t("Settings")}
-        </Text>
+        <View className="flex-row items-center justify-between">
+          <Text className="text-xl font-bold tracking-tight">
+            {t("Settings")}
+          </Text>
+          <OfflineIndicator dayKey="settings" />
+        </View>
       </View>
       <ScrollView
         ref={scrollRef as never}
         className="flex-1 px-5"
         contentContainerStyle={{ paddingBottom: tabBarOverlay + 32 }}
       >
-        {notif.ready && !integrationsLoading && (
+        {notif.ready && !integrationsLoading && !offline && (
           <FinishSetupCard
             notificationsActive={notif.active}
             dluConnected={dluConnected}
@@ -127,7 +144,9 @@ export default function SettingsScreen() {
         <SettingsSectionLabel>{t("Profile")}</SettingsSectionLabel>
         <View className="overflow-hidden rounded-2xl border border-border bg-card">
           {user ? (
-            <ProfileRow user={user} onUpdated={setUser} />
+            <OfflineLock>
+              <ProfileRow user={user} onUpdated={setUser} />
+            </OfflineLock>
           ) : (
             <View className="flex-row items-center gap-[13px] px-4 py-3.5">
               <Skeleton className="size-12 rounded-full" />
@@ -160,16 +179,19 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        <PreferencesSection />
-
-        <TagsRow />
+        <OfflineLock>
+          <PreferencesSection />
+          <TagsRow />
+        </OfflineLock>
 
         <View
           onLayout={(e) => {
             dluY.current = e.nativeEvent.layout.y;
           }}
         >
-          <DluAccountsSection />
+          <OfflineLock>
+            <DluAccountsSection />
+          </OfflineLock>
         </View>
 
         <SettingsSectionLabel>{t("Account")}</SettingsSectionLabel>

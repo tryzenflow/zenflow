@@ -1,6 +1,7 @@
 import { CloudOffIcon, DuskIcon, SyncedIcon } from "@/components/brand/icons";
 import { Glass } from "@/components/ui/glass";
 import { type ToastIcon, useToast } from "@/components/ui/toast";
+import { useScreenFocusedRef } from "@/hooks/use-screen-focused-ref";
 import { selectOffline, useConnectivity } from "@/lib/connectivity";
 import { NAV_THEME } from "@/lib/constants";
 import { t } from "@/lib/i18n";
@@ -39,11 +40,14 @@ export function OfflineIndicator({ dayKey }: { dayKey: string }) {
   const { toast } = useToast();
   const { isDarkColorScheme } = useColorScheme();
   const wasOffline = useRef(false);
+  // Tab screens stay mounted, so only the visible one may toast (not one per tab).
+  const focused = useScreenFocusedRef();
 
   useEffect(() => {
     if (offline) {
       if (wasOffline.current) return;
       wasOffline.current = true;
+      if (!focused.current) return;
       toast({
         title: t("You're offline"),
         description: t(
@@ -54,6 +58,7 @@ export function OfflineIndicator({ dayKey }: { dayKey: string }) {
       });
     } else if (wasOffline.current) {
       wasOffline.current = false;
+      if (!focused.current) return;
       toast({
         title: t("Back online"),
         description: t("Your calendar and tasks are up to date."),
@@ -61,7 +66,7 @@ export function OfflineIndicator({ dayKey }: { dayKey: string }) {
         variant: "success",
       });
     }
-  }, [offline, toast]);
+  }, [offline, toast, focused]);
 
   if (!offline) return null;
 

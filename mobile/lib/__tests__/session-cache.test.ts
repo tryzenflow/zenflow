@@ -4,6 +4,7 @@ import {
   DAY_CACHE_TTL_MS,
   clearDaySessionCache,
   fetchDaySessions,
+  findCachedSession,
   getCachedDaySessions,
   isDayCacheFresh,
   setCachedDaySessions,
@@ -83,5 +84,15 @@ describe("account switch", () => {
     resolve(sessions(1));
     await pending;
     expect(getCachedDaySessions("2026-09-01")).toBeUndefined();
+  });
+});
+
+describe("findCachedSession", () => {
+  it("finds a session in any cached day or month, else undefined", () => {
+    setCachedDaySessions("2026-09-01", sessions(2));
+    setCachedDaySessions("month:2026-09", [{ id: "m1" } as Session]);
+    expect(findCachedSession("s1")?.id).toBe("s1");
+    expect(findCachedSession("m1")?.id).toBe("m1");
+    expect(findCachedSession("nope")).toBeUndefined();
   });
 });

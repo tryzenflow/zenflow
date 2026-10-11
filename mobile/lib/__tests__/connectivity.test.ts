@@ -33,3 +33,22 @@ describe("connectivity", () => {
     setOnline(true);
   });
 });
+
+describe("forced offline (dev toggle)", () => {
+  it("overrides NetInfo and restores it when switched off", () => {
+    const { setOnline, setForcedOffline } = useConnectivity.getState();
+    setForcedOffline(false);
+    setOnline(true);
+    setForcedOffline(true);
+    expect(useConnectivity.getState().online).toBe(false);
+    setOnline(true); // NetInfo still says online: stays forced offline
+    expect(useConnectivity.getState().online).toBe(false);
+    setForcedOffline(false);
+    expect(useConnectivity.getState().online).toBe(true);
+    setOnline(false);
+    setForcedOffline(true);
+    setForcedOffline(false);
+    expect(useConnectivity.getState().online).toBe(false); // really offline
+    setOnline(true);
+  });
+});
