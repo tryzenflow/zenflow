@@ -91,44 +91,37 @@ const TOAST_VARIANTS: Record<
     badge: string;
     icon: string;
     Icon: LucideIcon;
-    confirmBtn: string;
   }
 > = {
   default: {
     badge: "bg-blue-500/15",
     icon: "text-blue-600 dark:text-blue-400",
     Icon: Info,
-    confirmBtn: "bg-blue-600",
   },
   destructive: {
     badge: "bg-destructive/15",
     icon: "text-destructive",
     Icon: AlertCircle,
-    confirmBtn: "bg-destructive",
   },
   warning: {
     badge: "bg-amber-500/15",
     icon: "text-amber-600 dark:text-amber-400",
     Icon: AlertTriangle,
-    confirmBtn: "bg-amber-600",
   },
   success: {
     badge: "bg-green-500/15",
     icon: "text-green-600 dark:text-green-400",
     Icon: CheckCircle,
-    confirmBtn: "bg-green-600",
   },
   info: {
     badge: "bg-blue-500/15",
     icon: "text-blue-600 dark:text-blue-400",
     Icon: Info,
-    confirmBtn: "bg-blue-600",
   },
   tip: {
     badge: "bg-primary/15",
     icon: "text-primary",
     Icon: Sparkles,
-    confirmBtn: "bg-primary",
   },
 } satisfies Record<
   string,
@@ -136,7 +129,6 @@ const TOAST_VARIANTS: Record<
     badge: string;
     icon: string;
     Icon: LucideIcon;
-    confirmBtn: string;
   }
 >;
 
@@ -160,6 +152,25 @@ const VARIANT_ACCENT: Record<ToastVariant, ToastAccent> = {
   info: { light: "#2563eb", dark: "#60a5fa" },
   tip: { light: "#f97316", dark: "#fb923c" },
 };
+
+/** `--primary-foreground`: the dark ink used on every orange/primary fill. */
+const ON_PRIMARY = "#2B1406";
+
+function luminance(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** Label color for a solid `#rrggbb` fill: dark ink or white, whichever contrasts more. */
+function onFill(hex: string): string {
+  const l = luminance(hex);
+  const dark = (l + 0.05) / (luminance(ON_PRIMARY) + 0.05);
+  const white = 1.05 / (l + 0.05);
+  return dark >= white ? ON_PRIMARY : "#fff";
+}
 
 /** Back-compat export — was a `variant → bg` map, now just the badge tints. */
 const toastVariants = Object.fromEntries(
@@ -522,7 +533,7 @@ function Toast({
                 >
                   <Text
                     className="text-[13px] font-semibold"
-                    style={{ color: tint ? "#fff" : palette.text }}
+                    style={{ color: tint ? onFill(tint) : palette.text }}
                   >
                     {b.label}
                   </Text>
@@ -568,7 +579,10 @@ function Toast({
                 backgroundColor: accent,
               }}
             >
-              <Text className="text-[13px] font-bold" style={{ color: "#fff" }}>
+              <Text
+                className="text-[13px] font-bold"
+                style={{ color: onFill(accent) }}
+              >
                 {confirm.confirmLabel ?? t("Confirm")}
               </Text>
             </Pressable>

@@ -476,7 +476,11 @@ function NotificationRowItem({
               )}
             >
               {isSelected && (
-                <Check size={15} color="#ffffff" strokeWidth={3} />
+                <Check
+                  size={15}
+                  strokeWidth={3}
+                  className="text-primary-foreground"
+                />
               )}
             </View>
           )}

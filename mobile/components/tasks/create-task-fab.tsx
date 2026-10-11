@@ -75,7 +75,7 @@ export function CreateSessionFab({ tz }: { tz: string }) {
         className="items-center justify-center bg-primary"
       >
         <SpotlightAnchor step="create-task" />
-        <Plus size={26} color="black" className="text-primary-foreground" />
+        <Plus size={26} className="text-primary-foreground" />
       </Pressable>
     </View>
   );
