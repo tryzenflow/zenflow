@@ -31,7 +31,7 @@ describe("parseOpenMediaMessage", () => {
 const c = { fg: "#111", muted: "#888", link: "#f80" };
 
 describe("mediaPlayerScript", () => {
-  const labels = { title: "Available online", hint: "h", retry: "r" };
+  const labels = { offline: "Offline", failed: "f" };
   it("is syntactically valid JavaScript offline and online", () => {
     for (const offline of [true, false]) {
       expect(
@@ -42,9 +42,14 @@ describe("mediaPlayerScript", () => {
   it("embeds the labels safely", () => {
     const js = mediaPlayerScript({
       offline: true,
-      labels: { title: 'a"b</script>', hint: "h", retry: "r" },
+      labels: { offline: 'a"b</script>', failed: "f" },
     });
     expect(() => new Function(js)).not.toThrow();
+  });
+  it("turns a file link into a document card", () => {
+    const js = mediaPlayerScript({ offline: false, labels });
+    expect(js).toContain("docCard(p, links[0], name)");
+    expect(noteMediaCss("body", false, c)).toContain("a.zf-doc");
   });
   it("themes for both color schemes", () => {
     expect(noteMediaCss("body", true, c)).not.toBe(
@@ -66,7 +71,7 @@ describe("audio links", () => {
   it("the player script turns an audio link into a player", () => {
     const js = mediaPlayerScript({
       offline: false,
-      labels: { title: "t", hint: "h", retry: "r" },
+      labels: { offline: "o", failed: "f" },
     });
     expect(js).toContain("AUDIO_NAME");
     expect(js).toContain("VIDEO_NAME");
@@ -77,10 +82,20 @@ describe("audio links", () => {
 describe("offline and error placeholders", () => {
   const js = mediaPlayerScript({
     offline: true,
-    labels: { title: "t", hint: "h", retry: "r" },
+    labels: { offline: "o", failed: "f" },
   });
   it("covers images offline and never stacks placeholders", () => {
     expect(js).toContain("if (OFFLINE) return placeholder(img)");
     expect(js).toContain("__zfBox");
+  });
+});
+
+describe("document card script", () => {
+  it("reads the extension with a real dot (survives the template literal)", () => {
+    const js = mediaPlayerScript({
+      offline: false,
+      labels: { offline: "o", failed: "f" },
+    });
+    expect(js).toContain(String.raw`/\.([A-Za-z0-9]{1,5})$/.exec(name)`);
   });
 });

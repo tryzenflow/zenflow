@@ -11,8 +11,9 @@ Dev-facing notes on what works offline and how to test it. Design rationale:
 - **Cached.** Signed in and on every foreground / reconnect the app fetches the previous, current
   and next month plus each day of this week (`lib/warm-calendar.ts`). Task details open from that
   cache (`findCachedSession`), notes included.
-- **Not cached.** Images, audio and video in notes. Offline they all show a placeholder (even an image the
-  WebView still has cached); a file that
+- **Not cached.** Images, audio and video in notes. Offline each shows a placeholder of its own kind (grey image box;
+  audio player and video poster with a disabled play button), even for an image the WebView
+  still has cached; a file that
   fails to load shows it too, and tapping retries. Link previews load by default.
 - **Settings.** Language, timezone, default reminder and notifications can be changed offline: they
   apply at once, wait in `lib/pending-prefs.ts` and sync on reconnect or foreground. Profile, tags

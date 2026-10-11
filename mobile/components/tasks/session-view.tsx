@@ -403,7 +403,14 @@ function NoteHtml({ html }: { html: string }) {
     return {
       html: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><style>${fontFace} html, body { margin: 0; padding: 0; background: transparent; } #note { display: flow-root; padding-bottom: 6px; } body { color: ${fg}; font-family: ${family}; font-size: 16px; line-height: 1.55; word-wrap: break-word; } ${noteTypographyCss("body", isDarkColorScheme)} ${noteLinkCardCss("body", isDarkColorScheme, reduceMotion)} ${noteMediaCss("body", isDarkColorScheme, noteColors(isDarkColorScheme))}</style></head><body><div id="note">${html}</div><script>window.ZF_PREVIEWS = ${JSON.stringify(previews).replace(/</g, "\\u003c")}; window.ZF_PENDING = ${JSON.stringify(pendingUrls).replace(/</g, "\u003c")};</script></body></html>`,
     };
-  }, [html, isDarkColorScheme, fontDataUri, previews, pendingUrls, reduceMotion]);
+  }, [
+    html,
+    isDarkColorScheme,
+    fontDataUri,
+    previews,
+    pendingUrls,
+    reduceMotion,
+  ]);
   // The page is rebuilt when connectivity flips, so media swaps to / from placeholders.
   const sourceKey = offline ? "offline" : "online";
 
@@ -411,9 +418,8 @@ function NoteHtml({ html }: { html: string }) {
     ${mediaPlayerScript({
       offline,
       labels: {
-        title: t("Available online"),
-        hint: t("Reconnect to play this file."),
-        retry: t("Couldn't load. Tap to retry."),
+        offline: t("Offline"),
+        failed: t("Couldn't load. Tap to retry."),
       },
     })}
     ${LINK_CARD_SCRIPT}
