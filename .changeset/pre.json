@@ -3,6 +3,8 @@
   "tag": "beta",
   "changesets": [
     "file-ids-queue-release",
+    "glass-login-staging-exporter",
+    "mobile-nav-and-lag",
     "mobile-test-pyramid",
     "short-user-facing-copy"
   ],
