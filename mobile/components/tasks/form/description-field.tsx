@@ -9,6 +9,7 @@ import { noteSnippet } from "@/lib/note-html";
 import { cn } from "@/lib/utils";
 import { Suspense, lazy, useEffect, useState } from "react";
 import { Modal, Pressable, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // The editor (tentap + tiptap + WebView) is the heaviest module in the form.
 // It is only needed once the modal opens, so it is loaded then instead of
@@ -18,6 +19,35 @@ const DescriptionFieldEditor = lazy(() =>
     default: m.DescriptionFieldEditor,
   })),
 );
+
+/**
+ * Shown while the editor chunk loads. Same header as the editor (title +
+ * Done) so only the body is a skeleton and the modal can still be closed.
+ */
+function EditorFallback({ onClose }: { onClose: () => void }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
+      <View className="flex-row items-center justify-between px-5 pb-3 pt-2">
+        <Text className="text-[19px] font-bold tracking-tight">
+          {t("Description")}
+        </Text>
+        <Pressable
+          onPress={onClose}
+          accessibilityLabel={t("Done")}
+          className="h-9 flex-row items-center rounded-full bg-primary px-4"
+        >
+          <Text className="text-[14px] font-semibold text-primary-foreground">
+            {t("Done")}
+          </Text>
+        </Pressable>
+      </View>
+      <View className="px-5 pt-5">
+        <NoteSkeleton />
+      </View>
+    </View>
+  );
+}
 
 export function DescriptionField({
   initialValue: storedValue,
@@ -69,13 +99,7 @@ export function DescriptionField({
         presentationStyle="fullScreen"
         onRequestClose={() => setOpen(false)}
       >
-        <Suspense
-          fallback={
-            <View className="flex-1 bg-background px-5 pt-16">
-              <NoteSkeleton />
-            </View>
-          }
-        >
+        <Suspense fallback={<EditorFallback onClose={() => setOpen(false)} />}>
           <DescriptionFieldEditor
             initialValue={value}
             onChange={(html) => {
