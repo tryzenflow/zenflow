@@ -1,5 +1,21 @@
 # mobile
 
+## 0.1.0-beta.4
+
+### Patch Changes
+
+- 8879d7b: The A/B slot pick is only offered when the two times are at least an hour apart, so you no longer choose
+  between 9:00 and 9:15. Reminders are armed every minute instead of every five. On mobile, primary-colored
+  buttons keep dark text, the active note toolbar icon is readable in dark mode, and the description shows a
+  skeleton and fades in instead of snapping.
+- 0299acf: Getting started: the spotlight appears instantly, and "Move a task to another day" now points at a future task
+  instead of falling back to "Create a task" when the first day of the month held only a lecture or a past task.
+  The Month day sheet opens after its state commits and remounts after a drag-out, so it no longer slips behind
+  the scrim.
+  The task description editor shows its header (title and Done) while it loads, instead of a full-screen skeleton.
+  - @zenflow/shared@0.1.0-beta.4
+  - @zenflow/core@0.1.0-beta.4
+
 ## 0.1.0-beta.3
 
 ### Minor Changes

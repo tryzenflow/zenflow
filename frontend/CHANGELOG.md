@@ -1,5 +1,12 @@
 # frontend
 
+## 0.1.0-beta.4
+
+### Patch Changes
+
+- @zenflow/shared@0.1.0-beta.4
+- @zenflow/core@0.1.0-beta.4
+
 ## 0.1.0-beta.3
 
 ### Minor Changes

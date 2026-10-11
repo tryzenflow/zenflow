@@ -2,6 +2,8 @@
   "mode": "pre",
   "tag": "beta",
   "changesets": [
+    "ab-gap-primary-text-note-skeleton",
+    "checklist-day-sheet-spotlight",
     "file-ids-queue-release",
     "glass-login-staging-exporter",
     "mobile-nav-and-lag",
