@@ -1,4 +1,4 @@
-# Staging only (mounted by compose.staging.yml): Postgres connections, locks and pg_stat_* for the load test.
+# Mounted by compose.staging.yml and compose.prod.yml: Postgres connections, locks and pg_stat_*.
 scrape_configs:
   - job_name: postgres-exporter
     static_configs:

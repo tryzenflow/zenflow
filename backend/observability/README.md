@@ -20,7 +20,7 @@ App-side instrumentation: `../src/observability/`, `../src/tracing.ts`, `service
 - Run from `backend/`. Compose defaults the Grafana password to `admin` when unset; always set it.
 - Grafana has no published port; nginx proxies it: <http://grafana.localhost> (staging) and <https://grafana.alphatrann.com> (prod, own Let's Encrypt cert: `DOMAIN=grafana.alphatrann.com ./nginx/init-cert.sh`, DNS A record first). Anonymous access is off; prod refuses to start without `GF_SECURITY_ADMIN_PASSWORD`.
 - Dashboards are in the **Zenflow** folder. **Explore** has Tempo, Loki and Prometheus wired.
-- Staging adds `postgres-exporter` (scrape file `prometheus/scrape.d/postgres-exporter.yml`) and a fake DLU upstream for [the staging load test](../../loadtest/staging/README.md).
+- Staging and prod both run `postgres-exporter` (scrape file `prometheus/scrape.d/postgres-exporter.yml`). The fake DLU upstream exists only in the [load-test overlay](../../loadtest/staging/README.md).
 - cAdvisor sees only the aggregate `/docker` cgroup on containerd image stores (Colima, recent Docker Engine); see the `cadvisor` service comment.
 
 ## What is here

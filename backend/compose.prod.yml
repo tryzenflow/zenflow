@@ -594,6 +594,7 @@ services:
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./observability/prometheus/scrape.d/redis-exporter.yml:/etc/prometheus/scrape.d/redis-exporter.yml:ro
+      - ./observability/prometheus/scrape.d/postgres-exporter.yml:/etc/prometheus/scrape.d/postgres-exporter.yml:ro
       - ./observability/prometheus/rules.d/redis-sessions.yml:/etc/prometheus/rules.d/redis-sessions.yml:ro
       - ./observability/prometheus/rules.d/session-event-partitions.yml:/etc/prometheus/rules.d/session-event-partitions.yml:ro
       - prometheus_data:/prometheus
@@ -624,6 +625,31 @@ services:
       - o11y
     depends_on:
       session-redis:
+        condition: service_healthy
+
+  # Postgres connections / locks / pg_stat_* (Prometheus job `postgres-exporter`). Reads the same
+  # Vault set as `postgres`; the DSN is assembled at start so the password never appears in
+  # `docker compose config`, and DATA_SOURCE_PASS needs no URL-encoding.
+  postgres-exporter:
+    container_name: zenflow-postgres-exporter-prod
+    image: prometheuscommunity/postgres-exporter:v0.17.1
+    restart: unless-stopped
+    entrypoint:
+      - /bin/sh
+      - -c
+      - 'DATA_SOURCE_USER="$$POSTGRES_USER" DATA_SOURCE_PASS="$$POSTGRES_PASSWORD" DATA_SOURCE_URI="postgres:5432/$$POSTGRES_DB?sslmode=disable" exec /bin/postgres_exporter'
+    env_file:
+      - path: .env.prod
+        required: false
+      - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/postgres/files.env
+        required: false
+    expose:
+      - "9187"
+    networks:
+      - db
+      - o11y
+    depends_on:
+      postgres:
         condition: service_healthy
 
   node-exporter:
