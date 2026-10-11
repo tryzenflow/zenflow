@@ -84,6 +84,14 @@ jobs:
       ZENFLOW_E2E: ${{ inputs.variant == 'release' && '0' || '1' }}
       EXPO_PUBLIC_API_URL: ${{ inputs.variant == 'release' && (inputs.api_url || 'https://zenflow.alphatrann.com/api/v1') || '' }}
     steps:
+      # The 4-ABI native build filled the runner disk (job died with "No space
+      # left on device"). Drop toolchains this job never uses; the Android
+      # SDK/NDK under /usr/local/lib/android is what Gradle needs, so it stays.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          docker system prune -af >/dev/null || true
+          df -h /
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
       - uses: actions/setup-java@v4
@@ -91,6 +99,10 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          # Only master writes the Gradle cache; PR builds read it, so they do
+          # not each save a multi-GB copy.
+          cache-read-only: ${{ github.ref != 'refs/heads/master' }}
       - name: Resolve API URL
         run: |
           if [ -z "$EXPO_PUBLIC_API_URL" ]; then
@@ -100,9 +112,21 @@ jobs:
       - name: Prebuild (android/ is gitignored)
         working-directory: mobile
         run: pnpm exec expo prebuild --platform android --no-install --clean
+      # One native ABI instead of four: the emulator runs x86_64, phones run
+      # arm64-v8a (32-bit-only devices are not supported by release builds).
+      # lintVitalRelease only lints; skipping it saves minutes and heap.
       - name: Assemble release APK
         working-directory: mobile/android
-        run: ./gradlew assembleRelease --no-daemon
+        env:
+          ABI: ${{ inputs.variant == 'release' && 'arm64-v8a' || 'x86_64' }}
+        run: |
+          ./gradlew assembleRelease --no-daemon \
+            -PreactNativeArchitectures="$ABI" \
+            -x lintVitalRelease \
+            -Dorg.gradle.parallel=true \
+            -Dorg.gradle.caching=true \
+            -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=768m -XX:+UseParallelGC" \
+            -Pkotlin.daemon.jvm.options="-Xmx1g"
       - name: Collect APK
         run: |
           mkdir -p dist
