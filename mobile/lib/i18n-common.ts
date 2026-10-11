@@ -23,7 +23,6 @@ export default {
   "Reconnect to play this file.": "Hãy kết nối mạng để phát tệp này.",
   "Couldn't load. Tap to retry.": "Không tải được. Chạm để thử lại.",
   "Overdue at": "Hết hạn vào",
-  "Load link previews": "Tải xem trước liên kết",
   Hour: "Giờ",
   Minute: "Phút",
   "+{count} more": "+{count} nữa",

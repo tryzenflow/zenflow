@@ -7,6 +7,14 @@ export interface OpenMedia {
   src: string;
 }
 
+/** Signed file links from `/files/:id?sig=…`: embeds, not web pages to unfurl. */
+export function isFileUrl(url: string): boolean {
+  return /\/files\/[^/?#]+\?/.test(url);
+}
+
+/** Audio uploads are saved as a plain link; the viewer turns them into a player. */
+export const AUDIO_NAME_RE = /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac|weba)$/i;
+
 /** A media tap posted by `mediaPlayerScript`; null for any other message. */
 export function parseOpenMediaMessage(raw: string): OpenMedia | null {
   try {
@@ -38,7 +46,7 @@ export function noteMediaCss(
   const edge = isDark ? "rgba(255,150,80,0.30)" : "rgba(255,142,62,0.32)";
   const bar = isDark ? "rgba(255,255,255,0.22)" : "rgba(28,25,23,0.18)";
   const ink = isDark ? "rgb(29 26 23)" : "#fff";
-  return `${selector} .zf-media { position: relative; margin: 8px 0 12px; border: 1px solid ${edge}; border-radius: 20px; background: ${fill}; overflow: hidden; -webkit-tap-highlight-color: transparent; } ${selector} .zf-media audio, ${selector} .zf-media video { display: block; } ${selector} .zf-media.zf-audio { display: flex; align-items: center; gap: 12px; padding: 12px 14px; } ${selector} .zf-media.zf-audio audio { display: none; } ${selector} .zf-play { flex: none; width: 46px; height: 46px; border: 0; border-radius: 50%; background: ${link}; color: ${ink}; display: flex; align-items: center; justify-content: center; padding: 0; box-shadow: 0 0 0 5px ${edge}; } ${selector} .zf-play svg { width: 20px; height: 20px; fill: currentColor; } ${selector} .zf-play .zf-pause, ${selector} .zf-media.zf-on .zf-play .zf-go-play { display: none; } ${selector} .zf-media.zf-on .zf-play .zf-pause { display: block; } ${selector} .zf-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; } ${selector} .zf-wave { display: flex; align-items: center; gap: 2px; height: 30px; touch-action: none; } ${selector} .zf-wave i { flex: 1; min-width: 2px; border-radius: 2px; background: ${bar}; } ${selector} .zf-wave i.zf-hit { background: ${link}; } ${selector} .zf-meta { display: flex; justify-content: space-between; font-size: 12px; color: ${muted}; font-variant-numeric: tabular-nums; } ${selector} .zf-speed { flex: none; border: 1px solid ${edge}; border-radius: 999px; background: transparent; color: ${fg}; font: inherit; font-size: 12px; font-weight: 600; padding: 4px 9px; } ${selector} .zf-media.zf-video { background: #1c1917; border-color: transparent; } ${selector} .zf-media.zf-video video { width: 100%; max-height: 320px; border-radius: 0; background: #1c1917; } ${selector} .zf-vplay { position: absolute; left: 50%; top: 50%; margin: -29px 0 0 -29px; width: 58px; height: 58px; } ${selector} .zf-media.zf-on .zf-vplay { opacity: 0; } ${selector} .zf-vbar { display: flex; align-items: center; gap: 10px; padding: 8px 12px 10px; color: #fff; font-size: 12px; font-variant-numeric: tabular-nums; background: linear-gradient(0deg, rgba(0,0,0,0.65), rgba(0,0,0,0)); position: absolute; left: 0; right: 0; bottom: 0; } ${selector} .zf-track { flex: 1; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.3); touch-action: none; } ${selector} .zf-track b { display: block; height: 100%; width: 0; border-radius: 3px; background: ${link}; } ${selector} .zf-expand { border: 0; background: transparent; color: #fff; padding: 2px; display: flex; } ${selector} .zf-expand svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; } ${selector} .zf-off { display: flex; align-items: center; gap: 12px; margin: 8px 0 12px; padding: 14px; border: 1px dashed ${edge}; border-radius: 20px; background: ${fill}; color: ${muted}; } ${selector} .zf-off svg { flex: none; width: 34px; height: 34px; fill: none; stroke: ${link}; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; } ${selector} .zf-off b { display: block; color: ${fg}; font-size: 14px; } ${selector} .zf-off span { font-size: 13px; }`;
+  return `${selector} .zf-media { position: relative; margin: 8px 0 12px; border: 1px solid ${edge}; border-radius: 20px; background: ${fill}; overflow: hidden; -webkit-tap-highlight-color: transparent; } ${selector} .zf-media audio, ${selector} .zf-media video { display: block; } ${selector} .zf-media.zf-audio { display: flex; align-items: center; gap: 12px; padding: 12px 14px; } ${selector} .zf-media.zf-audio audio { display: none; } ${selector} .zf-play { flex: none; width: 46px; height: 46px; border: 0; border-radius: 50%; background: ${link}; color: ${ink}; display: flex; align-items: center; justify-content: center; padding: 0; box-shadow: 0 0 0 5px ${edge}; } ${selector} .zf-play svg { width: 20px; height: 20px; fill: currentColor; } ${selector} .zf-play .zf-pause, ${selector} .zf-media.zf-on .zf-play .zf-go-play { display: none; } ${selector} .zf-media.zf-on .zf-play .zf-pause { display: block; } ${selector} .zf-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; } ${selector} .zf-wave { display: flex; align-items: center; gap: 2px; height: 30px; touch-action: none; } ${selector} .zf-wave i { flex: 1; min-width: 2px; border-radius: 2px; background: ${bar}; } ${selector} .zf-wave i.zf-hit { background: ${link}; } ${selector} .zf-meta { display: flex; justify-content: space-between; font-size: 12px; color: ${muted}; font-variant-numeric: tabular-nums; } ${selector} .zf-speed { flex: none; width: 54px; text-align: center; box-sizing: border-box; border: 1px solid ${edge}; border-radius: 999px; background: transparent; color: ${fg}; font: inherit; font-size: 12px; font-weight: 600; padding: 4px 0; font-variant-numeric: tabular-nums; } ${selector} .zf-media.zf-video { background: #1c1917; border-color: transparent; } ${selector} .zf-media.zf-video video { width: 100%; max-height: 320px; border-radius: 0; background: #1c1917; } ${selector} .zf-vplay { position: absolute; left: 50%; top: 50%; margin: -29px 0 0 -29px; width: 58px; height: 58px; } ${selector} .zf-media.zf-on .zf-vplay { opacity: 0; } ${selector} .zf-vbar { display: flex; align-items: center; gap: 10px; padding: 8px 12px 10px; color: #fff; font-size: 12px; font-variant-numeric: tabular-nums; background: linear-gradient(0deg, rgba(0,0,0,0.65), rgba(0,0,0,0)); position: absolute; left: 0; right: 0; bottom: 0; } ${selector} .zf-track { flex: 1; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.3); touch-action: none; } ${selector} .zf-track b { display: block; height: 100%; width: 0; border-radius: 3px; background: ${link}; } ${selector} .zf-expand { border: 0; background: transparent; color: #fff; padding: 2px; display: flex; } ${selector} .zf-expand svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; } ${selector} .zf-off { display: flex; align-items: center; gap: 12px; margin: 8px 0 12px; padding: 14px; border: 1px dashed ${edge}; border-radius: 20px; background: ${fill}; color: ${muted}; } ${selector} .zf-off svg { flex: none; width: 34px; height: 34px; fill: none; stroke: ${link}; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; } ${selector} .zf-off b { display: block; color: ${fg}; font-size: 14px; } ${selector} .zf-off span { font-size: 13px; }`;
 }
 
 /**
@@ -97,6 +105,18 @@ export function mediaPlayerScript(opts: {
       node.addEventListener('pointermove', function(e) { if (down) seekFrom(e, node, media); });
       ['pointerup', 'pointercancel', 'pointerleave'].forEach(function(n) { node.addEventListener(n, function() { down = false; }); });
     }
+    // The editor stores an audio upload as a link to the file (like any document); play it here.
+    var AUDIO_NAME = ${AUDIO_NAME_RE.toString()};
+    document.querySelectorAll('#note p').forEach(function(p) {
+      var links = p.querySelectorAll('a');
+      if (links.length !== 1 || p.textContent.trim() !== links[0].textContent.trim()) return;
+      var href = links[0].getAttribute('href') || '';
+      if (!/\\/files\\/[^/?#]+\\?/.test(href) || !AUDIO_NAME.test(links[0].textContent.trim())) return;
+      var el = document.createElement('audio');
+      el.src = href;
+      el.setAttribute('controls', '');
+      p.parentNode.replaceChild(el, p);
+    });
     document.querySelectorAll('#note audio').forEach(function(a) {
       if (OFFLINE) return placeholder(a);
       a.removeAttribute('controls');
