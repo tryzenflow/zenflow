@@ -423,10 +423,16 @@ export function DayTimeline({
     };
   }, [dayKey, refreshKey, mutationTick]);
 
-  // Saved tasks for this day (prefetched offline) beat the error screen.
+  // Saved tasks for this day (prefetched offline) beat the error screen; an
+  // empty day we can't refresh (offline, or its last refresh failed) gets it.
+  const dayStale = useConnectivity((s) => s.staleKeys.has(dayKey));
   useEffect(() => {
-    if (error && tasks.length > 0) setError(false);
-  }, [error, tasks]);
+    if (tasks.length > 0) {
+      if (error) setError(false);
+    } else if (!loading && (offline || dayStale)) {
+      setError(true);
+    }
+  }, [error, tasks, loading, offline, dayStale]);
 
   useEffect(() => {
     onStateChange?.(loading ? "loading" : error ? "error" : "ready");
