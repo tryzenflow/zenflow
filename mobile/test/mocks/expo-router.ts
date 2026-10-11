@@ -6,6 +6,8 @@ export const router = {
   push: vi.fn(),
   replace: vi.fn(),
   back: vi.fn(),
+  canGoBack: vi.fn(() => true),
+  dismissTo: vi.fn(),
   navigate: vi.fn(),
   setParams: vi.fn(),
 };

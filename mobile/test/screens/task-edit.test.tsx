@@ -109,7 +109,7 @@ describe("EditSessionScreen — editing", () => {
     expect(patch?.body).toMatchObject({ title: "Revise trees", deadline: DEADLINE, reminders: [60] });
     await toastShown("Session updated");
     await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith({
+      expect(router.dismissTo).toHaveBeenCalledWith({
         pathname: "/",
         params: { date: "2026-10-15T03:00:00.000Z", flash: "t1" },
       }),
@@ -164,7 +164,7 @@ describe("EditSessionScreen — editing", () => {
     fireEvent.change(screen.getByTestId("task.title"), { target: { value: "Revise trees" } });
     fireEvent.click(screen.getByTestId("task.save"));
     await toastShown(/Conflict with exam|Couldn't update session/);
-    expect(router.replace).not.toHaveBeenCalled();
+    expect(router.dismissTo).not.toHaveBeenCalled();
   });
 });
 

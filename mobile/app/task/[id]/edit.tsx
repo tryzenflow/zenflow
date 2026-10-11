@@ -1,4 +1,5 @@
 import { t } from "@/lib/i18n";
+import { goToCalendar, safeBack } from "@/lib/nav";
 import { warmLandingDay } from "@/lib/warm-day";
 import { useLanguage } from "@/hooks/use-language";
 import { format } from "@/lib/i18n";
@@ -48,7 +49,7 @@ import {
 } from "@zenflow/core";
 import type { Session, UpdateSessionInput } from "@zenflow/shared";
 
-import { type Href, useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 
@@ -140,7 +141,7 @@ function EditSessionForm() {
           t("Couldn't open this session"),
           "calendar-x",
         );
-        router.back();
+        safeBack(router);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
@@ -198,10 +199,7 @@ function EditSessionForm() {
           tz,
         });
         await warmLandingDay(updated.primarySlot, tz);
-        router.replace({
-          pathname: "/",
-          params: { date: updated.primarySlot, flash: updated.id },
-        } as Href);
+        goToCalendar(router, { date: updated.primarySlot, flash: updated.id });
         return;
       }
 
@@ -216,10 +214,10 @@ function EditSessionForm() {
           tz,
         });
         await warmLandingDay(series[0].primarySlot, tz);
-        router.replace({
-          pathname: "/",
-          params: { date: series[0].primarySlot, flash: series[0].session.id },
-        } as Href);
+        goToCalendar(router, {
+          date: series[0].primarySlot,
+          flash: series[0].session.id,
+        });
         return;
       }
 
@@ -249,12 +247,12 @@ function EditSessionForm() {
       // Jump the calendar to the (possibly new) time and pulse the block.
       if (updated.scheduledStartTime) {
         await warmLandingDay(updated.scheduledStartTime, tz);
-        router.replace({
-          pathname: "/",
-          params: { date: updated.scheduledStartTime, flash: updated.id },
-        } as Href);
+        goToCalendar(router, {
+          date: updated.scheduledStartTime,
+          flash: updated.id,
+        });
       } else {
-        router.back();
+        safeBack(router);
       }
     };
     await withInfeasibleRetry(
@@ -281,7 +279,7 @@ function EditSessionForm() {
   }
 
   async function runDelete(scope: DeleteRecurringScope) {
-    if (!task) return;
+    if (!task || deleting) return;
     const seriesKind = getSeriesKind(task);
     setDeleting(true);
     try {
@@ -321,7 +319,7 @@ function EditSessionForm() {
         "success",
         { icon: "trash" },
       );
-      router.back();
+      safeBack(router);
     } catch (error) {
       showErrorToast(toast, error, t("Couldn't delete session"), "trash");
     } finally {

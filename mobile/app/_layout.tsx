@@ -55,6 +55,10 @@ export {
   ErrorBoundary,
 } from "expo-router";
 
+// A deep link / push tap that cold-starts straight into a modal still gets the
+// calendar underneath, so closing it has somewhere to go back to.
+export const unstable_settings = { anchor: "(app)" };
+
 SplashScreen.preventAutoHideAsync();
 
 /**
@@ -255,8 +259,11 @@ export default function RootLayout() {
                   name="task/new"
                   options={{ presentation: "modal" }}
                 />
+                {/* `getId`: opening the same session twice (double tap) focuses
+                    the existing modal instead of stacking a second one. */}
                 <Stack.Screen
                   name="task/[id]/edit"
+                  getId={({ params }) => String(params?.id ?? "")}
                   options={{ presentation: "modal" }}
                 />
                 {/* The ingestion inbox — LMS / portal notifications. */}

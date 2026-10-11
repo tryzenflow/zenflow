@@ -1,4 +1,5 @@
 import { useConnectivity } from "@/lib/connectivity";
+import { navigateOnce } from "@/lib/nav";
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { locale } from "@/lib/i18n";
@@ -774,10 +775,12 @@ export function DayTimeline({
     }
     const start = new Date(date);
     start.setHours(0, startMin, 0, 0);
-    router.push({
-      pathname: "/task/new",
-      params: { start: zonedWallClockToUtc(start, tz).toISOString() },
-    } as Href);
+    navigateOnce(() =>
+      router.push({
+        pathname: "/task/new",
+        params: { start: zonedWallClockToUtc(start, tz).toISOString() },
+      } as Href),
+    );
   }, [date, isToday, router, tz]);
 
   const handleReschedule = useCallback(

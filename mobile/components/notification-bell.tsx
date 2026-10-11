@@ -1,4 +1,5 @@
 import { t } from "@/lib/i18n";
+import { navigateOnce } from "@/lib/nav";
 import { useLanguage } from "@/hooks/use-language";
 import { Bell } from "@/components/Icons";
 import { useNotificationsStore } from "@/hooks/use-notifications";
@@ -20,7 +21,9 @@ export function NotificationBell() {
 
   return (
     <Pressable
-      onPress={() => router.push("/notifications" as Href)}
+      onPress={() =>
+        navigateOnce(() => router.push("/notifications" as Href))
+      }
       accessibilityLabel={
         unread > 0 ? `Notifications, ${unread} unread` : t(t("Notifications"))
       }

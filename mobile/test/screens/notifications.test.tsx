@@ -88,7 +88,7 @@ describe("NotificationsScreen", () => {
       renderScreen(<NotificationsScreen />);
       fireEvent.click(screen.getByText("New assignment"));
       await waitFor(() =>
-        expect(router.replace).toHaveBeenCalledWith({
+        expect(router.dismissTo).toHaveBeenCalledWith({
           pathname: "/",
           params: { date: "2026-10-20T03:00:00.000Z", flash: "s9" },
         }),
@@ -104,7 +104,7 @@ describe("NotificationsScreen", () => {
       renderScreen(<NotificationsScreen />);
       fireEvent.click(screen.getByText("Old item"));
       await toastShown("Couldn't find that item");
-      expect(router.replace).not.toHaveBeenCalled();
+      expect(router.dismissTo).not.toHaveBeenCalled();
     });
 
     it("only marks a removal (no session) as read", async () => {
@@ -112,7 +112,7 @@ describe("NotificationsScreen", () => {
       renderScreen(<NotificationsScreen />);
       fireEvent.click(screen.getByText("Lecture removed"));
       await waitFor(() => expect(calls).toEqual(["read:n1"]));
-      expect(router.replace).not.toHaveBeenCalled();
+      expect(router.dismissTo).not.toHaveBeenCalled();
     });
   });
 

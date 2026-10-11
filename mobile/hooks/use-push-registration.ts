@@ -20,6 +20,7 @@ import {
   pushOwner,
   registerPushCategories,
 } from "@/lib/push";
+import { goToCalendar, navigateOnce } from "@/lib/nav";
 import { markResponseHandled } from "@/lib/push-response";
 import type { Href } from "expo-router";
 
@@ -86,7 +87,7 @@ export function usePushRegistration(): void {
       }
       // A conflict has no session to open: show the inbox row with its button.
       if (data?.eventName && pushCategoryFor(data.eventName)) {
-        router.push("/notifications" as Href);
+        navigateOnce(() => router.push("/notifications" as Href));
         return;
       }
       const sessionId = data?.sessionId;
@@ -94,10 +95,7 @@ export function usePushRegistration(): void {
         try {
           const session = await getSessionDetails(sessionId);
           const targetDate = session.scheduledStartTime ?? session.createdAt;
-          router.replace({
-            pathname: "/",
-            params: { date: targetDate, flash: session.id },
-          } as Href);
+          goToCalendar(router, { date: targetDate, flash: session.id });
           return;
         } catch {
           toast({
@@ -109,7 +107,7 @@ export function usePushRegistration(): void {
           return;
         }
       }
-      router.push(hrefFromPushData(data));
+      navigateOnce(() => router.push(hrefFromPushData(data)));
     };
 
     void Notifications.getLastNotificationResponseAsync().then(route);
@@ -153,10 +151,10 @@ export function usePushRegistration(): void {
                     const session = await getSessionDetails(sessionId);
                     const targetDate =
                       session.scheduledStartTime ?? session.createdAt;
-                    router.replace({
-                      pathname: "/",
-                      params: { date: targetDate, flash: session.id },
-                    } as Href);
+                    goToCalendar(router, {
+                      date: targetDate,
+                      flash: session.id,
+                    });
                   } catch {
                     toast({
                       title: t("Couldn't find that item"),

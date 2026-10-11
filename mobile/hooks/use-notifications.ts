@@ -9,6 +9,7 @@ import {
 import { getSessionDetails } from "@/api/tasks";
 import { useToast } from "@/components/ui/toast";
 import { useUserStore } from "@/hooks/use-user-store";
+import { goToCalendar, navigateOnce } from "@/lib/nav";
 import { notificationToastVisual } from "@/lib/notification-visual";
 import { rescheduleWithToast } from "@/lib/reschedule-toast";
 import { claimNotification, LOCAL_NOTIFICATION_SOURCE } from "@/lib/push";
@@ -202,11 +203,9 @@ export async function jumpToSession(
     if (notificationId) {
       markNotificationActionTaken(notificationId).catch(() => {});
     }
-    if (replace) {
-      router.replace(`/task/${encodeURIComponent(sessionId)}/edit` as Href);
-    } else {
-      router.push(`/task/${encodeURIComponent(sessionId)}/edit` as Href);
-    }
+    const href = `/task/${encodeURIComponent(sessionId)}/edit` as Href;
+    if (replace) router.replace(href);
+    else navigateOnce(() => router.push(href));
   } catch {
     toast({
       title: t("Couldn't find that item"),
@@ -232,10 +231,7 @@ export async function viewSessionOnCalendar(
       markNotificationActionTaken(notificationId).catch(() => {});
     }
     const targetDate = session.scheduledStartTime ?? session.createdAt;
-    router.replace({
-      pathname: "/",
-      params: { date: targetDate, flash: session.id },
-    } as Href);
+    goToCalendar(router, { date: targetDate, flash: session.id });
   } catch {
     toast({
       title: t("Couldn't find that item"),
