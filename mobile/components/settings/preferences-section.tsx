@@ -13,7 +13,7 @@ import {
   type OptionSheetHandle,
 } from "@/components/settings/option-sheet";
 import { SettingsSectionLabel } from "@/components/settings/settings-header";
-import { useNotificationToggle } from "@/hooks/use-notification-toggle";
+import { useNotificationState } from "@/hooks/use-notification-toggle";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
@@ -64,7 +64,7 @@ const TZ_RESULT_LIMIT = 50;
 export function PreferencesSection() {
   useLanguage();
   const { prefs, update } = usePreferences();
-  const { setEnabled, active } = useNotificationToggle();
+  const { setEnabled, active } = useNotificationState();
   const { toast } = useToast();
   const languageSheet = useRef<OptionSheetHandle>(null);
   const timezoneSheet = useRef<OptionSheetHandle>(null);

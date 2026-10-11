@@ -32,7 +32,7 @@ import { useReducedMotion } from "@/lib/motion";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { fromRrule, zonedDate } from "@zenflow/core";
 import type { Session } from "@zenflow/shared";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, memo, useEffect, useMemo, useState } from "react";
 import { Linking, Pressable, View } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
@@ -193,15 +193,13 @@ function Property({
  * Read-only "page" for a session — the default when a session is opened. A
  * big title, a Notion-style property list, then the note rendered as HTML.
  */
-export function SessionView({
-  task,
-  values,
-  tz,
-}: {
+type SessionViewProps = {
   task: Session;
   values: SessionViewValues;
   tz: string;
-}) {
+};
+
+function SessionViewImpl({ task, values, tz }: SessionViewProps) {
   useLanguage();
   const when = useMemo(() => {
     if (!task.scheduledStartTime) return null;
@@ -288,6 +286,24 @@ export function SessionView({
     </View>
   );
 }
+
+/**
+ * The edit screen passes `form.watch()`, a fresh object every render; compare
+ * field by field so the (WebView-backed) page only re-renders on a real change.
+ */
+export const SessionView = memo(SessionViewImpl, (a, b) => {
+  if (a.task !== b.task || a.tz !== b.tz) return false;
+  const keys = new Set([...Object.keys(a.values), ...Object.keys(b.values)]);
+  for (const key of keys) {
+    if (
+      (a.values as unknown as Record<string, unknown>)[key] !==
+      (b.values as unknown as Record<string, unknown>)[key]
+    ) {
+      return false;
+    }
+  }
+  return true;
+});
 
 function NoteHtml({ html }: { html: string }) {
   const { isDarkColorScheme } = useColorScheme();

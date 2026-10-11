@@ -4,6 +4,19 @@ import { sessionTypesByDay } from "@/lib/week-day-types";
 import type { SessionType } from "@zenflow/shared";
 import { useEffect, useRef, useState } from "react";
 
+function sameDayTypes(
+  a: Map<string, SessionType[]>,
+  b: Map<string, SessionType[]>,
+): boolean {
+  if (a.size !== b.size) return false;
+  for (const [key, types] of a) {
+    const other = b.get(key);
+    if (!other || other.length !== types.length) return false;
+    if (types.some((type, i) => type !== other[i])) return false;
+  }
+  return true;
+}
+
 /**
  * Per-day distinct session types for the CURRENTLY VISIBLE week — what
  * `WeekHeader`'s per-day dot row renders. Fetches `GET /sessions?view=week`
@@ -38,7 +51,10 @@ export function useWeekDayTypes(
     listSessions("week", weekStart(visibleDateRef.current))
       .then(({ sessions }) => {
         if (cancelled) return;
-        setDayTypes(sessionTypesByDay(sessions, tz));
+        const next = sessionTypesByDay(sessions, tz);
+        // Refetches on every focus; keep the old Map when nothing changed so
+        // `WeekHeader` doesn't re-render for an identical dot row.
+        setDayTypes((prev) => (sameDayTypes(prev, next) ? prev : next));
       })
       .catch(() => {
         // Best-effort — the dot row just stays stale/empty, not worth a toast.

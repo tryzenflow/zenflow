@@ -402,11 +402,15 @@ function EditSessionForm() {
         </View>
       )}
 
-      <DeleteRecurringSheet
-        ref={deleteScopeSheet}
-        kind={task && getSeriesKind(task) === "task" ? "task" : "recurring"}
-        onChoose={runDelete}
-      />
+      {/* One-offs delete straight away (`onDelete`), so only a series needs
+          the scope sheet mounted. */}
+      {task && getSeriesKind(task) !== "none" && (
+        <DeleteRecurringSheet
+          ref={deleteScopeSheet}
+          kind={getSeriesKind(task) === "task" ? "task" : "recurring"}
+          onChoose={runDelete}
+        />
+      )}
     </SessionFormScreen>
   );
 }
