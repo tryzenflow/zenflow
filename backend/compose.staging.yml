@@ -1,6 +1,6 @@
 # Staging / load-test stack.
 #   docker compose --env-file .env.staging -f compose.staging.yml up -d --build
-# (--env-file feeds the ${...} interpolation used by postgres-exporter.)
+# (--env-file only feeds the optional ${...} overrides, e.g. image tags and GRAFANA_*.)
 name: zenflow-staging
 services:
   # HTTP only (ADR-0011); scheduled work runs in `watcher`, queue consumers in `worker-*`.
@@ -658,9 +658,14 @@ services:
     container_name: zenflow-postgres-exporter-staging
     image: prometheuscommunity/postgres-exporter:v0.17.1
     restart: unless-stopped
-    # Interpolated by compose: run with `docker compose --env-file .env.staging ...`.
-    environment:
-      DATA_SOURCE_NAME: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+    # Reads POSTGRES_* from .env.staging at container start (`$$` defers expansion to the
+    # shell), so compose needs no `--env-file` to interpolate them.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - 'DATA_SOURCE_USER="$$POSTGRES_USER" DATA_SOURCE_PASS="$$POSTGRES_PASSWORD" DATA_SOURCE_URI="postgres:5432/$$POSTGRES_DB?sslmode=disable" exec /bin/postgres_exporter'
+    env_file:
+      - .env.staging
     expose:
       - "9187"
     networks:
