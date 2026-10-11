@@ -8,9 +8,9 @@ For developers changing `services/bandit/src/core/*`, the LinUCB model or the of
   - `A = λI + Σ xxᵀ`, `b = Σ r·x`; `λ = 1.0`, `α = 0.15` (`BANDIT_RIDGE`, `BANDIT_ALPHA` in `backend/src/scheduler/constants.ts`, sent per request).
   - `A⁻¹` is cached per arm and invalidated on update.
   - `LinUCB` is arm-agnostic: arms are created lazily by string key at the ridge prior.
-- **Arms** (`SchedulingArm` in `@zenflow/shared`), half-open, lower-inclusive: `EARLY_MORNING [00:00,08:00)`, `MORNING [08:00,12:00)`, `MIDDAY [12:00,14:00)`, `AFTERNOON [14:00,18:00)`, `EVENING [18:00,22:00)`, `NIGHT [22:00,24:00)`. No waking band starts before 08:00 ([ADR-0012](../adr/0012-linucb-time-of-day-arms.md)).
+- **Arms** (`SchedulingArm` in `@zenflow/shared`), half-open, lower-inclusive: `EARLY_MORNING [00:00,08:00)`, `MORNING [08:00,11:00)`, `MIDDAY [11:00,14:00)`, `AFTERNOON [14:00,17:00)`, `EVENING [17:00,20:00)`, `NIGHT [20:00,24:00)`. No waking band starts before 08:00 ([ADR-0012](../adr/0012-linucb-time-of-day-arms.md)).
 - **Cold arm** = ridge prior. It scores `α·√(xᵀx/λ)`, not `0`.
-- **No warm start.** A cold arm is the plain ridge prior. All cold arms tie, so the preference term of the slot score (below) puts a new user's first picks at 09:00-12:00 ([ADR-0012](../adr/0012-linucb-time-of-day-arms.md); evidence in [heuristic-vs-linucb-report.md](../scheduler/heuristic-vs-linucb-report.md)).
+- **No warm start.** A cold arm is the plain ridge prior. All cold arms tie, so the preference term of the slot score (below) puts a new user's first picks at 09:00-11:00 ([ADR-0012](../adr/0012-linucb-time-of-day-arms.md); evidence in [heuristic-vs-linucb-report.md](../scheduler/heuristic-vs-linucb-report.md)).
 
 ## Context vector (`d = 7`, `src/core/context_vector.py`)
 

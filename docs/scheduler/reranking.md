@@ -24,7 +24,7 @@ Only `TASK` sessions reach this path — fixed types and `DND` are user-pinned (
 
 1. **Score candidate day × arm.** For every day from the next 15-min boundary through the
    deadline, build the `d=7` LinUCB context vector and score all six half-open time-of-day
-   arms (`EARLY_MORNING [00:00,08:00)` … `NIGHT [22:00,24:00)`, lower-inclusive).
+   arms (`EARLY_MORNING [00:00,08:00)` … `NIGHT [20:00,24:00)`, lower-inclusive).
 
 2. **Generate concrete candidate slots.** 15-min-aligned starts survive only if: on/after
    now, ending by the deadline, on-grid, and **fully empty** (no overlap with any fixed

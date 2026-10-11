@@ -213,28 +213,28 @@ def test_near_task_stays_far_task_follows_linucb() -> None:
 
 def test_preference_matrix_picks_the_hour_inside_the_winning_band() -> None:
     """The arm term is flat inside a band, so the matrix (weight wP) decides the
-    hour: a user who keeps moving tasks to 11:00 gets 11:00, not the band centre,
+    hour: a user who keeps moving tasks to 10:00 gets 10:00, not the band centre,
     while the band LinUCB chose stays the same."""
     scores = {a: 0.0 for a, *_ in ARM_BANDS} | {"MORNING": 0.5}
     day = MIDNIGHT + DAY_MS  # Tue (ISO weekday 2)
     days = [_one_day(day, scores)]
     plain = best_linucb_slot(days, 60, "UTC", NOW, day + DAY_MS)
     learned = [0.0] * 168
-    learned[matrix_index(2, 11)] = 1.0
+    learned[matrix_index(2, 10)] = 1.0
     biased = best_linucb_slot(days, 60, "UTC", NOW, day + DAY_MS, pref_matrix=learned)
     assert plain is not None and biased is not None
     assert plain.arm == biased.arm == "MORNING"
-    assert plain.start_ms == day + (9 * 60 + 30) * 60_000
-    assert biased.start_ms == day + 11 * HOUR
+    assert plain.start_ms == day + 9 * HOUR
+    assert biased.start_ms == day + 10 * HOUR
 
 
 def test_repeated_drags_teach_the_hour_inside_the_band() -> None:
     """Closed loop with the real preference updates: a user who keeps dragging the
-    proposal to 11:00 moves the pick there within a few drags, staying in MORNING."""
+    proposal to 10:00 moves the pick there within a few drags, staying in MORNING."""
     scores = {a: 0.0 for a, *_ in ARM_BANDS} | {"MORNING": 0.5}
     day = MIDNIGHT + DAY_MS
     days = [_one_day(day, scores)]
-    target = day + 11 * HOUR
+    target = day + 10 * HOUR
     matrix = default_preference_matrix()
     starts: list[int] = []
     for _ in range(8):
@@ -257,7 +257,7 @@ def test_repeated_drags_teach_the_hour_inside_the_band() -> None:
 
 def test_default_matrix_keeps_a_cold_pick_in_waking_study_hours() -> None:
     """With every arm tied (cold start) and the default matrix, the pick is 09:00
-    or later and outside the 12-14 and 17-19 meal gaps, whatever the seed."""
+    or later and outside the 11-14 and 16-19 gaps, whatever the seed."""
     cold = {a: 0.0 for a, *_ in ARM_BANDS}
     day = MIDNIGHT + DAY_MS
     default = default_preference_matrix()
@@ -273,17 +273,17 @@ def test_default_matrix_keeps_a_cold_pick_in_waking_study_hours() -> None:
         )
         assert pick is not None
         hour = (pick.start_ms - day) / HOUR
-        assert hour >= 9 and not 12 <= hour < 14 and not 17 <= hour < 19
+        assert hour >= 9 and not 11 <= hour < 14 and not 16 <= hour < 19
 
 
 @pytest.mark.parametrize(
     ("arm", "dur", "want_start_min"),
     [
-        ("MORNING", 60, 9 * 60 + 30),  # [08:00, 12:00) centre 10:00 -> 09:30-10:30
-        ("MIDDAY", 60, 12 * 60 + 30),  # [12:00, 14:00) centre 13:00
-        ("AFTERNOON", 60, 15 * 60 + 30),  # [14:00, 18:00) centre 16:00
-        ("EVENING", 90, 19 * 60 + 15),  # [18:00, 22:00) centre 20:00
-        ("NIGHT", 120, 22 * 60),  # [22:00, 24:00) centre 23:00
+        ("MORNING", 60, 9 * 60),  # [08:00, 11:00) centre 09:30 -> 09:00-10:00
+        ("MIDDAY", 60, 12 * 60),  # [11:00, 14:00) centre 12:30
+        ("AFTERNOON", 60, 15 * 60),  # [14:00, 17:00) centre 15:30
+        ("EVENING", 90, 17 * 60 + 45),  # [17:00, 20:00) centre 18:30
+        ("NIGHT", 120, 21 * 60),  # [20:00, 24:00) centre 22:00
     ],
 )
 def test_winning_band_places_the_task_at_its_centre(

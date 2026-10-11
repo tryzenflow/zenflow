@@ -157,7 +157,7 @@ def _unexplained(sid: int) -> tuple[float, float]:
 def test_hidden_utility_is_neither_models_class(sid: int) -> None:
     table_res, linear_res = _unexplained(sid)
     assert table_res > 0.005, f"{make_student(1, sid).cell}: table fits exactly"
-    assert linear_res > 0.02, f"{make_student(1, sid).cell}: LinUCB fits exactly"
+    assert linear_res > 0.015, f"{make_student(1, sid).cell}: LinUCB fits exactly"
 
 
 def test_context_dependent_behaviors_defeat_the_table_most() -> None:

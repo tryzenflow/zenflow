@@ -37,7 +37,7 @@ STABILITY_FAR_HOURS = 168
 # which Nest stores as ``SlotProposal.modelVersion``; Nest drops delayed rewards
 # from proposals made under another layout. Mirrors ``ARM_LAYOUT`` in
 # ``backend/src/scheduler/constants.ts``: bump both when the arm hours change.
-ARM_LAYOUT = "arms6-v1"
+ARM_LAYOUT = "arms6-v3"
 
 # Weight of the (hour-averaged) preference matrix in the LinUCB slot score. It
 # decides the hour *inside* the chosen band, where the arm term is flat, and so

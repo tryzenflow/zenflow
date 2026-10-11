@@ -9,11 +9,11 @@ from .slot import utc_to_minutes
 
 ARM_BANDS: tuple[tuple[str, int, int], ...] = (
     ("EARLY_MORNING", 0, 480),
-    ("MORNING", 480, 720),
-    ("MIDDAY", 720, 840),
-    ("AFTERNOON", 840, 1080),
-    ("EVENING", 1080, 1320),
-    ("NIGHT", 1320, 1440),
+    ("MORNING", 480, 660),
+    ("MIDDAY", 660, 840),
+    ("AFTERNOON", 840, 1020),
+    ("EVENING", 1020, 1200),
+    ("NIGHT", 1200, 1440),
 )
 
 
