@@ -1,5 +1,5 @@
 import axios from "axios";
-import { cleanup, configure } from "@testing-library/react";
+import { act, cleanup, configure, getConfig } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, vi } from "vitest";
 import { setLanguage } from "@/lib/i18n";
 import { server } from "./msw/server";
@@ -8,7 +8,18 @@ import { server } from "./msw/server";
 // defaults to Vietnamese, so switch before any screen module loads.
 setLanguage("en");
 // Screens settle through real HTTP round-trips to MSW; leave headroom for a loaded CI runner.
-configure({ asyncUtilTimeout: 4000 });
+// react-native-web's Pressable applies its latest onPress/disabled in a passive effect, so a click
+// fired right after a screen change can hit the previous step's stale handler and be dropped (flaky
+// under CPU load). Flush pending effects when every findBy*/waitFor resolves, before the next click.
+const { asyncWrapper } = getConfig();
+configure({
+  asyncUtilTimeout: 4000,
+  asyncWrapper: async (cb) => {
+    const result = await asyncWrapper(cb);
+    await act(async () => {});
+    return result;
+  },
+});
 // Node http adapter: no CORS/XHR emulation involved, MSW intercepts it directly.
 axios.defaults.adapter = "http";
 
