@@ -735,13 +735,16 @@ services:
       - ./nginx/snippets-proxy.conf:/etc/nginx/zenflow/snippets-proxy.conf:ro
       - ./nginx/sse.conf:/etc/nginx/zenflow/sse.conf:ro
       - ./nginx/grafana.conf:/etc/nginx/zenflow/grafana.conf:ro
+      - ./nginx/minio.conf:/etc/nginx/zenflow/minio.conf:ro
       - letsencrypt:/etc/letsencrypt:ro
       - certbot_webroot:/var/www/certbot:ro
     depends_on:
       - grafana
+      - storage
     networks:
       - edge
       - o11y
+      - storage
 
   # Renews the certificate over the nginx webroot. First issuance: nginx/init-cert.sh.
   certbot:
@@ -767,9 +770,13 @@ services:
         mkdir -p "/data/$$S3_BUCKET" &&
         MINIO_ROOT_USER="$$S3_ACCESS_KEY_ID"
         MINIO_ROOT_PASSWORD="$$S3_SECRET_ACCESS_KEY"
-        exec minio server /data
+        exec minio server /data --console-address ":9001"
+    environment:
+      # Console redirects and cookies use the public URL behind nginx.
+      MINIO_BROWSER_REDIRECT_URL: https://minio.alphatrann.com
     expose:
       - "9000"
+      - "9001"
     volumes:
       - storage_data:/data
     env_file:
