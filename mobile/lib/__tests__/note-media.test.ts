@@ -99,3 +99,14 @@ describe("document card script", () => {
     expect(js).toContain(String.raw`/\.([A-Za-z0-9]{1,5})$/.exec(name)`);
   });
 });
+
+describe("document size", () => {
+  it("reads the size handed over by the app", () => {
+    const js = mediaPlayerScript({
+      offline: false,
+      labels: { offline: "o", failed: "f" },
+    });
+    expect(js).toContain("window.ZF_FILE_SIZES");
+    expect(js).toContain("zf-dsub");
+  });
+});

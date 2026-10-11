@@ -17,7 +17,9 @@ import { localizedReminderLabel } from "@/components/tasks/form/reminder-field";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { getBaseURL } from "@/lib/api-client";
-import { resolveNoteFileUrls } from "@/lib/file-link";
+import { parseFileIdFromHref, resolveNoteFileUrls } from "@/lib/file-link";
+import { formatBytes } from "@/lib/file-size";
+import { fileSizesFor } from "@/lib/file-sizes";
 import { loadGeistWebviewFontDataUri } from "@/lib/geist-webview-font";
 import { type LinkPreview, fetchLinkPreview } from "@/lib/link-preview";
 import {
@@ -384,6 +386,40 @@ function NoteHtml({ html }: { html: string }) {
     };
   }, [previewUrls]);
 
+  // Document cards show the file's size. The metadata endpoint needs the
+  // session, which the WebView doesn't have, so it is fetched here (once per
+  // file, then kept) and handed to the page by link.
+  const [fileSizes, setFileSizes] = useState<Record<string, string>>({});
+  const fileLinks = useMemo(() => {
+    const byHref: Record<string, string> = {};
+    for (const m of html.matchAll(/<a [^>]*href="([^"]+)"/gi)) {
+      const href = m[1].replace(/&amp;/g, "&");
+      const id = isFileUrl(href)
+        ? parseFileIdFromHref(href, getBaseURL())
+        : null;
+      if (id) byHref[href] = id;
+    }
+    return byHref;
+  }, [html]);
+  useEffect(() => {
+    const ids = Array.from(new Set(Object.values(fileLinks)));
+    if (ids.length === 0) return;
+    let cancelled = false;
+    void fileSizesFor(ids, !offline).then((found) => {
+      if (cancelled) return;
+      const next: Record<string, string> = {};
+      for (const [href, id] of Object.entries(fileLinks)) {
+        if (found[id] !== undefined) next[href] = formatBytes(found[id]);
+      }
+      setFileSizes((prev) =>
+        JSON.stringify(prev) === JSON.stringify(next) ? prev : next,
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fileLinks, offline]);
+
   const reduceMotion = useReducedMotion();
   const webViewStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
   function markReady() {
@@ -401,7 +437,7 @@ function NoteHtml({ html }: { html: string }) {
     const { fg } = noteColors(isDarkColorScheme);
     const { fontFace, family } = noteFont(fontDataUri);
     return {
-      html: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><style>${fontFace} html, body { margin: 0; padding: 0; background: transparent; } #note { display: flow-root; padding-bottom: 6px; } body { color: ${fg}; font-family: ${family}; font-size: 16px; line-height: 1.55; word-wrap: break-word; } ${noteTypographyCss("body", isDarkColorScheme)} ${noteLinkCardCss("body", isDarkColorScheme, reduceMotion)} ${noteMediaCss("body", isDarkColorScheme, noteColors(isDarkColorScheme))}</style></head><body><div id="note">${html}</div><script>window.ZF_PREVIEWS = ${JSON.stringify(previews).replace(/</g, "\\u003c")}; window.ZF_PENDING = ${JSON.stringify(pendingUrls).replace(/</g, "\u003c")};</script></body></html>`,
+      html: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><style>${fontFace} html, body { margin: 0; padding: 0; background: transparent; } #note { display: flow-root; padding-bottom: 6px; } body { color: ${fg}; font-family: ${family}; font-size: 16px; line-height: 1.55; word-wrap: break-word; } ${noteTypographyCss("body", isDarkColorScheme)} ${noteLinkCardCss("body", isDarkColorScheme, reduceMotion)} ${noteMediaCss("body", isDarkColorScheme, noteColors(isDarkColorScheme))}</style></head><body><div id="note">${html}</div><script>window.ZF_PREVIEWS = ${JSON.stringify(previews).replace(/</g, "\\u003c")}; window.ZF_PENDING = ${JSON.stringify(pendingUrls).replace(/</g, "\u003c")}; window.ZF_FILE_SIZES = ${JSON.stringify(fileSizes).replace(/</g, "\u003c")};</script></body></html>`,
     };
   }, [
     html,
@@ -409,6 +445,7 @@ function NoteHtml({ html }: { html: string }) {
     fontDataUri,
     previews,
     pendingUrls,
+    fileSizes,
     reduceMotion,
   ]);
   // The page is rebuilt when connectivity flips, so media swaps to / from placeholders.

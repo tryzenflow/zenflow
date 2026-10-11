@@ -88,10 +88,12 @@ export function mediaPlayerScript(opts: {
       var m = /\\.([A-Za-z0-9]{1,5})$/.exec(name);
       var ext = m ? m[1].toLowerCase() : '';
       var color = DOC_COLORS[ext] || '#8A8178';
+      var sizes = window.ZF_FILE_SIZES || {};
+      var size = sizes[a.getAttribute('href')] || sizes[a.href] || '';
       var wrap = document.createElement('div');
       wrap.className = 'zf-docwrap';
       a.className = 'zf-doc' + (OFFLINE ? ' zf-dead' : '');
-      a.innerHTML = '<span class="zf-ft" style="color:' + color + '">' + ICON.file + '<b>' + esc((ext || 'file').toUpperCase().slice(0, 4)) + '</b></span><span class="zf-dn"><span class="zf-dname">' + esc(name) + '</span>' + (OFFLINE ? tag() : '') + '</span><span class="zf-dgo">' + ICON.down + '</span>';
+      a.innerHTML = '<span class="zf-ft" style="color:' + color + '">' + ICON.file + '<b>' + esc((ext || 'file').toUpperCase().slice(0, 4)) + '</b></span><span class="zf-dn"><span class="zf-dname">' + esc(name) + '</span>' + (size ? '<span class="zf-dsub">' + esc(size) + '</span>' : '') + (OFFLINE ? tag() : '') + '</span><span class="zf-dgo">' + ICON.down + '</span>';
       wrap.appendChild(a);
       p.parentNode.replaceChild(wrap, p);
     }
