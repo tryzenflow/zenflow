@@ -24,7 +24,7 @@ on:
         type: string
         default: release
       api_url:
-        description: "API base URL baked into the build"
+        description: "API base URL baked into the build (blank = https://zenflow.alphatrann.com/api/v1)"
         type: string
         default: ""
       skip_e2e:
@@ -39,7 +39,7 @@ on:
         options: [e2e, release]
         default: e2e
       api_url:
-        description: "API base URL baked into the build (variant=release only)"
+        description: "API base URL baked into the build (variant=release only; blank = https://zenflow.alphatrann.com/api/v1)"
         type: string
         default: ""
       run_ios_e2e:
@@ -82,7 +82,7 @@ jobs:
     timeout-minutes: 60
     env:
       ZENFLOW_E2E: ${{ inputs.variant == 'release' && '0' || '1' }}
-      EXPO_PUBLIC_API_URL: ${{ inputs.variant == 'release' && inputs.api_url || '' }}
+      EXPO_PUBLIC_API_URL: ${{ inputs.variant == 'release' && (inputs.api_url || 'https://zenflow.alphatrann.com/api/v1') || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
@@ -94,7 +94,7 @@ jobs:
       - name: Resolve API URL
         run: |
           if [ -z "$EXPO_PUBLIC_API_URL" ]; then
-            [ "${{ inputs.variant }}" != "release" ] || echo "::warning::variant=release without api_url: falling back to the emulator-host URL, so this build will not reach a real API"
+            [ "${{ inputs.variant }}" != "release" ] || echo "::warning::variant=release without a usable API URL: falling back to the emulator-host URL"
             echo "EXPO_PUBLIC_API_URL=$ANDROID_E2E_API_URL" >> "$GITHUB_ENV"
           fi
       - name: Prebuild (android/ is gitignored)
@@ -120,7 +120,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 75
     env:
-      EXPO_PUBLIC_API_URL: ${{ inputs.variant == 'release' && inputs.api_url || '' }}
+      EXPO_PUBLIC_API_URL: ${{ inputs.variant == 'release' && (inputs.api_url || 'https://zenflow.alphatrann.com/api/v1') || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
