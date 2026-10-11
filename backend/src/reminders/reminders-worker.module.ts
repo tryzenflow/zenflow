@@ -4,7 +4,7 @@ import { ReminderSweepService } from "./reminder-sweep.service";
 import { RemindersSchedulerModule } from "./reminders-scheduler.module";
 
 /**
- * Watcher-only reminder arming (the 5-minute sweep). Firing is the notify
+ * Watcher-only reminder arming (the 1-minute sweep). Firing is the notify
  * worker's `reminder` job. `ScheduleModule` comes from the watcher's global
  * `ScheduleModule.forRoot()`.
  */

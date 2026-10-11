@@ -6,7 +6,7 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { ReminderSchedulerService } from "./reminder-scheduler.service";
 
 /**
- * Watcher-only (ADR-0011): arms reminder jobs at boot and every 5 minutes.
+ * Watcher-only (ADR-0011): arms reminder jobs at boot and every minute (push reconcile every 5).
  * Lives apart from {@link ReminderSchedulerService} so the notify worker, which
  * only fires reminders, runs no sweep.
  */
@@ -25,11 +25,16 @@ export class ReminderSweepService implements OnApplicationBootstrap {
     await this.scheduler.sweep();
   }
 
-  @Cron(CronExpression.EVERY_5_MINUTES)
+  @Cron(CronExpression.EVERY_MINUTE)
   async sweep(): Promise<void> {
     if (!(await this.killSwitch.isEnabled("notifications"))) return;
     await this.scheduler.sweep();
-    // Also repairs pushes whose enqueue was dropped (any notification row).
+  }
+
+  /** Repairs pushes whose enqueue was dropped (any notification row). */
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async reconcile(): Promise<void> {
+    if (!(await this.killSwitch.isEnabled("notifications"))) return;
     try {
       const n = await this.notifications.reconcileRecent();
       if (n > 0) this.logger.warn(`re-enqueued ${n} lost push job(s)`);
