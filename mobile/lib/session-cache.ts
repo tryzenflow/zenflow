@@ -1,3 +1,4 @@
+import { format } from "date-fns";
 import type { Session } from "@zenflow/shared";
 import type { SessionDisk } from "./session-disk";
 
@@ -152,6 +153,23 @@ export function setCachedDaySessions(
   const now = Date.now();
   cache.set(dayKey, { sessions, fetchedAt: now, savedAt: now });
   disk?.save(dayKey, sessions, now);
+}
+
+/**
+ * What is saved for a day: its own entry, else the month it falls in (the
+ * calendar warms months, so a day never opened still has its tasks there; the
+ * timeline picks out the day's own).
+ */
+export function getSavedDaySessions(dayKey: string): Session[] | undefined {
+  return (
+    cache.get(dayKey)?.sessions ??
+    cache.get(`month:${dayKey.slice(0, 7)}`)?.sessions
+  );
+}
+
+/** Sessions of the cached month containing `date` (`'month:YYYY-MM'`), if any. */
+export function getCachedMonthSessions(date: Date): Session[] | undefined {
+  return cache.get(`month:${format(date, "yyyy-MM")}`)?.sessions;
 }
 
 /** A session by id from any cached day or month (offline detail view). */

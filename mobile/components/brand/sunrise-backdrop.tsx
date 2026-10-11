@@ -33,10 +33,10 @@ interface Blob {
 }
 
 const BLOBS: Blob[] = [
-  { id: "orange", color: "#FF6900", x: 0.12, y: 0.86, size: 0.95, alpha: [0.18, 0.16], dx: 60, dy: -40, ms: 11000 },
-  { id: "amber", color: "#F0B100", x: 0.88, y: 0.62, size: 0.8, alpha: [0.15, 0.14], dx: -50, dy: 36, ms: 14000 },
-  { id: "lime", color: "#D8F999", x: 0.9, y: 0.06, size: 0.85, alpha: [0.3, 0.12], dx: -44, dy: 50, ms: 17000 },
-  { id: "peach", color: "#FFA66B", x: 0.05, y: 0.14, size: 0.7, alpha: [0.16, 0.12], dx: 48, dy: 30, ms: 13000 },
+  { id: "orange", color: "#FF6900", x: 0.12, y: 0.86, size: 0.95, alpha: [0.18, 0.16], dx: 150, dy: -110, ms: 7000 },
+  { id: "amber", color: "#F0B100", x: 0.88, y: 0.62, size: 0.8, alpha: [0.15, 0.14], dx: -130, dy: 100, ms: 9000 },
+  { id: "lime", color: "#D8F999", x: 0.9, y: 0.06, size: 0.85, alpha: [0.3, 0.12], dx: -120, dy: 130, ms: 11000 },
+  { id: "peach", color: "#FFA66B", x: 0.05, y: 0.14, size: 0.7, alpha: [0.16, 0.12], dx: 130, dy: 90, ms: 8000 },
 ];
 
 function BlobLayer({
@@ -69,7 +69,7 @@ function BlobLayer({
     transform: [
       { translateX: blob.dx * t.value },
       { translateY: blob.dy * t.value },
-      { scale: 1 + 0.08 * t.value },
+      { scale: 1 + 0.18 * t.value },
     ],
   }));
 

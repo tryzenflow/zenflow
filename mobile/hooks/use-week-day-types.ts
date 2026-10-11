@@ -1,7 +1,7 @@
 import { listSessions } from "@/api/tasks";
 import { dateKey, weekStart } from "@/lib/week-date-math";
 import { sessionTypesByDay } from "@/lib/week-day-types";
-import type { SessionType } from "@zenflow/shared";
+import type { Session, SessionType } from "@zenflow/shared";
 import { useUserStore } from "@/hooks/use-user-store";
 import {
   type DayTypes,
@@ -9,6 +9,11 @@ import {
   getCachedWeekTypes,
   setCachedWeekTypes,
 } from "@/lib/week-day-types-cache";
+import {
+  getCachedDaySessions,
+  getCachedMonthSessions,
+} from "@/lib/session-cache";
+import { addDays } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 
 function sameDayTypes(
@@ -43,6 +48,23 @@ function sameDayTypes(
  */
 const EMPTY: Map<string, SessionType[]> = new Map();
 
+/** The week's dots from saved days / months (offline, or before the fetch lands). */
+function savedWeekTypes(monday: Date, tz: string): DayTypes {
+  const sessions = new Map<string, Session>();
+  for (let i = 0; i < 7; i++) {
+    const day = addDays(monday, i);
+    const saved =
+      getCachedDaySessions(dateKey(day)) ?? getCachedMonthSessions(day) ?? [];
+    for (const s of saved) sessions.set(s.id, s);
+  }
+  const week = new Set(
+    Array.from({ length: 7 }, (_, i) => dateKey(addDays(monday, i))),
+  );
+  const all = sessionTypesByDay(Array.from(sessions.values()), tz);
+  for (const k of Array.from(all.keys())) if (!week.has(k)) all.delete(k);
+  return all;
+}
+
 export function useWeekDayTypes(
   visibleDate: Date,
   tz: string,
@@ -58,10 +80,12 @@ export function useWeekDayTypes(
   // (or warmed, see `warmLandingDay`) week renders immediately.
   const [state, setState] = useState<{ key: string; map: DayTypes }>(() => ({
     key,
-    map: getCachedWeekTypes(key) ?? EMPTY,
+    map: getCachedWeekTypes(key) ?? savedWeekTypes(weekStart(visibleDate), tz),
   }));
   const dayTypes =
-    state.key === key ? state.map : (getCachedWeekTypes(key) ?? EMPTY);
+    state.key === key
+      ? state.map
+      : (getCachedWeekTypes(key) ?? savedWeekTypes(weekStart(visibleDate), tz));
 
   useEffect(() => {
     let cancelled = false;
@@ -79,7 +103,14 @@ export function useWeekDayTypes(
         );
       })
       .catch(() => {
-        // Best-effort — the dot row just stays stale/empty, not worth a toast.
+        // Offline: draw the dots from the saved days instead of leaving them blank.
+        if (cancelled) return;
+        const saved = savedWeekTypes(weekStart(visibleDateRef.current), tz);
+        setState((prev) =>
+          prev.key === key && sameDayTypes(prev.map, saved)
+            ? prev
+            : { key, map: saved },
+        );
       });
     return () => {
       cancelled = true;

@@ -16,6 +16,8 @@ export const handlers = [
   http.post(`${API}/auth/otp/verify`, () => HttpResponse.json({ data: testUser })),
   http.post(`${API}/auth/logout`, () => HttpResponse.json({ ok: true })),
   http.get(`${API}/auth/me`, () => HttpResponse.json({ data: testUser })),
+  // A healthy server: a 401/403 then means the session really is gone.
+  http.get(`${API}/health/ready`, () => HttpResponse.json({ success: true })),
   http.get(`${API}/integrations`, () =>
     HttpResponse.json({ data: { integrations: [] } }),
   ),

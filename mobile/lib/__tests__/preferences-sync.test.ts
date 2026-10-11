@@ -1,6 +1,11 @@
+import { AxiosError } from "axios";
 import { describe, expect, it } from "vitest";
 import {
   deviceZoneDrift,
+  isQueueableFailure,
+  mergePending,
+  parsePending,
+  pendingFromInput,
   modeForTimezone,
   patchToUpdateInput,
   storedMode,
@@ -85,5 +90,48 @@ describe("timezonePickerValue", () => {
     expect(timezonePickerValue({ ...p, timezoneMode: "explicit" })).toBe(
       "Asia/Ho_Chi_Minh",
     );
+  });
+});
+
+describe("offline queue", () => {
+  it("later edits win per field and unknown fields are dropped", () => {
+    expect(
+      mergePending({ lang: "en", timezone: "UTC" }, { lang: "vi" }),
+    ).toEqual({
+      lang: "vi",
+      timezone: "UTC",
+    });
+    expect(parsePending(JSON.stringify({ lang: "en", foo: "x" }))).toEqual({
+      lang: "en",
+    });
+    expect(parsePending("not json")).toEqual({});
+    expect(parsePending(null)).toEqual({});
+  });
+
+  it("queues only when the server was never reached", () => {
+    expect(isQueueableFailure(new AxiosError("Offline", "ERR_OFFLINE"))).toBe(
+      true,
+    );
+    const rejected = new AxiosError(
+      "bad",
+      "ERR_BAD_REQUEST",
+      undefined,
+      undefined,
+      {
+        status: 400,
+      } as never,
+    );
+    expect(isQueueableFailure(rejected)).toBe(false);
+    expect(isQueueableFailure(new Error("x"))).toBe(false);
+  });
+
+  it("pulls the queueable fields out of a PATCH body", () => {
+    expect(
+      pendingFromInput({
+        lang: "en",
+        onboarded: true,
+        allowNotifications: false,
+      }),
+    ).toEqual({ lang: "en", allowNotifications: false });
   });
 });

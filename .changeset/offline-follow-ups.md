@@ -1,0 +1,5 @@
+---
+"mobile": patch
+---
+
+Offline polish: the week header's dots come from saved days, the offline toast shows once per spell, the offline glyph is a cloud with a slash, and the tab bar uses the full width when the create button is hidden. Language, timezone, default reminder and notifications can be changed offline and sync on reconnect. Offline media gets a placeholder per type (grey image box, disabled audio player with its waveform, dark video box with a disabled play button). Audio and video uploads are links in the editor and play in the viewer, and documents show as file cards there. A server that is down no longer signs you out (a 401/403 counts only when `/health/ready` is OK), and the profile name can be edited offline and syncs later. Audio shows a progress bar instead of a made-up waveform, and a day never opened takes its tasks from the saved month. The login logo casts an orange shadow and the background gradients drift further and faster. Document cards show the file size under the name.

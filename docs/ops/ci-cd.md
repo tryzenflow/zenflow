@@ -45,7 +45,7 @@ The app tier runs as two colours, `api-{blue,green}` (x N) + `bandit-{blue,green
 `deploy.sh` on the host:
 
 1. Read the active colour; pull the new tag; run `migrations` once.
-2. Start the idle colour at 1 replica; gate on its healthcheck (`GET /api/v1/health/ready`: Postgres + Redis) and a smoke `GET /api/v1/health` (all dependencies, including its bandit). A failure stops the idle colour and leaves the active one untouched.
+2. Start the idle colour at 1 replica; gate on its healthcheck (`GET /api/v1/health/ready`: Postgres + Redis) and a smoke `GET /api/v1/health` (every dependency that is configured: Postgres, the session, rate-limit, queue, kill-switch and pub/sub Redis, object storage, the SMTP relay and bandit; the campus sites are left out, their circuit breakers cover them). A failure stops the idle colour and leaves the active one untouched.
 3. Memory guard: abort if the host cannot fit the full overlap plus `MIN_FREE_MB`.
 4. Point nginx at the new colour (`nginx -t`, reload), scale it to full size, reload again.
 5. Recreate `watcher` / `worker-*` on the new tag.

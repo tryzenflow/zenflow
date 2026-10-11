@@ -25,6 +25,7 @@ import { showMovedToast } from "@/lib/move-toast";
 import {
   fetchDaySessions,
   getCachedDaySessions,
+  getSavedDaySessions,
   isDayCacheFresh,
   sameSessions,
   setCachedDaySessions,
@@ -407,8 +408,13 @@ export function DayTimeline({
         // Saved data on screen: keep showing it and flag offline (a quiet
         // glyph) instead of replacing the day with the error state.
         if (cancelled) return;
-        if (cached != null) useConnectivity.getState().setStale(dayKey, true);
-        else setError(true);
+        // Read the cache again: the warm-up may have filled this day while the
+        // request was in flight.
+        const saved = getSavedDaySessions(dayKey);
+        if (saved != null) {
+          setSessions((prev) => (sameSessions(prev, saved) ? prev : saved));
+          useConnectivity.getState().setStale(dayKey, true);
+        } else setError(true);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -441,9 +447,11 @@ export function DayTimeline({
       useConnectivity.getState().setStale(format(date, "yyyy-MM-dd"), false);
     } catch {
       const key = format(date, "yyyy-MM-dd");
-      const saved = getCachedDaySessions(key);
-      if (saved) useConnectivity.getState().setStale(key, true);
-      else setError(true);
+      const saved = getSavedDaySessions(key);
+      if (saved) {
+        setSessions((prev) => (sameSessions(prev, saved) ? prev : saved));
+        useConnectivity.getState().setStale(key, true);
+      } else setError(true);
     }
   }, [date]);
 
@@ -451,6 +459,17 @@ export function DayTimeline({
     const blocks = tasksToBlocks(tasks);
     return eventsForDay(blocks, date, tz);
   }, [tasks, date, tz]);
+
+  // Saved tasks for this day (prefetched offline) beat the error screen; an
+  // empty day we can't refresh (offline, or its last refresh failed) gets it.
+  const dayStale = useConnectivity((s) => s.staleKeys.has(dayKey));
+  useEffect(() => {
+    if (segments.length > 0) {
+      if (error) setError(false);
+    } else if (!loading && (offline || dayStale)) {
+      setError(true);
+    }
+  }, [error, segments, loading, offline, dayStale]);
 
   const layout = useMemo(() => getOverlapLayout(segments), [segments]);
 

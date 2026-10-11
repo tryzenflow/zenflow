@@ -144,9 +144,7 @@ export default function SettingsScreen() {
         <SettingsSectionLabel>{t("Profile")}</SettingsSectionLabel>
         <View className="overflow-hidden rounded-2xl border border-border bg-card">
           {user ? (
-            <OfflineLock>
-              <ProfileRow user={user} onUpdated={setUser} />
-            </OfflineLock>
+            <ProfileRow user={user} onUpdated={setUser} />
           ) : (
             <View className="flex-row items-center gap-[13px] px-4 py-3.5">
               <Skeleton className="size-12 rounded-full" />
@@ -179,8 +177,8 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        <PreferencesSection />
         <OfflineLock>
-          <PreferencesSection />
           <TagsRow />
         </OfflineLock>
 

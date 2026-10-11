@@ -96,9 +96,25 @@ export class FilesController {
       if (!request.isAuthenticated()) throw new UnauthorizedException();
       userId = (request.user as User).id;
     }
-    const { file, stream } = await this.filesService.download(id, userId);
+    const { file, stream, range } = await this.filesService.download(
+      id,
+      userId,
+      request.headers.range,
+    );
 
+    // Players (iOS video above all) fetch media in byte ranges and refuse to
+    // play from a server that doesn't answer them.
+    if (range) {
+      response.status(206);
+      response.set({
+        "Content-Range": `bytes ${range.start}-${range.end}/${file.size}`,
+        "Content-Length": String(range.end - range.start + 1),
+      });
+    } else {
+      response.set("Content-Length", String(file.size));
+    }
     response.set({
+      "Accept-Ranges": "bytes",
       "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.originalName)}`,
       "Content-Type": file.mimetype,
       // Uploaded content is user-controlled: never let it sniff into HTML/JS.

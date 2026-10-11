@@ -1,3 +1,4 @@
+import { isAxiosError } from "axios";
 import {
   DEFAULT_REMINDER_CHOICES,
   type DefaultReminderChoice,
@@ -117,4 +118,50 @@ export function storedMode(stored: {
 /** Value the timezone picker should highlight. */
 export function timezonePickerValue(p: SyncedPrefs): string {
   return p.timezoneMode === "device" ? DEVICE_TIMEZONE : p.timezone;
+}
+
+/** Settings edits waiting for a connection (the API's own shape, IANA zone resolved). */
+export type PendingPrefs = Pick<
+  UpdateUserInput,
+  "name" | "lang" | "timezone" | "defaultReminderMinutes" | "allowNotifications"
+>;
+
+const PENDING_KEYS = [
+  "name",
+  "lang",
+  "timezone",
+  "defaultReminderMinutes",
+  "allowNotifications",
+] as const;
+
+/** Later edits win per field. */
+export function mergePending(a: PendingPrefs, b: PendingPrefs): PendingPrefs {
+  return { ...a, ...b };
+}
+
+/** Stored JSON -> only the known fields (anything else is dropped). */
+export function parsePending(raw: string | null): PendingPrefs {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const k of PENDING_KEYS)
+      if (parsed[k] !== undefined) out[k] = parsed[k];
+    return out as PendingPrefs;
+  } catch {
+    return {};
+  }
+}
+
+/** The server was never reached (offline, timeout, dead network): keep the edit and retry later. */
+export function isQueueableFailure(error: unknown): boolean {
+  return isAxiosError(error) && !error.response;
+}
+
+/** The part of a PATCH body that is a queued preference. */
+export function pendingFromInput(input: UpdateUserInput): PendingPrefs {
+  const out: PendingPrefs = {};
+  for (const k of PENDING_KEYS)
+    if (input[k] !== undefined) (out as Record<string, unknown>)[k] = input[k];
+  return out;
 }

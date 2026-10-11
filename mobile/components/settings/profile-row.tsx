@@ -1,11 +1,10 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { updateBasicInfo } from "@/api/users";
-import {
-  ChevronRight,
-  CircleUserRound,
-  Lock,
-} from "@/components/Icons";
+import { useUserStore } from "@/hooks/use-user-store";
+import { queuePendingPrefs } from "@/lib/pending-prefs";
+import { isQueueableFailure } from "@/lib/preferences-sync";
+import { ChevronRight, CircleUserRound, Lock } from "@/components/Icons";
 import {
   BottomSheet,
   BottomSheetContent,
@@ -78,6 +77,16 @@ export function ProfileRow({
       toast(t("Profile updated"), "success", { icon: CircleUserRound });
       bottomSheet.close();
     } catch (error) {
+      if (isQueueableFailure(error)) {
+        // Offline or server down: keep the name on this device, sync it later.
+        await queuePendingPrefs({ name: trimmed });
+        useUserStore.getState().updateUser({ ...user, name: trimmed });
+        toast(t("Profile saved on this device"), "success", {
+          icon: CircleUserRound,
+        });
+        bottomSheet.close();
+        return;
+      }
       showErrorToast(
         toast,
         error,
@@ -157,7 +166,9 @@ export function ProfileRow({
                 <Lock size={16} className="shrink-0 text-muted-foreground" />
               </View>
               <Text className="mt-[7px] text-[13px] leading-snug text-muted-foreground">
-                {t("Your email is how you sign in, so it can't be changed here.")}
+                {t(
+                  "Your email is how you sign in, so it can't be changed here.",
+                )}
               </Text>
             </View>
           </View>

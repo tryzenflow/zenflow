@@ -11,10 +11,14 @@ Dev-facing notes on what works offline and how to test it. Design rationale:
 - **Cached.** Signed in and on every foreground / reconnect the app fetches the previous, current
   and next month plus each day of this week (`lib/warm-calendar.ts`). Task details open from that
   cache (`findCachedSession`), notes included.
-- **Not cached.** Images, audio and video in notes. Offline they show a placeholder; a file that
+- **Not cached.** Images, audio and video in notes (the app stores no media; the WebView's own HTTP cache is not relied on). Offline each shows a placeholder of its own kind (grey image box;
+  audio player and dark video box with a disabled play button), even for an image the WebView
+  still has cached; a file that
   fails to load shows it too, and tapping retries. Link previews load by default.
-- **Settings.** Server-backed rows are greyed out; integrations show the last status seen.
-  Dark mode and sign-out still work.
+- **Settings.** Language, timezone, default reminder and notifications can be changed offline: they
+  apply at once, wait in `lib/pending-prefs.ts` and sync on reconnect or foreground. So can the profile name (the email is shown locked and never changes). Tags
+  and integrations are greyed out (integrations show the last status seen). Dark mode and sign-out
+  still work.
 
 ## Simulate offline
 
@@ -27,3 +31,8 @@ use the in-app switch:
 
 Other options: `adb shell svc wifi disable` (Android emulator, host and API stay up), or stop the
 API (exercises the failed-refresh path, not the offline guard).
+
+## Server down
+
+A 401/403 signs you out only if `GET /health/ready` answers OK (`sessionIsDead`). While the server is
+unwell (Postgres or Redis down) the saved session, user (name, email) and calendar stay in use.

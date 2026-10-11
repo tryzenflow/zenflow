@@ -1,4 +1,4 @@
-import { CloudOffIcon, DuskIcon, SyncedIcon } from "@/components/brand/icons";
+import { CloudOffIcon, SyncedIcon } from "@/components/brand/icons";
 import { Glass } from "@/components/ui/glass";
 import { type ToastIcon, useToast } from "@/components/ui/toast";
 import { useScreenFocusedRef } from "@/hooks/use-screen-focused-ref";
@@ -9,7 +9,7 @@ import { format } from "@/lib/i18n";
 import { getCachedSavedAt } from "@/lib/session-cache";
 import { useColorScheme } from "@/lib/useColorScheme";
 import * as Haptics from "expo-haptics";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { Pressable, View } from "react-native";
 
 // The toast renders its icon through the lucide contract (`size`); ours are
@@ -29,25 +29,29 @@ const SyncedToastIcon = (({ size }: { size?: number }) => (
   <SyncedIcon size={size} color="#10B981" />
 )) as unknown as ToastIcon;
 
+// Every screen mounts its own indicator (week, month, settings…), so the
+// announcement is tracked here: one "offline" toast per offline spell, one
+// "back online" toast when it ends, whichever screen is showing.
+let announcedOffline = false;
+
 /**
- * Offline is dusk, not an error: a small sun-under-horizon glyph while the
- * device is offline or showing saved data. Going offline raises a toast saying
- * so; tap the glyph for what and since when; on reconnect it clears with a
- * "Back online" toast saying what was refreshed. Renders nothing while online.
+ * Offline is quiet, not an error: a small cloud-off glyph while the device is
+ * offline or showing saved data. Going offline raises a toast saying so (once,
+ * not again on another screen); tap the glyph for what and since when; on
+ * reconnect it clears with a "Back online" toast saying what was refreshed.
+ * Renders nothing while online.
  */
 export function OfflineIndicator({ dayKey }: { dayKey: string }) {
   const offline = useConnectivity(selectOffline);
   const { toast } = useToast();
   const { isDarkColorScheme } = useColorScheme();
-  const wasOffline = useRef(false);
   // Tab screens stay mounted, so only the visible one may toast (not one per tab).
   const focused = useScreenFocusedRef();
 
   useEffect(() => {
     if (offline) {
-      if (wasOffline.current) return;
-      wasOffline.current = true;
-      if (!focused.current) return;
+      if (announcedOffline || !focused.current) return;
+      announcedOffline = true;
       toast({
         title: t("You're offline"),
         description: t(
@@ -56,9 +60,9 @@ export function OfflineIndicator({ dayKey }: { dayKey: string }) {
         icon: OfflineToastIcon,
         variant: "info",
       });
-    } else if (wasOffline.current) {
-      wasOffline.current = false;
+    } else if (announcedOffline) {
       if (!focused.current) return;
+      announcedOffline = false;
       toast({
         title: t("Back online"),
         description: t("Your calendar and tasks are up to date."),
@@ -105,7 +109,7 @@ export function OfflineIndicator({ dayKey }: { dayKey: string }) {
             justifyContent: "center",
           }}
         >
-          <DuskIcon size={20} color={color} />
+          <CloudOffIcon size={20} color={color} />
         </Glass>
       </Pressable>
     </View>

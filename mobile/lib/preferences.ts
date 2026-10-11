@@ -1,5 +1,7 @@
 import { t, setLanguage } from "./i18n";
 import { updateBasicInfo } from "@/api/users";
+import { isOffline } from "@/hooks/use-offline";
+import { loadPendingPrefs, queuePendingPrefs } from "@/lib/pending-prefs";
 import { useUserStore } from "@/hooks/use-user-store";
 import { IANA_TIMEZONES } from "@/lib/timezones";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -9,8 +11,10 @@ import {
   type SyncedPatch,
   type TimezoneMode,
   deviceZoneDrift,
+  isQueueableFailure,
   modeForTimezone,
   patchToUpdateInput,
+  pendingFromInput,
   storedMode,
   userToSyncedPrefs,
 } from "./preferences-sync";
@@ -197,9 +201,18 @@ export function usePreferences() {
       const mode: TimezoneMode =
         savedMode ??
         (user.timezone === deviceTimezone() ? "device" : "explicit");
+      // Edits made offline that haven't synced yet still show.
+      const waiting = await loadPendingPrefs(user.id);
+      if (!mounted) return;
+      const synced = userToSyncedPrefs(user, mode);
       const next = {
         ...stored,
-        ...userToSyncedPrefs(user, mode),
+        ...synced,
+        ...(waiting.lang !== undefined && { language: waiting.lang }),
+        ...(waiting.timezone !== undefined && { timezone: waiting.timezone }),
+        ...(waiting.defaultReminderMinutes !== undefined && {
+          defaultReminder: waiting.defaultReminderMinutes,
+        }),
       };
       setLanguage(next.language);
       setPrefs(next);
@@ -258,8 +271,30 @@ export function usePreferences() {
         });
         return true;
       }
+      // Offline (or unreachable): keep the edit here and show it everywhere now;
+      // `flushPendingPrefs` sends it once the connection is back.
+      const queueEdit = async (): Promise<boolean> => {
+        await queuePendingPrefs(pendingFromInput(input));
+        await savePreferences(prefsRef.current);
+        const current = useUserStore.getState().user;
+        if (current) {
+          updateUser({
+            ...current,
+            ...(input.lang !== undefined && { lang: input.lang }),
+            ...(input.timezone !== undefined && { timezone: input.timezone }),
+            ...(input.defaultReminderMinutes !== undefined && {
+              defaultReminderMinutes: input.defaultReminderMinutes,
+            }),
+          });
+        }
+        return true;
+      };
       const run = async (): Promise<boolean> => {
         try {
+          // Offline: keep the edit on this device and send it once reconnected.
+          if (isOffline()) {
+            return await queueEdit();
+          }
           const updated = await updateBasicInfo(input);
           // Later edits are already applied optimistically; only take the
           // server's values for the fields this request changed.
@@ -278,7 +313,10 @@ export function usePreferences() {
           await savePreferences(next);
           updateUser(updated);
           return true;
-        } catch {
+        } catch (error) {
+          if (isQueueableFailure(error)) {
+            return await queueEdit();
+          }
           // Roll back only this edit's fields, keeping any newer ones.
           const latest = prefsRef.current;
           const rolled: Preferences = {

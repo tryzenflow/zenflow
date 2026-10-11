@@ -1,5 +1,8 @@
 import { updateBasicInfo } from "@/api/users";
 import { debugLog } from "@/lib/debug-log";
+import { isOffline } from "@/hooks/use-offline";
+import { queuePendingPrefs } from "@/lib/pending-prefs";
+import { isQueueableFailure } from "@/lib/preferences-sync";
 import { useUserStore } from "@/hooks/use-user-store";
 import {
   dropPushRegistration,
@@ -69,8 +72,14 @@ async function saveAllow(allowNotifications: boolean): Promise<boolean> {
       .getState()
       .updateUser(await updateBasicInfo({ allowNotifications }));
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (!isQueueableFailure(error)) return false;
+    // Offline: keep the choice and send it once reconnected (`flushPendingPrefs`).
+    await queuePendingPrefs({ allowNotifications });
+    const user = useUserStore.getState().user;
+    if (user)
+      useUserStore.getState().updateUser({ ...user, allowNotifications });
+    return true;
   }
 }
 
@@ -129,6 +138,8 @@ export const usePushStatusStore = create<State & Action>((set) => ({
         }
         if (!(await saveAllow(true))) return false;
         debugLog("push", `enable: saved +${Date.now() - t0}ms`);
+        // Offline: the device registers on reconnect (`sync` after the flush).
+        if (isOffline()) return true;
         // Keep allowNotifications true on failure (the user's intent): the next
         // launch/foreground sync retries. But don't report success.
         return await register();
@@ -140,7 +151,9 @@ export const usePushStatusStore = create<State & Action>((set) => ({
   },
   disable: async () => {
     await saveAllow(false);
-    await unregister();
+    // Offline the server still holds this device; once `allowNotifications:false`
+    // syncs it sends nothing.
+    if (!isOffline()) await unregister();
   },
   unregisterOnLogout: async () => {
     await unregister();

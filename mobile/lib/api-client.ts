@@ -5,6 +5,7 @@ import { Platform } from "react-native";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useConnectivity } from "@/lib/connectivity";
 import { OFFLINE_ERROR_CODE } from "@/lib/save-error";
+import { sessionIsDead } from "@/lib/session-guard";
 import { clearDaySessionCache } from "@/lib/session-cache";
 import { resetTimelineScroll } from "@/lib/timeline-scroll";
 import {
@@ -178,6 +179,11 @@ api.interceptors.response.use(undefined, async (error) => {
       const sent = (error.config?.headers?.get?.("Cookie") as string) ?? null;
       if (sent !== sessionCookie) return Promise.reject(error);
     }
+    // A server that is itself unwell can refuse a valid session; only a healthy
+    // one that did so means the session is gone.
+    if (!sessionIsDead(error.response.status, await serverIsReady())) {
+      return Promise.reject(error);
+    }
     useUserStore.getState().setUser(null);
     // Same per-user cleanup as Settings sign-out.
     clearDaySessionCache();
@@ -187,6 +193,20 @@ api.interceptors.response.use(undefined, async (error) => {
   }
   return Promise.reject(error);
 });
+
+/**
+ * True when the API can serve requests (Postgres + the session Redis are up).
+ * A 401/403 only means "signed out" if this is true; while the server is
+ * broken, those answers say nothing about the session.
+ */
+export async function serverIsReady(): Promise<boolean> {
+  try {
+    await api.get("/health/ready", { timeout: 4000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function clearSession() {
   sessionCookie = null;
