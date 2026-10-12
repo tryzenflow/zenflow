@@ -455,7 +455,7 @@
       "title": "Live updates published and delivered per second",
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 18,
         "x": 0,
         "y": 25
       },
@@ -514,9 +514,9 @@
       "type": "stat",
       "title": "Processes listening for live updates",
       "gridPos": {
-        "h": 5,
-        "w": 12,
-        "x": 12,
+        "h": 8,
+        "w": 6,
+        "x": 18,
         "y": 25
       },
       "datasource": {

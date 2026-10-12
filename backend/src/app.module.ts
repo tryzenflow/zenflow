@@ -104,17 +104,11 @@ const jobModules = [
         // Per-provider master keys for the DLU-credential envelope scheme (see
         // crypto/). 32 bytes, hex-encoded (64 chars) each. Each one wraps that
         // provider's per-user UserEncryptionKey rows; never stored in the DB.
-        // The `_V<n>` suffix is the master-key version — add a new var (bump
-        // MasterKeyService.CURRENT_MASTER_KEY_VERSION) to rotate; unwrapping an
-        // old row still resolves its recorded version.
-        MASTER_LMS_ENCRYPTION_KEY_V1: Joi.string()
-          .length(64)
-          .regex(/^[0-9a-fA-F]+$/, "hex")
-          .required(),
-        MASTER_PORTAL_ENCRYPTION_KEY_V1: Joi.string()
-          .length(64)
-          .regex(/^[0-9a-fA-F]+$/, "hex")
-          .required(),
+        // The `_V<n>` suffix is the master-key version. To rotate: add the new
+        // `_V<n>` vars, then set MASTER_KEY_CURRENT_VERSION=<n>; unwrapping an
+        // old row still resolves its recorded version. The pattern + custom
+        // check below validate every versioned var and require the current one.
+        MASTER_KEY_CURRENT_VERSION: Joi.number().integer().min(1).default(1),
         // HMAC key for signed file URLs (files/). Rotating it invalidates every
         // link already stored in notes.
         FILE_URL_SECRET: Joi.string().min(32).required(),
@@ -129,6 +123,14 @@ const jobModules = [
         // Where multer buffers uploads before they move to S3. Defaults to the
         // OS temp dir.
         UPLOAD_TMP_DIR: Joi.string().optional(),
+        // Upload limits, served to clients by GET /files/limits. Keep nginx
+        // `client_max_body_size` >= max file x max files + multipart overhead.
+        UPLOAD_MAX_FILE_BYTES: Joi.number().integer().positive().optional(),
+        UPLOAD_MAX_FILES_PER_REQUEST: Joi.number()
+          .integer()
+          .positive()
+          .optional(),
+        UPLOAD_USER_QUOTA_BYTES: Joi.number().integer().positive().optional(),
         // Session/OTP Redis.
         ...redisEnv("SESSION_REDIS", Joi.string().required()),
         // Separate Redis instance dedicated to LimitKit's rate-limit
@@ -482,7 +484,28 @@ const jobModules = [
           .default(60000),
         // A request at/above this many ms is always logged, sampling aside.
         HTTP_SLOW_REQUEST_MS: Joi.number().integer().positive().default(1000),
-      }),
+      })
+        .pattern(
+          /^MASTER_(LMS|PORTAL)_ENCRYPTION_KEY_V\d+$/,
+          Joi.string()
+            .length(64)
+            .regex(/^[0-9a-fA-F]+$/, "hex"),
+        )
+        .custom((value: unknown, helpers) => {
+          const env = value as Record<string, unknown>;
+          const version = Number(env.MASTER_KEY_CURRENT_VERSION ?? 1);
+          for (const provider of ["LMS", "PORTAL"]) {
+            const name = `MASTER_${provider}_ENCRYPTION_KEY_V${version}`;
+            if (!env[name]) {
+              return helpers.error("any.custom", {
+                error: new Error(
+                  `${name} is required (MASTER_KEY_CURRENT_VERSION=${version})`,
+                ),
+              });
+            }
+          }
+          return value;
+        }),
     }),
     // Logging + CLS correlation + the global exception filter / HTTP metrics
     // interceptor. First so its Nest logger and filter cover everything below.

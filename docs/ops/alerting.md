@@ -6,7 +6,7 @@ Thresholds are in the rule files; this table says what each alert means and wher
 
 | Alert | Means | Look at |
 | --- | --- | --- |
-| API not ready | `/health/ready` fails: Postgres or Redis unreachable, or the API is down | `/health` body (lists failing checks), API logs |
+| API not ready | No API colour (`api-blue`/`api-green`) passes `/health/ready`: Postgres or Redis unreachable, or the API is down | `/health` body (lists failing checks), API logs |
 | TLS certificate expires soon | Public certificate under 14 days left (prod only) | certbot container logs |
 | High 5xx error ratio | Server errors over 5% of requests | API Overview dashboard, errors panel, slow/failed traces |
 | High API latency | p95 over 2 s, sync excluded | API Overview, traces row, outbound client latency |
@@ -25,7 +25,7 @@ Thresholds are in the rule files; this table says what each alert means and wher
 - Rules evaluate every minute and wait 3 to 30 minutes (`for`) so a deploy restart does not page.
 - Ratio, latency and queue rules treat missing data as healthy (no traffic is not an outage). API-not-ready and exporter-down treat it as firing.
 - Emails group by alert name, repeat every 4 h and wait 30 s to batch.
-- Readiness and TLS come from the blackbox exporter (`prometheus/scrape.d/blackbox*.yml`).
+- Readiness and TLS come from the blackbox exporter (`prometheus/scrape.d/blackbox*.yml`). Readiness probes both blue and green; the stopped standby reports 0 and is ignored.
 
 ## Adding a rule
 

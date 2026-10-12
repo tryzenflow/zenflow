@@ -14,12 +14,13 @@ import {
   UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
-import { MAX_UPLOAD_BYTES } from "@zenflow/shared";
+import { ConfigService } from "@nestjs/config";
 import { type Request, type Response } from "express";
 import { type User } from "../../generated/prisma";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { RemoveFilesDto } from "./dto";
+import { readFileLimits } from "./file-limits";
 import { FileUrlSignerService } from "./file-url-signer.service";
 import { FILES_SERVICE, type FilesService } from "./files.service";
 import { FilesUploadInterceptor } from "./interceptors/files-upload.interceptor";
@@ -29,15 +30,32 @@ export class FilesController {
   constructor(
     @Inject(FILES_SERVICE) private readonly filesService: FilesService,
     private readonly signer: FileUrlSignerService,
+    private readonly config: ConfigService,
   ) {}
+
+  @Get("limits")
+  @UseGuards(CookieAuthGuard)
+  limits() {
+    return { success: true, data: readFileLimits(this.config) };
+  }
+
+  @Get("usage")
+  @UseGuards(CookieAuthGuard)
+  async usage(@CurrentUser() user: User) {
+    return {
+      success: true,
+      data: {
+        ...readFileLimits(this.config),
+        usedBytes: await this.filesService.usedBytes(user.id),
+      },
+    };
+  }
 
   @Post("upload")
   @UseGuards(CookieAuthGuard)
   @UseInterceptors(
     FilesUploadInterceptor({
       fieldName: "files",
-      limits: { fileSize: MAX_UPLOAD_BYTES },
-      maxFilesCount: 5,
     }),
   )
   async upload(

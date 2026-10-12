@@ -17,10 +17,11 @@ import {
   PayloadTooLargeException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { MAX_UPLOAD_BYTES, MAX_USER_STORAGE_BYTES } from "@zenflow/shared";
+import { type FileLimits } from "@zenflow/shared";
 import { Prisma } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadFileDto } from "./dto";
+import { readFileLimits } from "./file-limits";
 import { parseByteRange } from "./byte-range";
 import { FilesService } from "./files.service";
 
@@ -35,10 +36,13 @@ export class S3FilesService implements FilesService {
   private readonly s3: S3Client;
   private readonly bucket: string;
 
+  private readonly limits: FileLimits;
+
   constructor(
     private prisma: PrismaService,
     configService: ConfigService,
   ) {
+    this.limits = readFileLimits(configService);
     this.bucket = configService.getOrThrow<string>("S3_BUCKET");
     this.s3 = new S3Client({
       endpoint: configService.getOrThrow<string>("S3_ENDPOINT"),
@@ -89,21 +93,25 @@ export class S3FilesService implements FilesService {
 
   /** Rejects before any S3 write; the caller's `finally` removes the temp files. */
   private async assertWithinLimits(dtos: UploadFileDto[], userId: string) {
-    if (dtos.some((d) => d.size > MAX_UPLOAD_BYTES))
+    if (dtos.some((d) => d.size > this.limits.maxFileBytes))
       throw new PayloadTooLargeException({
         success: false,
         message: "File too large",
       });
     const incoming = dtos.reduce((sum, d) => sum + d.size, 0);
-    const { _sum } = await this.prisma.file.aggregate({
-      where: { userId },
-      _sum: { size: true },
-    });
-    if ((_sum.size ?? 0) + incoming > MAX_USER_STORAGE_BYTES)
+    if ((await this.usedBytes(userId)) + incoming > this.limits.userQuotaBytes)
       throw new PayloadTooLargeException({
         success: false,
         message: "Storage full",
       });
+  }
+
+  async usedBytes(userId: string) {
+    const { _sum } = await this.prisma.file.aggregate({
+      where: { userId },
+      _sum: { size: true },
+    });
+    return _sum.size ?? 0;
   }
 
   async findOne(id: string, userId?: string) {
