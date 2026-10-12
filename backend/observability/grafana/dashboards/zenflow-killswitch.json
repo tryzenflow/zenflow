@@ -1,6 +1,6 @@
 {
   "uid": "zenflow-killswitch",
-  "title": "Zenflow \u00b7 Kill switch",
+  "title": "Zenflow · Kill switch",
   "tags": [
     "zenflow",
     "killswitch"
@@ -9,7 +9,7 @@
   "editable": true,
   "graphTooltip": 1,
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
   "time": {
     "from": "now-24h",
@@ -26,7 +26,7 @@
     {
       "id": 1,
       "type": "stat",
-      "title": "Flag state (1 = on; max across processes, see disagreement below)",
+      "title": "Current setting of each switch",
       "gridPos": {
         "h": 6,
         "w": 24,
@@ -91,12 +91,13 @@
           "expr": "max by (flag) (killswitch_flag_enabled)",
           "legendFormat": "{{flag}}"
         }
-      ]
+      ],
+      "description": "Whether each emergency switch is on (1) or off (0), as seen by the busiest process. A switch that is on disables the feature it protects."
     },
     {
       "id": 3,
       "type": "stat",
-      "title": "Process disagreement (1 = some process sees a different value)",
+      "title": "Do all processes agree?",
       "gridPos": {
         "h": 4,
         "w": 24,
@@ -161,12 +162,13 @@
           "expr": "max by (flag) (killswitch_flag_enabled) - min by (flag) (killswitch_flag_enabled)",
           "legendFormat": "{{flag}}"
         }
-      ]
+      ],
+      "description": "Shows 1 when any process sees a different value from another, for example right after a change or when one process cannot reach Redis. It should return to 0 within seconds."
     },
     {
       "id": 2,
       "type": "state-timeline",
-      "title": "Flag history, any-process view (a flip is a toggle; audit detail: `killswitch history`)",
+      "title": "Switch history",
       "gridPos": {
         "h": 9,
         "w": 24,
@@ -212,7 +214,8 @@
           "expr": "max by (flag) (killswitch_flag_enabled)",
           "legendFormat": "{{flag}}"
         }
-      ]
+      ],
+      "description": "When each switch changed over the selected time range. For who changed it and why, use the kill-switch history command (see the kill-switch ops page)."
     }
   ]
 }

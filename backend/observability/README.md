@@ -34,9 +34,11 @@ App-side instrumentation: `../src/observability/`, `../src/tracing.ts`, `service
 | `alloy/config.alloy` | Docker-SD log scrape; `level` becomes a label, `traceId` structured metadata |
 | `grafana/provisioning/datasources/` | Prometheus, Tempo, Loki, cross-linked (trace, logs, metrics, exemplars) |
 | `grafana/provisioning/dashboards/` | file provider for the dashboards below |
-| `grafana/dashboards/zenflow-api-overview.json` | HTTP RED, outbound clients RED, runtime/container USE, push and SSE, logs |
-| `grafana/dashboards/zenflow-scheduler-bandit.json` | proposals, policy, fallback, arms, session events, rewards, move-drag heatmap, cron, bandit latency |
-| `grafana/dashboards/zenflow-ingestion.json` | blocks by outcome, upstream items, reconcile deletes, freshness, watcher logs |
+| `grafana/provisioning/alerting/` | alert rules (`backup.yml`, `system.yml`) and the email contact point; see [alerting](../../docs/ops/alerting.md) |
+| `blackbox/`, `prometheus/scrape.d/blackbox*.yml` | readiness and TLS probes behind the API-down and certificate alerts |
+| `grafana/dashboards/zenflow-api-overview.json` | traffic, errors and speed, external calls, process and container health, push and live updates, logs, recent traces |
+| `grafana/dashboards/zenflow-scheduler-bandit.json` | placement method and fallbacks, placement time step by step, learning signals, learning service, recent traces |
+| `grafana/dashboards/zenflow-ingestion.json` | freshness and sign-in failures, blocks by outcome, upstream calls, background jobs, errors by component, watcher logs, recent traces |
 
 ## Metric names
 
