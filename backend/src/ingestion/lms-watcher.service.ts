@@ -4,6 +4,7 @@ import { ConfigService } from "@nestjs/config";
 import {
   ingestionLastSuccess,
   ingestionUpstreamItems,
+  ingestionSignInFailures,
 } from "../observability/metrics";
 import { IntegrationsService } from "../integrations/integrations.service";
 import { LMSService, type LmsSession } from "../lms/lms.service";
@@ -513,6 +514,7 @@ export class LmsWatcherService {
       const result = await this.lms.login(creds.username, creds.password);
       if (!result.ok) {
         await this.jobs.finishJob("LMS", jobId, "FAILED");
+        ingestionSignInFailures.add(1, { provider: "LMS", reason: "rejected" });
         this.logger.warn(
           `LMS rejected the stored credentials for integration ${target.integrationId}`,
         );
@@ -525,7 +527,8 @@ export class LmsWatcherService {
         throw error;
       }
       await this.jobs.finishJob("LMS", jobId, "FAILED");
-      this.logger.warn(
+      ingestionSignInFailures.add(1, { provider: "LMS", reason: "error" });
+      this.logger.error(
         `LMS sign-in failed for integration ${target.integrationId}: ${errorMessage(error)}`,
       );
       return null;

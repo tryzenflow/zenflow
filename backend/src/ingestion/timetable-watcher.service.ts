@@ -4,6 +4,7 @@ import { ConfigService } from "@nestjs/config";
 import {
   ingestionLastSuccess,
   ingestionUpstreamItems,
+  ingestionSignInFailures,
 } from "../observability/metrics";
 import { IntegrationsService } from "../integrations/integrations.service";
 import { PortalAPIService } from "../portal/portal-api.service";
@@ -591,6 +592,10 @@ export class TimetableWatcherService {
       );
       if (!result.ok) {
         await this.jobs.finishJob("PORTAL", jobId, "FAILED");
+        ingestionSignInFailures.add(1, {
+          provider: "PORTAL",
+          reason: "rejected",
+        });
         this.logger.warn(
           `The portal rejected the stored credentials for integration ${target.integrationId}`,
         );
@@ -603,7 +608,8 @@ export class TimetableWatcherService {
         throw error;
       }
       await this.jobs.finishJob("PORTAL", jobId, "FAILED");
-      this.logger.warn(
+      ingestionSignInFailures.add(1, { provider: "PORTAL", reason: "error" });
+      this.logger.error(
         `Portal sign-in failed for integration ${target.integrationId}: ${errorMessage(error)}`,
       );
       return null;
