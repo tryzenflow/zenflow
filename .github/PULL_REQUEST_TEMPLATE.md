@@ -31,7 +31,7 @@ Closes #
 ## Checklist
 
 - [ ] Title follows [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/) (`type(scope): summary`)
-- [ ] Branched off `master` with a `type/short-description` name; commits are focused (no unrelated changes)
+- [ ] Branched off `main` with a `type/short-description` name; commits are focused (no unrelated changes)
 - [ ] `pnpm --filter <app> lint` passes for each touched app (mobile: `pnpm --filter mobile format` and `typecheck`)
 - [ ] `pnpm shared:build && pnpm -r typecheck` passes (rebuilt shared types if I changed them)
 - [ ] Added/updated tests — new behavior has a test, a bug fix has a regression test; scheduler changes update the matching `*.spec.ts`

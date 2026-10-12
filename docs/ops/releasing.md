@@ -8,7 +8,7 @@ the repo is in prerelease mode (`beta`, see `.changeset/pre.json`), so versions 
 
 1. A PR with a user-visible change runs `pnpm changeset`, picks the bump (`patch` / `minor`) and writes a
    one-line summary. Commit the generated `.changeset/*.md` with the PR.
-2. Merging to `master` runs [`release-beta.yml`](../../.github/workflows/release-beta.yml), which opens or
+2. Merging to `main` runs [`release-beta.yml`](../../.github/workflows/release-beta.yml), which opens or
    updates a **"chore: version packages"** PR (bumps every `package.json`, writes each package's
    `CHANGELOG.md`, syncs the root version and compose image defaults via `scripts/sync-version.mjs`).
 3. Merging that PR publishes a GitHub **pre-release** `vX.Y.Z-beta.N` with:
