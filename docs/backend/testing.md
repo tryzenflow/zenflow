@@ -2,7 +2,7 @@
 
 For: developers adding or running specs in `backend/test/`. Unit specs (`*.spec.ts`) sit next to the code and are not covered here.
 
-Run the whole suite with `backend/e2e.sh` (the same stack CI uses), or against a stack you already started with `pnpm --filter backend test:e2e` (builds `dist/` first). One spec: `pnpm --filter backend exec jest --config ./test/jest-e2e.json <name>` with `.env.test` loaded.
+Run the whole suite on the stack CI uses: from `backend/`, write `.env.test` (`../.github/scripts/write-test-env.sh .env.test`), then `docker compose --profile queue --profile bandit -f compose.test.yml up -d --build`, `pnpm exec dotenv -e .env.test -- node scripts/with-database-url.cjs prisma migrate deploy`, `pnpm prisma:test:gen` and `pnpm test:e2e` (builds `dist/` first). The last step alone runs against a stack you already started. One spec: `pnpm --filter backend exec jest --config ./test/jest-e2e.json <name>` with `.env.test` loaded.
 
 ## Stack
 

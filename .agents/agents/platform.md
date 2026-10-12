@@ -4,7 +4,6 @@ summary: "Compose, CI/CD, observability, secrets, load tests"
 description: "Zenflow's delivery and operations: compose files for dev/test/staging/prod, GitHub Actions, Prometheus/Grafana, Vault and secrets, load-test harness and benchmark reports."
 owns:
   - backend/compose*.yml
-  - backend/compose-dev.sh
   - backend/Dockerfile
   - backend/nginx/**
   - backend/docker-entrypoint.sh
