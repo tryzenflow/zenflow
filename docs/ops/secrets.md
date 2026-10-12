@@ -121,17 +121,17 @@ What the code supports (`backend/src/crypto/master-key.service.ts`, `UserEncrypt
 
 - Each wrapped DEK row records its `..._V<n>`; `unwrap` resolves that exact env var.
 - Old versions must stay configured while any row references them. Deleting one makes those users' DLU credentials permanently undecryptable.
-- New wraps use `CURRENT_MASTER_KEY_VERSION` (currently 1).
+- New wraps use `MASTER_KEY_CURRENT_VERSION` (default 1). Boot fails unless `MASTER_LMS_ENCRYPTION_KEY_V<current>` and `MASTER_PORTAL_ENCRYPTION_KEY_V<current>` exist; every `MASTER_*_ENCRYPTION_KEY_V<n>` is validated as 64 hex.
 - DEKs are created on a user's first integration only, so a version bump affects **new** users only.
 - **There is no re-wrap or DEK rotation job.** Existing rows stay on V1 until someone writes one:
   read each row, `unwrap` with its recorded version, `wrap` with the current one, update `masterKeyVersion`.
   Only the wrapped DEK ciphertext changes.
 
-Adding a version (code change):
+Adding a version (config only, no code change):
 
-1. Add `MASTER_<P>_ENCRYPTION_KEY_V2` to the Joi schema in `app.module.ts` (currently only `V1`; V2 would be unvalidated).
-2. Bump `CURRENT_MASTER_KEY_VERSION` and ship.
-3. Generate keys with `openssl rand -hex 32` (64 hex chars; Joi enforces length and hex).
+1. Generate keys with `openssl rand -hex 32` (64 hex chars; Joi enforces length and hex).
+2. Add `MASTER_LMS_ENCRYPTION_KEY_V2` and `MASTER_PORTAL_ENCRYPTION_KEY_V2` to the store, keeping V1.
+3. Set `MASTER_KEY_CURRENT_VERSION=2` and deploy. Roll back by setting it to 1 (rows wrapped under V2 still need V2 configured).
 
 | Case | Required work |
 | --- | --- |
