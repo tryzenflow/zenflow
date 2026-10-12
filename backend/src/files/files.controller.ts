@@ -39,6 +39,18 @@ export class FilesController {
     return { success: true, data: readFileLimits(this.config) };
   }
 
+  @Get("usage")
+  @UseGuards(CookieAuthGuard)
+  async usage(@CurrentUser() user: User) {
+    return {
+      success: true,
+      data: {
+        ...readFileLimits(this.config),
+        usedBytes: await this.filesService.usedBytes(user.id),
+      },
+    };
+  }
+
   @Post("upload")
   @UseGuards(CookieAuthGuard)
   @UseInterceptors(

@@ -99,15 +99,19 @@ export class S3FilesService implements FilesService {
         message: "File too large",
       });
     const incoming = dtos.reduce((sum, d) => sum + d.size, 0);
-    const { _sum } = await this.prisma.file.aggregate({
-      where: { userId },
-      _sum: { size: true },
-    });
-    if ((_sum.size ?? 0) + incoming > this.limits.userQuotaBytes)
+    if ((await this.usedBytes(userId)) + incoming > this.limits.userQuotaBytes)
       throw new PayloadTooLargeException({
         success: false,
         message: "Storage full",
       });
+  }
+
+  async usedBytes(userId: string) {
+    const { _sum } = await this.prisma.file.aggregate({
+      where: { userId },
+      _sum: { size: true },
+    });
+    return _sum.size ?? 0;
   }
 
   async findOne(id: string, userId?: string) {

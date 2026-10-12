@@ -19,9 +19,14 @@ function setup() {
     mimetype: "image/png",
     size: 1,
   });
-  const ctrl = new FilesController({ download, getMetadata } as never, signer, {
-    get: (_k: string, d?: unknown) => d,
-  } as unknown as ConfigService);
+  const usedBytes = jest.fn().mockResolvedValue(1234);
+  const ctrl = new FilesController(
+    { download, getMetadata, usedBytes } as never,
+    signer,
+    {
+      get: (_k: string, d?: unknown) => d,
+    } as unknown as ConfigService,
+  );
   const res = { set: jest.fn(), status: jest.fn() };
   const req = (auth: boolean, range?: string) =>
     ({
@@ -29,7 +34,7 @@ function setup() {
       user: { id: "u1" },
       headers: { range },
     }) as never;
-  return { signer, ctrl, download, res, req, getMetadata };
+  return { signer, ctrl, download, res, req, getMetadata, usedBytes };
 }
 
 describe("FilesController.stream", () => {
@@ -107,5 +112,21 @@ describe("FilesController.stream", () => {
     expect(res.set).toHaveBeenCalledWith(
       expect.objectContaining({ "Accept-Ranges": "bytes" }),
     );
+  });
+});
+
+describe("FilesController.usage", () => {
+  it("returns the effective limits plus the user's stored bytes", async () => {
+    const { ctrl, usedBytes } = setup();
+
+    const body = await ctrl.usage({ id: "u1" } as never);
+
+    expect(usedBytes).toHaveBeenCalledWith("u1");
+    expect(body.data).toEqual({
+      maxFileBytes: 20 * 1024 * 1024,
+      maxFilesPerRequest: 5,
+      userQuotaBytes: 150 * 1024 * 1024,
+      usedBytes: 1234,
+    });
   });
 });

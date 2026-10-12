@@ -13,3 +13,8 @@ export interface FileLimits {
   maxFilesPerRequest: number;
   userQuotaBytes: number;
 }
+
+/** `GET /files/usage`: the effective limits plus what the signed-in user has stored. */
+export interface FileUsage extends FileLimits {
+  usedBytes: number;
+}

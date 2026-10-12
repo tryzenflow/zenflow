@@ -20,6 +20,8 @@ export interface FilesService {
   /** `userId` undefined skips the ownership check (signed-URL path only). */
   findOne(id: string, userId?: string): Promise<File | null>;
   remove(keys: string[], userId: string): Promise<void>;
+  /** Total `File.size` stored by the user. */
+  usedBytes(userId: string): Promise<number>;
   getMetadata(id: string, userId: string): Promise<UploadFilesResponse>;
   /** `rangeHeader` is the raw `Range` request header; `range` is set for a partial response. */
   download(
