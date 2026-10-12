@@ -11,6 +11,7 @@ import { useNotificationState } from "@/hooks/use-notification-toggle";
 import { PreferencesSection } from "@/components/settings/preferences-section";
 import { ProfileRow } from "@/components/settings/profile-row";
 import { SettingsSectionLabel } from "@/components/settings/settings-header";
+import { StorageSection } from "@/components/settings/storage-section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
@@ -180,6 +181,9 @@ export default function SettingsScreen() {
         <PreferencesSection />
         <OfflineLock>
           <TagsRow />
+        </OfflineLock>
+        <OfflineLock>
+          <StorageSection />
         </OfflineLock>
 
         <View

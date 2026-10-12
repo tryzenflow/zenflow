@@ -17,6 +17,13 @@ export default {
   "File too large": "Tệp quá lớn",
   "Each file can be up to {size} MB.": "Mỗi tệp tối đa {size} MB.",
   "Storage full": "Đã đầy dung lượng",
+  Storage: "Dung lượng",
+  "File storage": "Dung lượng tệp",
+  "{used} of {total} used": "Đã dùng {used} / {total}",
+  "Almost full. Remove files from your notes to free up space.":
+    "Sắp đầy. Hãy xoá bớt tệp trong ghi chú để giải phóng dung lượng.",
+  "Storage full. Remove files from your notes to upload more.":
+    "Đã đầy dung lượng. Hãy xoá bớt tệp trong ghi chú để tải thêm.",
   "Remove files from your notes, or use smaller ones.":
     "Hãy xoá bớt tệp trong ghi chú, hoặc dùng tệp nhỏ hơn.",
   Close: "Đóng",
