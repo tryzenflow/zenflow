@@ -491,8 +491,9 @@ const jobModules = [
             .length(64)
             .regex(/^[0-9a-fA-F]+$/, "hex"),
         )
-        .custom((env, helpers) => {
-          const version = env.MASTER_KEY_CURRENT_VERSION ?? 1;
+        .custom((value: unknown, helpers) => {
+          const env = value as Record<string, unknown>;
+          const version = Number(env.MASTER_KEY_CURRENT_VERSION ?? 1);
           for (const provider of ["LMS", "PORTAL"]) {
             const name = `MASTER_${provider}_ENCRYPTION_KEY_V${version}`;
             if (!env[name]) {
@@ -503,7 +504,7 @@ const jobModules = [
               });
             }
           }
-          return env;
+          return value;
         }),
     }),
     // Logging + CLS correlation + the global exception filter / HTTP metrics
