@@ -1,7 +1,6 @@
 import { getFileUsage } from "@/api/files";
 import { AlertTriangle, Database } from "@/components/Icons";
 import { SettingsSectionLabel } from "@/components/settings/settings-header";
-import { Progress } from "@/components/ui/progress";
 import { Text } from "@/components/ui/text";
 import { useLanguage } from "@/hooks/use-language";
 import { formatBytes } from "@/lib/file-size";
@@ -66,12 +65,20 @@ export function StorageSection() {
             {percent}%
           </Text>
         </View>
-        <Progress
+        {/* Plain Views, not ui/progress: its spring-animated "%" width is unreliable on native. */}
+        <View
           testID="settings.storage-bar"
-          value={percent}
-          className="mt-3 h-2"
-          indicatorClassName={BAR[level]}
-        />
+          role="progressbar"
+          accessibilityValue={{ min: 0, max: 100, now: percent }}
+          className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-muted"
+        >
+          <View
+            className={`h-full rounded-full ${BAR[level]}`}
+            style={{
+              width: `${Math.max(percent, usage.usedBytes > 0 ? 2 : 0)}%`,
+            }}
+          />
+        </View>
         {level !== "ok" && (
           <View
             testID="settings.storage-warning"
