@@ -51,4 +51,4 @@ Architecture: [ARCHITECTURE.md](ARCHITECTURE.md). Decisions: [docs/adr/](docs/ad
 - Bugs and features: [issue templates](https://github.com/tryzenflow/zenflow/issues/new/choose).
 
 ## License
-[PolyForm Strict 1.0.0](LICENSE): the source is visible for study and noncommercial use. No commercial use, redistribution or derived works.
+Copyright (c) 2026 Zenflow. All rights reserved ([LICENSE](LICENSE)): no right to use, copy, modify or distribute the software is granted without a written agreement.
