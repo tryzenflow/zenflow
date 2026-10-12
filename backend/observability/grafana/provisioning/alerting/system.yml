@@ -1,0 +1,320 @@
+apiVersion: 1
+
+# System alerts: API health, errors, latency, ingestion freshness, queues, host and exporters.
+# Grafana-managed, evaluated against Prometheus, routed to zenflow-ops-email (contact-points.yml).
+# noData = OK for ratio/latency rules (no traffic is not an outage); the API-up and exporter rules
+# alert on missing data. Reference: docs/ops/alerting.md. Generated shape matches backup.yml.
+groups:
+  - orgId: 1
+    name: system
+    folder: Zenflow
+    interval: 1m
+    rules:
+      - uid: zenflow-api-not-ready
+        title: API not ready
+        condition: C
+        for: 3m
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: "The API readiness check is failing: Postgres or Redis is unreachable, or the API is down"
+          runbook: docs/ops/alerting.md
+        labels:
+          severity: critical
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model: {refId: A, expr: 'min(probe_success{job="zenflow-ready"})', instant: true}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, type: reduce, expression: A, reducer: last}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: lt, params: [1]}}]}
+      - uid: zenflow-tls-expiry
+        title: TLS certificate expires soon
+        condition: C
+        for: 30m
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          summary: "The public certificate expires in under 14 days: check certbot renewal"
+          runbook: docs/ops/alerting.md
+        labels:
+          severity: warning
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model: {refId: A, expr: 'min(probe_ssl_earliest_cert_expiry{job="zenflow-public"}) - time()', instant: true}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, type: reduce, expression: A, reducer: last}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: lt, params: [1209600]}}]}
+      - uid: zenflow-http-5xx
+        title: High 5xx error ratio
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          summary: "More than 5% of API requests are failing with a server error"
+          runbook: docs/ops/alerting.md
+        labels:
+          severity: critical
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model: {refId: A, expr: 'sum(rate(http_server_request_duration_seconds_count{route!="",status_class="5xx"}[5m])) / clamp_min(sum(rate(http_server_request_duration_seconds_count{route!=""}[5m])), 0.001)', instant: true}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, type: reduce, expression: A, reducer: last}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [0.05]}}]}
+      - uid: zenflow-http-p95
+        title: High API latency
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          summary: "API p95 latency is over 2 s (sync calls excluded)"
+          runbook: docs/ops/alerting.md
+        labels:
+          severity: warning
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model: {refId: A, expr: 'histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{route!="",route!~".*/sync"}[5m])) by (le))', instant: true}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, type: reduce, expression: A, reducer: last}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [2]}}]}
+      - uid: zenflow-ingestion-stale
+        title: Ingestion stale
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          summary: "A provider has had no fully successful sync for over 2 h: check watcher logs and credentials"
+          runbook: docs/ops/alerting.md
+        labels:
+          severity: warning
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model: {refId: A, expr: 'max(time() - ingestion_last_success_timestamp_seconds)', instant: true}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, type: reduce, expression: A, reducer: last}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [7200]}}]}
+      - uid: zenflow-queue-dlq
+        title: Dead-letter queue not empty
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          summary: "Jobs exhausted their retries and sit in a dead-letter queue"
+          runbook: docs/ops/alerting.md
+        labels:
+          severity: warning
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model: {refId: A, expr: 'sum(queue_depth{state="dlq"})', instant: true}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, type: reduce, expression: A, reducer: last}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [0]}}]}
+      - uid: zenflow-queue-wait
+        title: Queue wait high
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          summary: "Jobs wait over 60 s (p95) before a worker picks them up"
+          runbook: docs/ops/alerting.md
+        labels:
+          severity: warning
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model: {refId: A, expr: 'histogram_quantile(0.95, sum(rate(queue_job_wait_seconds_bucket[5m])) by (le))', instant: true}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, type: reduce, expression: A, reducer: last}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [60]}}]}
+      - uid: zenflow-bandit-fallback
+        title: Bandit fallback rate high
+        condition: C
+        for: 15m
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          summary: "Over 20% of placements fell back to the heuristic: the learning service may be failing"
+          runbook: docs/ops/alerting.md
+        labels:
+          severity: warning
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model: {refId: A, expr: 'sum(rate(scheduler_bandit_fallback_total[15m])) / clamp_min(sum(rate(scheduler_proposals_total[15m])), 0.001)', instant: true}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, type: reduce, expression: A, reducer: last}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [0.2]}}]}
+      - uid: zenflow-breaker-open
+        title: Upstream circuit breaker open
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          summary: "A circuit breaker to an upstream (portal, LMS, bandit, ...) has been open for 10 min"
+          runbook: docs/ops/alerting.md
+        labels:
+          severity: warning
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model: {refId: A, expr: 'max(outbound_breaker_state)', instant: true}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, type: reduce, expression: A, reducer: last}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [1]}}]}
+      - uid: zenflow-container-memory
+        title: Container memory high
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          summary: "A container is using over 90% of its memory limit"
+          runbook: docs/ops/alerting.md
+        labels:
+          severity: warning
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model: {refId: A, expr: 'max(container_memory_working_set_bytes{name=~"zenflow-.*"} / (container_spec_memory_limit_bytes{name=~"zenflow-.*"} > 0))', instant: true}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, type: reduce, expression: A, reducer: last}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [0.9]}}]}
+      - uid: zenflow-disk-full
+        title: Disk nearly full
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          summary: "The host disk is over 85% full"
+          runbook: docs/ops/alerting.md
+        labels:
+          severity: critical
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model: {refId: A, expr: 'max(1 - node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay|squashfs"} / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay|squashfs"})', instant: true}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, type: reduce, expression: A, reducer: last}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [0.85]}}]}
+      - uid: zenflow-postgres-down
+        title: Postgres exporter down
+        condition: C
+        for: 5m
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: "Postgres metrics are not being scraped: the database or its exporter is down"
+          runbook: docs/ops/alerting.md
+        labels:
+          severity: critical
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model: {refId: A, expr: 'min(up{job="postgres-exporter"})', instant: true}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, type: reduce, expression: A, reducer: last}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: lt, params: [1]}}]}
+      - uid: zenflow-redis-down
+        title: Redis exporter down
+        condition: C
+        for: 5m
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: "Sessions Redis metrics are not being scraped: Redis or its exporter is down"
+          runbook: docs/ops/alerting.md
+        labels:
+          severity: critical
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model: {refId: A, expr: 'min(up{job="redis-exporter"})', instant: true}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, type: reduce, expression: A, reducer: last}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: lt, params: [1]}}]}
+      - uid: zenflow-signin-errors
+        title: Watcher sign-in errors
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          summary: "Watchers cannot sign in to an upstream (missing API key, upstream error): see error logs for the cause"
+          runbook: docs/ops/alerting.md
+        labels:
+          severity: critical
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model: {refId: A, expr: 'sum(increase(ingestion_sign_in_failures_total{reason="error"}[15m]))', instant: true}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, type: reduce, expression: A, reducer: last}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [0]}}]}

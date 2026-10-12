@@ -1,9 +1,10 @@
 apiVersion: 1
 
 # Backup alerts (ADR-0014, docs/ops/backups.md). Metrics come from the `backup`
-# container via node-exporter's textfile collector. noData = alerting: a missing
-# metric means the job never ran or the container is gone. No contact point is
-# provisioned; wire one in the Grafana UI.
+# container via node-exporter's textfile collector. For "missing" and "restore
+# stale", noData = alerting: a missing metric means the job never ran or the
+# container is gone. "Small" treats noData as OK so it stays quiet before the
+# first backup ("missing" already covers that). Contact point: contact-points.yml.
 groups:
   - orgId: 1
     name: backups
@@ -36,8 +37,8 @@ groups:
         title: Postgres backup suspiciously small
         condition: C
         for: 10m
-        noDataState: Alerting
-        execErrState: Alerting
+        noDataState: OK
+        execErrState: OK
         annotations:
           summary: Last encrypted dump is under 1 MiB
           runbook: docs/ops/backups.md

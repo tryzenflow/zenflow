@@ -594,6 +594,8 @@ services:
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./observability/prometheus/scrape.d/redis-exporter.yml:/etc/prometheus/scrape.d/redis-exporter.yml:ro
+      - ./observability/prometheus/scrape.d/blackbox.yml:/etc/prometheus/scrape.d/blackbox.yml:ro
+      - ./observability/prometheus/scrape.d/blackbox-public.yml:/etc/prometheus/scrape.d/blackbox-public.yml:ro
       - ./observability/prometheus/scrape.d/postgres-exporter.yml:/etc/prometheus/scrape.d/postgres-exporter.yml:ro
       - ./observability/prometheus/rules.d/redis-sessions.yml:/etc/prometheus/rules.d/redis-sessions.yml:ro
       - ./observability/prometheus/rules.d/session-event-partitions.yml:/etc/prometheus/rules.d/session-event-partitions.yml:ro
@@ -602,6 +604,21 @@ services:
       - "9090"
     networks:
       - o11y
+
+  # Probes API readiness (and, in prod, the public URL and its TLS certificate): Prometheus
+  # jobs `zenflow-ready` and `zenflow-public`.
+  blackbox-exporter:
+    container_name: zenflow-blackbox-exporter-prod
+    image: prom/blackbox-exporter:v0.25.0
+    restart: unless-stopped
+    command: ["--config.file=/etc/blackbox/blackbox.yml"]
+    volumes:
+      - ./observability/blackbox/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    expose:
+      - "9115"
+    networks:
+      - o11y
+
 
   # Sessions Redis memory and evictions (Prometheus job `redis-exporter`, rules in
   # observability/prometheus/rules.d/redis-sessions.yml).
