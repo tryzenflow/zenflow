@@ -17,7 +17,7 @@ groups:
         noDataState: Alerting
         execErrState: Alerting
         annotations:
-          summary: "The API readiness check is failing: Postgres or Redis is unreachable, or the API is down"
+          summary: "No API colour passes its readiness check: Postgres or Redis is unreachable, or the API is down"
           runbook: docs/ops/alerting.md
         labels:
           severity: critical
@@ -25,7 +25,7 @@ groups:
           - refId: A
             relativeTimeRange: {from: 600, to: 0}
             datasourceUid: prometheus
-            model: {refId: A, expr: 'min(probe_success{job="zenflow-ready"})', instant: true}
+            model: {refId: A, expr: 'max(probe_success{job="zenflow-ready"})', instant: true}
           - refId: B
             datasourceUid: __expr__
             model: {refId: B, type: reduce, expression: A, reducer: last}

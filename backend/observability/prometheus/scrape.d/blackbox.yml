@@ -1,11 +1,15 @@
 # Staging and prod: API readiness probed from inside the network (Postgres and Redis up).
+# `api` is a never-started template (blue-green, ADR-0013), so probe each colour; the standby
+# colour is usually stopped and reports probe_success 0, which the alert ignores (it uses max).
 scrape_configs:
   - job_name: zenflow-ready
     metrics_path: /probe
     params:
       module: [http_2xx]
     static_configs:
-      - targets: ["http://api:8000/api/v1/health/ready"]
+      - targets:
+          - "http://api-blue:8000/api/v1/health/ready"
+          - "http://api-green:8000/api/v1/health/ready"
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target
