@@ -3,6 +3,7 @@ node_modules/
 .env.prod
 docker.prod.env
 ssh/
+*.key
 
 # IDE / local tooling
 .idea/
