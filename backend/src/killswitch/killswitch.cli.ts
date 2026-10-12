@@ -11,6 +11,10 @@
  * `KillSwitchService.set`, which writes the flag and its audit record in one
  * atomic Lua call.
  */
+// First: expands *_FILE secrets (Vault) into env before ConfigModule snapshots it. The CLI runs
+// via `docker compose exec` and bypasses main.ts and the entrypoint, so without this the Redis
+// clients connect with no password (NOAUTH).
+import "../common/config/file-secrets";
 import { userInfo } from "os";
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
