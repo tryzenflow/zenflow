@@ -1,14 +1,18 @@
 import { getFileUsage } from "@/api/files";
 import { AlertTriangle, Database } from "@/components/Icons";
 import { SettingsSectionLabel } from "@/components/settings/settings-header";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useLanguage } from "@/hooks/use-language";
+import { useOffline } from "@/hooks/use-offline";
+import { useUserStore } from "@/hooks/use-user-store";
 import { formatBytes } from "@/lib/file-size";
 import { t } from "@/lib/i18n";
+import { loadUsageCache, saveUsageCache } from "@/lib/storage-cache";
 import { type StorageLevel, storageUsage } from "@/lib/storage-usage";
 import type { FileUsage } from "@zenflow/shared";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
 
 const BAR: Record<StorageLevel, string> = {
@@ -17,30 +21,63 @@ const BAR: Record<StorageLevel, string> = {
   full: "bg-destructive",
 };
 
+/** Warning callout: tinted card, dark same-hue text (light) / light text (dark). */
+const CALLOUT: Record<
+  Exclude<StorageLevel, "ok">,
+  { card: string; text: string }
+> = {
+  warn: {
+    card: "border-amber-500/30 bg-amber-500/15",
+    text: "text-amber-800 dark:text-amber-300",
+  },
+  full: {
+    card: "border-destructive/30 bg-destructive/10",
+    text: "text-red-800 dark:text-red-300",
+  },
+};
+
 /** Settings "Storage": how much of the per-user file quota is used, with a warning near the limit. */
 export function StorageSection() {
   useLanguage();
+  const offline = useOffline();
+  const userId = useUserStore((s) => s.user?.id);
   const [usage, setUsage] = useState<FileUsage | null>(null);
+  const [settled, setSettled] = useState(false);
+
+  // Last known usage first, so the row has content offline or before the fetch lands.
+  useEffect(() => {
+    if (!userId) return;
+    let active = true;
+    void loadUsageCache(userId).then((c) => {
+      if (active && c) setUsage((cur) => cur ?? c);
+    });
+    return () => {
+      active = false;
+    };
+  }, [userId]);
 
   // Refetch on every focus: uploads happen in the task form, not here.
   useFocusEffect(
     useCallback(() => {
       let active = true;
       getFileUsage()
-        .then((u) => active && setUsage(u))
-        .catch(() => {});
+        .then((u) => {
+          if (!active) return;
+          setUsage(u);
+          if (userId) void saveUsageCache(userId, u);
+        })
+        .catch(() => {})
+        .finally(() => active && setSettled(true));
       return () => {
         active = false;
       };
-    }, []),
+    }, [userId]),
   );
 
-  // Hidden until the first answer, so an offline first load shows nothing wrong.
-  if (!usage) return null;
-  const { percent, level } = storageUsage(
-    usage.usedBytes,
-    usage.userQuotaBytes,
-  );
+  const { percent, level } = usage
+    ? storageUsage(usage.usedBytes, usage.userQuotaBytes)
+    : { percent: 0, level: "ok" as const };
+  const unavailable = !usage && (offline || settled);
 
   return (
     <>
@@ -54,16 +91,28 @@ export function StorageSection() {
             <Text className="text-[15px] font-semibold">
               {t("File storage")}
             </Text>
-            <Text className="mt-0.5 text-[13px] text-muted-foreground">
-              {t("{used} of {total} used", {
-                used: formatBytes(usage.usedBytes),
-                total: formatBytes(usage.userQuotaBytes),
-              })}
-            </Text>
+            {usage ? (
+              <Text className="mt-0.5 text-[13px] text-muted-foreground">
+                {t("{used} of {total} used", {
+                  used: formatBytes(usage.usedBytes),
+                  total: formatBytes(usage.userQuotaBytes),
+                })}
+              </Text>
+            ) : unavailable ? (
+              <Text className="mt-0.5 text-[13px] text-muted-foreground">
+                {offline
+                  ? t("Usage is unavailable offline.")
+                  : t("Couldn't load your usage.")}
+              </Text>
+            ) : (
+              <Skeleton className="mt-1.5 h-3 w-1/2" />
+            )}
           </View>
-          <Text className="text-[15px] font-medium text-muted-foreground">
-            {percent}%
-          </Text>
+          {usage && (
+            <Text className="text-[15px] font-medium text-muted-foreground">
+              {percent}%
+            </Text>
+          )}
         </View>
         {/* Plain Views, not ui/progress: its spring-animated "%" width is unreliable on native. */}
         <View
@@ -72,27 +121,32 @@ export function StorageSection() {
           accessibilityValue={{ min: 0, max: 100, now: percent }}
           className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-muted"
         >
-          <View
-            className={`h-full rounded-full ${BAR[level]}`}
-            style={{
-              width: `${Math.max(percent, usage.usedBytes > 0 ? 2 : 0)}%`,
-            }}
-          />
+          {usage && (
+            <View
+              className={`h-full rounded-full ${BAR[level]}`}
+              style={{
+                width: `${Math.max(percent, usage.usedBytes > 0 ? 2 : 0)}%`,
+              }}
+            />
+          )}
         </View>
+        {usage && offline && (
+          <Text className="mt-2 text-xs text-muted-foreground">
+            {t("Offline. Showing your last known usage.")}
+          </Text>
+        )}
         {level !== "ok" && (
           <View
             testID="settings.storage-warning"
-            className="mt-3 flex-row items-start gap-2"
+            className={`mt-3 flex-row items-start gap-2 rounded-xl border px-3 py-2.5 ${CALLOUT[level].card}`}
           >
             <AlertTriangle
               size={16}
-              className={
-                level === "full"
-                  ? "mt-px text-destructive"
-                  : "mt-px text-amber-600 dark:text-amber-400"
-              }
+              className={`mt-px ${CALLOUT[level].text}`}
             />
-            <Text className="flex-1 text-[13px] text-muted-foreground">
+            <Text
+              className={`flex-1 text-[13px] font-medium ${CALLOUT[level].text}`}
+            >
               {level === "full"
                 ? t(
                     "Storage full. Remove files from your notes to upload more.",

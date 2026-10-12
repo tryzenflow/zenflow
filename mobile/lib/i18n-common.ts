@@ -19,6 +19,10 @@ export default {
   "Storage full": "Đã đầy dung lượng",
   Storage: "Dung lượng",
   "File storage": "Dung lượng tệp",
+  "Usage is unavailable offline.": "Không xem được dung lượng khi ngoại tuyến.",
+  "Couldn't load your usage.": "Không tải được dung lượng đã dùng.",
+  "Offline. Showing your last known usage.":
+    "Ngoại tuyến. Đang hiện dung lượng gần nhất.",
   "{used} of {total} used": "Đã dùng {used} / {total}",
   "Almost full. Remove files from your notes to free up space.":
     "Sắp đầy. Hãy xoá bớt tệp trong ghi chú để giải phóng dung lượng.",
