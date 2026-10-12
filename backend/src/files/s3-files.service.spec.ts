@@ -47,7 +47,7 @@ describe("S3FilesService", () => {
   };
   const config = {
     getOrThrow: jest.fn((k: string) => `test-${k}`),
-    get: jest.fn((_k: string, d?: string) => d),
+    get: jest.fn((_k: string, d?: unknown) => d),
   };
   let service: FilesService;
 
@@ -114,6 +114,23 @@ describe("S3FilesService", () => {
       );
       expect(mockDone).not.toHaveBeenCalled();
       expect(await exists(dto.path)).toBe(false);
+    });
+
+    it("honours UPLOAD_MAX_FILE_BYTES from config", async () => {
+      config.get.mockImplementationOnce((k: string, d?: unknown) =>
+        k === "UPLOAD_MAX_FILE_BYTES" ? 10 : d,
+      );
+      const module = await Test.createTestingModule({
+        providers: [
+          { provide: FILES_SERVICE, useClass: S3FilesService },
+          { provide: PrismaService, useValue: prisma },
+          { provide: ConfigService, useValue: config },
+        ],
+      }).compile();
+      const small = module.get<FilesService>(FILES_SERVICE);
+      const dto = { ...(await tempUpload("s.bin")), size: 11 };
+
+      await expect(small.upload([dto], "u1")).rejects.toThrow("File too large");
     });
 
     it("rejects when the upload would exceed the user quota", async () => {

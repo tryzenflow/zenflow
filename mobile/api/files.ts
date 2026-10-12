@@ -1,4 +1,4 @@
-import type { FileMetadata } from "@zenflow/shared";
+import type { FileLimits, FileMetadata } from "@zenflow/shared";
 import { safeFileName } from "@/lib/file-link";
 import { Directory, File as ExpoFile, Paths } from "expo-file-system";
 import { api } from "./base";
@@ -31,6 +31,11 @@ export async function uploadFiles(
     } as unknown as Blob);
   }
   const { data } = await api.post("/files/upload", formData);
+  return data.data;
+}
+
+export async function getFileLimits(): Promise<FileLimits> {
+  const { data } = await api.get("/files/limits");
   return data.data;
 }
 

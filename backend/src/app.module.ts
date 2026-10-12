@@ -123,6 +123,14 @@ const jobModules = [
         // Where multer buffers uploads before they move to S3. Defaults to the
         // OS temp dir.
         UPLOAD_TMP_DIR: Joi.string().optional(),
+        // Upload limits, served to clients by GET /files/limits. Keep nginx
+        // `client_max_body_size` >= max file x max files + multipart overhead.
+        UPLOAD_MAX_FILE_BYTES: Joi.number().integer().positive().optional(),
+        UPLOAD_MAX_FILES_PER_REQUEST: Joi.number()
+          .integer()
+          .positive()
+          .optional(),
+        UPLOAD_USER_QUOTA_BYTES: Joi.number().integer().positive().optional(),
         // Session/OTP Redis.
         ...redisEnv("SESSION_REDIS", Joi.string().required()),
         // Separate Redis instance dedicated to LimitKit's rate-limit
