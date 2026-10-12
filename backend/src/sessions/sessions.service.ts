@@ -93,7 +93,9 @@ export class SessionsService {
       dto.reminders !== undefined
         ? await this.reminders.resolveUpdateTargets(id, dto.reminders, user)
         : null;
-    const res = await this.updates.update(id, dto, user);
+    const res = await this.noteFiles.releasingUnreferenced(user.id, () =>
+      this.updates.update(id, dto, user),
+    );
     if (target) {
       const { applied, skipped } = await this.reminders.replace(
         target.sessionIds,
@@ -112,7 +114,9 @@ export class SessionsService {
   }
 
   async remove(id: string, user: User): Promise<RemoveSessionResponse> {
-    const res = await this.crud.remove(id, user);
+    const res = await this.noteFiles.releasingUnreferenced(user.id, () =>
+      this.crud.remove(id, user),
+    );
     return res;
   }
 
@@ -130,7 +134,9 @@ export class SessionsService {
     fromStartISO: string,
     user: User,
   ): Promise<RemoveSessionSeriesResponse> {
-    const res = await this.series.truncateFrom(seriesId, fromStartISO, user);
+    const res = await this.noteFiles.releasingUnreferenced(user.id, () =>
+      this.series.truncateFrom(seriesId, fromStartISO, user),
+    );
     return res;
   }
 
@@ -138,7 +144,9 @@ export class SessionsService {
     seriesId: string,
     user: User,
   ): Promise<RemoveSessionSeriesResponse> {
-    const res = await this.series.removeSeries(seriesId, user);
+    const res = await this.noteFiles.releasingUnreferenced(user.id, () =>
+      this.series.removeSeries(seriesId, user),
+    );
     return res;
   }
 
@@ -147,7 +155,9 @@ export class SessionsService {
     sessionId: string,
     user: User,
   ): Promise<RemoveSessionSeriesResponse> {
-    const res = await this.series.removeFrom(seriesId, sessionId, user);
+    const res = await this.noteFiles.releasingUnreferenced(user.id, () =>
+      this.series.removeFrom(seriesId, sessionId, user),
+    );
     return res;
   }
 
@@ -155,7 +165,9 @@ export class SessionsService {
     sessionId: string,
     user: User,
   ): Promise<RemoveTimetableGroupResponse> {
-    const res = await this.crud.removeTimetableGroupFrom(sessionId, user);
+    const res = await this.noteFiles.releasingUnreferenced(user.id, () =>
+      this.crud.removeTimetableGroupFrom(sessionId, user),
+    );
     return res;
   }
 
@@ -163,7 +175,9 @@ export class SessionsService {
     sessionId: string,
     user: User,
   ): Promise<RemoveTimetableGroupResponse> {
-    const res = await this.crud.removeTimetableGroup(sessionId, user);
+    const res = await this.noteFiles.releasingUnreferenced(user.id, () =>
+      this.crud.removeTimetableGroup(sessionId, user),
+    );
     return res;
   }
 }
