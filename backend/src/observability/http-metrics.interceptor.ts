@@ -6,6 +6,7 @@ import {
   NestInterceptor,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { SSE_METADATA } from "@nestjs/common/constants";
 import { PinoLogger } from "nestjs-pino";
 import { ClsService } from "nestjs-cls";
 import { Observable } from "rxjs";
@@ -22,6 +23,8 @@ import { serverTimingHeader } from "./phase-timings";
  *    histogram that yields RED's rate (`_count`), errors (`status`) and latency;
  *  - emits a single sampled request-completion log line (see request-sampling);
  *  - seeds the CLS store with `userId` so downstream logs carry it.
+ *
+ * `@Sse` handlers are not measured (see below).
  *
  * `route` is the express route template prefixed with the global prefix
  * (`/api/v1/sessions/:id`), never the raw path — occurrence ids like
@@ -58,6 +61,14 @@ export class HttpMetricsInterceptor implements NestInterceptor {
       } catch {
         /* no CLS context */
       }
+    }
+
+    // `@Sse` streams (notifications) live as long as the client stays connected, and
+    // the handler's observable emits once per event — timing them would put
+    // connection lifetimes into the latency histogram and skew p95. They are
+    // tracked by `sse.active_connections` instead.
+    if (Reflect.getMetadata(SSE_METADATA, ctx.getHandler())) {
+      return next.handle();
     }
 
     const method = req.method;

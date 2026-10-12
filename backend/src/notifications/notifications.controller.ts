@@ -20,7 +20,10 @@ import { NotificationsService } from "./notifications.service";
 import { ConflictRescheduleService } from "../scheduler/io/conflict-reschedule.service";
 import { NotificationEvent } from "./types";
 import { filter, fromEvent, map, Observable } from "rxjs";
-import { sseActiveConnections } from "../observability/metrics";
+import {
+  sseActiveConnections,
+  sseConnectionDuration,
+} from "../observability/metrics";
 
 /**
  * The ingestion inbox — read + acknowledge only.
@@ -53,9 +56,11 @@ export class NotificationsController {
     // connections that leak on unclean disconnects show up as a rising gauge.
     return new Observable((subscriber) => {
       sseActiveConnections.add(1);
+      const openedAt = Date.now();
       const sub = events$.subscribe(subscriber);
       return () => {
         sseActiveConnections.add(-1);
+        sseConnectionDuration.record((Date.now() - openedAt) / 1000);
         sub.unsubscribe();
       };
     });

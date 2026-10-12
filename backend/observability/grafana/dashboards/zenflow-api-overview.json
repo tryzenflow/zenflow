@@ -1,6 +1,6 @@
 {
   "uid": "zenflow-api-overview",
-  "title": "Zenflow · API Overview",
+  "title": "Zenflow \u00b7 API Overview",
   "tags": [
     "zenflow",
     "red",
@@ -778,7 +778,7 @@
             "uid": "prometheus"
           },
           "expr": "sum by (route) (rate(http_server_request_duration_seconds_count{route=~\".*/sync\"}[$__rate_interval]))",
-          "legendFormat": "rate · {{route}}"
+          "legendFormat": "rate \u00b7 {{route}}"
         },
         {
           "refId": "B",
@@ -787,7 +787,7 @@
             "uid": "prometheus"
           },
           "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_server_request_duration_seconds_bucket{route=~\".*/sync\"}[$__rate_interval])))",
-          "legendFormat": "p95 · {{route}}"
+          "legendFormat": "p95 \u00b7 {{route}}"
         }
       ]
     },
@@ -847,7 +847,7 @@
             "uid": "prometheus"
           },
           "expr": "sum by (operation) (rate(portal_client_request_duration_seconds_count[$__rate_interval]))",
-          "legendFormat": "portal · {{operation}}"
+          "legendFormat": "portal \u00b7 {{operation}}"
         },
         {
           "refId": "B",
@@ -856,7 +856,7 @@
             "uid": "prometheus"
           },
           "expr": "sum by (operation) (rate(lms_client_request_duration_seconds_count[$__rate_interval]))",
-          "legendFormat": "lms · {{operation}}"
+          "legendFormat": "lms \u00b7 {{operation}}"
         },
         {
           "refId": "C",
@@ -865,7 +865,7 @@
             "uid": "prometheus"
           },
           "expr": "sum by (operation) (rate(bandit_client_request_duration_seconds_count[$__rate_interval]))",
-          "legendFormat": "bandit · {{operation}}"
+          "legendFormat": "bandit \u00b7 {{operation}}"
         }
       ],
       "description": "Requests the API makes to the portal, LMS and learning service, by operation. Compare with the ingestion dashboard for the background watchers."
@@ -1250,7 +1250,7 @@
             "uid": "prometheus"
           },
           "expr": "sum by (provider, result) (rate(push_send_total[$__rate_interval]))",
-          "legendFormat": "{{provider}} · {{result}}"
+          "legendFormat": "{{provider}} \u00b7 {{result}}"
         }
       ],
       "description": "Push messages sent per second by provider and result. Failures usually mean expired device tokens or a provider outage."
@@ -1258,7 +1258,7 @@
     {
       "id": 32,
       "type": "stat",
-      "title": "Devices removed (selected range)",
+      "title": "Median live-update connection (selected range)",
       "gridPos": {
         "h": 7,
         "w": 4,
@@ -1271,7 +1271,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "s",
           "color": {
             "mode": "thresholds"
           },
@@ -1279,12 +1279,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": null
               },
               {
-                "color": "yellow",
-                "value": 1
+                "color": "green",
+                "value": 60
               }
             ]
           }
@@ -1307,10 +1307,10 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(push_devices_pruned_total[$__range])) or vector(0)"
+          "expr": "histogram_quantile(0.5, sum(increase(sse_connection_duration_seconds_bucket[$__range])) by (le))"
         }
       ],
-      "description": "Devices dropped because the push provider said their token is no longer valid."
+      "description": "Median time a live-update connection stayed open before closing. Short values (under a minute) mean something is cutting streams and clients keep reconnecting."
     },
     {
       "id": 33,
@@ -1453,7 +1453,7 @@
     {
       "id": 42,
       "type": "logs",
-      "title": "Live logs — $service",
+      "title": "Live logs \u2014 $service",
       "gridPos": {
         "h": 12,
         "w": 24,

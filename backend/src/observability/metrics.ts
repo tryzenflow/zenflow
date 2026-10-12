@@ -213,6 +213,20 @@ export const sseActiveConnections = meter.createUpDownCounter(
   { description: "Currently-open /notifications/stream subscriptions" },
 );
 
+export const sseConnectionDuration = meter.createHistogram(
+  "sse.connection.duration",
+  {
+    unit: "s",
+    description:
+      "How long a /notifications/stream subscription stayed open; a pile-up at one value means a proxy or client is cutting streams (reconnect churn)",
+    advice: {
+      explicitBucketBoundaries: [
+        1, 5, 15, 30, 60, 120, 300, 900, 1800, 3600, 14400,
+      ],
+    },
+  },
+);
+
 export const ssePubsubPublished = meter.createCounter("sse.pubsub.published", {
   description: "Notification events published to Redis pub/sub, by result",
 });
