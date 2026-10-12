@@ -1,6 +1,3 @@
-import { getData, postData } from "@/api";
-import type { Session } from "@/types/tasks";
-import { extractFileIdsFromNoteContent } from "./files";
 import { removeSession } from "@/api/tasks";
 import type { RemoveSessionResponse } from "@zenflow/shared";
 
@@ -20,14 +17,7 @@ export {
   type SessionFormValues,
 } from "@zenflow/core";
 
-/** Delete a task, cleaning up any note attachments it referenced. */
-export async function deleteSession(
-  taskId: string,
-): Promise<RemoveSessionResponse> {
-  const { data } = await getData<{ data: Session }>(`/sessions/${taskId}`);
-  const previousIds = extractFileIdsFromNoteContent(data.note || "");
-  if (previousIds.length > 0) {
-    await postData("/files/remove", { ids: previousIds });
-  }
+/** Delete a task. The API releases any note attachments no other task uses. */
+export function deleteSession(taskId: string): Promise<RemoveSessionResponse> {
   return removeSession(taskId);
 }

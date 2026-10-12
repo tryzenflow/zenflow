@@ -12,6 +12,7 @@ import {
   withInfeasibleRetry,
 } from "@/lib/toast";
 import { postData } from "@/api";
+import { extractFileIdsFromNoteContent } from "@/utils/files";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useHighlightStore } from "@/hooks/use-highlight-store";
 import type { Session } from "@/types/tasks";
@@ -189,6 +190,14 @@ export function EditSessionDialog({
         ),
       );
       if (!updated) return; // user dismissed the infeasible prompt
+      // Files uploaded in this dialog but dropped from the note before saving;
+      // the API already released the original note's dropped files.
+      const kept = extractFileIdsFromNoteContent(values.note || "");
+      const dropped = newUploadsRef.current.filter((id) => !kept.includes(id));
+      newUploadsRef.current = [];
+      if (dropped.length > 0) {
+        await postData("/files/remove", { ids: dropped }).catch(() => {});
+      }
       notifyDisplaced(updated);
       if (updated.divergent && updated.slotProposalId && updated.alternativeSlot) {
         setPendingPick(updated);
