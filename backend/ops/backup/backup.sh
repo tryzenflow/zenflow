@@ -13,7 +13,8 @@ set -eu
 
 MIN_BYTES="${BACKUP_MIN_BYTES:-1024}"
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+step="setup"
+trap 'rc=$?; rm -rf "$WORK"; record_run backup "$rc" "$step"' EXIT
 
 recipients=""
 for r in $(printf '%s' "$BACKUP_AGE_RECIPIENT" | tr ',' ' '); do
@@ -21,6 +22,7 @@ for r in $(printf '%s' "$BACKUP_AGE_RECIPIENT" | tr ',' ' '); do
 done
 
 if [ "${BACKUP_CREATE_BUCKET:-0}" = 1 ]; then
+  step="creating the bucket"
   s3 s3api head-bucket --bucket "$BACKUP_S3_BUCKET" >/dev/null 2>&1 ||
     s3 s3 mb "s3://$BACKUP_S3_BUCKET" >/dev/null
 fi
@@ -29,15 +31,19 @@ ts="$(date -u +%Y%m%dT%H%M%SZ)"
 dest="s3://$BACKUP_S3_BUCKET/$PREFIX/$(date -u +%Y/%m/%d)"
 
 log "pg_dump $POSTGRES_DB"
+step="pg_dump"
 pg_dump -Fc -d "$POSTGRES_DB" -f "$WORK/db.dump"
+step="age encryption"
 # shellcheck disable=SC2086
 age $recipients -o "$WORK/db.dump.age" "$WORK/db.dump"
 rm -f "$WORK/db.dump"
+step="S3 upload of the dump"
 s3 s3 cp --only-show-errors "$WORK/db.dump.age" "$dest/zenflow-$ts.dump.age"
 size="$(wc -c <"$WORK/db.dump.age")"
 log "uploaded $dest/zenflow-$ts.dump.age ($size bytes)"
 
 if [ -n "${BACKUP_VAULT_DIR:-}" ] && [ -d "$BACKUP_VAULT_DIR" ]; then
+  step="Vault snapshot"
   tar -C "$BACKUP_VAULT_DIR" -cf "$WORK/vault.tar" .
   # shellcheck disable=SC2086
   age $recipients -o "$WORK/vault.tar.age" "$WORK/vault.tar"
@@ -55,6 +61,7 @@ if [ -n "${BACKUP_PRUNE_DAYS:-}" ]; then
     done || log "WARN prune failed"
 fi
 
+step="size check"
 write_metric zenflow_backup_size zenflow_backup_last_size_bytes \
   "Size of the last uploaded encrypted dump." "$size"
 if [ "$size" -lt "$MIN_BYTES" ]; then

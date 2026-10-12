@@ -176,6 +176,8 @@ describe("backup service", () => {
     const ts = metric("zenflow_backup_success")!;
     expect(Date.now() / 1000 - ts).toBeLessThan(300);
     expect(metric("zenflow_backup_size")).toBeGreaterThan(1000);
+    expect(metric("zenflow_backup_run_ok")).toBe(1);
+    expect(metric("zenflow_backup_run_time")).toBeGreaterThan(ts - 1);
   });
 
   it("snapshots the Vault data directory next to the dump", async () => {
@@ -217,7 +219,9 @@ describe("backup service", () => {
       "BACKUP_AGE_IDENTITY=AGE-SECRET-KEY-1NOTAREALKEY sh /opt/backup/restore-test.sh",
     );
     expect(r.code).not.toBe(0);
+    expect(r.out).toMatch(/ERROR backup_restore failed .* during: decrypting/);
     expect(metric("zenflow_backup_restore_success")).toBe(before);
+    expect(metric("zenflow_backup_restore_run_ok")).toBe(0);
   });
 
   it("the restore test fails and writes nothing when there is no dump", () => {
@@ -231,6 +235,8 @@ describe("backup service", () => {
     const r = inBackup("BACKUP_MIN_BYTES=999999999 sh /opt/backup/backup.sh");
     expect(r.code).not.toBe(0);
     expect(r.out).toMatch(/below BACKUP_MIN_BYTES/);
+    expect(r.out).toMatch(/ERROR backup failed .* during: size check/);
+    expect(metric("zenflow_backup_run_ok")).toBe(0);
     expect(metric("zenflow_backup_success")).toBe(before);
     expect(metric("zenflow_backup_size")).toBeGreaterThan(0); // size still reported for the alert
   });
@@ -241,6 +247,10 @@ describe("backup service", () => {
       "BACKUP_S3_SECRET_ACCESS_KEY=wrong sh /opt/backup/backup.sh",
     );
     expect(r.code).not.toBe(0);
+    expect(r.out).toMatch(
+      /ERROR backup failed .* during: (creating the bucket|S3 upload)/,
+    );
+    expect(metric("zenflow_backup_run_ok")).toBe(0);
     expect(metric("zenflow_backup_success")).toBe(before);
   });
 
@@ -248,6 +258,7 @@ describe("backup service", () => {
     const before = metric("zenflow_backup_success");
     const r = inBackup("POSTGRES_DB=does_not_exist sh /opt/backup/backup.sh");
     expect(r.code).not.toBe(0);
+    expect(r.out).toMatch(/ERROR backup failed .* during: pg_dump/);
     expect(metric("zenflow_backup_success")).toBe(before);
   });
 
