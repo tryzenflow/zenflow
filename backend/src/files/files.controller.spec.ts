@@ -19,7 +19,9 @@ function setup() {
     mimetype: "image/png",
     size: 1,
   });
-  const ctrl = new FilesController({ download, getMetadata } as never, signer);
+  const ctrl = new FilesController({ download, getMetadata } as never, signer, {
+    get: (_k: string, d?: unknown) => d,
+  } as unknown as ConfigService);
   const res = { set: jest.fn(), status: jest.fn() };
   const req = (auth: boolean, range?: string) =>
     ({

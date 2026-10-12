@@ -4,17 +4,16 @@ import { Injectable, mixin, NestInterceptor, Type } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { MulterOptions } from "@nestjs/platform-express/multer/interfaces/multer-options.interface";
 import { diskStorage } from "multer";
+import { readFileLimits } from "../file-limits";
 
 interface FilesUploadInterceptorOptions {
   fieldName: string;
   fileFilter?: MulterOptions["fileFilter"];
-  limits?: MulterOptions["limits"];
-  maxFilesCount?: number;
 }
 
 /**
- * Buffers multipart uploads to a temp directory (not memory — up to 5×20 MB
- * per request); `FilesService.upload` moves them to storage and removes them.
+ * Buffers multipart uploads to a temp directory (not memory — up to
+ * `UPLOAD_MAX_FILES_PER_REQUEST` × `UPLOAD_MAX_FILE_BYTES` per request); `FilesService.upload` moves them to storage and removes them.
  */
 export function FilesUploadInterceptor(
   options: FilesUploadInterceptorOptions,
@@ -25,15 +24,17 @@ export function FilesUploadInterceptor(
     constructor(configService: ConfigService) {
       const destination = configService.get<string>("UPLOAD_TMP_DIR", tmpdir());
 
+      const { maxFileBytes, maxFilesPerRequest } =
+        readFileLimits(configService);
       const multerOptions: MulterOptions = {
         storage: diskStorage({ destination }),
         fileFilter: options.fileFilter,
-        limits: options.limits,
+        limits: { fileSize: maxFileBytes },
       };
 
       this.filesInterceptor = new (FilesInterceptor(
         options.fieldName,
-        options.maxFilesCount,
+        maxFilesPerRequest,
         multerOptions,
       ))();
     }

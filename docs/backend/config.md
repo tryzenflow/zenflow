@@ -28,6 +28,11 @@ For: developers and operators setting up the API. Source of truth: the Joi schem
 | `S3_REGION` | `us-east-1` | |
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` / `S3_BUCKET` | none | Required. Bucket must exist (compose creates it). |
 | `UPLOAD_TMP_DIR` | none | Optional upload buffer dir. |
+| `UPLOAD_MAX_FILE_BYTES` | 20971520 (20 MiB) | Largest single file. Served to clients by `GET /files/limits`. |
+| `UPLOAD_MAX_FILES_PER_REQUEST` | 5 | Files per `POST /files/upload`. |
+| `UPLOAD_USER_QUOTA_BYTES` | 157286400 (150 MiB) | Total stored bytes per user. Size it against disk: quota x users must fit alongside Postgres, telemetry and backups. |
+
+nginx `client_max_body_size` (`backend/nginx/nginx.{prod,staging}.conf`, 110m) is not derived from these: keep it above `UPLOAD_MAX_FILES_PER_REQUEST` x `UPLOAD_MAX_FILE_BYTES` plus multipart overhead, and raise `proxy_read_timeout` if the per-file limit grows well past 20 MiB.
 | `PORT` | 8000 | |
 | `ROLE` | `all` | `api` = HTTP only; `watcher` = crons that enqueue; `worker-portal` / `worker-lms` / `worker-notify` = one queue consumer each; `worker` = watcher + all consumers; `all` = everything (dev, test). Non-HTTP roles serve `GET /health/live` on `WORKER_PORT` (5001). Prod/staging: `api` replicas + `watcher` (1) + `worker-*` ([ADR-0007](../adr/0007-bullmq-for-notification-queue.md), [ADR-0011](../adr/0011-separate-api-worker-processes.md)). |
 | `NODE_ENV` | `development` | `production` makes `BANDIT_SERVICE_URL` required and turns Swagger (`/api`) off. |

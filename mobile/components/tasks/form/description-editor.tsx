@@ -1,9 +1,10 @@
-import { describeUploadError, splitOversize, tooLargeToast } from "@/lib/upload-limits";
+import { describeUploadError, setUploadLimits, splitOversize, tooLargeToast } from "@/lib/upload-limits";
 import { showSplitToast } from "@/lib/task-toasts";
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
 import {
   type PickedFilePart,
+  getFileLimits,
   getFileMetadata,
   uploadFiles,
 } from "@/api/files";
@@ -426,6 +427,8 @@ export function DescriptionFieldEditor({
     allParts: PickedFilePart[],
     failureMessage: string,
   ) {
+    // Best effort: on failure the shared defaults stay in force and the server decides.
+    await getFileLimits().then(setUploadLimits, () => {});
     const { ok: parts, tooLarge } = splitOversize(allParts);
     if (tooLarge.length > 0) showSplitToast(toast, tooLargeToast(), "destructive", Upload);
     if (parts.length === 0) return;
