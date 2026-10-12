@@ -316,7 +316,7 @@ services:
   # Sessions + OTP. Every key carries a TTL, so volatile-lru can only ever drop expiring keys.
   # AOF everysec plus an RDB snapshot keep sessions across restarts (ADR-0017).
   session-redis:
-    container_name: zenflow-cache-prod
+    container_name: zenflow-redis-session-prod
     image: redis:8.8.0-alpine
     restart: unless-stopped
     env_file:
@@ -357,7 +357,7 @@ services:
   # Rate-limit counters only (ADR-0005): disposable, so LRU eviction + RDB snapshot
   # (every 15 s when >= 1 key changed) and no AOF. Keep separate from `session-redis`.
   redis-ratelimit:
-    container_name: zenflow-cache-ratelimit-prod
+    container_name: zenflow-redis-ratelimit-prod
     image: redis:8.8.0-alpine
     restart: unless-stopped
     env_file:
@@ -396,7 +396,7 @@ services:
   # Job queues (ADR-0007, BullMQ). Must NOT evict or lose jobs: noeviction + AOF on
   # its own volume. Keep separate from `session-redis` and `redis-ratelimit`.
   redis-queue:
-    container_name: zenflow-cache-queue-prod
+    container_name: zenflow-redis-queue-prod
     image: redis:8.8.0-alpine
     restart: unless-stopped
     env_file:
@@ -436,7 +436,7 @@ services:
   # restart keeps every flag; its own volume. Shares the `queue` network (same
   # consumers: api, watcher, workers). Keep separate from every other Redis.
   redis-killswitch:
-    container_name: zenflow-cache-killswitch-prod
+    container_name: zenflow-redis-killswitch-prod
     image: redis:8.8.0-alpine
     restart: unless-stopped
     env_file:
@@ -474,7 +474,7 @@ services:
 
   # SSE fan-out (ADR-0018): ephemeral pub/sub only, no persistence.
   redis-pubsub:
-    container_name: zenflow-cache-pubsub-prod
+    container_name: zenflow-redis-pubsub-prod
     image: redis:8.8.0-alpine
     restart: unless-stopped
     env_file:

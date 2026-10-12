@@ -111,7 +111,7 @@ Prod Redis used to run open on internal networks. The first deploy with password
 
 1. Generate five passwords and write each to `api` and its own set (above), or add the `*_REDIS_PASSWORD` lines to the `.env.prod` you import from.
 2. Re-run `setup-approle.sh` so the policy lists the five new set paths.
-3. Deploy. Check `docker compose ps` is healthy and `docker exec zenflow-cache-prod redis-cli ping` answers `NOAUTH`.
+3. Deploy. Check `docker compose ps` is healthy and `docker exec zenflow-redis-session-prod redis-cli ping` answers `NOAUTH`.
 
 ### After a Vault restart or host reboot
 

@@ -61,8 +61,8 @@ cp "$HERE/portal-timetable.json" "$OUT/portal-timetable.orig.json"
 psql_admin() { docker exec -i zenflow-db psql -v ON_ERROR_STOP=1 -U admin -d postgres -At "$@"; }
 psql_() { docker exec -i -e PGOPTIONS="-c client_min_messages=warning" zenflow-db psql -v ON_ERROR_STOP=1 -U admin -d zenflow -At "$@"; }
 flush_redis() {
-  docker exec zenflow-cache redis-cli FLUSHALL >/dev/null
-  docker exec zenflow-cache-ratelimit redis-cli FLUSHALL >/dev/null
+  docker exec zenflow-redis-session redis-cli FLUSHALL >/dev/null
+  docker exec zenflow-redis-ratelimit redis-cli FLUSHALL >/dev/null
 }
 restore_db() { # restore_db <template>
   psql_admin -c 'DROP DATABASE IF EXISTS zenflow WITH (FORCE)' >/dev/null
