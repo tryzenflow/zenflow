@@ -21,7 +21,8 @@ For: developers and operators setting up the API. Source of truth: the Joi schem
 | `SESSION_TTL_MS` | 604800000 (7 d) | Idle lifetime; rolling. Drives cookie `maxAge` and Redis TTL. |
 | `COOKIE_SECURE` / `COOKIE_SAMESITE` | `true` / `lax` | Cross-site prod needs `true` + `none`. |
 | `MAIL_HOST` / `MAIL_PORT` / `MAIL_SECURE` / `MAIL_USER` / `MAIL_PASSWORD` / `MAIL_FROM` | none / 587 / `false` / unset / unset / none | `MAIL_HOST` and `MAIL_FROM` required. No `MAIL_USER` = unauthenticated SMTP (Mailpit). |
-| `MASTER_LMS_ENCRYPTION_KEY_V1` / `MASTER_PORTAL_ENCRYPTION_KEY_V1` | none | Required. 64 hex chars (`openssl rand -hex 32`). Add `_V<n>` to rotate. |
+| `MASTER_LMS_ENCRYPTION_KEY_V1` / `MASTER_PORTAL_ENCRYPTION_KEY_V1` | none | Required. 64 hex chars (`openssl rand -hex 32`). Add `_V<n>` and set `MASTER_KEY_CURRENT_VERSION` to rotate. |
+| `MASTER_KEY_CURRENT_VERSION` | `1` | Master-key version used for new wraps; its `_V<n>` keys must exist. |
 | `FILE_URL_SECRET` | none | Required, 32+ chars. HMAC for signed file URLs. Notes store no sig, so rotating needs no rewrite. |
 | `S3_ENDPOINT` | none | Required. `http://storage:9000` in compose; `http://localhost:9000` for host `start:dev`. |
 | `S3_REGION` | `us-east-1` | |

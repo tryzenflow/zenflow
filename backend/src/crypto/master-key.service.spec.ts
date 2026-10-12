@@ -56,6 +56,31 @@ describe("MasterKeyService", () => {
     expect(() => service.unwrap("PORTAL", wrapped)).toThrow();
   });
 
+  it("wraps under MASTER_KEY_CURRENT_VERSION and still unwraps older rows", async () => {
+    const v2 = randomBytes(32).toString("hex");
+    const env: Record<string, string> = {
+      ...ENV,
+      MASTER_KEY_CURRENT_VERSION: "2",
+      MASTER_LMS_ENCRYPTION_KEY_V2: v2,
+    };
+    const module = await Test.createTestingModule({
+      providers: [
+        MasterKeyService,
+        CryptoService,
+        { provide: ConfigService, useValue: { get: (n: string) => env[n] } },
+      ],
+    }).compile();
+    const rotated = module.get(MasterKeyService);
+    const dek = randomBytes(KEY_RANDOM_BYTES_SIZE);
+
+    const wrapped = rotated.wrap("LMS", dek);
+    expect(wrapped.masterKeyVersion).toBe(2);
+    expect(rotated.unwrap("LMS", wrapped).equals(dek)).toBe(true);
+
+    const old = service.wrap("LMS", dek);
+    expect(rotated.unwrap("LMS", old).equals(dek)).toBe(true);
+  });
+
   it("throws when the recorded master-key version is not configured", () => {
     const dek = randomBytes(KEY_RANDOM_BYTES_SIZE);
     const wrapped = service.wrap("PORTAL", dek);

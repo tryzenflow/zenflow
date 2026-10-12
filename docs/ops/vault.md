@@ -196,7 +196,7 @@ The runbooks in [secrets.md](secrets.md#rotation-runbooks) apply with two change
 | `SESSION_SECRET` | patch, deploy; all users are logged out |
 | Redis password | patch the value in `api` **and** the instance's own set, deploy; brief outage for that instance, see [secrets.md](secrets.md#redis-passwords) |
 | Database password | run the `ALTER USER` step, patch `POSTGRES_PASSWORD` in all three sets (`api`, `postgres`, `backup`), then deploy; dynamic DB credentials are post-MVP |
-| Crypto master keys | add `MASTER_*_ENCRYPTION_KEY_V2` with `kv patch`, ship the code change, deploy |
+| Crypto master keys | add `MASTER_*_ENCRYPTION_KEY_V2` with `kv patch`, set `MASTER_KEY_CURRENT_VERSION=2` in `backend/env/prod.env`, deploy |
 
 - Never `kv put` over a set without V1: `kv put` replaces all keys, and V1 must stay while rows reference it.
 - KV version history is not a substitute for the re-wrap job. Transit-engine key management is post-MVP.

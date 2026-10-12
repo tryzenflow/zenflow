@@ -9,10 +9,12 @@ import {
 import { CryptoService } from "./crypto.service";
 
 /**
- * Master-key version to wrap NEW keys with. Bump this the same commit you add a
- * `MASTER_<PROVIDER>_ENCRYPTION_KEY_V<n>` env var; existing rows keep their
- * recorded `masterKeyVersion` and still unwrap against the older env var until
- * they are re-wrapped.
+ * Default master-key version to wrap NEW keys with, used when
+ * `MASTER_KEY_CURRENT_VERSION` is unset. To rotate, add a
+ * `MASTER_<PROVIDER>_ENCRYPTION_KEY_V<n>` env var and set
+ * `MASTER_KEY_CURRENT_VERSION=<n>`; existing rows keep their recorded
+ * `masterKeyVersion` and still unwrap against the older env var until they are
+ * re-wrapped.
  */
 export const CURRENT_MASTER_KEY_VERSION = 1;
 
@@ -56,7 +58,9 @@ export class MasterKeyService {
 
   /** Wrap a raw 32-byte DEK under the current master key for `provider`. */
   wrap(provider: IntegrationProvider, dek: Buffer): WrappedKey {
-    const masterKeyVersion = CURRENT_MASTER_KEY_VERSION;
+    const masterKeyVersion =
+      Number(this.config.get("MASTER_KEY_CURRENT_VERSION")) ||
+      CURRENT_MASTER_KEY_VERSION;
     const iv = randomBytes(IV_RANDOM_BYTES_SIZE);
     const { encrypted, authTag } = this.crypto.encryptString({
       key: this.masterKey(provider, masterKeyVersion),
