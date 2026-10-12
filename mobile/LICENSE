@@ -1,3 +1,27 @@
+Copyright (c) 2026 Zenflow (https://github.com/tryzenflow/zenflow). All rights reserved.
+
+This software and its documentation are proprietary. No license or right to use,
+copy, modify, merge, publish, distribute, sublicense, sell or create derivative
+works of the software is granted to anyone except by a separate written agreement
+with the copyright holder.
+
+Viewing the source code does not grant any such right.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+---
+
+Third-party notice
+
+Parts of this directory started from the Expo Starter template, which is
+distributed under the MIT License below. That license applies only to those
+parts; its notice is kept here as it requires.
+
 MIT License
 
 Copyright (c) 2024 Expo Starter
