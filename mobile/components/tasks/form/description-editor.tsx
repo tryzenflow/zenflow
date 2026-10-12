@@ -1,4 +1,9 @@
-import { describeUploadError, setUploadLimits, splitOversize, tooLargeToast } from "@/lib/upload-limits";
+import {
+  describeUploadError,
+  setUploadLimits,
+  splitOversize,
+  tooLargeToast,
+} from "@/lib/upload-limits";
 import { showSplitToast } from "@/lib/task-toasts";
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
@@ -24,6 +29,8 @@ import {
   type LucideIcon,
   Quote,
   Underline as UnderlineIcon,
+  Undo2,
+  Redo2,
   Upload,
   X,
 } from "@/components/Icons";
@@ -53,6 +60,7 @@ import {
   CoreBridge,
   type EditorTheme,
   HighlightBridge,
+  HistoryBridge,
   ImageBridge,
   ItalicBridge,
   LinkBridge,
@@ -110,6 +118,7 @@ const EDITOR_EXTENSIONS = [
   AudioBridge,
   BulletListBridge,
   OrderedListBridge,
+  HistoryBridge,
 ];
 
 /**
@@ -168,11 +177,14 @@ export function DescriptionFieldEditor({
   initialValue,
   onChange,
   onClose,
+  onUpload,
   disabled,
 }: {
   initialValue: string;
   onChange: (value: string) => void;
   onClose: () => void;
+  /** Ids of files just uploaded here, so the form can clean up dropped ones. */
+  onUpload?: (ids: string[]) => void;
   disabled?: boolean;
 }) {
   useLanguage();
@@ -415,11 +427,8 @@ export function DescriptionFieldEditor({
     if (!fileMetadata.url) throw new Error("File response has no url");
     const src = escapeHtml(new URL(fileMetadata.url, baseURL).toString());
     const name = escapeHtml(fileMetadata.originalName);
-    if (fileMetadata.mimetype.startsWith("image/")) {
-      return `<img src="${src}" alt="${name}" style="max-width: 100%;"/>`;
-    }
-    // Audio and video are links like any document (the editor WebView can't
-    // reliably draw media nodes); the read-only view plays them.
+    // Every upload is a link (the editor WebView can't reliably draw media
+    // nodes); the read-only view shows images inline and plays audio/video.
     return `<p><a href="${src}">${name}</a></p>`;
   }
 
@@ -430,11 +439,15 @@ export function DescriptionFieldEditor({
     // Best effort: on failure the shared defaults stay in force and the server decides.
     await getFileLimits().then(setUploadLimits, () => {});
     const { ok: parts, tooLarge } = splitOversize(allParts);
-    if (tooLarge.length > 0) showSplitToast(toast, tooLargeToast(), "destructive", Upload);
+    if (tooLarge.length > 0)
+      showSplitToast(toast, tooLargeToast(), "destructive", Upload);
     if (parts.length === 0) return;
     try {
       const uploaded = await uploadFiles(parts);
 
+      // Tracked before embedding so a failure below still lets the form
+      // delete files that were uploaded but never made it into the note.
+      onUpload?.(uploaded.map((f) => f.id));
       let html = await editor.getHTML();
       for (const file of uploaded) {
         const fileMetadata = await getFileMetadata(file.id);
@@ -535,8 +548,16 @@ export function DescriptionFieldEditor({
     ? "rgba(255, 255, 255, 0.18)"
     : "rgba(255, 255, 255, 0.7)";
   const sheen: [string, string, string] = isDarkColorScheme
-    ? ["rgba(255,255,255,0.10)", "rgba(255,255,255,0.03)", "rgba(255,255,255,0)"]
-    : ["rgba(255,255,255,0.85)", "rgba(255,255,255,0.30)", "rgba(255,255,255,0)"];
+    ? [
+        "rgba(255,255,255,0.10)",
+        "rgba(255,255,255,0.03)",
+        "rgba(255,255,255,0)",
+      ]
+    : [
+        "rgba(255,255,255,0.85)",
+        "rgba(255,255,255,0.30)",
+        "rgba(255,255,255,0)",
+      ];
   const barBottom =
     Platform.OS === "ios" && keyboardHeight > 0
       ? keyboardHeight + 20
@@ -556,18 +577,50 @@ export function DescriptionFieldEditor({
         <Text className="text-[19px] font-bold tracking-tight">
           {t("Description")}
         </Text>
-        <Pressable
-          onPress={() => {
-            Keyboard.dismiss();
-            onClose();
-          }}
-          accessibilityLabel={t("Done")}
-          className="h-9 flex-row items-center rounded-full bg-primary px-4"
-        >
-          <Text className="text-[14px] font-semibold text-primary-foreground">
-            {t("Done")}
-          </Text>
-        </Pressable>
+        <View className="flex-row items-center gap-1.5">
+          {!disabled && (
+            <>
+              <Pressable
+                onPress={() => editor.undo()}
+                disabled={!state.canUndo}
+                accessibilityRole="button"
+                accessibilityLabel={t("Undo")}
+                hitSlop={4}
+                className={cn(
+                  "h-9 w-9 items-center justify-center rounded-full active:bg-muted/60",
+                  !state.canUndo && "opacity-35",
+                )}
+              >
+                <Undo2 size={18} className="text-foreground" />
+              </Pressable>
+              <Pressable
+                onPress={() => editor.redo()}
+                disabled={!state.canRedo}
+                accessibilityRole="button"
+                accessibilityLabel={t("Redo")}
+                hitSlop={4}
+                className={cn(
+                  "mr-1 h-9 w-9 items-center justify-center rounded-full active:bg-muted/60",
+                  !state.canRedo && "opacity-35",
+                )}
+              >
+                <Redo2 size={18} className="text-foreground" />
+              </Pressable>
+            </>
+          )}
+          <Pressable
+            onPress={() => {
+              Keyboard.dismiss();
+              onClose();
+            }}
+            accessibilityLabel={t("Done")}
+            className="h-9 flex-row items-center rounded-full bg-primary px-4"
+          >
+            <Text className="text-[14px] font-semibold text-primary-foreground">
+              {t("Done")}
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
       <View className="flex-1 bg-background">

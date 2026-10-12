@@ -16,6 +16,7 @@ import { useLastCreated } from "@/hooks/use-last-created";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
 import { setPendingSlotPick } from "@/lib/pending-slot-pick";
+import { useUploadTracker } from "@/hooks/use-upload-tracker";
 import { goToCalendar, safeBack } from "@/lib/nav";
 import { warmLandingDay } from "@/lib/warm-day";
 import { divergentSittings } from "@/lib/series-alternatives";
@@ -219,11 +220,14 @@ function NewSessionForm() {
     );
   }
 
+  const uploads = useUploadTracker();
+
   async function onSubmit(values: SessionFormValues) {
     if (!user) return;
     const handleCreated = async (
       response: Awaited<ReturnType<typeof createSession>>,
     ) => {
+      void uploads.settle(values.note);
       completeStep("create-task");
       useLastCreated.getState().set(response.id);
       // Handle divergent response — present a primary-vs-alternative pick.
@@ -351,6 +355,7 @@ function NewSessionForm() {
       }
     >
       <SessionSheetFields
+        onNoteUpload={uploads.track}
         form={form}
         tz={tz}
         disabled={loading}

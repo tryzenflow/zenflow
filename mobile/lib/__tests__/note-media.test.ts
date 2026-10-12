@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AUDIO_NAME_RE,
+  IMAGE_NAME_RE,
   VIDEO_NAME_RE,
   MEDIA_OPEN_MESSAGE,
   isFileUrl,
@@ -108,5 +109,21 @@ describe("document size", () => {
     });
     expect(js).toContain("window.ZF_FILE_SIZES");
     expect(js).toContain("zf-dsub");
+  });
+});
+
+describe("IMAGE_NAME_RE", () => {
+  it("matches image file names only, and the viewer script uses it", () => {
+    for (const n of ["a.png", "IMG_1.JPG", "x.jpeg", "p.heic", "s.webp"]) {
+      expect(IMAGE_NAME_RE.test(n)).toBe(true);
+    }
+    for (const n of ["a.pdf", "clip.mp4", "song.mp3", "png", "a.png.exe"]) {
+      expect(IMAGE_NAME_RE.test(n)).toBe(false);
+    }
+    const script = mediaPlayerScript({
+      offline: false,
+      labels: { offline: "o", failed: "f" },
+    });
+    expect(script).toContain(IMAGE_NAME_RE.toString());
   });
 });

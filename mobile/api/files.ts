@@ -34,6 +34,12 @@ export async function uploadFiles(
   return data.data;
 }
 
+/** Delete files the caller owns (only ids the form itself uploaded). */
+export async function removeFiles(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await api.post("/files/remove", { ids });
+}
+
 export async function getFileLimits(): Promise<FileLimits> {
   const { data } = await api.get("/files/limits");
   return data.data;

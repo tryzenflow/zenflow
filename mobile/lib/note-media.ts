@@ -12,9 +12,11 @@ export function isFileUrl(url: string): boolean {
   return /\/files\/[^/?#]+\?/.test(url);
 }
 
-/** Audio and video uploads are saved as a plain link; the viewer turns them into a player. */
+/** Uploads are saved as a plain link; the viewer turns them into a player. */
 export const AUDIO_NAME_RE = /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac|weba)$/i;
 export const VIDEO_NAME_RE = /\.(mp4|m4v|mov|webm|ogv|3gp)$/i;
+/** Images are saved as a link too; the viewer shows them inline. */
+export const IMAGE_NAME_RE = /\.(jpe?g|png|gif|webp|heic|heif|avif|bmp)$/i;
 
 /** A media tap posted by `mediaPlayerScript`; null for any other message. */
 export function parseOpenMediaMessage(raw: string): OpenMedia | null {
@@ -152,12 +154,21 @@ export function mediaPlayerScript(opts: {
     // The editor stores an audio/video upload as a link to the file (like any document); play it here.
     var AUDIO_NAME = ${AUDIO_NAME_RE.toString()};
     var VIDEO_NAME = ${VIDEO_NAME_RE.toString()};
+    var IMAGE_NAME = ${IMAGE_NAME_RE.toString()};
     document.querySelectorAll('#note p').forEach(function(p) {
       var links = p.querySelectorAll('a');
       if (links.length !== 1 || p.textContent.trim() !== links[0].textContent.trim()) return;
       var href = links[0].getAttribute('href') || '';
       var name = links[0].textContent.trim();
       if (!/\\/files\\/[^/?#]+\\?/.test(href)) return;
+      if (IMAGE_NAME.test(name)) {
+        var img = document.createElement('img');
+        img.src = href;
+        img.alt = name;
+        img.style.maxWidth = '100%';
+        p.parentNode.replaceChild(img, p);
+        return;
+      }
       var kind = AUDIO_NAME.test(name) ? 'audio' : VIDEO_NAME.test(name) ? 'video' : '';
       if (!kind) return docCard(p, links[0], name);
       var el = document.createElement(kind);
