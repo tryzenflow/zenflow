@@ -1,5 +1,21 @@
 # @zenflow/shared
 
+## 0.1.0-beta.7
+
+### Minor Changes
+
+- 7b46c95: Files linked from a note are deleted when no session references them any more: after a session is
+  deleted, a series is removed or shrunk, or an edit drops them, while a file shared with another session
+  is kept. Mobile deletes files uploaded in a form that is cancelled or saved without them, saves every
+  upload as a link (images still render inline when viewing), and the description editor gains undo and
+  redo. Timetables sync every 12 hours in production.
+
+### Patch Changes
+
+- 4476823: Backups: each backup and restore-test run records whether it succeeded and logs the failing step. A new
+  Zenflow · Backups Grafana dashboard shows the result, ages, dump size and error lines, and alerts fire
+  as soon as a run fails instead of after hours of silence.
+
 ## 0.1.0-beta.6
 
 ### Patch Changes
