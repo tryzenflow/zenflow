@@ -1307,7 +1307,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(push_devices_pruned_total[$__range]))"
+          "expr": "sum(increase(push_devices_pruned_total[$__range])) or vector(0)"
         }
       ],
       "description": "Devices dropped because the push provider said their token is no longer valid."

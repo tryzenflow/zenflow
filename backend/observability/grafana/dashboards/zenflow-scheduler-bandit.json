@@ -318,7 +318,7 @@
       "description": "How long placing one task takes, from the API's point of view. Three nested views, each wider than the last: the placement service's own time, the same call including the network round trip, and the whole placement including reading data and saving the result. p50 is the typical request, p95 is the slow end.",
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 8,
         "x": 0,
         "y": 18
       },
@@ -391,8 +391,8 @@
       "description": "Where the placement service spends its time (slow end, p95). Read request: parse and validate the incoming request. Build context: compute the features describing each candidate day. Score options: the learned model scores every option (the extra cost of the model). Search slots: find the best free slot among the candidates. Resolve conflicts: only runs when no slot is free and other sessions have to be moved around, so it is usually empty.",
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
+        "w": 8,
+        "x": 8,
         "y": 18
       },
       "datasource": {
@@ -498,9 +498,9 @@
       "description": "Per assigned policy over the selected time range: number of placements, typical and slow placement-service time, and the same call including network. 'Ran both methods' means the heuristic and the learned model were both computed for the same request so they can be compared; while that is on for every request, the policies show near-identical numbers.",
       "gridPos": {
         "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 26
+        "w": 8,
+        "x": 16,
+        "y": 18
       },
       "datasource": {
         "type": "prometheus",
@@ -611,7 +611,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 34
+        "y": 26
       }
     },
     {
@@ -622,7 +622,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 35
+        "y": 27
       },
       "datasource": {
         "type": "prometheus",
@@ -671,7 +671,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 35
+        "y": 27
       },
       "datasource": {
         "type": "prometheus",
@@ -720,7 +720,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 35
+        "y": 27
       },
       "datasource": {
         "type": "prometheus",
@@ -769,7 +769,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 43
+        "y": 35
       },
       "datasource": {
         "type": "prometheus",
@@ -828,7 +828,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 52
+        "y": 44
       }
     },
     {
@@ -837,9 +837,9 @@
       "title": "Scoring failures (selected range)",
       "gridPos": {
         "h": 8,
-        "w": 6,
-        "x": 16,
-        "y": 53
+        "w": 4,
+        "x": 0,
+        "y": 45
       },
       "datasource": {
         "type": "prometheus",
@@ -883,7 +883,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(bandit_singular_matrix_total[$__range]))"
+          "expr": "sum(increase(bandit_singular_matrix_total[$__range])) or vector(0)"
         }
       ],
       "description": "Times the learned model could not score options because its internal matrix was unusable. Each one forces a heuristic fallback. Healthy is 0."
@@ -894,9 +894,9 @@
       "title": "Options still learning, per placement (average)",
       "gridPos": {
         "h": 8,
-        "w": 18,
-        "x": 6,
-        "y": 53
+        "w": 10,
+        "x": 4,
+        "y": 45
       },
       "datasource": {
         "type": "prometheus",
@@ -942,9 +942,9 @@
       "title": "Calls to the learning service: rate and p95",
       "gridPos": {
         "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 61
+        "w": 10,
+        "x": 14,
+        "y": 45
       },
       "datasource": {
         "type": "prometheus",
@@ -1027,7 +1027,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 69
+        "y": 53
       }
     },
     {
@@ -1039,7 +1039,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 70
+        "y": 54
       },
       "datasource": {
         "type": "tempo",
@@ -1071,7 +1071,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 70
+        "y": 54
       },
       "datasource": {
         "type": "tempo",

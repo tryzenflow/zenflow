@@ -29,7 +29,7 @@
       "title": "Current setting of each switch",
       "gridPos": {
         "h": 6,
-        "w": 24,
+        "w": 16,
         "x": 0,
         "y": 0
       },
@@ -99,10 +99,10 @@
       "type": "stat",
       "title": "Do all processes agree?",
       "gridPos": {
-        "h": 4,
-        "w": 24,
-        "x": 0,
-        "y": 6
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 0
       },
       "datasource": {
         "type": "prometheus",
@@ -173,7 +173,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 10
+        "y": 6
       },
       "datasource": {
         "type": "prometheus",
