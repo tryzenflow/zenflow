@@ -1,5 +1,13 @@
 # frontend
 
+## 0.1.0-beta.6
+
+### Patch Changes
+
+- Updated dependencies [c6a0e0a]
+  - @zenflow/shared@0.1.0-beta.6
+  - @zenflow/core@0.1.0-beta.6
+
 ## 0.1.0-beta.5
 
 ### Patch Changes
