@@ -216,6 +216,13 @@ jobs:
         image: axllent/mailpit:v1.31.4
         ports: ["1025:1025", "8025:8025"]
     steps:
+      # The pixel_6 AVD wants a ~7.2 GB userdata partition and the emulator
+      # died with "Not enough space" (5.2 GB free). No docker prune here: the
+      # service containers are already running.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          df -h /
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
       - uses: actions/setup-java@v4
@@ -258,6 +265,7 @@ jobs:
           arch: x86_64
           target: google_apis
           profile: pixel_6
+          disk-size: 4096M
           disable-animations: true
           script: bash mobile/e2e/ci-android.sh
       - name: Upload screenshots, video and reports
