@@ -3,6 +3,7 @@
   "tag": "beta",
   "changesets": [
     "ab-gap-primary-text-note-skeleton",
+    "backup-failure-visibility",
     "checklist-day-sheet-spotlight",
     "env-upload-limits-storage-bar",
     "file-ids-queue-release",
@@ -14,6 +15,7 @@
     "offline-follow-ups",
     "offline-guard-toasts",
     "offline-readonly-media",
+    "release-note-files-undo-redo",
     "restore-saved-theme",
     "short-user-facing-copy"
   ],
