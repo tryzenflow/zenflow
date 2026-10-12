@@ -1,6 +1,6 @@
 {
   "uid": "zenflow-queues",
-  "title": "Zenflow \u00b7 Queues & SSE fan-out",
+  "title": "Zenflow · Queues & SSE fan-out",
   "tags": [
     "zenflow",
     "queues"
@@ -9,7 +9,7 @@
   "editable": true,
   "graphTooltip": 1,
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "1m",
   "time": {
     "from": "now-6h",
@@ -37,7 +37,7 @@
     {
       "id": 2,
       "type": "stat",
-      "title": "Dead-letter queue size",
+      "title": "Failed jobs (dead-letter queue)",
       "gridPos": {
         "h": 5,
         "w": 6,
@@ -92,7 +92,7 @@
           "legendFormat": "{{queue}}"
         }
       ],
-      "description": "Jobs that exhausted their attempts (<queue>.dlq). Any value above 0 needs a look."
+      "description": "Jobs that used up all their retries and were set aside. Any value above 0 needs a look; an alert fires after 10 minutes."
     },
     {
       "id": 3,
@@ -156,12 +156,12 @@
           "legendFormat": "{{queue}}"
         }
       ],
-      "description": "Delayed includes jobs parked behind an open circuit breaker and armed reminders."
+      "description": "Jobs waiting to run now, plus delayed ones. Delayed includes jobs held back while an upstream is failing and reminders scheduled for later."
     },
     {
       "id": 4,
       "type": "timeseries",
-      "title": "Depth by state",
+      "title": "Queue size by state",
       "gridPos": {
         "h": 5,
         "w": 12,
@@ -204,10 +204,10 @@
             "uid": "prometheus"
           },
           "expr": "max by (queue, state) (queue_depth)",
-          "legendFormat": "{{queue}} \u00b7 {{state}}"
+          "legendFormat": "{{queue}} · {{state}}"
         }
       ],
-      "description": "Polled every 15 s by the watcher."
+      "description": "Number of jobs in each state (waiting, delayed, running, failed, set aside), refreshed every 15 seconds."
     },
     {
       "id": 5,
@@ -223,7 +223,7 @@
     {
       "id": 6,
       "type": "timeseries",
-      "title": "Job outcomes/s",
+      "title": "Job results per second",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -269,10 +269,10 @@
             "uid": "prometheus"
           },
           "expr": "sum by (queue, result) (rate(queue_jobs_total[$__rate_interval]))",
-          "legendFormat": "{{queue}} \u00b7 {{result}}"
+          "legendFormat": "{{queue}} · {{result}}"
         }
       ],
-      "description": "completed, failed (each failed attempt), dead_lettered (final failure), delayed (parked behind an open breaker; no attempt used)."
+      "description": "Jobs finishing per second by outcome: completed, failed (one failed attempt that will retry) and given up (all retries used)."
     },
     {
       "id": 7,
@@ -322,7 +322,8 @@
           "expr": "histogram_quantile(0.95, sum by (le, queue) (rate(queue_job_attempts_bucket[$__rate_interval])))",
           "legendFormat": "{{queue}}"
         }
-      ]
+      ],
+      "description": "How many tries jobs need to succeed at the slow end. Above 1 means jobs are being retried regularly."
     },
     {
       "id": 8,
@@ -338,7 +339,7 @@
     {
       "id": 9,
       "type": "timeseries",
-      "title": "Processing time p95",
+      "title": "Time to run (p95)",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -383,12 +384,13 @@
           "expr": "histogram_quantile(0.95, sum by (le, queue) (rate(queue_job_duration_seconds_bucket[$__rate_interval])))",
           "legendFormat": "{{queue}}"
         }
-      ]
+      ],
+      "description": "How long a job takes once a worker starts it, at the slow end."
     },
     {
       "id": 10,
       "type": "timeseries",
-      "title": "Wait before start p95",
+      "title": "Time waiting to start (p95)",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -434,12 +436,12 @@
           "legendFormat": "{{queue}}"
         }
       ],
-      "description": "Enqueue (or due time for delayed jobs) until an attempt starts."
+      "description": "How long a job waits between being queued (or becoming due) and starting, at the slow end. An alert fires above 60 s."
     },
     {
       "id": 11,
       "type": "row",
-      "title": "SSE fan-out (Redis pub/sub)",
+      "title": "Live-update delivery",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -450,7 +452,7 @@
     {
       "id": 12,
       "type": "timeseries",
-      "title": "Published vs delivered/s",
+      "title": "Live updates published and delivered per second",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -493,7 +495,7 @@
             "uid": "prometheus"
           },
           "expr": "sum by (result) (rate(sse_pubsub_published_total[$__rate_interval]))",
-          "legendFormat": "published \u00b7 {{result}}"
+          "legendFormat": "published · {{result}}"
         },
         {
           "refId": "B",
@@ -505,12 +507,12 @@
           "legendFormat": "delivered"
         }
       ],
-      "description": "published result=error means pub/sub Redis was unreachable and the event stayed in-process."
+      "description": "Notifications handed to the live-update channel versus delivered to connected browsers and apps. A published error means the channel itself was unreachable."
     },
     {
       "id": 13,
       "type": "stat",
-      "title": "Subscribed processes",
+      "title": "Processes listening for live updates",
       "gridPos": {
         "h": 5,
         "w": 12,
@@ -565,7 +567,82 @@
           "legendFormat": "subscribers"
         }
       ],
-      "description": "HTTP-serving processes holding a live subscription; 0 means SSE does not cross processes."
+      "description": "How many API processes are subscribed to the live-update channel. 0 means no one would receive updates."
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Recent traces",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      }
+    },
+    {
+      "id": 21,
+      "type": "table",
+      "title": "Slow job traces (over 5s)",
+      "description": "The latest job traces that took longer than 5s, newest first. Click a trace ID to open the full timeline; from there you can jump to its logs.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 34
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "query": "{ resource.service.name =~ \".*worker.*\" && duration > 5s }",
+          "limit": 20,
+          "tableType": "traces"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "table",
+      "title": "Failed job traces",
+      "description": "The latest job traces that ended in an error, newest first. Click a trace ID to open the full timeline; from there you can jump to its logs.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 34
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "query": "{ resource.service.name =~ \".*worker.*\" && status = error }",
+          "limit": 20,
+          "tableType": "traces"
+        }
+      ]
     }
   ]
 }

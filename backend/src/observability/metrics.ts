@@ -70,6 +70,14 @@ export const ingestionLastSuccess = meter.createGauge(
   },
 );
 
+export const ingestionSignInFailures = meter.createCounter(
+  "ingestion.sign_in.failures",
+  {
+    description:
+      "Watcher sign-ins that failed, by provider and reason (rejected = stored password refused; error = missing config, upstream or other failure)",
+  },
+);
+
 // --- Scheduler / bandit ---------------------------------------------------------
 export const schedulerProposals = meter.createCounter("scheduler.proposals", {
   description: "SlotProposal rows written, by policy/trigger/series",

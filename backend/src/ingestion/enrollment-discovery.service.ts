@@ -3,7 +3,10 @@ import { forwardRef, Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { IntegrationsService } from "../integrations/integrations.service";
 import { LMSService, type LmsSession } from "../lms/lms.service";
-import { ingestionUpstreamItems } from "../observability/metrics";
+import {
+  ingestionUpstreamItems,
+  ingestionSignInFailures,
+} from "../observability/metrics";
 import { PortalAPIService } from "../portal/portal-api.service";
 import { PrismaService } from "../prisma/prisma.service";
 import {
@@ -499,6 +502,10 @@ export class EnrollmentDiscoveryService {
         // no request to attach the failure to, and `lastSyncStatus: FAILED` is
         // how the student learns their stored password went stale.
         await this.jobs.finishJob("PORTAL", jobId, "FAILED");
+        ingestionSignInFailures.add(1, {
+          provider: "PORTAL",
+          reason: "rejected",
+        });
         this.logger.warn(
           `The portal rejected the stored credentials for integration ${target.integrationId}`,
         );
@@ -511,7 +518,8 @@ export class EnrollmentDiscoveryService {
         throw error;
       }
       await this.jobs.finishJob("PORTAL", jobId, "FAILED");
-      this.logger.warn(
+      ingestionSignInFailures.add(1, { provider: "PORTAL", reason: "error" });
+      this.logger.error(
         `Portal sign-in failed for integration ${target.integrationId}: ${errorMessage(error)}`,
       );
       return null;
@@ -530,6 +538,7 @@ export class EnrollmentDiscoveryService {
       const result = await this.lms.login(creds.username, creds.password);
       if (!result.ok) {
         await this.jobs.finishJob("LMS", jobId, "FAILED");
+        ingestionSignInFailures.add(1, { provider: "LMS", reason: "rejected" });
         this.logger.warn(
           `The LMS rejected the stored credentials for integration ${target.integrationId}`,
         );
@@ -542,7 +551,8 @@ export class EnrollmentDiscoveryService {
         throw error;
       }
       await this.jobs.finishJob("LMS", jobId, "FAILED");
-      this.logger.warn(
+      ingestionSignInFailures.add(1, { provider: "LMS", reason: "error" });
+      this.logger.error(
         `LMS sign-in failed for integration ${target.integrationId}: ${errorMessage(error)}`,
       );
       return null;

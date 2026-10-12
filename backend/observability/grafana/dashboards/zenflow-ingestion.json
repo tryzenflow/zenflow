@@ -1,95 +1,812 @@
 {
   "uid": "zenflow-ingestion",
   "title": "Zenflow · Ingestion & Watchers",
-  "tags": ["zenflow", "ingestion"],
+  "tags": [
+    "zenflow",
+    "ingestion"
+  ],
   "timezone": "browser",
   "editable": true,
   "graphTooltip": 1,
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "1m",
-  "time": { "from": "now-24h", "to": "now" },
-  "annotations": { "list": [] },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "annotations": {
+    "list": []
+  },
   "links": [],
-  "templating": { "list": [] },
+  "templating": {
+    "list": []
+  },
   "panels": [
-    { "id": 1, "type": "row", "title": "Freshness", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
     {
-      "id": 2, "type": "stat", "title": "Time since last successful sync, by provider",
-      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 1 },
-      "description": "Fed by the ingestion_last_success_timestamp gauge. Empty until that gauge lands (issue 53 follow-up).",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "s", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 3600 }, { "color": "red", "value": 172800 } ] } }, "overrides": [] },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none", "textMode": "value_and_name", "orientation": "horizontal" },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "time() - max by (provider) (ingestion_last_success_timestamp_seconds)", "legendFormat": "{{provider}}" } ]
-    },
-
-    { "id": 10, "type": "row", "title": "Materialization", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 7 } },
-    {
-      "id": 11, "type": "timeseries", "title": "Materialized blocks/s by outcome",
-      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 8 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "drawStyle": "bars", "fillOpacity": 70, "stacking": { "mode": "normal" } } }, "overrides": [
-        { "matcher": { "id": "byName", "options": "unchanged" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "super-light-yellow" } } ] },
-        { "matcher": { "id": "byName", "options": "created" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] },
-        { "matcher": { "id": "byName", "options": "updated" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } } ] },
-        { "matcher": { "id": "byName", "options": "guarded" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } } ] }
-      ] },
-      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["sum"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (outcome) (rate(ingestion_blocks_total[$__rate_interval]))", "legendFormat": "{{outcome}}" } ]
+      "id": 1,
+      "type": "row",
+      "title": "Freshness and sign-in",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
     },
     {
-      "id": 12, "type": "stat", "title": "Redundant work — unchanged ratio (range)",
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 0.7 }, { "color": "red", "value": 0.95 } ] } }, "overrides": [] },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(increase(ingestion_blocks_total{outcome=\"unchanged\"}[$__range])) / clamp_min(sum(increase(ingestion_blocks_total[$__range])), 1)" } ]
+      "id": 2,
+      "type": "stat",
+      "title": "Time since last successful sync, by provider",
+      "gridPos": {
+        "h": 6,
+        "w": 16,
+        "x": 0,
+        "y": 1
+      },
+      "description": "How long ago each provider (portal, LMS) last completed a sync with no failures. It should stay within a few minutes; an alert fires at 2 hours.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 3600
+              },
+              {
+                "color": "red",
+                "value": 172800
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "orientation": "horizontal"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "time() - max by (provider) (ingestion_last_success_timestamp_seconds)",
+          "legendFormat": "{{provider}}"
+        }
+      ]
     },
     {
-      "id": 13, "type": "timeseries", "title": "Blocks/s by source",
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 16 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "drawStyle": "line", "fillOpacity": 20, "stacking": { "mode": "normal" } } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (source) (rate(ingestion_blocks_total[$__rate_interval]))", "legendFormat": "{{source}}" } ]
+      "id": 40,
+      "type": "timeseries",
+      "title": "Sign-in failures, by provider and reason",
+      "description": "Watcher sign-ins that failed. 'rejected' means a student's stored password was refused (their problem, expected occasionally). 'error' means the sign-in itself broke, for example a missing API key or an unreachable upstream (our problem; check the error logs).",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (provider, reason) (increase(ingestion_sign_in_failures_total[$__interval]))",
+          "legendFormat": "{{provider}} · {{reason}}"
+        }
+      ]
     },
     {
-      "id": 14, "type": "timeseries", "title": "Reconciliation deletes/s by source (destructive)",
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 16 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "drawStyle": "bars", "fillOpacity": 70 } }, "overrides": [
-        { "matcher": { "id": "byType", "options": "number" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] }
-      ] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (source) (rate(ingestion_reconcile_deleted_total[$__rate_interval]))", "legendFormat": "{{source}}" } ]
-    },
-
-    { "id": 20, "type": "row", "title": "Upstream calls", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 } },
-    {
-      "id": 21, "type": "timeseries", "title": "Upstream items/s by operation · status",
-      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 24 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (operation, status) (rate(ingestion_upstream_items_total[$__rate_interval]))", "legendFormat": "{{operation}} · {{status}}" } ]
+      "id": 10,
+      "type": "row",
+      "title": "Calendar updates",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      }
     },
     {
-      "id": 22, "type": "timeseries", "title": "Watcher (cron) duration p95",
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.95, sum by (le, cron_job) (rate(scheduler_cron_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "{{cron_job}}" } ]
+      "id": 11,
+      "type": "timeseries",
+      "title": "Blocks written per second, by outcome",
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 0,
+        "y": 10
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cps",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "unchanged"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "super-light-yellow"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "created"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "updated"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "guarded"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (outcome) (rate(ingestion_blocks_total[$__rate_interval]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ],
+      "description": "Calendar blocks processed per second, by what happened to them: created, updated, or unchanged (nothing to do)."
     },
-
-    { "id": 30, "type": "row", "title": "Ingestion logs", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 } },
     {
-      "id": 31, "type": "logs", "title": "Watcher / materializer log lines",
-      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 33 },
-      "datasource": { "type": "loki", "uid": "loki" },
-      "options": { "showTime": true, "wrapLogMessage": true, "prettifyLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" },
-      "targets": [ { "refId": "A", "datasource": { "type": "loki", "uid": "loki" }, "expr": "{service=~\"api.*|watcher|worker.*\"} | json | context =~ `(?i).*(watcher|ingestion|materializer|portal|lms).*`" } ]
+      "id": 12,
+      "type": "stat",
+      "title": "Wasted work: unchanged share (selected range)",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 10
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.7
+              },
+              {
+                "color": "red",
+                "value": 0.95
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(ingestion_blocks_total{outcome=\"unchanged\"}[$__range])) / clamp_min(sum(increase(ingestion_blocks_total[$__range])), 1)"
+        }
+      ],
+      "description": "Share of processed blocks that turned out identical to what we already had. A high value means the watchers re-fetch more than they need to."
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Blocks written per second, by source",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 18
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cps",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (source) (rate(ingestion_blocks_total[$__rate_interval]))",
+          "legendFormat": "{{source}}"
+        }
+      ],
+      "description": "The same blocks split by where they came from (portal timetable, LMS calendar, exams)."
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Sessions removed per second, by source",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 18
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cps",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byType",
+              "options": "number"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (source) (rate(ingestion_reconcile_deleted_total[$__rate_interval]))",
+          "legendFormat": "{{source}}"
+        }
+      ],
+      "description": "Sessions deleted because the upstream no longer lists them. This is destructive, so unexpected spikes deserve a look."
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Calls to the portal and LMS",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      }
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Upstream items per second, by operation and status",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cps",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (operation, status) (rate(ingestion_upstream_items_total[$__rate_interval]))",
+          "legendFormat": "{{operation}} · {{status}}"
+        }
+      ],
+      "description": "Requests made to the portal and LMS per second, by operation and result. Rising failures point at an upstream outage or a credential problem."
+    },
+    {
+      "id": 50,
+      "type": "row",
+      "title": "Background jobs",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      }
+    },
+    {
+      "id": 51,
+      "type": "table",
+      "title": "Background job runs (selected range)",
+      "description": "How many times each scheduled job ran and how many of those runs failed. The watcher ticker runs every minute; the others run daily or every half hour.",
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 0,
+        "y": 35
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/ok|failed/"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (cron_job) (increase(scheduler_cron_runs_total{result=\"ok\"}[$__range]))"
+        },
+        {
+          "refId": "B",
+          "format": "table",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (cron_job) (increase(scheduler_cron_runs_total{result=\"error\"}[$__range]))"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "cron_job": "job",
+              "Value #A": "ok",
+              "Value #B": "failed"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 52,
+      "type": "timeseries",
+      "title": "Background job duration (p95)",
+      "description": "How long each scheduled job takes at the slow end (p95). A job creeping towards its schedule interval will start overlapping with itself.",
+      "gridPos": {
+        "h": 8,
+        "w": 14,
+        "x": 10,
+        "y": 35
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, cron_job) (rate(scheduler_cron_duration_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "{{cron_job}}"
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "type": "row",
+      "title": "Logs",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 43
+      }
+    },
+    {
+      "id": 53,
+      "type": "timeseries",
+      "title": "Errors by component",
+      "description": "Error-level log lines per interval, grouped by the part of the system that logged them. Use it to see which component is failing before opening the log stream below.",
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 44
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 40,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "queryType": "range",
+          "expr": "sum by (context) (count_over_time({service=~\"api.*|watcher|worker.*\"} | json | level=~\"error|fatal\" [$__interval]))",
+          "legendFormat": "{{context}}"
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "type": "logs",
+      "title": "Watcher and sync log lines",
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 51
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{service=~\"api.*|watcher|worker.*\"} | json | context =~ `(?i).*(watcher|ingestion|materializer|portal|lms).*`"
+        }
+      ],
+      "description": "Live log lines from the watchers, workers and sync code. Failed sign-ins appear at error level and name the missing setting."
+    },
+    {
+      "id": 60,
+      "type": "row",
+      "title": "Recent traces",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 63
+      }
+    },
+    {
+      "id": 61,
+      "type": "table",
+      "title": "Slow background-job traces (over 5s)",
+      "description": "The latest background-job traces that took longer than 5s, newest first. Click a trace ID to open the full timeline; from there you can jump to its logs.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 64
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "query": "{ resource.service.name =~ \"watcher.*|.*worker.*\" && duration > 5s }",
+          "limit": 20,
+          "tableType": "traces"
+        }
+      ]
+    },
+    {
+      "id": 62,
+      "type": "table",
+      "title": "Failed background-job traces",
+      "description": "The latest background-job traces that ended in an error, newest first. Click a trace ID to open the full timeline; from there you can jump to its logs.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 64
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "query": "{ resource.service.name =~ \"watcher.*|.*worker.*\" && status = error }",
+          "limit": 20,
+          "tableType": "traces"
+        }
+      ]
     }
   ]
 }

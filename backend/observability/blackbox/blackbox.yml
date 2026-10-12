@@ -1,0 +1,10 @@
+# Probe modules for the blackbox exporter (scrape.d/blackbox*.yml).
+modules:
+  http_2xx:
+    prober: http
+    timeout: 5s
+    http:
+      method: GET
+      valid_status_codes: [200]
+      follow_redirects: true
+      preferred_ip_protocol: ip4

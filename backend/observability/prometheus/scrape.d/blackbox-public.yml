@@ -1,0 +1,15 @@
+# Prod only: the public URL through nginx, which also reports TLS certificate expiry.
+scrape_configs:
+  - job_name: zenflow-public
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets: ["https://zenflow.alphatrann.com/api/v1/health/live"]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
