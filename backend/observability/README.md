@@ -38,6 +38,7 @@ App-side instrumentation: `../src/observability/`, `../src/tracing.ts`, `service
 | `blackbox/`, `prometheus/scrape.d/blackbox*.yml` | readiness and TLS probes behind the API-down and certificate alerts |
 | `grafana/dashboards/zenflow-api-overview.json` | traffic, errors and speed, external calls, process and container health, push and live updates, logs, recent traces |
 | `grafana/dashboards/zenflow-scheduler-bandit.json` | placement method and fallbacks, placement time step by step, learning signals, learning service, recent traces |
+| `grafana/dashboards/zenflow-backups.json` | last backup and restore-test result and age, dump size, run history, backup error lines and full output from Loki |
 | `grafana/dashboards/zenflow-ingestion.json` | freshness and sign-in failures, blocks by outcome, upstream calls, background jobs, errors by component, watcher logs, recent traces |
 
 ## Metric names
@@ -51,7 +52,7 @@ Names and labels are an API: update the dashboards with them. Definitions: `../s
 | `scheduler.proposals` | `scheduler_proposals_total` |
 | `scheduler.cron.duration` (s) | `scheduler_cron_duration_seconds_bucket` |
 | `ingestion.last_success.timestamp` (s) | `ingestion_last_success_timestamp_seconds` |
-| (textfile, `backup` container) | `zenflow_backup_last_success_timestamp_seconds`, `zenflow_backup_last_size_bytes`, `zenflow_backup_restore_last_success_timestamp_seconds` |
+| (textfile, `backup` container) | `zenflow_backup_last_success_timestamp_seconds`, `zenflow_backup_last_size_bytes`, `zenflow_backup_restore_last_success_timestamp_seconds`, `zenflow_backup_last_run_ok`, `zenflow_backup_last_run_timestamp_seconds`, `zenflow_backup_restore_last_run_ok`, `zenflow_backup_restore_last_run_timestamp_seconds` |
 | `bandit.update.duration` (s) | `bandit_update_duration_seconds_bucket` |
 | `bandit.linucb.cold_arms` | `bandit_linucb_cold_arms_{sum,count}` |
 

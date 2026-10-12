@@ -9,20 +9,26 @@ set -eu
 
 TMPDB=zenflow_restore_test
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"; psql -d postgres -qc "DROP DATABASE IF EXISTS $TMPDB" >/dev/null 2>&1 || true' EXIT
+step="setup"
+trap 'rc=$?; rm -rf "$WORK"; psql -d postgres -qc "DROP DATABASE IF EXISTS $TMPDB" >/dev/null 2>&1 || true; record_run backup_restore "$rc" "$step"' EXIT
 umask 077
 printf '%s\n' "$BACKUP_AGE_IDENTITY" >"$WORK/identity"
 
+step="finding the newest dump"
 key="$(s3 s3 ls --recursive "s3://$BACKUP_S3_BUCKET/$PREFIX/" | awk '{print $4}' | grep '\.dump\.age$' | sort | tail -n1)"
 [ -n "$key" ] || { log "ERROR no dump found under $PREFIX/"; exit 1; }
 log "restoring $key"
+step="download"
 s3 s3 cp --only-show-errors "s3://$BACKUP_S3_BUCKET/$key" "$WORK/db.dump.age"
+step="decrypting the dump"
 age -d -i "$WORK/identity" -o "$WORK/db.dump" "$WORK/db.dump.age"
 
+step="restoring into a scratch database"
 psql -d postgres -qc "DROP DATABASE IF EXISTS $TMPDB"
 psql -d postgres -qc "CREATE DATABASE $TMPDB"
 pg_restore --no-owner --exit-on-error -d "$TMPDB" "$WORK/db.dump"
 
+step="comparing with the live database"
 count() { psql -d "$1" -Atc "$2"; }
 tables='SELECT count(*) FROM information_schema.tables WHERE table_schema = '"'public'"
 live_t="$(count "$POSTGRES_DB" "$tables")"

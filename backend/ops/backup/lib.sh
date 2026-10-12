@@ -34,3 +34,17 @@ write_metric() {
   } >"$METRICS_DIR/$1.tmp"
   mv "$METRICS_DIR/$1.tmp" "$METRICS_DIR/$1.prom"
 }
+
+# record_run <job> <exit code> <step>: call from the job's EXIT trap. Writes whether
+# the run succeeded and when it ran, and on failure logs one `ERROR ... during <step>`
+# line. This is what the dashboard and the "backup failed" alert read, so a failed
+# run shows up at once instead of only as a success that never came.
+record_run() {
+  _job="$1" _rc="$2" _step="$3"
+  if [ "$_rc" -eq 0 ]; then _ok=1; else _ok=0; fi
+  write_metric "zenflow_${_job}_run_ok" "zenflow_${_job}_last_run_ok" \
+    "1 if the last ${_job} run succeeded, 0 if it failed." "$_ok" || true
+  write_metric "zenflow_${_job}_run_time" "zenflow_${_job}_last_run_timestamp_seconds" \
+    "Unix time the last ${_job} run finished, whatever the result." "$(date +%s)" || true
+  [ "$_ok" -eq 1 ] || log "ERROR ${_job} failed (exit $_rc) during: $_step"
+}
