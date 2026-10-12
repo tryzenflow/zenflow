@@ -285,7 +285,7 @@ services:
     entrypoint:
       - sh
       - -c
-      - 'export BACKUP_CRON="$${BACKUP_CRON:-0 */3 * * *}" RESTORE_TEST_CRON="$${RESTORE_TEST_CRON:-0 4 * * 0}"; exec sh /opt/backup/entrypoint.sh'
+      - 'export BACKUP_CRON="$${BACKUP_CRON:-0 */3 * * *}" RESTORE_TEST_CRON="$${RESTORE_TEST_CRON:-0 4 * * 0,3}"; exec sh /opt/backup/entrypoint.sh'
     env_file:
       # Non-secret settings. Vault mode: deploy.sh ships backend/env/prod.env as .env.prod; other providers write it with the secrets.
       - path: .env.prod
