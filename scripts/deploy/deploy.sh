@@ -52,7 +52,7 @@ if [ "$DEPLOY_MODE" = "deploy" ]; then
 fi
 
 SSH_TARGET="${DEPLOY_USER}@${DEPLOY_HOST}"
-ssh_run() { ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$SSH_TARGET" "$@"; }
+ssh_run() { ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=8 "$SSH_TARGET" "$@"; }
 api_image="${REGISTRY%/}/zenflow-api:${IMAGE_TAG}"
 bandit_image="${REGISTRY%/}/zenflow-bandit:${IMAGE_TAG}"
 
@@ -113,6 +113,8 @@ remote_args=$(printf ' %q' \
 # would swallow the rest of it and the remote shell would exit 0 early: give those </dev/null.
 ssh_run "bash -s${remote_args}" <<'REMOTE'
 set -euo pipefail
+# set -e kills the script silently; name the line and command so a failure is diagnosable.
+trap 'rc=$?; echo "deploy: remote script failed (exit $rc) at line $LINENO: $BASH_COMMAND" >&2' ERR
 env_name="$1"; tag="$2"; api="$3"; bandit="$4"; path="$5"
 provider="$6"; vault_addr="$7"; role_id_file="$8"; secret_id_file="$9"
 mode="${10}"; ttl="${11}"; min_free_mb="${12}"
@@ -259,7 +261,9 @@ if ! $compose exec -T "api-$idle" node -e "fetch('http://127.0.0.1:8000/api/v1/h
 fi
 
 # Memory guard: the remaining replicas are still to come up while the old colour runs.
-replicas="$($compose config | awk -v s="  api-$idle:" '$0==s{f=1;next} f&&/^  [a-z]/{exit} f&&/replicas:/{print $2; exit}')"
+# awk must read to EOF: exiting early closes the pipe on a >64 KB `compose config`, which dies
+# with 255 and, under pipefail, silently ends the script.
+replicas="$($compose config | awk -v s="  api-$idle:" '$0==s{f=1;next} f&&/^  [a-z]/{f=0} f&&/replicas:/&&!d{print $2; d=1}')"
 replicas="${replicas:-2}"
 avail_mb="$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)"
 need_mb=$(( (replicas - 1) * 800 + min_free_mb ))
