@@ -128,3 +128,48 @@ jobs:
           [ -d dist ] && assets="dist/zenflow-android.apk dist/zenflow-ios-simulator.zip"
           gh release create "v$VERSION" $assets \
             --target "$GITHUB_SHA" --title "v$VERSION" --notes-file notes.md $flags
+
+  # This repo is private; users get builds from the public tryzenflow/releases
+  # repo. A separate job (not a step above) so a failure here can be re-run on its
+  # own without trying to recreate the private release. It is a job in this
+  # workflow, not a `release: published` trigger, because releases created with
+  # GITHUB_TOKEN don't start other workflows.
+  publish-public:
+    name: Mirror the release to tryzenflow/releases
+    needs: [detect, release]
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Copy the release (notes and app files) to the public repo
+        env:
+          # Reads this repo's release.
+          GH_TOKEN: ${{ github.token }}
+          # Fine-grained PAT or GitHub App token with "Contents: read and write"
+          # on tryzenflow/releases only. Unset = skip, so the workflow works before
+          # the secret exists.
+          PUBLIC_RELEASES_TOKEN: ${{ secrets.PUBLIC_RELEASES_TOKEN }}
+          PUBLIC_REPO: tryzenflow/releases
+          VERSION: ${{ needs.detect.outputs.version }}
+          PRERELEASE: ${{ needs.detect.outputs.prerelease }}
+        run: |
+          if [ -z "$PUBLIC_RELEASES_TOKEN" ]; then
+            echo "::notice::PUBLIC_RELEASES_TOKEN is not set; not mirroring v$VERSION."
+            exit 0
+          fi
+          tag="v$VERSION"
+          if GH_TOKEN="$PUBLIC_RELEASES_TOKEN" gh release view "$tag" --repo "$PUBLIC_REPO" >/dev/null 2>&1; then
+            echo "::notice::$tag already exists in $PUBLIC_REPO; nothing to do."
+            exit 0
+          fi
+          shopt -s nullglob # a notes-only release leaves assets/ empty
+          mkdir assets
+          # A release with only notes has no assets, which `gh release download` reports as an error.
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir assets || true
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json body --jq .body > notes.md
+          flags=""
+          [ "$PRERELEASE" = "true" ] && flags="--prerelease"
+          # shellcheck disable=SC2086
+          GH_TOKEN="$PUBLIC_RELEASES_TOKEN" gh release create "$tag" assets/* \
+            --repo "$PUBLIC_REPO" --title "$tag" --notes-file notes.md $flags

@@ -18,12 +18,20 @@ the repo is in prerelease mode (`beta`, see `.changeset/pre.json`), so versions 
    - notes taken from `backend/CHANGELOG.md`.
    - The app files are built only if `mobile/` or `packages/` changed since the previous release tag (version bumps and changelogs don't count); otherwise the release has just the notes and the previous release keeps the latest binaries.
 
+4. The `publish-public` job copies that release (notes and app files, same tag and pre-release flag) to the
+   public [`tryzenflow/releases`](https://github.com/tryzenflow/releases) repo, so people can download builds
+   while this repo stays private. It is skipped until the `PUBLIC_RELEASES_TOKEN` secret exists, and if it
+   fails it can be re-run alone. The notes are the private changelog text, so keep changeset summaries free
+   of anything internal.
+
 Pre-releases never trigger the production deploy: `release.yml` only promotes non-prerelease releases.
 
 ## Setup it relies on
 
 - Repo variable `MOBILE_API_URL`: the API the published app talks to. Without it the build falls back to a
   localhost URL (a warning is logged) and the artifacts won't reach a real API.
+- Secret `PUBLIC_RELEASES_TOKEN`: a fine-grained PAT (or GitHub App token) with **Contents: read and write** on
+  `tryzenflow/releases` only. Without it nothing is mirrored.
 - Workflow permission "Read and write" plus "Allow GitHub Actions to create and approve pull requests".
 - PRs opened by `GITHUB_TOKEN` don't start other workflows, so the version PR gets no CI run. Merge it as
   an admin or use a PAT/GitHub App token for `changesets/action` if `ci-ok` is a required check.
