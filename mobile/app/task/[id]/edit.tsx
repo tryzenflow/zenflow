@@ -1,6 +1,7 @@
 import { useOffline } from "@/hooks/use-offline";
 import { findCachedSession } from "@/lib/session-cache";
 import { t } from "@/lib/i18n";
+import { useUploadTracker } from "@/hooks/use-upload-tracker";
 import { goToCalendar, safeBack } from "@/lib/nav";
 import { warmLandingDay } from "@/lib/warm-day";
 import { useLanguage } from "@/hooks/use-language";
@@ -159,6 +160,8 @@ function EditSessionForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  const uploads = useUploadTracker();
+
   async function onSubmit(values: EditSessionFormValues) {
     if (!user || !task) return;
     const patch: UpdateSessionInput = {
@@ -194,6 +197,7 @@ function EditSessionForm() {
     const handleUpdated = async (
       updated: Awaited<ReturnType<typeof updateSession>>,
     ) => {
+      void uploads.settle(values.note);
       // Handle divergent response — hand the primary-vs-alternative pick off
       // to the week view, which owns the slot-pick sheet and presents it over
       // the calendar (`useFocusEffect`, app/(app)/index.tsx).
@@ -400,6 +404,7 @@ function EditSessionForm() {
         <SessionView task={task} values={form.watch()} tz={tz} />
       ) : task ? (
         <SessionSheetFields
+          onNoteUpload={uploads.track}
           initialValue={form.getValues("note") ?? task.note ?? ""}
           form={form}
           tz={tz}

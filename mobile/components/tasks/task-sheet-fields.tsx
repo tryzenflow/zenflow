@@ -47,8 +47,11 @@ export function SessionSheetFields({
   editing,
   typeSelector,
   editingInstance,
+  onNoteUpload,
 }: {
   initialValue?: string;
+  /** Ids of files uploaded into the description, for cancel/save cleanup. */
+  onNoteUpload?: (ids: string[]) => void;
   form: UseFormReturn<SessionFormValues>;
   disabled?: boolean;
   tz: string;
@@ -118,6 +121,7 @@ export function SessionSheetFields({
               <DescriptionField
                 initialValue={initialValue}
                 onChange={field.onChange}
+                onUpload={onNoteUpload}
                 disabled={disabled}
               />
             </ErrorBoundary>

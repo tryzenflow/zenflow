@@ -163,6 +163,8 @@ const taskTranslations: Record<string, string> = {
   Notes: "Ghi chú",
   "No notes": "Không có ghi chú",
   "Add notes…": "Thêm ghi chú…",
+  Undo: "Hoàn tác",
+  Redo: "Làm lại",
   "Every day": "Mỗi ngày",
   "Every week": "Mỗi tuần",
   "until {date}": "đến {date}",

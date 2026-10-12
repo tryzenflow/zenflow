@@ -170,7 +170,10 @@ async function makeService(
       { provide: RemindersService, useValue: fakeReminders() },
       {
         provide: NoteFilesService,
-        useValue: { normalize: (note: unknown) => Promise.resolve(note) },
+        useValue: {
+          normalize: (note: unknown) => Promise.resolve(note),
+          releasingUnreferenced: (_userId: string, fn: () => unknown) => fn(),
+        },
       },
     ],
   }).compile();

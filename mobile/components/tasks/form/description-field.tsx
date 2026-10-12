@@ -52,10 +52,12 @@ function EditorFallback({ onClose }: { onClose: () => void }) {
 export function DescriptionField({
   initialValue: storedValue,
   onChange,
+  onUpload,
   disabled,
 }: {
   initialValue: string;
   onChange: (value: string) => void;
+  onUpload?: (ids: string[]) => void;
   disabled?: boolean;
 }) {
   useLanguage();
@@ -107,6 +109,7 @@ export function DescriptionField({
               onChange(html);
             }}
             onClose={() => setOpen(false)}
+            onUpload={onUpload}
             disabled={disabled}
           />
         </Suspense>
