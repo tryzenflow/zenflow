@@ -69,6 +69,7 @@ from src.schemas_place import (
     PlaceResponse,
     Timings,
 )
+from src.telemetry import singular_matrix
 
 
 def _params_version() -> str:
@@ -232,6 +233,7 @@ class _Placer:
             try:
                 arm_scores = self.linucb_policy.arm_scores_batch(x)
             except np.linalg.LinAlgError:
+                singular_matrix.add(1, {"op": "place"})
                 ok = False
                 arm_scores = {arm: np.zeros((m_count, n_cols)) for arm in ARM_IDS}
             else:
