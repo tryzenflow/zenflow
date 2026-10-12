@@ -28,10 +28,10 @@ jobs:
           TAG_NAME: ${{ github.event.release.tag_name }}
         run: |
           sha="$(git rev-parse HEAD)"
-          # Only release commits that are on master (i.e. passed required CI).
-          git fetch origin master
-          git merge-base --is-ancestor "$sha" origin/master \
-            || { echo "::error::Tag ${TAG_NAME} is not on master"; exit 1; }
+          # Only release commits that are on main (i.e. passed required CI).
+          git fetch origin main
+          git merge-base --is-ancestor "$sha" origin/main \
+            || { echo "::error::Tag ${TAG_NAME} is not on main"; exit 1; }
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
   deploy-production:

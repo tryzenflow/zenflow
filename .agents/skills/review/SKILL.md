@@ -6,7 +6,7 @@ description: "Review a Zenflow diff, branch or PR against the repo invariants. U
 # review
 
 ## Input
-A diff (default: working tree vs `master`), branch, or PR number (`gh pr diff <n>`).
+A diff (default: working tree vs `main`), branch, or PR number (`gh pr diff <n>`).
 
 ## Steps
 1. Get the changes and their owners: `node .agents/scripts/owner.mjs --diff`.

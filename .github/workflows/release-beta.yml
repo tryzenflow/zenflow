@@ -1,7 +1,7 @@
 name: Version & Release (beta)
 
 # Changesets-driven, modelled on limitkit's release.yml:
-#   1. Merging changesets to master opens/updates a "version packages" PR.
+#   1. Merging changesets to main opens/updates a "version packages" PR.
 #   2. Merging that PR bumps every package (one fixed version), so the next run
 #      of this workflow sees a version with no tag yet, builds the Android APK
 #      and iOS simulator app, and publishes a GitHub *pre-release* vX.Y.Z-beta.N
@@ -10,7 +10,7 @@ name: Version & Release (beta)
 
 on:
   push:
-    branches: [master]
+    branches: [main]
 
 concurrency:
   group: release-beta

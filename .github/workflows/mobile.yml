@@ -100,9 +100,9 @@ jobs:
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
         with:
-          # Only master writes the Gradle cache; PR builds read it, so they do
+          # Only main writes the Gradle cache; PR builds read it, so they do
           # not each save a multi-GB copy.
-          cache-read-only: ${{ github.ref != 'refs/heads/master' }}
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
       - name: Resolve API URL
         run: |
           if [ -z "$EXPO_PUBLIC_API_URL" ]; then

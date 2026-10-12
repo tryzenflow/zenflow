@@ -68,7 +68,7 @@ jobs:
         id: base
         run: |
           base="${{ github.event.pull_request.base.sha }}"
-          [ -n "$base" ] || base="$(git merge-base origin/master HEAD)"
+          [ -n "$base" ] || base="$(git merge-base origin/main HEAD)"
           echo "sha=$base" >> "$GITHUB_OUTPUT"
       - name: Backend (eslint + prettier)
         run: |

@@ -5,8 +5,8 @@ For maintainers (issue #75). Workflows live in `.github/workflows/`.
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
 | `ci.yml` | every PR, merge queue | See "CI jobs" below. Final job **`CI ok`** is the only required check. |
-| `images.yml` | push to `master` | Builds `zenflow-api` and `zenflow-bandit` (`build_images.sh`), pushes `ghcr.io/<owner>/<image>:<git-sha>` and `:latest`, deploys that SHA to **staging**. |
-| `release.yml` | GitHub Release published (tag `vX.Y.Z`) | Resolves the tag to its commit (must be on `master`), deploys the **already built** images for that SHA to **production**. Gated by `production` required reviewers. No rebuild. |
+| `images.yml` | push to `main` | Builds `zenflow-api` and `zenflow-bandit` (`build_images.sh`), pushes `ghcr.io/<owner>/<image>:<git-sha>` and `:latest`, deploys that SHA to **staging**. |
+| `release.yml` | GitHub Release published (tag `vX.Y.Z`) | Resolves the tag to its commit (must be on `main`), deploys the **already built** images for that SHA to **production**. Gated by `production` required reviewers. No rebuild. |
 | `deploy.yml` | called by the two above, or manual | Single deploy entry point (see Deploy target). Manual run = rollback (`mode=flip` or an older SHA). |
 | `audit.yml` | weekly, and PRs touching the lockfile | `pnpm audit`; informational, never required. |
 | `.github/dependabot.yml` | weekly | npm, GitHub Actions, Docker, uv. |
@@ -72,7 +72,7 @@ The app tier runs as two colours, `api-{blue,green}` (x N) + `bandit-{blue,green
 
 ### GitHub Environments
 
-Create `staging` (no reviewers) and `production` (required reviewers; branches limited to `master` and tags). Per Environment:
+Create `staging` (no reviewers) and `production` (required reviewers; branches limited to `main` and tags). Per Environment:
 
 | Kind | Name | Purpose |
 | --- | --- | --- |
@@ -100,10 +100,10 @@ gh variable set DEPLOY_ENABLED --env staging --body true
 
 ## Branch protection (cannot be applied from code)
 
-Needs repo admin, and `CI ok` must have run once so the check name exists. Settings, Branches, rule for `master`, or:
+Needs repo admin, and `CI ok` must have run once so the check name exists. Settings, Branches, rule for `main`, or:
 
 ```bash
-gh api -X PUT repos/tryzenflow/zenflow/branches/master/protection --input - <<'JSON'
+gh api -X PUT repos/tryzenflow/zenflow/branches/main/protection --input - <<'JSON'
 {
   "required_status_checks": { "strict": true, "contexts": ["CI ok"] },
   "enforce_admins": true,
@@ -128,7 +128,7 @@ Result: PR required, up to date, `CI ok` green, linear history.
 
 ## Releasing to production
 
-1. Merge to `master`; wait for `images.yml` (staging deploy) to go green and verify staging.
+1. Merge to `main`; wait for `images.yml` (staging deploy) to go green and verify staging.
 2. Create a GitHub Release with tag `vX.Y.Z` on that commit (`gh release create vX.Y.Z --target <sha> --generate-notes`).
 3. `release.yml` pauses at the `production` Environment; a reviewer approves; `deploy.yml` rolls out the SHA's images.
 
@@ -139,13 +139,13 @@ Result: PR required, up to date, `CI ok` green, linear history.
 
 ### Redeploy the previous SHA
 
-1. Find the last good SHA: previous green `Images & staging deploy` / `Release (production)` run, `git log master`, or on the host `tail -n 5 $DEPLOY_PATH/.deploy-history` (lines: `timestamp sha prev=<previous sha>`).
+1. Find the last good SHA: previous green `Images & staging deploy` / `Release (production)` run, `git log main`, or on the host `tail -n 5 $DEPLOY_PATH/.deploy-history` (lines: `timestamp sha prev=<previous sha>`).
 2. Run it: Actions, **Deploy**, Run workflow, pick the environment, paste the full SHA. Or `gh workflow run deploy.yml -f environment=production -f image_tag=<sha>`. Production still needs reviewer approval.
 3. Verify (`HEALTHCHECK_URL`, `docker compose ps`, Grafana).
 4. Migrations only move forward; rolling back across a destructive one is unsafe.
    - Check what shipped: `git diff --stat <good>..<bad> -- backend/prisma/migrations`.
    - Prefer expand/contract migrations so the previous SHA still works; otherwise restore a DB backup or ship a forward fix.
-5. Revert or fix on `master` afterwards so the next merge does not redeploy the bad commit to staging.
+5. Revert or fix on `main` afterwards so the next merge does not redeploy the bad commit to staging.
 
 ## Known gaps
 

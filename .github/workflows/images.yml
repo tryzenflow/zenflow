@@ -1,10 +1,10 @@
 name: Images & staging deploy
 
-# Merge to master => build + push images tagged with the commit SHA (and
+# Merge to main => build + push images tagged with the commit SHA (and
 # :latest), then deploy that SHA to staging automatically.
 on:
   push:
-    branches: [master]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
