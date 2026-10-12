@@ -39,7 +39,7 @@
       "type": "stat",
       "title": "Time since last successful sync, by provider",
       "gridPos": {
-        "h": 6,
+        "h": 8,
         "w": 16,
         "x": 0,
         "y": 1
