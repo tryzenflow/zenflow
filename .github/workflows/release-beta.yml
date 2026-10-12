@@ -168,6 +168,17 @@ jobs:
           # A release with only notes has no assets, which `gh release download` reports as an error.
           gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir assets || true
           gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json body --jq .body > notes.md
+          # No app changes since the last build means no files on this release here
+          # (the previous one keeps them), but a public release page should always
+          # have downloads: reuse the newest earlier release that has some.
+          if [ -z "$(ls -A assets)" ]; then
+            from="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=30" \
+              --jq "[.[] | select(.tag_name != \"$tag\") | select(.assets | length > 0)][0].tag_name // empty")"
+            if [ -n "$from" ]; then
+              gh release download "$from" --repo "$GITHUB_REPOSITORY" --dir assets
+              printf '\n\nThe app files are the build from %s; the app did not change in this version.\n' "$from" >> notes.md
+            fi
+          fi
           flags=""
           [ "$PRERELEASE" = "true" ] && flags="--prerelease"
           # shellcheck disable=SC2086
