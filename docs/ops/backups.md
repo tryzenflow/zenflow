@@ -14,7 +14,7 @@ For maintainers/operators (issue #137, [ADR-0014](../adr/0014-postgres-backups-t
 
 - An age keypair is a **public key** (encrypts, safe to share) and a **secret key** (decrypts, guard it).
 - **Master keypair:** public key on the server (`BACKUP_AGE_RECIPIENT`), secret key offline with alpha. Only this can be trusted to restore in a disaster.
-- **Restore-test keypair:** a second pair so the weekly test can decrypt unattended. Its public key is also in `BACKUP_AGE_RECIPIENT` (every dump is readable by either secret key); its secret key is `BACKUP_AGE_IDENTITY` on the server. It never replaces the master key.
+- **Restore-test keypair:** a second pair so the twice-weekly test can decrypt unattended. Its public key is also in `BACKUP_AGE_RECIPIENT` (every dump is readable by either secret key); its secret key is `BACKUP_AGE_IDENTITY` on the server. It never replaces the master key.
 
 ## Setup
 
@@ -59,7 +59,7 @@ The age **master private key is held off the server** by: **alpha** (stored in a
   }
   ```
 
-  Check it from the server: `restore-test.sh` (see Operate) lists, downloads and restores the newest dump, so a missing `GetObject` shows up as a failed restore test and the "no restore test in 8 days" alert.
+  Check it from the server: `restore-test.sh` (see Operate) lists, downloads and restores the newest dump, so a missing `GetObject` shows up as a failed restore test and the "no restore test in 5 days" alert.
 
 ## Operate
 
@@ -89,7 +89,7 @@ Metrics are written to a textfile volume and exposed by node-exporter:
 | `zenflow_backup_last_size_bytes` | size of the last dump |
 | `zenflow_backup_restore_last_success_timestamp_seconds` | last good restore test |
 
-Grafana rules (`backend/observability/grafana/provisioning/alerting/backup.yml`): no backup in 26 h, dump under 1 MiB, no restore test in 8 days. Missing data also alerts.
+Grafana rules (`backend/observability/grafana/provisioning/alerting/backup.yml`): no backup in 7 h (two missed 3-hourly runs), dump under 1 MiB, no restore test in 5 days. Before the first success the age counts from the backup container's start, so a fresh deploy does not alert until the threshold passes (the restore test runs Sundays and Wednesdays at 04:00, so its first run can be days out). Missing data (container gone) alerts.
 
 ### Alerts
 
