@@ -1,5 +1,5 @@
 import { getFileUsage } from "@/api/files";
-import { AlertTriangle, Database } from "@/components/Icons";
+import { AlertCircle, AlertTriangle, Database } from "@/components/Icons";
 import { SettingsSectionLabel } from "@/components/settings/settings-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
@@ -140,10 +140,17 @@ export function StorageSection() {
             testID="settings.storage-warning"
             className={`mt-3 flex-row items-start gap-2 rounded-xl border px-3 py-2.5 ${CALLOUT[level].card}`}
           >
-            <AlertTriangle
-              size={16}
-              className={`mt-px ${CALLOUT[level].text}`}
-            />
+            {level === "full" ? (
+              <AlertCircle
+                size={16}
+                className={`mt-px ${CALLOUT[level].text}`}
+              />
+            ) : (
+              <AlertTriangle
+                size={16}
+                className={`mt-px ${CALLOUT[level].text}`}
+              />
+            )}
             <Text
               className={`flex-1 text-[13px] font-medium ${CALLOUT[level].text}`}
             >
