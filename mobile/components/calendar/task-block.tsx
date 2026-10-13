@@ -575,6 +575,18 @@ function SessionBlockImpl({
     },
   );
 
+  // Declared before `panGesture`: its worklets capture these when they are
+  // created, and a callback defined further down is captured as `undefined`
+  // (Hermes has no temporal dead zone), which crashed on the first long press.
+  const liftHaptic = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+  }, []);
+
+  const openMenu = useCallback(() => {
+    if (onLongPressMenu) onLongPressMenu(segment.taskId);
+    else onRequestReschedule?.(segment.taskId);
+  }, [onLongPressMenu, onRequestReschedule, segment.taskId]);
+
   // The drag is hold-then-drag: a swipe that starts on a block scrolls the
   // day / pages the week right away, and only a finger held still for 350ms
   // lifts the block. Released without moving, the same hold opens the "Move
@@ -703,15 +715,6 @@ function SessionBlockImpl({
   const triggerPress = useCallback(() => {
     onPress?.(segment.taskId);
   }, [onPress, segment.taskId]);
-
-  const liftHaptic = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-  }, []);
-
-  const openMenu = useCallback(() => {
-    if (onLongPressMenu) onLongPressMenu(segment.taskId);
-    else onRequestReschedule?.(segment.taskId);
-  }, [onLongPressMenu, onRequestReschedule, segment.taskId]);
 
   // Shorter than the hold, so lifting a held block never also counts as a tap.
   const tapGesture = Gesture.Tap()
