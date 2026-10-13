@@ -117,6 +117,25 @@ describe("ReminderSchedulerService", () => {
       expect(ids[0]).not.toContain(":");
     });
 
+    it("refills an empty queue from the database and reports how many it armed", async () => {
+      // A crash or a server move empties Redis; the DB rows are the truth.
+      prisma.sessionReminder.findMany.mockResolvedValue([
+        makeRow({ id: "r1", startsInMs: 2 * HOUR }),
+        makeRow({ id: "r2", startsInMs: 5 * HOUR }),
+      ]);
+      expect(await service.sweep()).toBe(2);
+      expect(queue.enqueueBestEffort).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not re-arm an occurrence that already fired", async () => {
+      const start = new Date(NOW.getTime() + 3 * HOUR);
+      prisma.sessionReminder.findMany.mockResolvedValue([
+        makeRow({ startsInMs: 3 * HOUR, firedForStart: start }),
+      ]);
+      expect(await service.sweep()).toBe(0);
+      expect(queue.enqueueBestEffort).not.toHaveBeenCalled();
+    });
+
     it("does not arm a reminder beyond the horizon", async () => {
       prisma.sessionReminder.findMany.mockResolvedValue([
         makeRow({ startsInMs: 60 * 24 * HOUR }),
@@ -162,7 +181,7 @@ describe("ReminderSchedulerService", () => {
 
     it("swallows a failing sweep", async () => {
       prisma.sessionReminder.findMany.mockRejectedValue(new Error("db"));
-      await expect(service.sweep()).resolves.toBeUndefined();
+      await expect(service.sweep()).resolves.toBe(0);
     });
 
     describe("jitter", () => {
