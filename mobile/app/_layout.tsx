@@ -198,26 +198,24 @@ export default function RootLayout() {
 
   // The native splash only has to cover font loading: once fonts are in, the
   // `BootScreen` overlay below takes over (same logo, same spot) and carries
-  // the wait for the session / redirect. Two frames of grace so it has
-  // actually painted before the native splash lifts.
+  // the wait for the session / redirect. The native splash lifts only after
+  // `BootScreen` reports it has painted (`onShown`), so there is no blank frame
+  // between the two.
   const [bootDone, setBootDone] = React.useState(false);
   const bootReady = !loading && (routeSettled || splashTimedOut);
   const handleBootDone = React.useCallback(() => setBootDone(true), []);
+  const hideNativeSplash = React.useCallback(() => {
+    SplashScreen.hideAsync().catch((err) => {
+      console.warn("[_layout] SplashScreen.hideAsync warning:", err);
+    });
+  }, []);
+  // Safety net: if `BootScreen` never reports (e.g. its layout never fires),
+  // do not leave the native splash up forever.
   React.useEffect(() => {
     if (!(fontsLoaded || fontError)) return;
-    let cancelled = false;
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        if (cancelled) return;
-        SplashScreen.hideAsync().catch((err) => {
-          console.warn("[_layout] SplashScreen.hideAsync warning:", err);
-        });
-      }),
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [fontsLoaded, fontError]);
+    const t = setTimeout(hideNativeSplash, 3000);
+    return () => clearTimeout(t);
+  }, [fontsLoaded, fontError, hideNativeSplash]);
 
   if (!fontsLoaded && !fontError) {
     return null;
@@ -313,7 +311,13 @@ export default function RootLayout() {
 
       <PortalHost />
       {/* Our own splash, over everything until the session + redirect settle. */}
-      {!bootDone && <BootScreen ready={bootReady} onDone={handleBootDone} />}
+      {!bootDone && (
+        <BootScreen
+          ready={bootReady}
+          onShown={hideNativeSplash}
+          onDone={handleBootDone}
+        />
+      )}
     </GestureHandlerRootView>
   );
 }
