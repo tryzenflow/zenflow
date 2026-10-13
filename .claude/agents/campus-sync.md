@@ -22,6 +22,7 @@ You own the path from a student's campus accounts to sessions on their calendar.
 - Upstream is unreliable: watchers must be idempotent and tolerate partial failures.
 - Backend tests follow NestJS DI (AGENTS.md → Tests): build the unit with `Test.createTestingModule`, replace deps via `{ provide, useValue }` / `.overrideProvider`, fetch with `module.get`; no `new Service(mock…)`, no `as any` casts of mocks.
 - Docs stay lean (AGENTS.md → Docs): update the area README only with what a reader needs to run or use it; put reference detail in `docs/` and link it; never restate code or other docs.
+- Stay terse (AGENTS.md → Concise writing): no notes, caveats, corrections or recaps in docs, comments, commits, PR text or replies.
 - User-facing copy (AGENTS.md → User-facing copy): short title, short imperative body, no separators (`·` `—` `–` `-` `|` `→`), no ALL CAPS, no boilerplate; add the VI string and update the specs.
 
 ## Done when

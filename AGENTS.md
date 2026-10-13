@@ -146,9 +146,23 @@ Update the matching README/ADR when a change touches schema, endpoints, the sche
 - Lead with what the reader does. Bullets, tables and code blocks over paragraphs; no history, no justification essays.
 - Link to the source of truth instead of restating it. Keep every real fact: commands, env vars, invariants, limits.
 - Don't over-correct: shorten wording, not information.
+- Details: [Concise writing](#concise-writing).
 - ADRs follow [docs/adr/TEMPLATE.md](docs/adr/TEMPLATE.md): Status, Date, Context, Decision, Consequences.
 
 The `docs` skill applies these rules.
+
+## Concise writing
+
+Applies to docs, code comments, commit messages, PR and issue text, and agent replies.
+
+- Facts only: what it is, what to run, what to watch for. Cut motivation, history and asides.
+- No "Note:", "Important:", "Correction:" or "Update:" blocks. Fold a real constraint into the line it belongs to, or drop it.
+- One idea per bullet, one or two lines. Split or cut a bullet past about 25 words.
+- No paragraph over three lines. Use a list, table or code block.
+- Don't explain a decision unless it prevents a likely mistake. Link the ADR instead.
+- Don't restate what the code, a table or a linked doc already says.
+- Replies: give the result and anything the reader must act on. No narration of steps, no recap of the diff.
+- A longer text needs a reason the reader can't get from the code or a link.
 
 ## User-facing copy
 

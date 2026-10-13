@@ -29,7 +29,7 @@ The scheduler places one `TASK` (or one series) into an empty slot and never mov
 
 ## Notes
 
-- **Slot scoring** (`core/slot-score.ts`, fallback only): overlap-weighted sum of the per-hour preference matrix; `bestFreeSlot` picks the top free slot in a window. LinUCB scoring is Python's (`services/bandit/src/core/linucb_best_slot.py`) and not golden-tested against TS.
+- **Slot scoring** (`core/slot-score.ts`, fallback only): overlap-weighted preference sum. `bestFreeSlot` picks the top free slot. LinUCB scoring is Python's (`services/bandit/src/core/linucb_best_slot.py`).
 - **Displacement and sync conflicts:** EDF repack and the infeasible fallbacks are Python's. Nest applies the response (`scheduler/io/displacement.service.ts`) and raises per-source conflict notifications (`ingestion/sync-conflicts.service.ts`).
 - **Series bounded window** (`core/series-spread.ts`, frozen, ported to Python): splits a series' day span into N non-overlapping buckets; tail buckets absorb the remainder days.
 

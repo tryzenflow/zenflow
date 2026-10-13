@@ -12,5 +12,8 @@ description: "Open a Zenflow pull request with gh from the PR template. Use when
 4. Title is a Conventional Commit (it becomes the squash commit).
 5. `git push -u origin HEAD`, then `gh pr create --base main --title "..." --body-file -` (add `--draft` for work in progress).
 
+## Rules
+- Body is short: why in one or two lines, a test list, no diff recap, no notes or caveats ([AGENTS.md → Concise writing](../../../AGENTS.md#concise-writing)).
+
 ## Output
 The PR URL. Don't merge.

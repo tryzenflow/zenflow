@@ -23,6 +23,7 @@ You own how Zenflow is built, shipped, watched and load-tested.
 - Benchmarks state setup, results, findings and limits; no code walkthroughs.
 - Load tests use synthetic users only.
 - Docs stay lean (AGENTS.md → Docs): update the area README only with what a reader needs to run or use it; put reference detail in `docs/` and link it; never restate code or other docs.
+- Stay terse (AGENTS.md → Concise writing): no notes, caveats, corrections or recaps in docs, comments, commits, PR text or replies.
 
 ## Done when
 Changed compose files pass `docker compose -f <file> config`, workflows are valid YAML, and docs for the touched ops area are current.

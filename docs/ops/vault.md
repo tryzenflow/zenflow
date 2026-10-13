@@ -1,75 +1,66 @@
-# Vault (production secret store)
+# Vault (production secrets)
 
-For operators. Self-hosted Vault container: KV v2 plus AppRole. Part of the secrets setup in [secrets.md](secrets.md) (issue #76).
+For operators. Self-hosted Vault: KV v2 plus AppRole. Part of [secrets.md](secrets.md) (issue #76).
 
 ## Scope
 
-- Vault is **production-only**. The `vault` service exists only in `backend/compose.prod.yml`; staging secrets come from `.env.staging`.
-- `SECRETS_PROVIDER=vault` is valid only for the `production` Environment; `deploy.sh` exits 2 and `deploy.yml` fails otherwise.
-- Dev and staging read `.env.<env>` via `host`, `sops` or `command`; `FOO_FILE` support is unchanged.
-- MVP-minimum: KV v2 with least-privilege AppRole replaces production `.env.prod`.
-- **Not implemented (post-MVP, issue #76 "full Vault"):** dynamic DB credentials, transit engine, automated key rotation, auto-unseal, HA/Raft.
-
-Files in `backend/ops/vault/`: `config.hcl` (server), `policy.hcl` (read-only), `setup-approle.sh`, `render-secrets.sh`.
-Image `hashicorp/vault` is pinned in `compose.prod.yml`; bump deliberately (Dependabot's Docker ecosystem tracks it).
+- Prod only. The `vault` service is in `backend/compose.prod.yml`; staging uses `.env.staging`.
+- `SECRETS_PROVIDER=vault` is valid only for the `production` Environment. `deploy.sh` exits 2 and `deploy.yml` fails otherwise.
+- Not implemented: dynamic DB credentials, transit engine, key rotation job, auto-unseal, HA.
+- Files in `backend/ops/vault/`: `config.hcl`, `policy.hcl`, `setup-approle.sh`, `render-secrets.sh`, `import-dotenv.sh`.
+- The `hashicorp/vault` image is pinned in `compose.prod.yml`.
 
 ## Layout
 
 | Item | Value |
 | --- | --- |
 | KV mount | v2 at `secret/` |
-| Secret sets | one per consumer, `secret/zenflow/<env>/<set>`: `api` (Nest app: `api`, `watcher`, `worker-*`, `migrations`), `bandit`, `postgres`, `minio`, `grafana`, `backup`, and one per Redis instance: `session-redis`, `redis-ratelimit`, `redis-queue`, `redis-killswitch`, `redis-pubsub` |
-| Keys | secrets only, by env var name (`SESSION_SECRET`, `POSTGRES_PASSWORD`, `MASTER_LMS_ENCRYPTION_KEY_V1`, ...). Hosts, ports, usernames and bucket names are not secrets and live in `backend/env/prod.env` |
-| Shared keys | written to every set that needs them: `POSTGRES_PASSWORD` (`api`, `postgres`, `backup`), `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` (`api`, `minio`), `BANDIT_SERVICE_TOKEN` (`api`, `bandit`), each `*_REDIS_PASSWORD` (`api` and that instance's set; the session one also reaches `redis-exporter`) |
-| Policy `zenflow-api-<env>` | `read` on each set's `secret/data/zenflow/<env>/<set>` path, listed explicitly; no wildcard, list, write or other environments. A new set needs a line in `policy.hcl` and a re-run of `setup-approle.sh` |
-| AppRole `zenflow-api-<env>` | token TTL 10 min (max 30), `secret_id` valid 30 days |
-| Rendered files | `/run/zenflow/<env>/<set>/` on the host tmpfs: one file per key plus `files.env` |
-| API and Bandit delivery | `files.env` has `FOO_FILE=/run/secrets/zenflow/FOO`; the Nest roles and `migrations` mount `api`, Bandit mounts `bandit`, read-only |
-| Third-party delivery | `postgres`, `minio`, `grafana` and `backup` each get their own `files.env` with direct values (those images have no `FOO_FILE` support), injected only into that service |
+| Secret sets | `secret/zenflow/<env>/<set>`, one per consumer: `api` (Nest roles and `migrations`), `bandit`, `postgres`, `minio`, `grafana`, `backup`, `session-redis`, `redis-ratelimit`, `redis-queue`, `redis-killswitch`, `redis-pubsub` |
+| Keys | Secrets only, named by env var. Hosts, ports, users and bucket names live in `backend/env/prod.env` |
+| Shared keys | Written to every set that needs them: `POSTGRES_PASSWORD` (`api`, `postgres`, `backup`), `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` (`api`, `minio`), `BANDIT_SERVICE_TOKEN` (`api`, `bandit`), each `*_REDIS_PASSWORD` (`api` and its own set) |
+| Policy `zenflow-api-<env>` | `read` on each set path, listed explicitly. A new set needs a line in `policy.hcl` and a re-run of `setup-approle.sh` |
+| AppRole `zenflow-api-<env>` | Token TTL 10 min (max 30), `secret_id` valid 30 days |
+| Rendered files | `/run/zenflow/<env>/<set>/` on host tmpfs: one file per key plus `files.env` |
+| API and Bandit | `files.env` holds `FOO_FILE=/run/secrets/zenflow/FOO`, mounted read-only |
+| Postgres, MinIO, Grafana, backup | Own `files.env` with direct values, injected only into that service |
 
-- `render-secrets.sh` logs in with the AppRole and writes the files; `file-secrets.ts` and `docker-entrypoint.sh` consume them.
-- Bandit reuses `docker-entrypoint.sh` (bind-mounted, entrypoint override in compose) because it reads plain env vars only.
-- Non-secret settings are the committed `backend/env/prod.env`, which `deploy.sh` ships as `.env.prod` (600). Only secrets are in Vault. A key in both aborts the deploy: a plain `KEY` would beat the rendered `KEY_FILE` and silently ignore Vault.
-- The app composes its connections from parts (`DB_HOST`, `POSTGRES_*`, `SESSION_REDIS_HOST`, `MAIL_HOST`, ...), so a password exists once instead of inside a URL.
-- Plain-env sets are still exposed as container environment variables because the upstream images do not consistently support `FOO_FILE`. They are rendered only on host tmpfs.
+- `render-secrets.sh` logs in and writes the files. `file-secrets.ts` and `docker-entrypoint.sh` read them.
+- Non-secret settings are the committed `backend/env/prod.env`, shipped as `.env.prod` (600). A key in both aborts the deploy.
+- The app builds connections from parts (`DB_HOST`, `POSTGRES_*`, ...), so each password exists once.
 
-## Test the render script locally
+## Test the render script
 
-No Vault in the dev compose stack. Run a throwaway dev-mode server (CI does the same):
+No Vault in the dev stack. CI uses a throwaway dev server:
 
 ```bash
 docker run -d --name vault-smoke --cap-add IPC_LOCK -e VAULT_DEV_ROOT_TOKEN_ID=local-root \
   -p 127.0.0.1:8200:8200 hashicorp/vault:1.20.4 server -dev -dev-listen-address=0.0.0.0:8200
-# put secret/zenflow/dev/{api,bandit}, run ops/setup-approle.sh with ENV_NAME=dev, then render-secrets.sh
+# put secret/zenflow/dev/{api,bandit}, run setup-approle.sh with ENV_NAME=dev, then render-secrets.sh
 docker rm -f vault-smoke
 ```
 
-`.secrets-rendered/` is gitignored.
-
 ## First-time init and unseal
 
-The service uses file storage on volume `vault_data`, `IPC_LOCK`, no UI, and a plain-HTTP listener on `127.0.0.1:8200` only.
-Its healthcheck treats sealed or uninitialised as "process up" (`sealedcode=200&uninitcode=200`). It always starts **sealed**.
+Vault uses file storage on `vault_data`, listens on `127.0.0.1:8200` only, and always starts sealed.
 
-1. Start only Vault: `docker compose -f compose.prod.yml up -d vault`.
-2. Initialise on the host (5 shares, threshold 3). Save the output only into the password managers below.
+1. Start it: `docker compose -f compose.prod.yml up -d vault`.
+2. Initialise (5 shares, threshold 3). Save the output only in the password managers below.
    ```bash
    docker exec zenflow-vault-prod vault operator init -key-shares=5 -key-threshold=3
    ```
-3. Unseal with three different shares, each holder entering theirs: `docker exec -it zenflow-vault-prod vault operator unseal` (x3).
-4. With the initial root token (`VAULT_TOKEN`), enable KV, load secrets, create the policy, AppRole and host credentials:
+3. Three holders each run `docker exec -it zenflow-vault-prod vault operator unseal`.
+4. With the root token (`VAULT_TOKEN`), enable KV, load secrets, create the AppRole:
    ```bash
    V="docker exec -e VAULT_TOKEN zenflow-vault-prod vault"
    $V secrets enable -path=secret -version=2 kv
-   # Copy every API value from the old .env.prod into this set before removing that file.
-   # Secrets only (hosts, users, bucket names are in backend/env/prod.env). Read values from a prompt/file, not shell history.
+   # Secrets only. Read values from a prompt or file, not shell history.
    $V kv put -mount=secret zenflow/prod/api SESSION_SECRET=... FILE_URL_SECRET=... MASTER_LMS_ENCRYPTION_KEY_V1=... MASTER_PORTAL_ENCRYPTION_KEY_V1=... POSTGRES_PASSWORD=... MAIL_PASSWORD=... S3_ACCESS_KEY_ID=... S3_SECRET_ACCESS_KEY=... PORTAL_API_KEY=... BANDIT_SERVICE_TOKEN=...
    $V kv put -mount=secret zenflow/prod/bandit BANDIT_SERVICE_TOKEN=...
    $V kv put -mount=secret zenflow/prod/postgres POSTGRES_PASSWORD=...
    $V kv put -mount=secret zenflow/prod/minio S3_ACCESS_KEY_ID=... S3_SECRET_ACCESS_KEY=...
    $V kv put -mount=secret zenflow/prod/grafana GF_SECURITY_ADMIN_PASSWORD=... GF_SMTP_PASSWORD=...
    $V kv put -mount=secret zenflow/prod/backup POSTGRES_PASSWORD=... BACKUP_S3_ACCESS_KEY_ID=... BACKUP_S3_SECRET_ACCESS_KEY=... BACKUP_AGE_IDENTITY=...
-   # One password per Redis instance (openssl rand -hex 24): in `api` too, and in that instance's own set.
+   # One Redis password each (openssl rand -hex 24), in `api` and in the instance's own set
    $V kv patch -mount=secret zenflow/prod/api SESSION_REDIS_PASSWORD=... RATE_LIMIT_REDIS_PASSWORD=... QUEUE_REDIS_PASSWORD=... REDIS_KILLSWITCH_PASSWORD=... REDIS_PUBSUB_PASSWORD=...
    $V kv put -mount=secret zenflow/prod/session-redis SESSION_REDIS_PASSWORD=...
    $V kv put -mount=secret zenflow/prod/redis-ratelimit RATE_LIMIT_REDIS_PASSWORD=...
@@ -81,122 +72,114 @@ Its healthcheck treats sealed or uninitialised as "process up" (`sealedcode=200&
      -v /etc/zenflow/vault:/creds -e VAULT_ADDR=http://127.0.0.1:8200 -e VAULT_TOKEN -e ENV_NAME=prod \
      hashicorp/vault:1.20.4 /ops/setup-approle.sh --role-id-file /creds/role_id --secret-id-file /creds/secret_id
    ```
-   If you already have a `.env.prod` in the new parts format, use the importer instead of retyping values. It writes each secret to every set that needs it, leaves non-secrets in the env file (listed in `--dry-run`), and **rejects** unknown keys instead of guessing (use `GF_SECURITY_ADMIN_PASSWORD` and `GF_SMTP_PASSWORD` for Grafana, not the old `GRAFANA_*` names):
+   Or import an existing `.env.prod` in parts format. The importer writes each secret to every set that needs it and rejects unknown keys (Grafana uses `GF_SECURITY_ADMIN_PASSWORD` and `GF_SMTP_PASSWORD`):
    ```bash
    export VAULT_ADDR=http://127.0.0.1:8200 VAULT_ENV=prod
    read -rs -p "Vault root token: " VAULT_TOKEN && export VAULT_TOKEN
-   ./ops/vault/import-dotenv.sh .env.prod --dry-run  # prints names only
+   ./ops/vault/import-dotenv.sh .env.prod --dry-run
    ./ops/vault/import-dotenv.sh .env.prod
    unset VAULT_TOKEN
    ```
-5. **Revoke the root token**: `vault token revoke -self`. Recreate one with `vault operator generate-root` (needs the shares) only for policy changes or a new environment.
-6. Set `SECRETS_PROVIDER=vault` on the GitHub Environment and deploy. Put every non-secret setting from the old `.env.prod` into `backend/env/prod.env` (reviewed in a PR); keep a copy of the old file until the new containers are healthy.
-   - The deploy ships `backend/env/prod.env` as `.env.prod`, starts Vault, renders the six sets, aborts if a key is in both, and starts services from those files. Replace every `REPLACE_ME` in `prod.env` first; the deploy refuses to ship it otherwise.
-   - It fails with a clear message if Vault is sealed (HTTP 503) or uninitialised (501).
-7. Verify `docker compose -f compose.prod.yml ps` is healthy. The `.env.prod` on the host is now the shipped non-secret file; securely delete any copy of the old one that held secrets.
+5. Revoke the root token: `vault token revoke -self`. Use `vault operator generate-root` for policy changes or a new environment.
+6. Set `SECRETS_PROVIDER=vault` on the GitHub Environment and deploy.
+   - Move non-secret settings into `backend/env/prod.env` via PR and replace every `REPLACE_ME`.
+   - The deploy ships it as `.env.prod`, renders the sets, and aborts on duplicate keys.
+   - A sealed Vault (503) or uninitialised one (501) fails with a clear message.
+7. Check `docker compose -f compose.prod.yml ps` is healthy. Securely delete any old `.env.prod` that held secrets.
 
-### Moving an existing Vault from `api` + `platform` to one set per consumer
+### Move from `api` + `platform` to one set per consumer
 
-Done once, by the root-token holder (or `generate-root` with three shares):
+Done once by the root-token holder:
 
-1. Write the old `.env.prod` as parts (`DB_HOST`, `POSTGRES_*`, `MAIL_*`, `*_HOST`, `BACKUP_S3_*`) with no URL vars or Redis `*_PASSWORD`.
-2. Re-run `setup-approle.sh` so the policy lists the new set paths.
-3. `import-dotenv.sh .env.prod --dry-run`, then for real. Old KV versions stay, so nothing is lost.
-4. Copy the non-secret keys into `backend/env/prod.env` and merge that PR, then deploy.
-5. After the stack is healthy, delete the retired `platform` set: `vault kv metadata delete -mount=secret zenflow/prod/platform`.
+1. Rewrite the old `.env.prod` as parts (`DB_HOST`, `POSTGRES_*`, `MAIL_*`, `*_HOST`, `BACKUP_S3_*`). No URL vars, no Redis `*_PASSWORD`.
+2. Re-run `setup-approle.sh`.
+3. Run `import-dotenv.sh .env.prod --dry-run`, then for real. Old KV versions stay.
+4. Copy non-secret keys to `backend/env/prod.env`, merge, deploy.
+5. When healthy: `vault kv metadata delete -mount=secret zenflow/prod/platform`.
 
-### Turning on Redis passwords on a running stack
+### Turn on Redis passwords on a running stack
 
-Prod Redis used to run open on internal networks. The first deploy with passwords restarts every Redis with `requirepass` before the new app colour starts, so the colour still serving cannot reach Redis until the flip: sessions, OTP, rate limits, queues and SSE fail for a short window (jobs and sessions persist on the AOF volumes). Do it off-peak.
+The deploy restarts every Redis with `requirepass` before the new colour starts. Sessions, OTP, rate limits, queues and SSE fail until the flip. Do it off-peak.
 
-1. Generate five passwords and write each to `api` and its own set (above), or add the `*_REDIS_PASSWORD` lines to the `.env.prod` you import from.
-2. Re-run `setup-approle.sh` so the policy lists the five new set paths.
-3. Deploy. Check `docker compose ps` is healthy and `docker exec zenflow-redis-session-prod redis-cli ping` answers `NOAUTH`.
+1. Write five passwords to `api` and each own set.
+2. Re-run `setup-approle.sh`.
+3. Deploy. Check `docker compose ps` and that `docker exec zenflow-redis-session-prod redis-cli ping` answers `NOAUTH`.
 
-### After a Vault restart or host reboot
+### After a restart or reboot
 
-- Vault is sealed; deploys fail until three share holders unseal it.
-- Running apps keep working: they read the files at boot only.
-- A restarted container cannot start without the rendered files, and `/run` is tmpfs, so a **host reboot clears them**.
-- Unseal, then re-run the deploy (or `render-secrets.sh` by hand). Put this in the on-call runbook.
+- Vault is sealed. Deploys fail until three holders unseal.
+- Running apps keep working (they read files at boot only).
+- A host reboot clears `/run` (tmpfs), so restarted containers cannot start. Unseal, then redeploy or run `render-secrets.sh`.
 
-## Who holds the key shares
+## Key shares
 
-Fill in and review quarterly.
+Review quarterly.
 
-- No one person holds 3 shares.
-- Shares live in different password managers or vaults; never the repo, CI, chat or the deploy host.
-- The root token is not stored.
+- No one holds 3 shares.
+- Store shares in separate password managers. Never in the repo, CI, chat or deploy host.
+- Do not store the root token.
+- Losing more than `shares - threshold` shares makes data unrecoverable.
+- Single maintainer: use 2 of 3 held by two people.
+- Auto-unseal (KMS or Transit) is not configured.
 
 | Share | Holder | Stored in | Reviewed |
 | --- | --- | --- | --- |
 | 1 | _name (owner)_ | _personal password manager_ | _date_ |
 | 2 | _name (second maintainer)_ | _personal password manager_ | _date_ |
 | 3 | _name_ | _personal password manager_ | _date_ |
-| 4 | _name_ | _offline/sealed envelope or hardware token_ | _date_ |
-| 5 | _name_ | _offline/sealed envelope or hardware token_ | _date_ |
-
-- With a single maintainer, use threshold 2 of 3 held by two separate people if possible.
-- Losing more than `shares - threshold` shares makes the data unrecoverable (see backup).
-- Auto-unseal via cloud KMS or Transit (`seal "awskms" { ... }` in `config.hcl`) is documented, **not configured**: no cloud account to bind to.
-  It trades the human quorum for trust in the KMS IAM policy; migrate with `vault operator unseal -migrate`.
+| 4 | _name_ | _offline envelope or hardware token_ | _date_ |
+| 5 | _name_ | _offline envelope or hardware token_ | _date_ |
 
 ## Deploy user
 
-`DEPLOY_USER` need not be root, but must be the owner of the AppRole creds and of `/run/zenflow`, and be able to run docker. `deploy.sh` checks both and fails with the fix. One-time, as root:
+`DEPLOY_USER` must own the AppRole creds and `/run/zenflow`, and run docker. `deploy.sh` checks both. One-time, as root:
 
 ```bash
 chown <user> /etc/zenflow/vault/role_id /etc/zenflow/vault/secret_id
-echo 'd /run/zenflow 0700 <user> <user>' > /etc/tmpfiles.d/zenflow.conf   # /run is tmpfs: recreated each boot
+echo 'd /run/zenflow 0700 <user> <user>' > /etc/tmpfiles.d/zenflow.conf
 systemd-tmpfiles --create
 ```
 
-## AppRole credential rotation
+## Rotate AppRole credentials
 
-`role_id` is an identifier. `secret_id` is the credential, in `/etc/zenflow/vault/secret_id` (600, owned by the deploy user) on the deploy host.
-It expires after 30 days: rotate at least monthly, and at once if the host or file may be exposed.
+`secret_id` (`/etc/zenflow/vault/secret_id`, 600) expires in 30 days. Rotate monthly, or at once on exposure.
 
-1. With an admin or freshly generated root token: `ENV_NAME=prod ... setup-approle.sh --secret-id-file /creds/secret_id.new`. Old secret_ids stay valid until expiry, so there is no downtime.
-2. On the host, `mv` the new file over `/etc/zenflow/vault/secret_id` (mode 600).
-3. Run a deploy (or `render-secrets.sh`) and confirm the login works.
-4. If exposure is suspected, revoke the old one. List accessors with `vault list auth/approle/role/zenflow-api-prod/secret-id`.
+1. With a root or admin token: `ENV_NAME=prod ... setup-approle.sh --secret-id-file /creds/secret_id.new`. Old ids stay valid until expiry.
+2. On the host, `mv` the new file over `/etc/zenflow/vault/secret_id` (600).
+3. Deploy or run `render-secrets.sh` to confirm login.
+4. On suspected exposure, list accessors with `vault list auth/approle/role/zenflow-api-prod/secret-id` and destroy the old one:
    ```bash
    vault write auth/approle/role/zenflow-api-prod/secret-id-accessor/destroy secret_id_accessor=<accessor>
    ```
-5. To rotate `role_id`: `vault write auth/approle/role/zenflow-api-prod/role-id role_id=$(uuidgen)`, then re-run `setup-approle.sh --role-id-file`.
+5. Rotate `role_id`: `vault write auth/approle/role/zenflow-api-prod/role-id role_id=$(uuidgen)`, then `setup-approle.sh --role-id-file`.
 
 ## Backup and restore
 
-`vault_data` holds encrypted data, useless without 3 unseal shares. Keep backups encrypted and off the host anyway.
-The volume is `<compose project>_vault_data` (e.g. `zenflow-prod_vault_data`; check `docker volume ls`).
+`vault_data` is useless without 3 shares, but keep copies encrypted and off the host. The automated job is in [backups.md](backups.md). Manual copy (volume name: `docker volume ls`):
 
 ```bash
-# backup (file backend: stop Vault briefly for consistent files)
+# backup (stop Vault briefly for consistent files)
 docker compose -f compose.prod.yml stop vault
 docker run --rm -v zenflow-prod_vault_data:/v:ro -v "$PWD":/out alpine tar czf /out/vault-$(date +%F).tgz -C /v .
 docker compose -f compose.prod.yml start vault        # then unseal
-# restore (into an empty volume, Vault stopped)
+# restore (empty volume, Vault stopped)
 docker compose -f compose.prod.yml stop vault
 docker run --rm -v zenflow-prod_vault_data:/v -v "$PWD":/in alpine sh -c 'rm -rf /v/* && tar xzf /in/vault-YYYY-MM-DD.tgz -C /v'
-docker compose -f compose.prod.yml start vault        # then unseal with the SAME shares
+docker compose -f compose.prod.yml start vault        # unseal with the SAME shares
 ```
 
-- Restore needs the shares that were current when the backup was taken.
-- Test a restore on a scratch host before relying on it.
-- A rebuilt, never-initialised Vault is not a restore: re-run `operator init` and reload every secret from its upstream source.
+- Restore needs the shares current at backup time.
+- A fresh, uninitialised Vault is not a restore: re-run `operator init` and reload every secret.
 
 ## Rotation with Vault
 
-The runbooks in [secrets.md](secrets.md#rotation-runbooks) apply with two changes.
-"Update the store" means `vault kv patch -mount=secret zenflow/prod/api KEY=...` (new KV version; `vault kv rollback` undoes a bad write).
-"Deploy" re-renders and force-recreates the containers.
+[secrets.md](secrets.md#rotation-runbooks) applies. "Update the store" is `vault kv patch -mount=secret zenflow/prod/api KEY=...` (`vault kv rollback` undoes it). "Deploy" re-renders and recreates containers.
 
 | Secret | Vault specifics |
 | --- | --- |
-| `SESSION_SECRET` | patch, deploy; all users are logged out |
-| Redis password | patch the value in `api` **and** the instance's own set, deploy; brief outage for that instance, see [secrets.md](secrets.md#redis-passwords) |
-| Database password | run the `ALTER USER` step, patch `POSTGRES_PASSWORD` in all three sets (`api`, `postgres`, `backup`), then deploy; dynamic DB credentials are post-MVP |
-| Crypto master keys | add `MASTER_*_ENCRYPTION_KEY_V2` with `kv patch`, set `MASTER_KEY_CURRENT_VERSION=2` in `backend/env/prod.env`, deploy |
+| `SESSION_SECRET` | Patch, deploy. All users log out |
+| Redis password | Patch `api` and the instance's set, deploy. Brief outage, see [secrets.md](secrets.md#redis-passwords) |
+| Database password | Run `ALTER USER`, patch `POSTGRES_PASSWORD` in `api`, `postgres` and `backup`, deploy |
+| Crypto master keys | Patch in `MASTER_*_ENCRYPTION_KEY_V2`, set `MASTER_KEY_CURRENT_VERSION=2` in `backend/env/prod.env`, deploy |
 
-- Never `kv put` over a set without V1: `kv put` replaces all keys, and V1 must stay while rows reference it.
-- KV version history is not a substitute for the re-wrap job. Transit-engine key management is post-MVP.
+Never `kv put` over a set that holds V1 keys: it replaces all keys, and V1 must stay while rows reference it.

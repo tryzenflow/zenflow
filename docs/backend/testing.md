@@ -2,16 +2,28 @@
 
 For: developers adding or running specs in `backend/test/`. Unit specs (`*.spec.ts`) sit next to the code and are not covered here.
 
-Run the whole suite on the stack CI uses: from `backend/`, write `.env.test` (`../.github/scripts/write-test-env.sh .env.test`), then `docker compose --profile queue --profile bandit -f compose.test.yml up -d --build`, `pnpm exec dotenv -e .env.test -- node scripts/with-database-url.cjs prisma migrate deploy`, `pnpm prisma:test:gen` and `pnpm test:e2e` (builds `dist/` first). The last step alone runs against a stack you already started. One spec: `pnpm --filter backend exec jest --config ./test/jest-e2e.json <name>` with `.env.test` loaded.
+Full suite on the CI stack, from `backend/`:
+
+```bash
+../.github/scripts/write-test-env.sh .env.test
+docker compose --profile queue --profile bandit -f compose.test.yml up -d --build
+pnpm exec dotenv -e .env.test -- node scripts/with-database-url.cjs prisma migrate deploy
+pnpm prisma:test:gen
+pnpm test:e2e    # builds dist/ first
+```
+
+One spec, with `.env.test` loaded: `pnpm --filter backend exec jest --config ./test/jest-e2e.json <name>`.
 
 ## Stack
 
-`backend/compose.test.yml`: Postgres and MinIO always; the `queue` profile adds the five Redis instances and Mailpit; the `bandit` profile adds the Python placement service on `:8100`. CI starts all of them (`backend-e2e` job) and applies migrations with `migrate deploy`.
+`backend/compose.test.yml`: Postgres and MinIO always. Profile `queue` adds five Redis and Mailpit. Profile `bandit` adds the placer on `:8100`. CI starts all (`backend-e2e`).
 
 Two spec styles:
 
 - **In-process Nest** (`notifications`, `devices`, `tags-onboarding`, `push-delivery`): `Test.createTestingModule` with the real module under test and the externals overridden (FCM and APNs senders, auth guard, an in-memory Prisma stub in the older ones).
-- **Real processes** (everything else): `test/queue/support/stack.ts` starts the built `dist/main.js` once per role plus the fake DLU server, logs in through the real OTP flow (code read from Mailpit) and drives the API with supertest. Use `startRole(role, extraEnv)`, `signUp`, `connect`, `openSse`, `until`. `support/db.ts` gives a Prisma client for assertions.
+- **Real processes** (everything else): `test/queue/support/stack.ts` starts `dist/main.js` per role plus the fake DLU server, logs in via OTP (code from Mailpit) and drives the API with supertest.
+  - Helpers: `startRole(role, extraEnv)`, `signUp`, `connect`, `openSse`, `until`.
+  - `support/db.ts`: Prisma client for assertions.
 
 ## What each spec covers
 

@@ -14,4 +14,5 @@ description: "Split working-tree changes into focused Conventional Commits for Z
 5. Check `git status` after the last commit.
 
 ## Rules
-Don't push, amend or rewrite history unless asked.
+- Subject only, plus a body line when the why is not obvious. No recap of the diff ([AGENTS.md → Concise writing](../../../AGENTS.md#concise-writing)).
+- Don't push, amend or rewrite history unless asked.

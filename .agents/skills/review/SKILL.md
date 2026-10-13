@@ -14,5 +14,8 @@ A diff (default: working tree vs `main`), branch, or PR number (`gh pr diff <n>`
 3. Run the checks the diff touches: `pnpm -r typecheck`, `pnpm --filter <app> lint`, the touched specs; scheduler/bandit changes also `uv run pytest` in `services/bandit`.
 4. If asked for live verification, start the dev stack and drive the changed flow (Playwright MCP for web, emulator for mobile).
 
+## Rules
+- One line per finding: where, what, fix. No praise, recap or caveats.
+
 ## Output
 Findings ranked by severity: `path:line`, failure scenario, owning agent. State what was run and what wasn't. Post to the PR only if asked (`gh pr review` / `gh pr comment`).

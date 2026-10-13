@@ -1,88 +1,90 @@
 # Postgres backups
 
-For maintainers/operators (issue #137, [ADR-0014](../adr/0014-postgres-backups-to-s3.md)).
+For operators. Issue #137, [ADR-0014](../adr/0014-postgres-backups-to-s3.md).
 
 | Item | Value |
 | --- | --- |
-| Service | `backup` in `backend/compose.staging.yml` and `compose.prod.yml` (own `crond` process) |
-| Scripts | `backend/ops/backup/` (`backup.sh`, `restore-test.sh`, `entrypoint.sh`) |
-| Object | `s3://$BACKUP_S3_BUCKET/zenflow/<env>/YYYY/MM/DD/zenflow-<ts>.dump.age` (+ `vault-<ts>.tar.age`) |
+| Service | `backup` in `backend/compose.staging.yml` and `compose.prod.yml` (own `crond`) |
+| Scripts | `backend/ops/backup/` (`backup.sh`, `restore-test.sh`, `backup-files.sh`, `entrypoint.sh`) |
+| Dump | `s3://$BACKUP_S3_BUCKET/zenflow/<env>/YYYY/MM/DD/zenflow-<ts>.dump.age` plus `vault-<ts>.tar.age` |
 | Format | `pg_dump -Fc`, encrypted with [age](https://age-encryption.org) |
-| Files | Prod only: `s3://$BACKUP_S3_BUCKET/zenflow/prod/files/YYYY/MM/DD/files-<ts>.tar.age`, a daily `tar` of the uploaded-files volume (`storage_data`), age-encrypted, streamed (no temp disk). `FILES_BACKUP_CRON` (default `30 3 * * *`), `BACKUP_FILES_DIR` (set by compose). Each run re-uploads everything, so size x retention is the S3 bill. Staging does not run it: its backups live in the same MinIO, which would archive itself |
-| Schedule | staging: backup every 15 min, restore test hourly, against MinIO. Prod: backup every 3 h, restore test Sun 04:00, against S3. RPO is at most 3 h. Override with `BACKUP_CRON` / `RESTORE_TEST_CRON` |
+| Files (prod) | `zenflow/prod/files/YYYY/MM/DD/files-<ts>.tar.age`, daily tar of `storage_data`. Cron: `FILES_BACKUP_CRON` (default `30 3 * * *`) |
+| Staging | backup every 15 min, restore test hourly, against MinIO. No files job |
+| Prod | backup every 3 h (RPO 3 h), restore test Sun and Wed 04:00, against S3 |
 
-## Key model
+Override schedules with `BACKUP_CRON` and `RESTORE_TEST_CRON`.
 
-- An age keypair is a **public key** (encrypts, safe to share) and a **secret key** (decrypts, guard it).
-- **Master keypair:** public key on the server (`BACKUP_AGE_RECIPIENT`), secret key offline with alpha. Only this can be trusted to restore in a disaster.
-- **Restore-test keypair:** a second pair so the twice-weekly test can decrypt unattended. Its public key is also in `BACKUP_AGE_RECIPIENT` (every dump is readable by either secret key); its secret key is `BACKUP_AGE_IDENTITY` on the server. It never replaces the master key.
+## Keys
 
-## Setup
+| Key | Where | Use |
+| --- | --- | --- |
+| Master secret | Offline, held by alpha | Disaster restore. Losing it makes every backup unreadable |
+| Master public | `BACKUP_AGE_RECIPIENT` | Encrypts |
+| Restore-test secret | `BACKUP_AGE_IDENTITY` | Unattended restore test. Cannot delete backups |
+| Restore-test public | `BACKUP_AGE_RECIPIENT` | Encrypts |
 
-Env lives in `.env.<env>` (see `backend/.env.example`):
-
-| Var | Notes |
-| --- | --- |
-| `BACKUP_S3_BUCKET`, `BACKUP_S3_REGION` | prod: the real bucket and its region |
-| `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY` | prod: IAM user with put, list and get on `zenflow/prod/*` (no delete). Staging: the MinIO root key. Vault `backup` set |
-| `BACKUP_S3_ENDPOINT` | set by compose to MinIO in staging; leave unset in prod (AWS) |
-| `BACKUP_AGE_RECIPIENT` | age **public** keys, comma separated: the master key and the restore-test key |
-| `BACKUP_AGE_IDENTITY` | the restore-test **secret** key. Unset = restore test is not scheduled and its alert fires |
-| `BACKUP_PRUNE_DAYS` | staging only: delete objects whose date folder is older than N days (default 1). Never set in prod |
-| `BACKUP_MIN_BYTES` | a smaller dump fails the run and records no success (default 1024) |
-
-Generate keys on a trusted machine, not the server:
+Generate on a trusted machine, not the server:
 
 ```bash
-age-keygen -o master.key        # prints the public key; keep master.key offline
+age-keygen -o master.key        # keep offline
 age-keygen -o restore-test.key  # secret goes in BACKUP_AGE_IDENTITY
 ```
 
-### Who holds the master key
+## Setup
 
-The age **master private key is held off the server** by: **alpha** (stored in a password manager, plus one offline copy; a second holder is recommended so one lost laptop is not fatal). Losing it makes every backup unreadable. The server only ever sees the public key and the restore-test key, which can decrypt backups but cannot delete them.
+Env lives in `.env.<env>` ([example](../../backend/.env.example)).
+
+| Var | Notes |
+| --- | --- |
+| `BACKUP_S3_BUCKET`, `BACKUP_S3_REGION` | Prod bucket and region |
+| `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY` | Prod: IAM user below. Staging: MinIO root key. Vault `backup` set |
+| `BACKUP_S3_ENDPOINT` | Set by compose to MinIO in staging. Unset in prod |
+| `BACKUP_AGE_RECIPIENT` | Comma-separated age public keys (master, restore-test) |
+| `BACKUP_AGE_IDENTITY` | Restore-test secret key. Unset: no restore test, alert fires |
+| `BACKUP_PRUNE_DAYS` | Staging only. Delete date folders older than N days (default 1) |
+| `BACKUP_MIN_BYTES` | Smaller dump fails the run (default 1024) |
 
 ### S3 bucket (prod)
 
 - Versioning on.
-- Retention is by age, set as an S3 lifecycle rule (the IAM user cannot delete, so the container never prunes in prod): expire current objects under `zenflow/prod/` after **14 days** and noncurrent versions after 7. At 3-hourly that is about 112 objects.
-- IAM user policy: `s3:PutObject`, `s3:GetObject`, `s3:ListBucket` on the bucket and `zenflow/prod/*` only. `GetObject` is what `restore-test.sh` needs to download the newest dump; the dumps are age-encrypted, so read access alone exposes nothing. No delete, so a compromised host cannot erase history.
+- Lifecycle rule: expire current objects under `zenflow/prod/` after 14 days, noncurrent after 7.
+- IAM user: put, get and list on `zenflow/prod/*`. No delete.
 
-  ```json
-  {
-    "Version": "2012-10-17",
-    "Statement": [
-      { "Effect": "Allow", "Action": ["s3:PutObject", "s3:GetObject"],
-        "Resource": "arn:aws:s3:::<bucket>/zenflow/prod/*" },
-      { "Effect": "Allow", "Action": "s3:ListBucket", "Resource": "arn:aws:s3:::<bucket>",
-        "Condition": { "StringLike": { "s3:prefix": "zenflow/prod/*" } } }
-    ]
-  }
-  ```
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    { "Effect": "Allow", "Action": ["s3:PutObject", "s3:GetObject"],
+      "Resource": "arn:aws:s3:::<bucket>/zenflow/prod/*" },
+    { "Effect": "Allow", "Action": "s3:ListBucket", "Resource": "arn:aws:s3:::<bucket>",
+      "Condition": { "StringLike": { "s3:prefix": "zenflow/prod/*" } } }
+  ]
+}
+```
 
-  Check it from the server: `restore-test.sh` (see Operate) lists, downloads and restores the newest dump, so a missing `GetObject` shows up as a failed restore test and the "no restore test in 5 days" alert.
+A missing `GetObject` shows as a failed restore test.
 
 ## Operate
 
 ```bash
-docker logs zenflow-backup-<env>                       # job output
-docker exec zenflow-backup-<env> sh -c '. /run/backup.env; sh /opt/backup/backup.sh'        # run now
-docker exec zenflow-backup-<env> sh -c '. /run/backup.env; sh /opt/backup/restore-test.sh'  # test now
+docker logs zenflow-backup-<env>
+docker exec zenflow-backup-<env> sh -c '. /run/backup.env; sh /opt/backup/backup.sh'         # backup now
+docker exec zenflow-backup-<env> sh -c '. /run/backup.env; sh /opt/backup/restore-test.sh'   # test now
+docker exec zenflow-backup-prod sh -c '. /run/backup.env; sh /opt/backup/backup-files.sh'    # files now
 ```
 
-### Confirm Vault and the files are really being backed up
+Check Vault and files (prod):
 
 ```bash
-docker logs zenflow-backup-prod 2>&1 | grep -iE 'vault|files'      # "uploaded vault snapshot", "uploaded s3://.../files/..."
-aws s3 ls --recursive s3://<bucket>/zenflow/prod/ | grep -E 'vault-|/files/' | tail   # newest objects
-docker exec zenflow-backup-prod sh -c '. /run/backup.env; sh /opt/backup/backup-files.sh'  # run the files job now
+docker logs zenflow-backup-prod 2>&1 | grep -iE 'vault|files'
+aws s3 ls --recursive s3://<bucket>/zenflow/prod/ | grep -E 'vault-|/files/' | tail
 ```
 
-The restore test also decrypts and lists the newest Vault snapshot (it does not start Vault) and fails if it is missing or empty.
+The restore test also decrypts the newest Vault snapshot and fails if it is missing or empty.
 
-## Not backed up (by design)
+## Not backed up
 
-Session, rate-limit, queue and kill-switch Redis, Prometheus, Loki, Tempo and Grafana state are rebuildable or disposable; the table is in [migration.md](migration.md). In particular reminders live in Postgres: the queue is a cache that refills about a minute after the watcher starts.
+Redis, Prometheus, Loki, Tempo and Grafana state. See [migration.md](migration.md).
 
 ## Restore
 
@@ -92,59 +94,74 @@ age -d -i master.key -o zenflow.dump zenflow-<ts>.dump.age
 pg_restore --no-owner --clean --if-exists -d <db> zenflow.dump
 ```
 
-Vault: decrypt `vault-<ts>.tar.age` the same way, untar into an empty `vault_data` volume, start Vault, unseal. The copy is taken while Vault runs; it is encrypted at rest by Vault's own seal, so it is useless without 3 of the 5 unseal shares (held offline, see [vault.md](vault.md)).
+**Vault:** decrypt `vault-<ts>.tar.age`, untar into an empty `vault_data` volume, start Vault, unseal with 3 of 5 shares ([vault.md](vault.md)).
 
-Uploaded files: decrypt and untar into an empty `storage_data` volume (stop `storage` first):
+**Files:** stop `storage`, then:
 
 ```bash
 aws s3 cp s3://<bucket>/zenflow/prod/files/<date>/files-<ts>.tar.age .
 age -d -i master.key files-<ts>.tar.age | docker run --rm -i -v zenflow-prod_storage_data:/data alpine tar -xf - -C /data
 ```
 
-(Volume names carry the compose project prefix `zenflow-prod_`; check `docker volume ls`.) Moving to a new machine end to end: [migration.md](migration.md).
+Volume names carry the project prefix (`docker volume ls`). New machine: [migration.md](migration.md).
 
 ## Monitoring
 
-Metrics are written to a textfile volume and exposed by node-exporter:
+Metrics go to a textfile volume, served by node-exporter.
 
 | Metric | Meaning |
 | --- | --- |
-| `zenflow_backup_last_success_timestamp_seconds` | last good backup |
-| `zenflow_backup_last_size_bytes` | size of the last dump |
-| `zenflow_backup_restore_last_success_timestamp_seconds` | last good restore test |
-| `zenflow_backup_last_run_ok`, `zenflow_backup_restore_last_run_ok`, `zenflow_backup_files_last_run_ok` | 1 if the last backup / restore-test / files run succeeded, 0 if it failed |
-| `zenflow_backup_vault_last_success_timestamp_seconds` | last Vault snapshot (prod; taken with each dump) |
-| `zenflow_backup_files_last_success_timestamp_seconds`, `zenflow_backup_files_last_size_bytes` | last uploaded-files archive and its encrypted size (prod) |
-| `zenflow_backup_last_run_timestamp_seconds`, `zenflow_backup_restore_last_run_timestamp_seconds` | when that run finished, whatever the result |
+| `zenflow_backup_last_success_timestamp_seconds` | Last good backup |
+| `zenflow_backup_last_size_bytes` | Last dump size |
+| `zenflow_backup_restore_last_success_timestamp_seconds` | Last good restore test |
+| `zenflow_backup_last_run_ok`, `zenflow_backup_restore_last_run_ok`, `zenflow_backup_files_last_run_ok` | 1 ok, 0 failed |
+| `zenflow_backup_vault_last_success_timestamp_seconds` | Last Vault snapshot (prod) |
+| `zenflow_backup_files_last_success_timestamp_seconds`, `zenflow_backup_files_last_size_bytes` | Last files archive and size (prod) |
+| `zenflow_backup_last_run_timestamp_seconds`, `zenflow_backup_restore_last_run_timestamp_seconds` | Last run end, any result |
 
-Dashboard: **Zenflow · Backups** (`observability/grafana/dashboards/zenflow-backups.json`). It shows the last run's result and the age of the last good backup and restore test, and lists the error lines from the `backup` container (the S3 error, the failing step), so a failure is readable without opening Explore. Every job logs `ERROR <job> failed (exit N) during: <step>` through `record_run` in `ops/backup/lib.sh`.
+Dashboard: **Zenflow Backups** (`observability/grafana/dashboards/zenflow-backups.json`). Failures log `ERROR <job> failed (exit N) during: <step>` (`record_run` in `ops/backup/lib.sh`). "No data" on a prod Vault or files stat means that job never succeeded: read "Backup output".
 
-The dashboard's second row shows the age of the last Vault snapshot and files archive, and the files run result and size. "No data" on a Vault or files stat in prod means that job never succeeded: read the `WARN`/`ERROR` line in "Backup output" (a missing mount is logged, not skipped).
+### Alert rules
 
-Grafana rules (`backend/observability/grafana/provisioning/alerting/backup.yml`): backup run failed and restore test failed (the next evaluation after a failed run, using the `*_last_run_ok` gauges), no backup in 7 h (two missed 3-hourly runs), dump under half its 7-day average size (relative, so a young database does not trip it; the script's own `BACKUP_MIN_BYTES` floor still fails an empty dump), no restore test in 5 days. Before the first success the age counts from the backup container's start, so a fresh deploy does not alert until the threshold passes (the restore test runs Sundays and Wednesdays at 04:00, so its first run can be days out). Missing data (container gone) alerts. Three more rules cover the extras (prod only; staging has neither): no Vault snapshot in 7 h, no files archive in 36 h, and the last files run failed.
+[`backup.yml`](../../backend/observability/grafana/provisioning/alerting/backup.yml). Missing data alerts.
 
-### Alerts
+| Rule | Fires when |
+| --- | --- |
+| Backup failed | `*_last_run_ok` is 0 |
+| Restore test failed | `*_last_run_ok` is 0 |
+| No backup | None in 7 h |
+| Small dump | Under half the 7-day average |
+| No restore test | None in 5 days |
+| No Vault snapshot (prod) | None in 7 h |
+| No files archive (prod) | None in 36 h |
+| Files run failed (prod) | `zenflow_backup_files_last_run_ok` is 0 |
 
-Contact point `zenflow-ops-email` (`alerting/contact-points.yml`) emails alphatran.forwork@gmail.com; it is the default policy, repeating every 4 h.
+Before the first success, age counts from container start.
+
+### Delivery
+
+Contact point `zenflow-ops-email` (`alerting/contact-points.yml`) is the default policy, repeating every 4 h.
 
 | Env | Delivery |
 | --- | --- |
-| Staging | Grafana (<http://grafana.localhost>) sends to Mailpit (<http://localhost:8025>) |
-| Prod | Mailgun SMTP, sender domain `zenflow.alphatrann.com`, from `alerts@zenflow.alphatrann.com` |
+| Staging | Grafana to Mailpit (<http://localhost:8025>) |
+| Prod | Mailgun SMTP from `alerts@zenflow.alphatrann.com` |
 
-Prod Mailgun setup (Grafana only speaks SMTP, not the Mailgun API):
-1. Mailgun: add domain `zenflow.alphatrann.com`; publish the SPF and DKIM DNS records it shows and wait for "verified".
-2. Domain settings > SMTP credentials: create/reset the password for `postmaster@zenflow.alphatrann.com`.
-3. Vault `grafana` set: `GF_SMTP_PASSWORD=<that password>`. The configured host is `smtp.mailgun.org:587`; edit `compose.prod.yml` for a different Mailgun region or sender.
-4. Deploy, then Grafana > Alerting > Contact points > Test, and check Mailgun logs.
+Prod Mailgun setup:
+1. Add domain `zenflow.alphatrann.com`, publish the SPF and DKIM records, wait for "verified".
+2. Create the SMTP password for `postmaster@zenflow.alphatrann.com`.
+3. Set `GF_SMTP_PASSWORD` in Vault `grafana`. Host is `smtp.mailgun.org:587` in `compose.prod.yml`.
+4. Deploy, then Grafana > Alerting > Contact points > Test.
 
-Without the password alerts still fire in Grafana but no mail leaves. Gmail may route a new sender to spam at first; mark it as not spam.
+Without the password, alerts fire but no mail leaves.
 
 ## Rotation
 
-- S3 keys: rotate in IAM/MinIO, update `.env.<env>`, `docker compose up -d backup`.
-- age keys: add the new public key to `BACKUP_AGE_RECIPIENT`; old dumps stay readable only by old keys, so keep the old private key until those expire.
+- S3 keys: rotate in IAM or MinIO, update `.env.<env>`, `docker compose up -d backup`.
+- age keys: add the new public key to `BACKUP_AGE_RECIPIENT`. Keep the old secret key until old dumps expire.
 
 ## Tests
 
-`pnpm --filter backend test:e2e` ([spec](../../backend/test/backup/backup.e2e-spec.ts)): boots its own Postgres + MinIO and the real `backup` service with crond every minute, then checks the encrypted object, Vault snapshot, decrypt + data, restore test, failure paths (small dump, bad S3 key, bad DB, bad age key), pruning, and the metrics. Needs Docker; no other stack. Runs in the normal backend e2e CI job; alone: `pnpm --filter backend exec jest --config ./test/jest-e2e.json backup`.
+`pnpm --filter backend test:e2e` ([spec](../../backend/test/backup/backup.e2e-spec.ts)) boots Postgres, MinIO and the real `backup` service. Needs Docker.
+
+Run alone: `pnpm --filter backend exec jest --config ./test/jest-e2e.json backup`.

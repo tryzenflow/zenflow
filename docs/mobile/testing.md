@@ -10,7 +10,11 @@ Three layers, shaped as a pyramid: many fast tests at the bottom, a handful of s
 
 `pnpm --filter mobile test` runs the first two.
 
-Put a case at the lowest layer that can catch it. Pure logic (date math, payload mapping, state machines) is a unit test. A screen's behaviour against API responses (validation, error and empty states, navigation) is a component test. Only whole journeys that need a real device, the real API or an OS dialog belong in e2e, and only their happy path: validation, error, empty and offline states are component tests (cheaper, faster, less flaky).
+Test at the lowest layer that can catch the case:
+
+- **Unit:** pure logic (date math, payload mapping, state machines).
+- **Component:** a screen against API responses (validation, error and empty states, navigation).
+- **E2e:** whole journeys that need a device, the real API or an OS dialog. Happy path only.
 
 ## Component tests
 
@@ -18,7 +22,9 @@ Screens render through `react-native-web` in happy-dom, with the API mocked over
 
 - Config: `mobile/vitest.component.config.ts`. Native-only modules are replaced by stubs in `mobile/test/mocks/` (aliased in the config) and `mobile/test/setup.component.tsx`.
 - `mobile/test/msw/handlers.ts` holds happy-path defaults. Override per test with `server.use(...)`. Unmatched requests fail the test (`onUnhandledRequest: "error"`), so a screen can't silently call an endpoint you didn't account for.
-- Render with `renderScreen` from `mobile/test/utils/render.tsx` (adds the toast provider and the `PortalHost` that sheets render through). Use `makeSession` and `makeNotification` from `mobile/test/fixtures.ts`. Select elements by `testID` (`getByTestId`); `className` styling is not applied in this environment.
+- Render with `renderScreen` (`mobile/test/utils/render.tsx`, adds toast and `PortalHost`).
+- Fixtures: `makeSession`, `makeNotification` (`mobile/test/fixtures.ts`).
+- Select by `testID` (`getByTestId`). `className` is not applied in tests.
 - Keep tests out of `mobile/app/`: expo-router treats every file there as a route.
 - Peripheral heavy widgets (the rich-text editor, bottom sheets owned by another screen, floating chrome) are `vi.mock`ed per test file.
 - Screens that depend on "now" freeze only the clock: `vi.useFakeTimers({ toFake: ["Date"] })` plus `vi.setSystemTime(...)`. Faking timers wholesale breaks MSW and `waitFor`.
@@ -82,14 +88,15 @@ Install Maestro first: <https://docs.maestro.dev/getting-started/installing-maes
 
 Builds run on GitHub runners via `expo prebuild` (no Expo/EAS account). It is not part of the required `ci-ok` check.
 
-The default (`e2e`) variant bakes in the emulator-host API URL and allows cleartext HTTP (`plugins/withE2eCleartext.js`, enabled only by `ZENFLOW_E2E=1`). For a build pointed at a real API run the workflow manually with `variant: release`; it defaults to `https://zenflow.alphatrann.com/api/v1` unless you pass an `api_url`.
+- `e2e` (default): emulator-host API URL, cleartext HTTP allowed (`plugins/withE2eCleartext.js`, `ZENFLOW_E2E=1` only).
+- `release`: run the workflow manually. API defaults to `https://zenflow.alphatrann.com/api/v1`, or pass `api_url`.
 
 ### Android artifact: `.apk`
 
-A release `.apk` you can sideload onto any Android device or emulator (`adb install zenflow-android.apk`). It is signed with the debug keystore the Expo template uses, so it is fine for testing but not for the Play Store (which needs a release keystore and an `.aab`).
+A release `.apk` for sideloading (`adb install zenflow-android.apk`). Signed with the Expo debug keystore: fine for testing, not the Play Store (needs a release keystore and `.aab`).
 
 ### iOS artifact: `.app` vs `.ipa`
 
 - **Simulator `.app` (what CI produces, zipped).** Runs only in the iOS Simulator on a Mac (`xcrun simctl install booted Zenflow.app`). Needs no Apple account.
-- **Device `.ipa`.** What you install on a real iPhone or upload to TestFlight/App Store. iOS only runs code signed by Apple, so building one needs a paid Apple Developer account (distribution certificate + provisioning profile) and the real bundle id. Not set up yet; when it is, add an `xcodebuild archive` + `-exportArchive` job gated on those secrets.
+- **Device `.ipa`:** for real iPhones, TestFlight and the App Store. Needs a paid Apple Developer account (certificate and provisioning profile). Not set up.
 - **Unsigned `.ipa`** (`zenflow-ios-unsigned.ipa`). A device build with no signature, for sideloading: SideStore/AltStore re-sign it on the phone with a free Apple ID (7-day expiry, push and other paid entitlements unavailable).
