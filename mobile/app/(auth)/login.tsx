@@ -29,6 +29,8 @@ import { z } from "zod";
 import { requestOtp, verifyOtp } from "@/api/auth";
 import { updateBasicInfo } from "@/api/users";
 import { LanguageSelect } from "@/components/language-select";
+import { getBaseURL } from "@/lib/api-client";
+import { type LegalPage, legalUrl } from "@/lib/legal-links";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Form, FormField, FormInput } from "@/components/ui/form";
@@ -162,6 +164,15 @@ function OtpBoxes({
       />
     </Pressable>
   );
+}
+
+function openLegal(page: LegalPage) {
+  const url = legalUrl(page, getBaseURL());
+  // Loaded on tap: the native module isn't needed to render the screen.
+  if (url)
+    void import("expo-web-browser")
+      .then((WebBrowser) => WebBrowser.openBrowserAsync(url))
+      .catch(() => {});
 }
 
 export default function LoginScreen() {
@@ -494,11 +505,19 @@ export default function LoginScreen() {
 
         <Text className="mt-[22px] px-2.5 text-center text-[12px] leading-normal text-muted-foreground">
           {t("By continuing, you agree to our")}{" "}
-          <Text className="text-[12px] font-medium text-brand-orange">
+          <Text
+            className="text-[12px] font-medium text-brand-orange"
+            accessibilityRole="link"
+            onPress={() => openLegal("terms")}
+          >
             {t("Terms of Service")}
           </Text>{" "}
           {t("and")}{" "}
-          <Text className="text-[12px] font-medium text-brand-orange">
+          <Text
+            className="text-[12px] font-medium text-brand-orange"
+            accessibilityRole="link"
+            onPress={() => openLegal("privacy")}
+          >
             {t("Privacy Policy")}
           </Text>
           .
