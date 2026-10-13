@@ -113,8 +113,7 @@ describe("NewSessionScreen", () => {
         params: { date: "2026-10-15T03:00:00.000Z", flash: "new1" },
       }),
     );
-    await toastShown("Scheduled for 10:00 AM");
-    await toastShown("Thu Oct 15");
+    await toastShown("Scheduled for Thu, Oct 15, 10:00 AM");
   });
 
   it("just goes back when the scheduler found no slot", async () => {
