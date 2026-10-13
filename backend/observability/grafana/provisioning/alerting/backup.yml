@@ -43,7 +43,7 @@ groups:
         noDataState: OK
         execErrState: OK
         annotations:
-          summary: Last encrypted dump is under 1 MiB
+          summary: Last encrypted dump is under half its 7-day average size
           runbook: docs/ops/backups.md
         labels:
           severity: critical
@@ -51,13 +51,13 @@ groups:
           - refId: A
             relativeTimeRange: {from: 600, to: 0}
             datasourceUid: prometheus
-            model: {refId: A, expr: 'min(zenflow_backup_last_size_bytes)', instant: true}
+            model: {refId: A, expr: 'min(zenflow_backup_last_size_bytes) / avg_over_time(min(zenflow_backup_last_size_bytes)[7d:1h])', instant: true}
           - refId: B
             datasourceUid: __expr__
             model: {refId: B, type: reduce, expression: A, reducer: last}
           - refId: C
             datasourceUid: __expr__
-            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: lt, params: [1048576]}}]}
+            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: lt, params: [0.5]}}]}
       - uid: zenflow-backup-restore-stale
         title: Backup restore test stale
         condition: C

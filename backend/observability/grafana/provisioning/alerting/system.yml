@@ -13,7 +13,7 @@ groups:
       - uid: zenflow-api-not-ready
         title: API not ready
         condition: C
-        for: 3m
+        for: 5m
         noDataState: Alerting
         execErrState: Alerting
         annotations:
@@ -105,7 +105,7 @@ groups:
         noDataState: OK
         execErrState: OK
         annotations:
-          summary: "A provider has had no fully successful sync for over 2 h: check watcher logs and credentials"
+          summary: "A provider has gone past its sync period (LMS hourly, PORTAL daily) with no fully successful sync: check watcher logs and credentials"
           runbook: docs/ops/alerting.md
         labels:
           severity: warning
@@ -113,13 +113,13 @@ groups:
           - refId: A
             relativeTimeRange: {from: 600, to: 0}
             datasourceUid: prometheus
-            model: {refId: A, expr: 'max(time() - ingestion_last_success_timestamp_seconds)', instant: true}
+            model: {refId: A, expr: 'max((time() - ingestion_last_success_timestamp_seconds{provider="LMS"}) / 7200 or (time() - ingestion_last_success_timestamp_seconds{provider="PORTAL"}) / 108000)', instant: true}
           - refId: B
             datasourceUid: __expr__
             model: {refId: B, type: reduce, expression: A, reducer: last}
           - refId: C
             datasourceUid: __expr__
-            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [7200]}}]}
+            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [1]}}]}
       - uid: zenflow-queue-dlq
         title: Dead-letter queue not empty
         condition: C
