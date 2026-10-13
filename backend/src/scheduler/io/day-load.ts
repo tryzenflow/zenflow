@@ -8,6 +8,11 @@ import type { DayLoad } from "../types/day-load.types";
 import { expandRrule } from "../core/recurrence";
 import { blocksPlacement, DAY_MS, type Interval } from "../core/slot";
 
+/** Null-safe "not a member of series `id`" filter (standalone rows pass). */
+const notInSeries = (id: string) => [
+  { OR: [{ seriesId: null }, { seriesId: { not: id } }] },
+];
+
 /**
  * Loads, for ONE local calendar day, everything a placer must schedule around
  * plus the per-type workload already on that day. Shared by
@@ -84,7 +89,11 @@ export async function loadDayLoad(
       // below, so it isn't double-counted.
       OR: [{ seriesId: null }, { series: { is: { rrule: null } } }],
       // Drop every row of the series being test-landed for itself, if any.
-      ...(excludeSeriesId ? { NOT: { seriesId: excludeSeriesId } } : {}),
+      // Spelled out with an explicit `seriesId: null` branch: a bare
+      // `NOT: { seriesId: x }` compiles to SQL `NOT (seriesId = x)`, which is
+      // NULL (so the row is dropped) for every standalone row — timetable
+      // lectures, exams, assignments — hiding exactly what must still block.
+      ...(excludeSeriesId ? { AND: notInSeries(excludeSeriesId) } : {}),
       // A day back so a session that began the previous night and runs into
       // this day is still returned; filtered to actual overlap below.
       scheduledStartTime: { gte: new Date(dayStartMs - DAY_MS), lte: scanEnd },
@@ -147,6 +156,7 @@ export async function loadDayLoad(
       new Date(dayStartMs - DAY_MS),
       scanEnd,
       timezone,
+      series.exdates,
     )) {
       const start = occStart.getTime();
       const end = start + rep.durationMinutes * 60_000;
@@ -214,7 +224,7 @@ export async function loadScheduleItems(
           ? { id: { notIn: excludeSessionIds } }
           : {}),
         OR: [{ seriesId: null }, { series: { is: { rrule: null } } }],
-        ...(excludeSeriesId ? { NOT: { seriesId: excludeSeriesId } } : {}),
+        ...(excludeSeriesId ? { AND: notInSeries(excludeSeriesId) } : {}),
         scheduledStartTime: { gte: scanStart, lte: scanEnd },
       },
       select: {
@@ -267,6 +277,7 @@ export async function loadScheduleItems(
       scanStart,
       scanEnd,
       timezone,
+      series.exdates,
     )) {
       const start = occStart.getTime();
       items.push({
