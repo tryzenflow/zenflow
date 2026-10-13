@@ -26,6 +26,7 @@ import { useIntegrationStore } from "@/hooks/use-integration-store";
 import { useNotificationToggle } from "@/hooks/use-notification-toggle";
 import { usePushStatusStore } from "@/hooks/use-push-status-store";
 import { useUserStore } from "@/hooks/use-user-store";
+import { DEFAULT_USER_NAME } from "@zenflow/shared";
 import {
   FIRST_STEP,
   type OnboardingStep,
@@ -301,7 +302,10 @@ export default function OnboardingScreen() {
   // skipping or going back returns straight to the summary.
   const [fromSummary, setFromSummary] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [name, setName] = useState(user?.name ?? "");
+  // The placeholder name means "not set": start empty instead of showing it.
+  const [name, setName] = useState(
+    user?.name && user.name !== DEFAULT_USER_NAME ? user.name : "",
+  );
   const [blocked, setBlocked] = useState(false);
   const [tzQuery, setTzQuery] = useState("");
   const [tags, setTags] = useState<string[]>([]);

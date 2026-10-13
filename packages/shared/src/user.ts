@@ -1,3 +1,10 @@
+/**
+ * The name a new account gets when none can be read from its email (a student
+ * number such as `2012345@dlu.edu.vn` has no name in it). Clients treat it as
+ * "not set yet" and ask for a real one.
+ */
+export const DEFAULT_USER_NAME = "New User";
+
 /** Supported UI languages (wire form of the DB `Language` enum). */
 export const LANGS = ["vi", "en"] as const;
 export type Lang = (typeof LANGS)[number];
