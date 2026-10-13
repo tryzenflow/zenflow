@@ -22,6 +22,11 @@ export interface LegalChrome {
   privacyLink: string;
   termsLink: string;
   languageName: string;
+  /** Short label for the language switch, e.g. EN. */
+  languageShort: string;
+  contentsLabel: string;
+  /** Page `<title>` from the document title; no separator characters. */
+  siteTitle: (title: string) => string;
   /** ISO date formatted for display. */
   formatDate: (iso: string) => string;
 }

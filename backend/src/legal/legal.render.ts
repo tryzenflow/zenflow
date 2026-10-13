@@ -17,7 +17,12 @@ export function escapeHtml(text: string): string {
 function inline(text: string, email: string): string {
   const safe = escapeHtml(text);
   const mail = escapeHtml(email);
-  return safe.replaceAll("{{email}}", `<a href="mailto:${mail}">${mail}</a>`);
+  return safe
+    .replaceAll("{{email}}", `<a href="mailto:${mail}">${mail}</a>`)
+    .replaceAll(
+      "zenflow.alphatrann.com",
+      '<span class="nh">zenflow.alphatrann.com</span>',
+    );
 }
 
 function block(b: LegalBlock, email: string): string {
@@ -25,23 +30,56 @@ function block(b: LegalBlock, email: string): string {
   return `<ul>${b.list.map((li) => `<li>${inline(li, email)}</li>`).join("")}</ul>`;
 }
 
+/** "3. Your account" -> number "3" and title "Your account"; headings without a number keep it null. */
+function splitHeading(heading: string): { n: string | null; title: string } {
+  const m = /^(\d+)\.\s+(.*)$/.exec(heading);
+  return m ? { n: m[1], title: m[2] } : { n: null, title: heading };
+}
+
 const STYLE = `
-:root{--bg:#fefcfa;--fg:#0f0d0a;--muted:#797065;--border:#e8e5df;--primary:#c2540a;--card:#fff}
-@media (prefers-color-scheme:dark){:root{--bg:#0f0d0a;--fg:#fbfaf8;--muted:#aca397;--border:#36322d;--primary:#ff9a52;--card:#1d1a17}}
+:root{color-scheme:light dark;--bg:#fefcfa;--fg:#1c1814;--muted:#7a7066;--rule:#e8e3dc;--primary:#c2540a;--soft:#fbf3ea}
+@media (prefers-color-scheme:dark){:root{--bg:#0f0d0a;--fg:#f6f2ec;--muted:#aca295;--rule:#2f2b26;--primary:#ff9a52;--soft:#1a1612}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
-header,main,footer{max-width:720px;margin:0 auto;padding:0 20px}
-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:24px;padding-bottom:8px}
-.brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:19px;color:var(--fg);text-decoration:none}
-nav{display:flex;gap:6px;flex-wrap:wrap;font-size:14px}
-nav a{padding:6px 12px;border:1px solid var(--border);border-radius:999px;color:var(--muted);text-decoration:none}
-nav a[aria-current=page]{background:var(--primary);border-color:var(--primary);color:#fff}
-h1{font-size:32px;line-height:1.2;letter-spacing:-.02em;margin:28px 0 6px}
-h2{font-size:19px;margin:34px 0 8px;letter-spacing:-.01em}
-.updated{color:var(--muted);font-size:14px;margin:0 0 18px}
-p{margin:0 0 14px}ul{margin:0 0 14px;padding-left:22px}li{margin:0 0 6px}
-a{color:var(--primary)}
-footer{padding-top:32px;padding-bottom:48px;color:var(--muted);font-size:14px;border-top:1px solid var(--border);margin-top:40px}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;scroll-padding-top:16px}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.7 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased}
+.sun{height:4px;background:linear-gradient(90deg,#ff6900,#f0b100 55%,#d8f999)}
+.wrap{max-width:700px;margin:0 auto;padding:0 22px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:22px}
+.brand{display:flex;align-items:center;gap:10px;color:var(--fg);text-decoration:none;font-weight:650;font-size:19px;letter-spacing:-.01em}
+.lang{display:inline-flex;gap:2px;padding:3px;border:1px solid var(--rule);border-radius:999px}
+.lang a{min-width:42px;padding:5px 10px;border-radius:999px;text-align:center;font-size:13px;font-weight:650;letter-spacing:.04em;color:var(--muted);text-decoration:none}
+.lang a[aria-current]{background:var(--fg);color:var(--bg)}
+.tabs{display:flex;gap:26px;margin-top:18px;border-bottom:1px solid var(--rule);overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs a{flex:none;padding:10px 0 11px;margin-bottom:-1px;border-bottom:2px solid transparent;color:var(--muted);text-decoration:none;font-size:15px;font-weight:550}
+.tabs a[aria-current]{color:var(--fg);border-color:var(--primary)}
+h1{margin:34px 0 8px;font-size:clamp(30px,7vw,42px);line-height:1.12;letter-spacing:-.025em}
+.updated{margin:0 0 22px;color:var(--muted);font-size:14.5px}
+.lead{font-size:18px;color:var(--fg)}
+p,li{text-align:justify;text-justify:inter-word;hyphens:auto;-webkit-hyphens:auto;text-wrap:pretty;overflow-wrap:anywhere}
+p{margin:0 0 15px}
+ul{margin:0 0 15px;padding-left:22px}
+li{margin:0 0 8px}
+li::marker{color:var(--primary)}
+a{color:var(--primary);text-underline-offset:3px}
+a,.nh{hyphens:none;-webkit-hyphens:none}
+.toc{margin:26px 0 8px;border:1px solid var(--rule);border-radius:14px;background:var(--soft)}
+.toc summary{cursor:pointer;padding:13px 18px;font-weight:650;font-size:15px;list-style:none}
+.toc summary::-webkit-details-marker{display:none}
+.toc summary::after{content:"+";float:right;color:var(--muted);font-weight:500}
+.toc[open] summary::after{content:"\\2212"}
+.toc ol{margin:0;padding:2px 18px 14px;list-style:none;columns:2 240px;column-gap:28px;font-size:15px;line-height:1.45}
+.toc li{margin:0 0 7px;text-align:left;break-inside:avoid}
+.toc a{color:var(--fg);text-decoration:none}
+.toc a:hover{color:var(--primary)}
+.toc .n{display:inline-block;min-width:1.6em;color:var(--primary);font-variant-numeric:tabular-nums;font-weight:650}
+section{padding:26px 0 12px;border-top:1px solid var(--rule)}
+h2{display:flex;align-items:baseline;gap:12px;margin:0 0 12px;font-size:21px;line-height:1.3;letter-spacing:-.012em}
+h2 .n{flex:none;min-width:1.4em;color:var(--primary);font-variant-numeric:tabular-nums}
+footer{margin-top:30px;padding:22px 0 56px;border-top:1px solid var(--rule);color:var(--muted);font-size:14.5px;display:flex;flex-wrap:wrap;gap:8px 26px}
+footer a{color:var(--muted)}
+footer a[aria-current]{color:var(--fg);text-decoration:none;font-weight:600}
+@media (max-width:480px){body{font-size:16.5px}.lead{font-size:17px}h2{font-size:19.5px}}
 `;
 
 const LOGO = `<svg width="30" height="30" viewBox="0 0 260 260" fill="none" aria-hidden="true"><circle cx="130" cy="130" r="130" fill="url(#g)"/><path d="M220.5 51.5C220.5 51.5 172.668 65.7587 147.635 89.6235C122.602 113.488 136.249 158.201 104.912 183.517C80.2542 203.436 33 199.5 33 199.5" stroke="#FFF085" stroke-width="24" stroke-linecap="round"/><defs><linearGradient id="g" x1="48.5" y1="31.5" x2="222.5" y2="220.5" gradientUnits="userSpaceOnUse"><stop stop-color="#FF6900"/><stop offset=".3236" stop-color="#F0B100"/><stop offset="1" stop-color="#D8F999"/></linearGradient></defs></svg>`;
@@ -54,17 +92,34 @@ export function renderLegalPage(
   const doc = LEGAL_DOCS[page][lang];
   const chrome = LEGAL_CHROME[lang];
   const other: LegalLang = lang === "en" ? "vi" : "en";
-  const otherPage: LegalPage = page === "privacy" ? "terms" : "privacy";
-  const otherTitle = LEGAL_DOCS[otherPage][lang].title;
+  const pages: LegalPage[] = ["privacy", "terms"];
 
-  const body = doc.sections
+  const sections = doc.sections.map((s, i) => ({
+    id: `s${i + 1}`,
+    ...splitHeading(s.heading),
+    body: s.body,
+  }));
+
+  const toc = sections
     .map(
       (s) =>
-        `<section><h2>${escapeHtml(s.heading)}</h2>${s.body
+        `<li><a href="#${s.id}">${s.n ? `<span class="n">${escapeHtml(s.n)}</span>` : ""}${escapeHtml(s.title)}</a></li>`,
+    )
+    .join("");
+
+  const body = sections
+    .map(
+      (s) =>
+        `<section id="${s.id}"><h2>${s.n ? `<span class="n">${escapeHtml(s.n)}</span>` : ""}<span>${escapeHtml(s.title)}</span></h2>${s.body
           .map((b) => block(b, email))
           .join("")}</section>`,
     )
     .join("");
+
+  const langLink = (l: LegalLang) =>
+    `<a href="/${page}?lang=${l}" hreflang="${l}" lang="${l}"${l === lang ? ' aria-current="true"' : ""} aria-label="${escapeHtml(LEGAL_CHROME[l].languageName)}">${LEGAL_CHROME[l].languageShort}</a>`;
+  const tab = (p: LegalPage) =>
+    `<a href="/${p}?lang=${lang}"${p === page ? ' aria-current="page"' : ""}>${escapeHtml(LEGAL_DOCS[p][lang].title)}</a>`;
 
   return `<!doctype html>
 <html lang="${chrome.htmlLang}">
@@ -72,25 +127,33 @@ export function renderLegalPage(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>${escapeHtml(doc.title)} · Zenflow</title>
+<title>${escapeHtml(chrome.siteTitle(doc.title))}</title>
 <link rel="alternate" hreflang="${other}" href="/${page}?lang=${other}">
 <style>${STYLE}</style>
 </head>
 <body>
+<div class="sun"></div>
+<div class="wrap">
 <header>
+<div class="top">
 <a class="brand" href="/${page}?lang=${lang}">${LOGO}<span>Zenflow</span></a>
-<nav aria-label="Legal">
-<a href="/${page}?lang=${other}" hreflang="${other}">${escapeHtml(LEGAL_CHROME[other].languageName)}</a>
-<a href="/${otherPage}?lang=${lang}">${escapeHtml(otherTitle)}</a>
-</nav>
+<nav class="lang" aria-label="Language">${langLink("en")}${langLink("vi")}</nav>
+</div>
+<nav class="tabs" aria-label="Legal">${pages.map(tab).join("")}</nav>
 </header>
 <main>
 <h1>${escapeHtml(doc.title)}</h1>
 <p class="updated">${escapeHtml(chrome.updatedLabel)}: ${escapeHtml(chrome.formatDate(LEGAL_UPDATED))}</p>
-<p>${inline(doc.intro, email)}</p>
+<p class="lead">${inline(doc.intro, email)}</p>
+<details class="toc"><summary>${escapeHtml(chrome.contentsLabel)}</summary><ol>${toc}</ol></details>
 ${body}
 </main>
-<footer>© 2026 Zenflow · <a href="/privacy?lang=${lang}"${page === "privacy" ? ' aria-current="page"' : ""}>${escapeHtml(chrome.privacyLink)}</a> · <a href="/terms?lang=${lang}"${page === "terms" ? ' aria-current="page"' : ""}>${escapeHtml(chrome.termsLink)}</a></footer>
+<footer>
+<span>&copy; 2026 Zenflow</span>
+<a href="/privacy?lang=${lang}"${page === "privacy" ? ' aria-current="page"' : ""}>${escapeHtml(chrome.privacyLink)}</a>
+<a href="/terms?lang=${lang}"${page === "terms" ? ' aria-current="page"' : ""}>${escapeHtml(chrome.termsLink)}</a>
+</footer>
+</div>
 </body>
 </html>`;
 }
