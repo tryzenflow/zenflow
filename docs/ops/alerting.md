@@ -10,7 +10,7 @@ Thresholds are in the rule files; this table says what each alert means and wher
 | TLS certificate expires soon | Public certificate under 14 days left (prod only) | certbot container logs |
 | High 5xx error ratio | Server errors over 5% of requests | API Overview dashboard, errors panel, slow/failed traces |
 | High API latency | p95 over 2 s, sync excluded | API Overview, traces row, outbound client latency |
-| Ingestion stale | A provider has had no fully successful sync for 2 h | Ingestion dashboard, watcher error logs (missing key, rejected login) |
+| Ingestion stale | A provider has had no fully successful sync for longer than its period (LMS 2 h, PORTAL 30 h; PORTAL syncs each student once a day) | Ingestion dashboard, watcher error logs (missing key, rejected login) |
 | Watcher sign-in errors | Watchers cannot sign in upstream: missing API key, upstream error (stale student passwords do not count) | Ingestion logs, error level: names the missing setting |
 | Dead-letter queue not empty | Jobs ran out of retries | Queues dashboard, worker logs |
 | Queue wait high | Jobs wait over 60 s before a worker starts | Queues dashboard, worker health |

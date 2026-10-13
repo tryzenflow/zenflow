@@ -93,7 +93,7 @@ Metrics are written to a textfile volume and exposed by node-exporter:
 
 Dashboard: **Zenflow · Backups** (`observability/grafana/dashboards/zenflow-backups.json`). It shows the last run's result and the age of the last good backup and restore test, and lists the error lines from the `backup` container (the S3 error, the failing step), so a failure is readable without opening Explore. Every job logs `ERROR <job> failed (exit N) during: <step>` through `record_run` in `ops/backup/lib.sh`.
 
-Grafana rules (`backend/observability/grafana/provisioning/alerting/backup.yml`): backup run failed and restore test failed (the next evaluation after a failed run, using the `*_last_run_ok` gauges), no backup in 7 h (two missed 3-hourly runs), dump under 1 MiB, no restore test in 5 days. Before the first success the age counts from the backup container's start, so a fresh deploy does not alert until the threshold passes (the restore test runs Sundays and Wednesdays at 04:00, so its first run can be days out). Missing data (container gone) alerts.
+Grafana rules (`backend/observability/grafana/provisioning/alerting/backup.yml`): backup run failed and restore test failed (the next evaluation after a failed run, using the `*_last_run_ok` gauges), no backup in 7 h (two missed 3-hourly runs), dump under half its 7-day average size (relative, so a young database does not trip it; the script's own `BACKUP_MIN_BYTES` floor still fails an empty dump), no restore test in 5 days. Before the first success the age counts from the backup container's start, so a fresh deploy does not alert until the threshold passes (the restore test runs Sundays and Wednesdays at 04:00, so its first run can be days out). Missing data (container gone) alerts.
 
 ### Alerts
 
