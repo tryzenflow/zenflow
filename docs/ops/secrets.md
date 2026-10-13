@@ -71,7 +71,7 @@ sops --encrypt --input-type dotenv --output-type dotenv backend/.env.staging > b
 # store the age PRIVATE key as the SOPS_AGE_KEY Environment secret; delete the plaintext file
 ```
 
-- With compose `env_file`, plaintext lands in `.env.<env>` on the host (root-owned, 600). That is the accepted minimum.
+- With compose `env_file`, plaintext lands in `.env.<env>` on the host (owned by the deploy user, 600; see [server-access.md](server-access.md)). That is the accepted minimum.
 - `*_FILE` mounts on tmpfs (compose `secrets:`) would remove it from host disk and `docker inspect`.
 - Staging acceptance check: set `SECRETS_PROVIDER` on the staging Environment, deploy, confirm `docker compose ps` is healthy and `ls -l` shows a fresh `.env.staging` mtime.
 
@@ -183,7 +183,7 @@ Review quarterly and on every offboarding; rotate anything the departing person 
 | `SOPS_AGE_KEY` / age private key | _names_ | holder | _owner_ | _date_ |
 | GitHub `production` Environment reviewers | _names_ | approve deploys | _owner_ | _date_ |
 | GitHub repo admins (can read Environment secrets via workflows) | _names_ | admin | _owner_ | _date_ |
-| Deploy host SSH | _names_ | root / deploy user | _owner_ | _date_ |
+| Deploy host SSH | _names_ | `admin` (sudo) / `deploy` (CI) | _owner_ | _date_ |
 | SMTP / Firebase / Apple accounts | _names_ | admin | _owner_ | _date_ |
 
 ## Guardrails
