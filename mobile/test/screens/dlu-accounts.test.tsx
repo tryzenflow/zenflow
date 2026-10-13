@@ -101,7 +101,7 @@ describe("DluAccountsSection — connected account", () => {
       status("PORTAL"),
     );
     renderScreen(<DluAccountsSection />);
-    expect(screen.getByText("Sync failing · last synced 5 min ago")).toBeTruthy();
+    expect(screen.getByText("Sync failing, last synced 5 min ago")).toBeTruthy();
   });
 
   it("syncs now and confirms", async () => {

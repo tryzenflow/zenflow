@@ -84,14 +84,11 @@ const COPY = {
     },
     get body() {
       return t(
-        "Shown in the app and in reminders. We guessed it from your email.",
+        "Shown in the app and in your reminders.",
       );
     },
     get label() {
       return t("Display name");
-    },
-    get hint() {
-      return t("Prefilled from your email — edit if you like");
     },
   },
   dlu: {
@@ -105,7 +102,7 @@ const COPY = {
     },
     get hint() {
       return t(
-        "You can also do this later in Settings → Connect your LMS or portal.",
+        "You can also do this later in Settings, under Connect your LMS or portal.",
       );
     },
   },
@@ -161,7 +158,7 @@ const COPY = {
       return t("Search all timezones");
     },
     get refine() {
-      return t("Showing the closest matches — refine your search to see more");
+      return t("Showing the closest matches. Refine your search to see more.");
     },
   },
   reminder: {
@@ -174,7 +171,7 @@ const COPY = {
       );
     },
     get hint() {
-      return t("Optional · saved as your default reminder.");
+      return t("Optional. Saved as your default reminder.");
     },
   },
   tags: {
@@ -188,7 +185,7 @@ const COPY = {
     },
     footer: (n: number) =>
       t(
-        "{count} selected · saved to your account",
+        "{count} selected, saved to your account",
         { count: n },
       ),
   },
@@ -538,9 +535,6 @@ export default function OnboardingScreen() {
             autoComplete="name"
             maxLength={100}
           />
-          <Text className="mt-2 text-[12.5px] text-muted-foreground">
-            {COPY.name.hint}
-          </Text>
         </View>
       );
       footer = (
@@ -684,7 +678,7 @@ export default function OnboardingScreen() {
               <Text className="text-[15px] font-semibold">
                 {device}
                 <Text className="font-normal text-muted-foreground">
-                  {gmtOffset(device) ? ` · ${gmtOffset(device)}` : ""}
+                  {gmtOffset(device) ? ` (${gmtOffset(device)})` : ""}
                 </Text>
               </Text>
             </View>
@@ -796,15 +790,7 @@ export default function OnboardingScreen() {
       ) : null;
       footer = (
         <>
-          {primary(
-            tagsForBulk(tags).length > 0
-              ? t("Continue · {count} tags", {
-                  count: tagsForBulk(tags).length,
-                })
-              : COPY.continue,
-            saveTags,
-            !tagsLoaded,
-          )}
+          {primary(COPY.continue, saveTags, !tagsLoaded)}
           {tagsForBulk(tags).length === 0 && ghost(COPY.skipForNow, advance)}
         </>
       );

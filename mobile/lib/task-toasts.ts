@@ -315,7 +315,7 @@ export function showSeriesAlternativesPrompt(
         : "{count} sittings have an alternative",
       { count },
     ),
-    description: t("All {total} are already scheduled — swap any you like", {
+    description: t("All {total} are already scheduled. Swap any you like.", {
       total,
     }),
     variant: "tip",

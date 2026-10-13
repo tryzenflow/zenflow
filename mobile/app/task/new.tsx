@@ -332,7 +332,7 @@ function NewSessionForm() {
     ? t("New session")
     : type === "TASK"
       ? t("From {date}", { date: format(initialStart, "EEEE, MMM d") })
-      : t("From {date} · starts {time}", {
+      : t("From {date}, starts {time}", {
           date: format(initialStart, "EEEE, MMM d"),
           time: format(initialStart, "h:mm a"),
         });

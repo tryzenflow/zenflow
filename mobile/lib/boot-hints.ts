@@ -13,6 +13,5 @@ export function bootHints(): string[] {
     t("Drag a held task to the screen edge to scroll as you move."),
     t("Hold a task without moving for Move to… and more."),
     t("Swipe a notification left to dismiss it."),
-    t("Timetable classes and exams stay put when you drag."),
   ];
 }

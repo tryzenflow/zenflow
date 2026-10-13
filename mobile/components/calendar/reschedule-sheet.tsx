@@ -245,7 +245,7 @@ export const RescheduleSheet = forwardRef<
               className="mt-[3px] text-[13px] text-muted-foreground"
             >
               {session?.title ?? ""}
-              {date ? ` · ${formatTitle(date, "EEE, MMM d")}` : ""}
+              {date ? `, ${formatTitle(date, "EEE, MMM d")}` : ""}
             </Text>
           </View>
 

@@ -134,7 +134,7 @@ function rowSubtitle(
   if (status.failing || status.lastSyncStatus === "FAILED")
     return {
       text: status.lastSuccessAt
-        ? t("Sync failing · last synced {time}", {
+        ? t("Sync failing, last synced {time}", {
             time: shortAgo(status.lastSuccessAt),
           })
         : t("Sync failing"),

@@ -236,7 +236,7 @@ export const SessionListSheet = forwardRef<
             />
             <Text className="flex-1 text-[12px] leading-snug text-muted-foreground">
               {t(
-                "Press and hold, then drag onto another day this month — or tap Move to pick any date.",
+                "Press and hold, then drag onto another day this month. Or tap Move to pick any date.",
               )}
             </Text>
           </View>

@@ -95,7 +95,7 @@ export function buildSlotOptions(
   return [
     {
       kind: "primary",
-      label: `${capitalize(primaryDay)} · ${formatRange(primary, addMinutes(primary, dur))}`,
+      label: `${capitalize(primaryDay)}, ${formatRange(primary, addMinutes(primary, dur))}`,
       time: format(primary, "h:mm a"),
       range: formatRange(primary, addMinutes(primary, dur)),
       day: primaryDay,
@@ -104,7 +104,7 @@ export function buildSlotOptions(
     },
     {
       kind: "alternative",
-      label: `${capitalize(alternativeDay)} · ${formatRange(alternative, addMinutes(alternative, dur))}`,
+      label: `${capitalize(alternativeDay)}, ${formatRange(alternative, addMinutes(alternative, dur))}`,
       time: format(alternative, "h:mm a"),
       range: formatRange(alternative, addMinutes(alternative, dur)),
       day: alternativeDay,

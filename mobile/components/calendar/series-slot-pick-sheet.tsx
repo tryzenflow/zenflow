@@ -275,7 +275,7 @@ const SeriesSlotPickSheet = forwardRef<
               <Text className="text-[12.5px] text-muted-foreground mt-[3px]">
                 {single
                   ? `${title} · ${duration}m`
-                  : t("{title} · {count} of {total} have alternatives", {
+                  : t("{title}, {count} of {total} have alternatives", {
                       title,
                       count: pairs.length,
                       total,
@@ -285,7 +285,7 @@ const SeriesSlotPickSheet = forwardRef<
             <Pressable
               onPress={handleDismiss}
               disabled={busy}
-              accessibilityLabel={t("Close — keeps everything as scheduled")}
+              accessibilityLabel={t("Close and keep everything as scheduled")}
               className="inline-flex size-8 items-center justify-center shrink-0"
             >
               <X size={15} className="text-muted-foreground" />

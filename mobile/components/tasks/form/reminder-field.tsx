@@ -125,7 +125,7 @@ export function ReminderField({
       </View>
       <Text className="text-[12.5px] leading-snug text-muted-foreground">
         {full
-          ? t("{count} of {max} reminders set — tap one to change it.", {
+          ? t("{count} of {max} reminders set. Tap one to change it.", {
               count: value.length,
               max: MAX_REMINDERS_PER_SESSION,
             })
