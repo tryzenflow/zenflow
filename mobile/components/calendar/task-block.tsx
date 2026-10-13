@@ -75,6 +75,8 @@ const COMPACT_TEXT_STYLE = {
  * dragged into for the timeline to start auto-scrolling under it, so an
  * off-screen drop slot can be reached. Rough bands (a header sits above, a
  * floating tab bar below) — auto-scroll doesn't need pixel precision. */
+/** Hold time before a block lifts for dragging (also opens the menu on release). */
+const LIFT_HOLD_MS = 350;
 const AUTOSCROLL_BAND_TOP = 140;
 const AUTOSCROLL_BAND_BOTTOM = 90;
 
@@ -359,6 +361,9 @@ function SessionBlockImpl({
   // Raw finger translationY of the live drag, so the auto-scroll reaction can
   // re-snap without a fresh touch event.
   const fingerTYSV = useSharedValue(0);
+  // 1 once the finger moved after the hold lifted the block (vs. a still hold).
+  const movedSV = useSharedValue(0);
+  const hasMenu = !!onRequestReschedule || !!onLongPressMenu;
   // Last reported vertical auto-scroll direction (fire `onDragVerticalEdge`
   // only on change).
   const vEdgeSV = useSharedValue<-1 | 0 | 1>(0);
@@ -570,19 +575,23 @@ function SessionBlockImpl({
     },
   );
 
-  // Horizontal activation threshold (10px) must stay BELOW the Week pager's
-  // 12px `activeOffsetX` (week-pager.tsx): a touch that starts on a block
-  // then activates this pan first, and RNGH's exclusive parent/child
-  // arbitration fails the pager the moment we activate — so the day can never
-  // steal a block drag. The block owns any gesture that starts on it.
+  // The drag is hold-then-drag: a swipe that starts on a block scrolls the
+  // day / pages the week right away, and only a finger held still for 350ms
+  // lifts the block. Released without moving, the same hold opens the "Move
+  // to…" sheet (see `onEnd`). Once active this pan owns the touch, so the
+  // pager and scroll view can no longer steal it.
   const panGesture = Gesture.Pan()
     .enabled(isInteractive)
-    .activeOffsetX([-10, 10])
-    .activeOffsetY([-10, 10])
+    .activateAfterLongPress(LIFT_HOLD_MS)
+    .onStart(() => {
+      movedSV.value = 0;
+      runOnJS(liftHaptic)();
+    })
     .onUpdate((e) => {
       const absX = Math.abs(e.translationX);
       const absY = Math.abs(e.translationY);
 
+      if (absX > 6 || absY > 6) movedSV.value = 1;
       translateY.value = e.translationY;
       fingerTYSV.value = e.translationY;
       // Grid scroll that happened under the finger counts toward the move.
@@ -674,6 +683,8 @@ function SessionBlockImpl({
         snapOffsetY.value = 0;
         translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
         translateX.value = withSpring(0, { damping: 20, stiffness: 300 });
+        // Held and released in place: open the "Move to…" sheet.
+        if (movedSV.value === 0 && hasMenu) runOnJS(openMenu)();
       }
     })
     .onFinalize(() => {
@@ -693,34 +704,24 @@ function SessionBlockImpl({
     onPress?.(segment.taskId);
   }, [onPress, segment.taskId]);
 
-  const triggerLongPress = useCallback(() => {
+  const liftHaptic = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+  }, []);
+
+  const openMenu = useCallback(() => {
     if (onLongPressMenu) onLongPressMenu(segment.taskId);
     else onRequestReschedule?.(segment.taskId);
   }, [onLongPressMenu, onRequestReschedule, segment.taskId]);
 
+  // Shorter than the hold, so lifting a held block never also counts as a tap.
   const tapGesture = Gesture.Tap()
     .enabled(isTappable)
+    .maxDuration(LIFT_HOLD_MS - 50)
     .onEnd(() => {
       runOnJS(triggerPress)();
     });
 
-  // A still finger held on the block opens the "Move to…" sheet; any real
-  // drag fails the long-press (`maxDistance`) so `panGesture` wins the
-  // `Exclusive` race and runs the in-day vertical time-drag as before. `Tap`
-  // stays simultaneous with the pair so a quick tap still opens the editor.
-  const longPressGesture = Gesture.LongPress()
-    .enabled(isInteractive && (!!onRequestReschedule || !!onLongPressMenu))
-    .minDuration(350)
-    .maxDistance(12)
-    .onStart(() => {
-      runOnJS(triggerLongPress)();
-    });
-
-  const composedGesture = Gesture.Simultaneous(
-    Gesture.Exclusive(longPressGesture, panGesture),
-    tapGesture,
-  );
+  const composedGesture = Gesture.Simultaneous(panGesture, tapGesture);
 
   // Glass edge: each state tints its own rim (below); the only extra ring is
   // the "landing" flash on create / reschedule / teleport.
