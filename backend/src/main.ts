@@ -51,7 +51,9 @@ async function bootstrap() {
   // be set before the session middleware is registered.
   app.set("trust proxy", 1);
   const configService = app.get(ConfigService);
-  app.setGlobalPrefix("api/v1");
+  // The public legal pages live at the site root (`/privacy`, `/terms`), so the
+  // app stores and the login screen can link to short stable URLs.
+  app.setGlobalPrefix("api/v1", { exclude: ["privacy", "terms"] });
   // Comma-separated list: the web frontend and Expo's web dev server are
   // separate origins. `cors` only echoes a single origin back, so this must be
   // an array for it to match the request and reflect the right one.

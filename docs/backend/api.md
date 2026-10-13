@@ -9,6 +9,10 @@ For: developers and clients of the Zenflow API. Live schema: Swagger UI at `<API
 - Error: `{ success: false, message, statusCode?, field? }`.
 - `POST /auth/otp/verify` reads the `x-timezone` header.
 
+## Legal pages
+
+`GET /privacy` and `GET /terms` are public HTML pages at the site root (not under `/api/v1`, no session), in English and Vietnamese: `?lang=en|vi`, else the browser's `Accept-Language`. Copy lives in `backend/src/legal/content/`; bump `LEGAL_UPDATED` in `legal.docs.ts` when it changes in substance. Contact address: `LEGAL_CONTACT_EMAIL` ([config](config.md)).
+
 ## Auth (`/auth`)
 
 | Method | Path | Purpose |
