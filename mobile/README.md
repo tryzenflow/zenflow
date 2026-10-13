@@ -113,6 +113,15 @@ Backend: `backend/src/devices/`, `backend/src/notifications/`.
 - **Foreground:** a tap-to-act toast jumps to the affected session (404-guarded).
 - **Native push:** the backend speaks FCM/APNs directly, so the app registers the raw device token (not an Expo token) via `POST /devices`. See [`lib/push.ts`](lib/push.ts) and the `use-push-registration` / `use-notifications` hooks. Sign-out unregisters.
 
+## Android home screen widgets
+
+- Add **Zenflow next up** (small), **Zenflow next up wide** (medium), or **Zenflow month** (large) from the Android widget picker.
+- Next up widgets show the next session. The month widget shows a Monday-first calendar and sessions for the selected day.
+- Tap a day to change the agenda, or + to create a session.
+- Sign-in, calendar refreshes and session changes refresh widgets. Android also requests an update every 30 minutes.
+- A signed-out widget prompts sign-in. An account with no upcoming session shows an empty state.
+- The widget needs a fresh Android dev-client build after installation: `pnpm android`.
+
 ## Language
 
 - Tiếng Việt is the default; English is selectable on the login screen and in Settings, and applies without resetting navigation or forms.

@@ -51,6 +51,22 @@ let disk: SessionDisk | null = null;
  * lands after logout never writes into the next account's memory or disk. */
 let generation = 0;
 let hydratedUserId: string | null = null;
+const cacheListeners = new Set<(sessions: Session[]) => void>();
+
+export function subscribeToSessionCache(listener: (sessions: Session[]) => void) {
+  cacheListeners.add(listener);
+  return () => {
+    cacheListeners.delete(listener);
+  };
+}
+
+function emitCacheSnapshot() {
+  if (cacheListeners.size === 0) return;
+  const sessions = [...cache.values()]
+    .sort((a, b) => b.savedAt - a.savedAt)
+    .flatMap((entry) => entry.sessions);
+  for (const listener of cacheListeners) listener(sessions);
+}
 
 /** Wire the disk layer once, at startup. */
 export function attachSessionDisk(d: SessionDisk | null): void {
@@ -59,7 +75,11 @@ export function attachSessionDisk(d: SessionDisk | null): void {
 
 /** Load `userId`'s persisted calendar into the memory cache (null = signed out: wipe disk). */
 export function hydrateSessionCache(userId: string | null): void {
-  if (userId !== hydratedUserId) generation++;
+  if (userId !== hydratedUserId) {
+    generation++;
+    cache.clear();
+    inFlight.clear();
+  }
   hydratedUserId = userId;
   if (!disk) return;
   for (const [key, entry] of disk.load(userId)) {
@@ -70,6 +90,7 @@ export function hydrateSessionCache(userId: string | null): void {
       savedAt: entry.savedAt,
     });
   }
+  emitCacheSnapshot();
 }
 
 /** When `dayKey` was last fetched from the server, if cached. */
@@ -153,6 +174,7 @@ export function setCachedDaySessions(
   const now = Date.now();
   cache.set(dayKey, { sessions, fetchedAt: now, savedAt: now });
   disk?.save(dayKey, sessions, now);
+  emitCacheSnapshot();
 }
 
 /**
@@ -219,6 +241,7 @@ export function clearDaySessionCache(): void {
   cache.clear();
   inFlight.clear();
   disk?.clear();
+  emitCacheSnapshot();
 }
 
 /**

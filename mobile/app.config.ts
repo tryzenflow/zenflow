@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import type { ConfigContext, ExpoConfig } from "@expo/config";
+import type { WithAndroidWidgetsParams } from "react-native-android-widget";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const withAndroidBuildFixes = require("./plugins/withAndroidBuildFixes");
@@ -22,6 +23,43 @@ const googleServicesFile = existsSync("./google-services.json")
 // the build number instead.
 const [appVersion, prerelease] = require("./package.json").version.split("-");
 const betaNumber = Number(prerelease?.split(".")[1] ?? 0);
+
+const widgetConfig: WithAndroidWidgetsParams = {
+  fonts: [
+    "./assets/fonts/Geist-Regular.ttf",
+    "./assets/fonts/Geist-Medium.ttf",
+    "./assets/fonts/Geist-SemiBold.ttf",
+  ],
+  widgets: [
+    {
+      name: "NextUpSmall",
+      label: "Zenflow next up",
+      minWidth: "160dp",
+      minHeight: "110dp",
+      targetCellWidth: 2,
+      targetCellHeight: 2,
+      updatePeriodMillis: 1_800_000,
+    },
+    {
+      name: "NextUpMedium",
+      label: "Zenflow next up wide",
+      minWidth: "260dp",
+      minHeight: "110dp",
+      targetCellWidth: 4,
+      targetCellHeight: 2,
+      updatePeriodMillis: 1_800_000,
+    },
+    {
+      name: "MonthAgenda",
+      label: "Zenflow month",
+      minWidth: "320dp",
+      minHeight: "240dp",
+      targetCellWidth: 4,
+      targetCellHeight: 3,
+      updatePeriodMillis: 1_800_000,
+    },
+  ],
+};
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -68,7 +106,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     adaptiveIcon: {
-      foregroundImage: "./assets/images/adaptive-icon.png",
+      foregroundImage: "./assets/images/splash.png",
       backgroundColor: "#ffffff",
     },
     package: "com.zenflow.app",
@@ -89,6 +127,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     ["expo-router"],
+    ["react-native-android-widget", widgetConfig],
     "@react-native-community/datetimepicker",
     // Adds the iOS push entitlement (`aps-environment`) + the Android
     // notification permission / channel wiring. Raw FCM/APNs tokens come from

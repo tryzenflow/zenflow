@@ -1,5 +1,6 @@
 /** Vietnamese UI copy. English keys remain the English fallback. */
 export default {
+  "Month calendar": "Lịch tháng",
   "Auto-scheduled": "Tự động xếp lịch",
   "Tell Zenflow what needs doing. It finds the time.":
     "Bạn nói việc cần làm, Zenflow tìm thời gian phù hợp.",
@@ -276,6 +277,7 @@ export default {
   "Manage {provider}": "Quản lý {provider}",
   "Sync {provider} now": "Đồng bộ {provider} ngay",
   "Sign in to your {provider}": "Đăng nhập {provider}",
+  "Sign in to see your schedule": "Đăng nhập để xem lịch",
   "Update your {provider} login": "Cập nhật đăng nhập {provider}",
   "Task created": "Đã tạo công việc",
   "{count} sittings have an alternative": "{count} buổi có giờ thay thế",
