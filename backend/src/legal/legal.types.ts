@@ -26,6 +26,8 @@ export interface LegalChrome {
   languageName: string;
   /** Short label for the language switch, e.g. EN. */
   languageShort: string;
+  /** Footer copyright line after the name, e.g. "All rights reserved." */
+  rightsReserved: string;
   contentsLabel: string;
   /** Page `<title>` from the document title; no separator characters. */
   siteTitle: (title: string) => string;

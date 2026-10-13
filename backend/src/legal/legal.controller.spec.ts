@@ -79,6 +79,10 @@ describe("renderLegalPage", () => {
     expect(html).toContain('href="/terms?lang=en"');
     expect(html).toContain('href="/privacy?lang=vi"');
     expect(html).not.toContain("{{email}}");
+    expect(html).toContain("Zenflow. Bảo lưu mọi quyền.");
+    expect(renderLegalPage("terms", "en", "a@x.test")).toContain(
+      "Zenflow. All rights reserved.",
+    );
   });
 });
 

@@ -184,7 +184,7 @@ ${absoluteTags}
 ${body}
 </main>
 <footer>
-<span>&copy; 2026 Zenflow</span>
+<span>&copy; ${LEGAL_UPDATED.slice(0, 4)} Zenflow. ${escapeHtml(chrome.rightsReserved)}</span>
 <a href="/privacy?lang=${lang}"${page === "privacy" ? ' aria-current="page"' : ""}>${escapeHtml(chrome.privacyLink)}</a>
 <a href="/terms?lang=${lang}"${page === "terms" ? ' aria-current="page"' : ""}>${escapeHtml(chrome.termsLink)}</a>
 </footer>

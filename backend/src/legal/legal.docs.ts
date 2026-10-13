@@ -45,6 +45,7 @@ export const LEGAL_CHROME: Record<LegalLang, LegalChrome> = {
     termsLink: "Terms of Service",
     languageName: "English",
     languageShort: "EN",
+    rightsReserved: "All rights reserved.",
     contentsLabel: "Contents",
     siteTitle: (title) => `Zenflow ${title}`,
     formatDate: (iso) => {
@@ -59,6 +60,7 @@ export const LEGAL_CHROME: Record<LegalLang, LegalChrome> = {
     termsLink: "Điều khoản dịch vụ",
     languageName: "Tiếng Việt",
     languageShort: "VI",
+    rightsReserved: "Bảo lưu mọi quyền.",
     contentsLabel: "Mục lục",
     siteTitle: (title) => `${title} của Zenflow`,
     formatDate: (iso) => {
