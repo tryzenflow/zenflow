@@ -1,47 +1,32 @@
 # Releasing (beta)
 
-Versioning is managed by [changesets](https://github.com/changesets/changesets). `backend`, `frontend`,
-`mobile`, `@zenflow/shared` and `@zenflow/core` are one **fixed** group: they always share a version, and
-the repo is in prerelease mode (`beta`, see `.changeset/pre.json`), so versions look like `0.1.0-beta.0`.
+[Changesets](https://github.com/changesets/changesets) manage versions. `backend`, `frontend`, `mobile`, `@zenflow/shared` and `@zenflow/core` share one version in prerelease mode (`beta`, `.changeset/pre.json`), for example `0.1.0-beta.0`.
 
 ## Day to day
 
-1. A PR with a user-visible change runs `pnpm changeset`, picks the bump (`patch` / `minor`) and writes a
-   one-line summary. Commit the generated `.changeset/*.md` with the PR.
-2. Merging to `main` runs [`release-beta.yml`](../../.github/workflows/release-beta.yml), which opens or
-   updates a **"chore: version packages"** PR (bumps every `package.json`, writes each package's
-   `CHANGELOG.md`, syncs the root version and compose image defaults via `scripts/sync-version.mjs`).
-3. Merging that PR publishes a GitHub **pre-release** `vX.Y.Z-beta.N` with:
+1. A PR with a user-visible change runs `pnpm changeset`, picks `patch` or `minor`, and writes a one-line summary. Commit the `.changeset/*.md`.
+2. Merging to `main` runs [`release-beta.yml`](../../.github/workflows/release-beta.yml). It opens or updates a **"chore: version packages"** PR (bumps `package.json`s, writes `CHANGELOG.md`s, syncs the root version and compose image defaults via `scripts/sync-version.mjs`).
+3. Merging that PR publishes a GitHub pre-release `vX.Y.Z-beta.N` with:
    - `zenflow-android.apk`
-   - `zenflow-ios-simulator.zip` (simulator `.app`; a device `.ipa` needs an Apple Developer account, see
-     [`docs/mobile/testing.md`](../mobile/testing.md#ios-artifact-app-vs-ipa))
-   - notes taken from `backend/CHANGELOG.md`.
-   - The app files are built only if `mobile/` or `packages/` changed since the previous release tag (version bumps and changelogs don't count); otherwise the release has just the notes and the previous release keeps the latest binaries.
+   - `zenflow-ios-simulator.zip` (a device `.ipa` needs an Apple Developer account, see [mobile/testing.md](../mobile/testing.md#ios-artifact-app-vs-ipa))
+   - Notes from `backend/CHANGELOG.md`
 
-4. The `publish-public` job copies that release (notes and app files, same tag and pre-release flag) to the
-   public [`tryzenflow/releases`](https://github.com/tryzenflow/releases) repo, so people can download builds
-   while this repo stays private. It is skipped until the `PUBLIC_RELEASES_TOKEN` secret exists, and if it
-   fails it can be re-run alone. The notes are the private changelog text, so keep changeset summaries free
-   of anything internal.
+   App files build only if `mobile/` or `packages/` changed since the last tag. Otherwise the release has notes only.
+4. `publish-public` copies the release to the public [`tryzenflow/releases`](https://github.com/tryzenflow/releases) repo. It skips without `PUBLIC_RELEASES_TOKEN` and can be re-run alone. Keep changeset summaries free of internal detail.
 
-Pre-releases never trigger the production deploy: `release.yml` only promotes non-prerelease releases.
+Pre-releases never deploy to production: `release.yml` promotes only non-prerelease releases.
 
-## Setup it relies on
+## Setup
 
-- Repo variable `MOBILE_API_URL`: the API the published app talks to. Without it the build falls back to a
-  localhost URL (a warning is logged) and the artifacts won't reach a real API.
-- Secret `PUBLIC_RELEASES_TOKEN`: a fine-grained PAT (or GitHub App token) with **Contents: read and write** on
-  `tryzenflow/releases` only. Without it nothing is mirrored.
-- Workflow permission "Read and write" plus "Allow GitHub Actions to create and approve pull requests".
-- PRs opened by `GITHUB_TOKEN` don't start other workflows, so the version PR gets no CI run. Merge it as
-  an admin or use a PAT/GitHub App token for `changesets/action` if `ci-ok` is a required check.
+- Repo variable `MOBILE_API_URL`: the API the app uses. Without it the build falls back to localhost.
+- Secret `PUBLIC_RELEASES_TOKEN`: fine-grained token with Contents read and write on `tryzenflow/releases` only.
+- Workflow permissions: "Read and write" and "Allow GitHub Actions to create and approve pull requests".
+- PRs from `GITHUB_TOKEN` start no workflows, so the version PR gets no CI. Merge as admin, or give `changesets/action` a PAT or App token if `ci-ok` is required.
 
 ## Mobile version
 
-`mobile/app.config.ts` reads `mobile/package.json`. Store builds need plain `x.y.z`, so `0.1.0-beta.3`
-ships as version `0.1.0` with build number / version code `4`.
+`mobile/app.config.ts` reads `mobile/package.json`. Store builds need `x.y.z`, so `0.1.0-beta.3` ships as version `0.1.0`, build `4`.
 
-## Leaving beta
+## Leave beta
 
-`pnpm changeset pre exit`, then merge a changeset; the next version PR produces a stable release (and
-`release.yml` will then deploy it).
+`pnpm changeset pre exit`, then merge a changeset. The next version PR makes a stable release, which `release.yml` deploys.
