@@ -507,10 +507,12 @@ export default function LoginScreen() {
         </Glass>
         </View>
 
-        <Text className="mt-[22px] px-2.5 text-center text-[12px] leading-normal text-muted-foreground">
+        {/* Foreground colour, not muted/orange: this sits on the backdrop's orange
+            glow, where grey and orange text both lose contrast. */}
+        <Text className="mt-[22px] px-2.5 text-center text-[13px] leading-[19px] text-foreground/80">
           {t("By continuing, you agree to our")}{" "}
           <Text
-            className="text-[12px] font-medium text-brand-orange"
+            className="text-[13px] font-semibold text-foreground underline"
             accessibilityRole="link"
             onPress={() => openLegal("terms")}
           >
@@ -518,7 +520,7 @@ export default function LoginScreen() {
           </Text>{" "}
           {t("and")}{" "}
           <Text
-            className="text-[12px] font-medium text-brand-orange"
+            className="text-[13px] font-semibold text-foreground underline"
             accessibilityRole="link"
             onPress={() => openLegal("privacy")}
           >
