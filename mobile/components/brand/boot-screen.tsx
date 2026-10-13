@@ -33,8 +33,8 @@ import Svg, {
 const MIN_VISIBLE_MS = 1200;
 const SLOW_AFTER_MS = 3000;
 const HINT_EVERY_MS = 3200;
-/** Logo is the splash image's mark: 560 of its 1024px, at `imageWidth` 220. */
-const LOGO_SIZE = 120;
+/** Logo is the splash image's mark: 560 of its 1024px, at `imageWidth` 160 (560/1024 of 160 is 88). */
+const LOGO_SIZE = 88;
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const AnimatedPath = Animated.createAnimatedComponent(Path);
@@ -231,14 +231,19 @@ export function BootScreen({
       style={[StyleSheet.absoluteFill, rootStyle, { zIndex: 100 }]}
       className="bg-background"
     >
-      <SunriseBackdrop dark={isDarkColorScheme} energy="lively" />
+      {/* Softer than login: the hint text sits right on it and must stay readable. */}
+      <SunriseBackdrop
+        dark={isDarkColorScheme}
+        energy="lively"
+        intensity={0.55}
+      />
       {/* Same centre as the native splash image, so the handover doesn't jump. */}
       <View
         pointerEvents="none"
         className="flex-1 items-center justify-center"
       >
         {/* Fixed size: the mark must match the native image (LOGO_SIZE). */}
-        <Logo glow breathe className="h-[120px] w-[120px] rounded-full" />
+        <Logo glow breathe className="h-[88px] w-[88px] rounded-full" />
       </View>
       <Animated.View
         pointerEvents="none"
@@ -264,7 +269,7 @@ export function BootScreen({
             entering={reduceMotion ? undefined : FadeIn.duration(DURATION.slow)}
             exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.fast)}
           >
-            <Text className="text-center text-[14px] leading-5 text-muted-foreground">
+            <Text className="text-center text-[15px] leading-[21px] text-foreground/80">
               {hint}
             </Text>
           </Animated.View>
