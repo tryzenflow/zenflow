@@ -145,10 +145,11 @@ describe("backup service", () => {
     if (process.env.KEEP_STACK !== "1") dc(["down", "-v", "--remove-orphans"]);
   });
 
-  it("installs a crontab with both the backup and the restore job", () => {
+  it("installs a crontab with the backup, restore and files jobs", () => {
     const tab = ok(dc(["exec", "-T", "backup", "cat", "/etc/crontabs/root"]));
     expect(tab).toMatch(/backup\.sh/);
     expect(tab).toMatch(/restore-test\.sh/);
+    expect(tab).toMatch(/backup-files\.sh/);
   });
 
   it("crond uploads an encrypted dump and records the metrics", async () => {
@@ -187,6 +188,75 @@ describe("backup service", () => {
     expect(key).toBeTruthy();
   });
 
+  it("records when the Vault snapshot last succeeded", async () => {
+    await until(
+      "the Vault metric",
+      () => metric("zenflow_backup_vault_success") !== undefined,
+    );
+    expect(
+      Date.now() / 1000 - metric("zenflow_backup_vault_success")!,
+    ).toBeLessThan(300);
+  });
+
+  it("warns loudly, and still backs up the database, when the Vault dir is missing", () => {
+    const r = inBackup(
+      "BACKUP_VAULT_DIR=/nonexistent sh /opt/backup/backup.sh",
+    );
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(
+      /WARN BACKUP_VAULT_DIR=\/nonexistent .* NOT being backed up/,
+    );
+  });
+
+  it("crond archives the uploaded files, encrypted, and records the metrics", async () => {
+    const key = await until("a files archive in S3", () =>
+      listKeys().find((k) => /\/files\/.*files-.*\.tar\.age$/.test(k)),
+    );
+    expect(key).toMatch(
+      new RegExp(
+        `^${PREFIX}/files/\\d{4}/\\d{2}/\\d{2}/files-\\d{8}T\\d{6}Z\\.tar\\.age$`,
+      ),
+    );
+    await until(
+      "files metrics",
+      () => metric("zenflow_backup_files_success") !== undefined,
+    );
+    expect(metric("zenflow_backup_files_size")).toBeGreaterThan(0);
+    expect(metric("zenflow_backup_files_run_ok")).toBe(1);
+
+    // Decrypts with the identity and holds the fixture.
+    const listing = ok(
+      inBackup(
+        `d=$(mktemp -d); printf '%s\\n' "$BACKUP_AGE_IDENTITY" > $d/id;
+         s3 s3 cp --only-show-errors s3://${BUCKET}/${key} $d/x.age
+         age -d -i $d/id $d/x.age | tar -tf - ; rm -rf $d`,
+      ),
+    );
+    expect(listing).toMatch(/upload-a\.txt/);
+  });
+
+  it("a files backup with a missing directory fails loudly", () => {
+    const r = inBackup(
+      "BACKUP_FILES_DIR=/nonexistent sh /opt/backup/backup-files.sh",
+    );
+    expect(r.code).not.toBe(0);
+    expect(r.out).toMatch(/uploaded files are NOT being backed up/);
+    expect(metric("zenflow_backup_files_run_ok")).toBe(0);
+  });
+
+  it("a files backup S3 failure records a failed run and keeps the last success", () => {
+    const before = metric("zenflow_backup_files_success");
+    const r = inBackup(
+      "BACKUP_S3_SECRET_ACCESS_KEY=wrong sh /opt/backup/backup-files.sh",
+    );
+    expect(r.code).not.toBe(0);
+    expect(r.out).toMatch(
+      /ERROR backup_files failed .* during: archive, encrypt and upload/,
+    );
+    expect(metric("zenflow_backup_files_run_ok")).toBe(0);
+    expect(metric("zenflow_backup_files_success")).toBe(before);
+  });
+
   it("the dump decrypts with the identity and contains the data", () => {
     ok(inBackup("sh /opt/backup/backup.sh")); // a dump taken after the seed
     const latest = listKeys()
@@ -211,6 +281,9 @@ describe("backup service", () => {
     );
     const out = ok(inBackup("sh /opt/backup/restore-test.sh"));
     expect(out).toMatch(/restore OK: \d+ tables, \d+ migrations/);
+    expect(out).toMatch(
+      /Vault snapshot OK: .*vault-.*\.tar\.age \(\d+ entries\)/,
+    );
   });
 
   it("the restore test fails with a wrong age identity and keeps the old metric", () => {

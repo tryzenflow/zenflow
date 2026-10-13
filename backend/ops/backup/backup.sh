@@ -42,13 +42,20 @@ s3 s3 cp --only-show-errors "$WORK/db.dump.age" "$dest/zenflow-$ts.dump.age"
 size="$(wc -c <"$WORK/db.dump.age")"
 log "uploaded $dest/zenflow-$ts.dump.age ($size bytes)"
 
-if [ -n "${BACKUP_VAULT_DIR:-}" ] && [ -d "$BACKUP_VAULT_DIR" ]; then
-  step="Vault snapshot"
-  tar -C "$BACKUP_VAULT_DIR" -cf "$WORK/vault.tar" .
-  # shellcheck disable=SC2086
-  age $recipients -o "$WORK/vault.tar.age" "$WORK/vault.tar"
-  s3 s3 cp --only-show-errors "$WORK/vault.tar.age" "$dest/vault-$ts.tar.age"
-  log "uploaded vault snapshot"
+if [ -n "${BACKUP_VAULT_DIR:-}" ]; then
+  if [ -d "$BACKUP_VAULT_DIR" ]; then
+    step="Vault snapshot"
+    tar -C "$BACKUP_VAULT_DIR" -cf "$WORK/vault.tar" .
+    # shellcheck disable=SC2086
+    age $recipients -o "$WORK/vault.tar.age" "$WORK/vault.tar"
+    s3 s3 cp --only-show-errors "$WORK/vault.tar.age" "$dest/vault-$ts.tar.age"
+    log "uploaded vault snapshot $dest/vault-$ts.tar.age ($(wc -c <"$WORK/vault.tar.age") bytes)"
+    write_metric zenflow_backup_vault_success zenflow_backup_vault_last_success_timestamp_seconds \
+      "Unix time of the last successful Vault snapshot." "$(date +%s)"
+  else
+    # Loud, not silent: the dashboard shows this line and the Vault age alert fires.
+    log "WARN BACKUP_VAULT_DIR=$BACKUP_VAULT_DIR is not a directory: Vault is NOT being backed up"
+  fi
 fi
 
 # Retention by age, using the YYYY/MM/DD folder in the key. Never fails the backup.

@@ -43,5 +43,20 @@ rest_m="$(count "$TMPDB" "$mig")"
 [ "$rest_m" -gt 0 ] || { log "ERROR restored _prisma_migrations is empty"; exit 1; }
 log "restore OK: $rest_t tables, $rest_m migrations"
 
+# The Vault snapshot only matters if it can be read back: decrypt the newest one
+# and list it. (It does not start Vault; unsealing needs the offline shares.)
+if [ -n "${BACKUP_VAULT_DIR:-}" ]; then
+  step="finding the newest Vault snapshot"
+  vkey="$(s3 s3 ls --recursive "s3://$BACKUP_S3_BUCKET/$PREFIX/" | awk '{print $4}' | grep '/vault-.*\.tar\.age$' | sort | tail -n1)"
+  [ -n "$vkey" ] || { log "ERROR no Vault snapshot found under $PREFIX/"; exit 1; }
+  step="downloading and decrypting the Vault snapshot"
+  s3 s3 cp --only-show-errors "s3://$BACKUP_S3_BUCKET/$vkey" "$WORK/vault.tar.age"
+  age -d -i "$WORK/identity" -o "$WORK/vault.tar" "$WORK/vault.tar.age"
+  step="listing the Vault snapshot"
+  vfiles="$(tar -tf "$WORK/vault.tar" | wc -l)"
+  [ "$vfiles" -gt 0 ] || { log "ERROR Vault snapshot $vkey is empty"; exit 1; }
+  log "Vault snapshot OK: $vkey ($vfiles entries)"
+fi
+
 write_metric zenflow_backup_restore_success zenflow_backup_restore_last_success_timestamp_seconds \
   "Unix time of the last successful restore test." "$(date +%s)"
