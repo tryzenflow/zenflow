@@ -217,6 +217,11 @@ export class PythonPlacer {
         policy,
         allowLastResort,
       );
+      schedulerAppliedPolicy.add(1, {
+        assigned: assignment.primaryPolicy,
+        applied: degraded.appliedPolicy,
+        trigger,
+      });
       schedulerPlacementDuration.record((Date.now() - tStart) / 1000, {
         assigned: assignment.primaryPolicy,
         applied: degraded.appliedPolicy,
@@ -488,6 +493,13 @@ export class PythonPlacer {
         now,
       );
       // Degraded: one plan only, never any alternatives.
+      for (const row of rows) {
+        schedulerAppliedPolicy.add(1, {
+          assigned: assignment.primaryPolicy,
+          applied: row.scheduledStartTime ? "HEURISTIC" : "NONE",
+          trigger,
+        });
+      }
       const ids = await Promise.all(
         rows.map((row) =>
           row.scheduledStartTime
@@ -569,6 +581,11 @@ export class PythonPlacer {
       const start = rawStarts[i];
       const linucb = r.linucb;
       const isShown = shown.has(i);
+      schedulerAppliedPolicy.add(1, {
+        assigned: assignment.primaryPolicy,
+        applied: start !== null ? r.appliedPolicy : "NONE",
+        trigger,
+      });
       const slotProposalId = await this.experiment.recordProposal({
         userId: user.id,
         sessionId: members[i].id,

@@ -27,7 +27,9 @@ function makeFakePrisma(sessions: FakeSession[]) {
           where: {
             userId: string;
             id?: { notIn: string[] };
-            NOT?: { seriesId: string };
+            AND?: Array<{
+              OR: Array<{ seriesId: null } | { seriesId: { not: string } }>;
+            }>;
             OR?: Array<
               { seriesId: null } | { series: { is: { rrule: null } } }
             >;
@@ -38,7 +40,14 @@ function makeFakePrisma(sessions: FakeSession[]) {
           const rows = sessions.filter((s) => {
             if (s.userId !== where.userId) return false;
             if (where.id?.notIn.includes(s.id)) return false;
-            if (where.NOT && s.seriesId === where.NOT.seriesId) return false;
+            for (const clause of where.AND ?? []) {
+              const ok = clause.OR.some((c) =>
+                c.seriesId === null
+                  ? s.seriesId === null
+                  : s.seriesId !== null && s.seriesId !== c.seriesId.not,
+              );
+              if (!ok) return false;
+            }
             if (where.OR) {
               const matches = where.OR.some((cond) => {
                 if ("seriesId" in cond) return s.seriesId === cond.seriesId;
@@ -76,6 +85,30 @@ function makeFakePrisma(sessions: FakeSession[]) {
 }
 
 describe("wouldConflict", () => {
+  it("still sees a standalone lecture when ignoring the caller's own series", async () => {
+    const prisma = makeFakePrisma([
+      {
+        id: "lecture-1",
+        userId: "u1",
+        seriesId: null,
+        seriesRrule: null,
+        scheduledStartTime: new Date("2026-06-15T13:00:00.000Z"),
+        durationMinutes: 210,
+        type: "LECTURE",
+      },
+    ]);
+
+    const result = await wouldConflict(prisma as never, {
+      userId: "u1",
+      timezone: TZ,
+      start: new Date("2026-06-15T13:00:00.000Z"),
+      durationMinutes: 30,
+      excludeSeriesId: "my-series",
+    });
+
+    expect(result).toBe(true);
+  });
+
   it("returns true when the candidate landing overlaps an existing session", async () => {
     const prisma = makeFakePrisma([
       {

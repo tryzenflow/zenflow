@@ -22,7 +22,10 @@ export class ReminderSweepService implements OnApplicationBootstrap {
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
-    await this.scheduler.sweep();
+    // Logged so a restart, crash recovery or server move is visible in Loki: the
+    // queue holds no truth of its own and refills from the database here.
+    const armed = await this.scheduler.sweep();
+    this.logger.log(`armed ${armed} reminder job(s) from the database at boot`);
   }
 
   @Cron(CronExpression.EVERY_MINUTE)

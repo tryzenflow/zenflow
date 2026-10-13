@@ -28,6 +28,8 @@ import { GettingStarted } from "@/components/checklist/getting-started";
 import { useOffline } from "@/hooks/use-offline";
 import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { Text } from "@/components/ui/text";
+import { useToast } from "@/components/ui/toast";
+import { showSkippedToast } from "@/lib/task-toasts";
 import { completeStep } from "@/hooks/use-checklist";
 import { useCalendarJump } from "@/hooks/use-calendar-jump";
 import { useSpotlight } from "@/hooks/use-spotlight";
@@ -54,6 +56,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
  */
 export default function MonthScreen() {
   useLanguage();
+  const { toast } = useToast();
   const router = useRouter();
   const offline = useOffline();
   const user = useUserStore((s) => s.user);
@@ -161,16 +164,17 @@ export default function MonthScreen() {
       scope?: UpdateScope,
       skipConflicting?: boolean,
     ) => {
-      await updateSession(id, {
+      const res = await updateSession(id, {
         scheduledStartTime: startISO,
         durationMinutes,
         scope,
         skipConflicting,
       });
+      showSkippedToast(toast, res.skippedSessionIds);
       setReloadToken((n) => n + 1);
       taskListSheetRef.current?.close();
     },
-    [],
+    [toast],
   );
 
   // The shared `RescheduleSheet`'s scope-confirmation deferral — same wiring

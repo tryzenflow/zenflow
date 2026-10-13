@@ -48,6 +48,7 @@ import {
 import { SchedulerWorkerModule } from "./scheduler/scheduler-worker.module";
 import { RemindersWorkerModule } from "./reminders/reminders-worker.module";
 import { HealthModule } from "./health/health.module";
+import { LegalModule } from "./legal/legal.module";
 
 const configEnvFile = envFilePath();
 // `<PREFIX>_HOST` / `_PORT` / `_PASSWORD` for one Redis instance (connections.ts).
@@ -560,6 +561,7 @@ const jobModules = [
     // Per-session reminders: SchedulerRegistry one-shot timers -> notifications.
     RemindersModule,
     HealthModule,
+    LegalModule,
     ...jobModules,
   ],
   providers: [AppService, MailService],

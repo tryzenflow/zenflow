@@ -45,12 +45,15 @@ services:
       BACKUP_S3_ACCESS_KEY_ID: e2e-access
       BACKUP_S3_SECRET_ACCESS_KEY: e2e-secret-key
       BACKUP_VAULT_DIR: /vault-data
+      BACKUP_FILES_DIR: /files-data
+      FILES_BACKUP_CRON: "* * * * *"
       POSTGRES_USER: e2e
       POSTGRES_PASSWORD: e2e-password
       POSTGRES_DB: zenflow
     volumes:
       - ../../ops/backup:/opt/backup:ro
       - ./vault-fixture:/vault-data:ro
+      - ./files-fixture:/files-data:ro
     networks: [db, storage, egress]
     depends_on:
       postgres:

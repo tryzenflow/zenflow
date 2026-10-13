@@ -62,7 +62,7 @@ interface SessionListSheetProps {
 
 // Module-level so the sheet gets the same array on every render; an inline
 // literal is a new `snapPoints` prop each time `open()` sets state.
-const SNAP_POINTS = ["62%"];
+const SNAP_POINTS = ["78%"];
 
 export const SessionListSheet = forwardRef<
   SessionListSheetHandle,
@@ -231,7 +231,7 @@ export const SessionListSheet = forwardRef<
         {sessions.length > 0 && (
           <View className="mx-5 mb-1 mt-2 flex-row items-center gap-2 rounded-lg bg-muted/60 px-3 py-2">
             <MousePointer2
-              size={13}
+              size={16}
               className="shrink-0 text-muted-foreground"
             />
             <Text className="flex-1 text-[12px] leading-snug text-muted-foreground">
@@ -413,30 +413,30 @@ const SessionListRow = memo(function SessionListRow({
           />
         )}
         <View className="min-w-0 flex-1">
-          <Text
-            className="text-[15px] font-semibold text-foreground"
-            numberOfLines={1}
-          >
-            {task.title}
-          </Text>
-          <View className="mt-0.5 flex-row items-center gap-1.5">
-            <Text className="text-[12.5px] text-muted-foreground">
-              {continuation
-                ? t("Continued from yesterday")
-                : ROW_STATE_LABELS[state]}
+          <View className="flex-row items-center gap-2">
+            <Text
+              className="min-w-0 shrink text-[15px] font-semibold text-foreground"
+              numberOfLines={1}
+            >
+              {task.title}
             </Text>
             {late && (
-              <View className="flex-row items-center gap-0.5">
+              <View className="flex-none flex-row items-center gap-1 rounded border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5">
                 <AlertTriangle
-                  size={11}
+                  size={10}
                   className="text-amber-700 dark:text-amber-300"
                 />
-                <Text className="text-[12px] font-semibold text-amber-700 dark:text-amber-300">
-                  {t("late")}
+                <Text className="text-[10px] font-semibold leading-[13px] text-amber-700 dark:text-amber-300">
+                  {t("Overdue")}
                 </Text>
               </View>
             )}
           </View>
+          <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
+            {continuation
+              ? t("Continued from yesterday")
+              : ROW_STATE_LABELS[state]}
+          </Text>
         </View>
         {onReschedule && !continuation && !offline && (
           <Pressable

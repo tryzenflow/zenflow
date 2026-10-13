@@ -431,6 +431,23 @@ export default {
     "Lịch này giờ kết thúc sau hạn chót.",
   "Scheduled after deadline": "Xếp sau hạn chót",
   "Moved {count} flexible tasks": "Đã dời {count} việc linh hoạt",
+  "Pinch the day to zoom the hours.": "Chụm hai ngón để phóng to thu nhỏ giờ.",
+  "Swipe the date strip to jump a whole week.":
+    "Vuốt thanh ngày để nhảy cả tuần.",
+  "Drag a held task to the screen edge to scroll as you move.":
+    "Kéo việc đang giữ chạm mép màn hình để cuộn khi di chuyển.",
+  "Hold a task without moving for Move to… and more.":
+    "Giữ yên một việc để mở Dời sang… và các tùy chọn khác.",
+  "Swipe a notification left to dismiss it.":
+    "Vuốt thông báo sang trái để xóa.",
+  "Timetable classes and exams stay put when you drag.":
+    "Lớp thời khóa biểu và lịch thi sẽ đứng yên khi bạn kéo.",
+  "Taking longer than usual…": "Lâu hơn bình thường một chút…",
+  "Zenflow is open to DLU students for now. Use your @dlu.edu.vn email.":
+    "Hiện Zenflow chỉ dành cho sinh viên DLU. Hãy dùng email @dlu.edu.vn của bạn.",
+  "Some sessions weren't moved": "Một số buổi chưa được dời",
+  "{count} stayed put because the new slot conflicted.":
+    "{count} buổi được giữ nguyên vì khung giờ mới bị trùng.",
   "To make room for the new session.": "Để nhường chỗ cho lịch mới.",
   "Moved to new slot": "Đã chuyển sang khung giờ mới",
   "{when}. Thanks, noted for next time.":

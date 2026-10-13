@@ -8,6 +8,7 @@ For maintainers/operators (issue #137, [ADR-0014](../adr/0014-postgres-backups-t
 | Scripts | `backend/ops/backup/` (`backup.sh`, `restore-test.sh`, `entrypoint.sh`) |
 | Object | `s3://$BACKUP_S3_BUCKET/zenflow/<env>/YYYY/MM/DD/zenflow-<ts>.dump.age` (+ `vault-<ts>.tar.age`) |
 | Format | `pg_dump -Fc`, encrypted with [age](https://age-encryption.org) |
+| Files | Prod only: `s3://$BACKUP_S3_BUCKET/zenflow/prod/files/YYYY/MM/DD/files-<ts>.tar.age`, a daily `tar` of the uploaded-files volume (`storage_data`), age-encrypted, streamed (no temp disk). `FILES_BACKUP_CRON` (default `30 3 * * *`), `BACKUP_FILES_DIR` (set by compose). Each run re-uploads everything, so size x retention is the S3 bill. Staging does not run it: its backups live in the same MinIO, which would archive itself |
 | Schedule | staging: backup every 15 min, restore test hourly, against MinIO. Prod: backup every 3 h, restore test Sun 04:00, against S3. RPO is at most 3 h. Override with `BACKUP_CRON` / `RESTORE_TEST_CRON` |
 
 ## Key model
@@ -69,6 +70,20 @@ docker exec zenflow-backup-<env> sh -c '. /run/backup.env; sh /opt/backup/backup
 docker exec zenflow-backup-<env> sh -c '. /run/backup.env; sh /opt/backup/restore-test.sh'  # test now
 ```
 
+### Confirm Vault and the files are really being backed up
+
+```bash
+docker logs zenflow-backup-prod 2>&1 | grep -iE 'vault|files'      # "uploaded vault snapshot", "uploaded s3://.../files/..."
+aws s3 ls --recursive s3://<bucket>/zenflow/prod/ | grep -E 'vault-|/files/' | tail   # newest objects
+docker exec zenflow-backup-prod sh -c '. /run/backup.env; sh /opt/backup/backup-files.sh'  # run the files job now
+```
+
+The restore test also decrypts and lists the newest Vault snapshot (it does not start Vault) and fails if it is missing or empty.
+
+## Not backed up (by design)
+
+Session, rate-limit, queue and kill-switch Redis, Prometheus, Loki, Tempo and Grafana state are rebuildable or disposable; the table is in [migration.md](migration.md). In particular reminders live in Postgres: the queue is a cache that refills about a minute after the watcher starts.
+
 ## Restore
 
 ```bash
@@ -77,7 +92,16 @@ age -d -i master.key -o zenflow.dump zenflow-<ts>.dump.age
 pg_restore --no-owner --clean --if-exists -d <db> zenflow.dump
 ```
 
-Vault: decrypt `vault-<ts>.tar.age` the same way, untar into an empty `vault_data` volume, start Vault, unseal. The copy is taken while Vault runs; it is encrypted at rest by Vault's own seal.
+Vault: decrypt `vault-<ts>.tar.age` the same way, untar into an empty `vault_data` volume, start Vault, unseal. The copy is taken while Vault runs; it is encrypted at rest by Vault's own seal, so it is useless without 3 of the 5 unseal shares (held offline, see [vault.md](vault.md)).
+
+Uploaded files: decrypt and untar into an empty `storage_data` volume (stop `storage` first):
+
+```bash
+aws s3 cp s3://<bucket>/zenflow/prod/files/<date>/files-<ts>.tar.age .
+age -d -i master.key files-<ts>.tar.age | docker run --rm -i -v zenflow-prod_storage_data:/data alpine tar -xf - -C /data
+```
+
+(Volume names carry the compose project prefix `zenflow-prod_`; check `docker volume ls`.) Moving to a new machine end to end: [migration.md](migration.md).
 
 ## Monitoring
 
@@ -88,12 +112,16 @@ Metrics are written to a textfile volume and exposed by node-exporter:
 | `zenflow_backup_last_success_timestamp_seconds` | last good backup |
 | `zenflow_backup_last_size_bytes` | size of the last dump |
 | `zenflow_backup_restore_last_success_timestamp_seconds` | last good restore test |
-| `zenflow_backup_last_run_ok`, `zenflow_backup_restore_last_run_ok` | 1 if the last backup / restore-test run succeeded, 0 if it failed |
+| `zenflow_backup_last_run_ok`, `zenflow_backup_restore_last_run_ok`, `zenflow_backup_files_last_run_ok` | 1 if the last backup / restore-test / files run succeeded, 0 if it failed |
+| `zenflow_backup_vault_last_success_timestamp_seconds` | last Vault snapshot (prod; taken with each dump) |
+| `zenflow_backup_files_last_success_timestamp_seconds`, `zenflow_backup_files_last_size_bytes` | last uploaded-files archive and its encrypted size (prod) |
 | `zenflow_backup_last_run_timestamp_seconds`, `zenflow_backup_restore_last_run_timestamp_seconds` | when that run finished, whatever the result |
 
 Dashboard: **Zenflow · Backups** (`observability/grafana/dashboards/zenflow-backups.json`). It shows the last run's result and the age of the last good backup and restore test, and lists the error lines from the `backup` container (the S3 error, the failing step), so a failure is readable without opening Explore. Every job logs `ERROR <job> failed (exit N) during: <step>` through `record_run` in `ops/backup/lib.sh`.
 
-Grafana rules (`backend/observability/grafana/provisioning/alerting/backup.yml`): backup run failed and restore test failed (the next evaluation after a failed run, using the `*_last_run_ok` gauges), no backup in 7 h (two missed 3-hourly runs), dump under half its 7-day average size (relative, so a young database does not trip it; the script's own `BACKUP_MIN_BYTES` floor still fails an empty dump), no restore test in 5 days. Before the first success the age counts from the backup container's start, so a fresh deploy does not alert until the threshold passes (the restore test runs Sundays and Wednesdays at 04:00, so its first run can be days out). Missing data (container gone) alerts.
+The dashboard's second row shows the age of the last Vault snapshot and files archive, and the files run result and size. "No data" on a Vault or files stat in prod means that job never succeeded: read the `WARN`/`ERROR` line in "Backup output" (a missing mount is logged, not skipped).
+
+Grafana rules (`backend/observability/grafana/provisioning/alerting/backup.yml`): backup run failed and restore test failed (the next evaluation after a failed run, using the `*_last_run_ok` gauges), no backup in 7 h (two missed 3-hourly runs), dump under half its 7-day average size (relative, so a young database does not trip it; the script's own `BACKUP_MIN_BYTES` floor still fails an empty dump), no restore test in 5 days. Before the first success the age counts from the backup container's start, so a fresh deploy does not alert until the threshold passes (the restore test runs Sundays and Wednesdays at 04:00, so its first run can be days out). Missing data (container gone) alerts. Three more rules cover the extras (prod only; staging has neither): no Vault snapshot in 7 h, no files archive in 36 h, and the last files run failed.
 
 ### Alerts
 

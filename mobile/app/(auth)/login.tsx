@@ -29,6 +29,8 @@ import { z } from "zod";
 import { requestOtp, verifyOtp } from "@/api/auth";
 import { updateBasicInfo } from "@/api/users";
 import { LanguageSelect } from "@/components/language-select";
+import { getBaseURL } from "@/lib/api-client";
+import { type LegalPage, legalUrl } from "@/lib/legal-links";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Form, FormField, FormInput } from "@/components/ui/form";
@@ -164,6 +166,15 @@ function OtpBoxes({
   );
 }
 
+function openLegal(page: LegalPage) {
+  const url = legalUrl(page, getBaseURL());
+  // Loaded on tap: the native module isn't needed to render the screen.
+  if (url)
+    void import("expo-web-browser")
+      .then((WebBrowser) => WebBrowser.openBrowserAsync(url))
+      .catch(() => {});
+}
+
 export default function LoginScreen() {
   useLanguage();
   const params = useLocalSearchParams<{ callback?: string }>();
@@ -225,8 +236,12 @@ export default function LoginScreen() {
       } else {
         const message =
           isAxiosError(error) && error.response
-            ? (error.response.data?.message ??
-              t("Couldn't send the code. Try again."))
+            ? error.response.data?.code === "EMAIL_DOMAIN_NOT_ALLOWED"
+              ? t(
+                  "Zenflow is open to DLU students for now. Use your @dlu.edu.vn email.",
+                )
+              : (error.response.data?.message ??
+                t("Couldn't send the code. Try again."))
             : t("No connection. Check your internet and try again.");
         setError("email", { type: "manual", message });
       }
@@ -281,7 +296,7 @@ export default function LoginScreen() {
 
   return (
     <View className="flex-1 bg-background px-5">
-      <SunriseBackdrop dark={isDarkColorScheme} />
+      <SunriseBackdrop dark={isDarkColorScheme} energy="lively" />
       <View
         className="absolute right-5 z-10"
         style={{ top: insets.top + 8 }}
@@ -290,7 +305,7 @@ export default function LoginScreen() {
       </View>
       <View className="flex-1 justify-center">
         <View className="items-center gap-3.5 pb-[26px]">
-          <Logo glow className="h-[60px] w-[60px] rounded-full" />
+          <Logo glow breathe className="h-[60px] w-[60px] rounded-full" />
           <View className="items-center gap-1">
             <Text className="text-[22px] font-bold tracking-[-0.02em]">
               {stage === "email" ? t("Login to Zenflow") : t("Enter your code")}
@@ -492,13 +507,23 @@ export default function LoginScreen() {
         </Glass>
         </View>
 
-        <Text className="mt-[22px] px-2.5 text-center text-[12px] leading-normal text-muted-foreground">
+        {/* Foreground colour, not muted/orange: this sits on the backdrop's orange
+            glow, where grey and orange text both lose contrast. */}
+        <Text className="mt-[22px] px-2.5 text-center text-[13px] leading-[19px] text-foreground/80">
           {t("By continuing, you agree to our")}{" "}
-          <Text className="text-[12px] font-medium text-brand-orange">
+          <Text
+            className="text-[13px] font-semibold text-foreground underline"
+            accessibilityRole="link"
+            onPress={() => openLegal("terms")}
+          >
             {t("Terms of Service")}
           </Text>{" "}
           {t("and")}{" "}
-          <Text className="text-[12px] font-medium text-brand-orange">
+          <Text
+            className="text-[13px] font-semibold text-foreground underline"
+            accessibilityRole="link"
+            onPress={() => openLegal("privacy")}
+          >
             {t("Privacy Policy")}
           </Text>
           .

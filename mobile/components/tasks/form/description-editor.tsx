@@ -34,6 +34,7 @@ import {
   Upload,
   X,
 } from "@/components/Icons";
+import { Glass } from "@/components/ui/glass";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
@@ -652,7 +653,7 @@ export function DescriptionFieldEditor({
             <NoteSkeleton />
           </Animated.View>
         )}
-        {isEmpty && !disabled && (
+        {isEmpty && !disabled && !linkOpen && (
           <View
             pointerEvents="box-none"
             className="absolute inset-x-5 top-16 gap-2.5"
@@ -697,7 +698,18 @@ export function DescriptionFieldEditor({
         ]}
       >
         {linkOpen && (
-          <View className="mb-2 gap-1.5 rounded-2xl border border-glass-edge/35 bg-glass/70 dark:border-glass-edge/25 dark:bg-glass/[0.07] p-2.5">
+          // Shadow on the wrapper; `Glass` clips its blur to the radius.
+          <View
+            className="mb-2"
+            style={{
+              shadowColor: "#000",
+              shadowOpacity: isDarkColorScheme ? 0.4 : 0.14,
+              shadowRadius: 12,
+              shadowOffset: { width: 0, height: 6 },
+              elevation: 8,
+            }}
+          >
+          <Glass radius={18} clear intensity={55} style={{ padding: 10, gap: 6 }}>
             {linkMode === "insert" && (
               <Input
                 autoFocus
@@ -738,6 +750,7 @@ export function DescriptionFieldEditor({
                 <X size={16} className="text-muted-foreground" />
               </Pressable>
             </View>
+          </Glass>
           </View>
         )}
         {/* Outer view carries the shadow only; rounding + clipping live inside. */}

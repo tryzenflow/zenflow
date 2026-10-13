@@ -1,6 +1,15 @@
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
-import { View } from "react-native";
+import { useReducedMotion } from "@/lib/motion";
+import { useEffect } from "react";
+import { StyleSheet, View } from "react-native";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 import Svg, {
   Circle,
   Defs,
@@ -26,18 +35,42 @@ const GLOW = {
 export function Logo({
   className,
   glow = false,
+  breathe = false,
 }: {
   className?: string;
   /** Orange drop shadow, as in mockups/login.html (`shadow-lg shadow-brand-orange/30`). */
   glow?: boolean;
+  /** Slowly swell the glow (needs `glow`). Static under Reduce Motion. */
+  breathe?: boolean;
 }) {
+  const reduceMotion = useReducedMotion();
+  const swell = useSharedValue(1);
+  useEffect(() => {
+    swell.value = 1;
+    if (glow && breathe && !reduceMotion) {
+      swell.value = withRepeat(
+        withTiming(0.45, { duration: 2400, easing: Easing.inOut(Easing.sin) }),
+        -1,
+        true,
+      );
+    }
+  }, [glow, breathe, reduceMotion, swell]);
+  const glowStyle = useAnimatedStyle(() => ({ opacity: swell.value }));
+
   return (
     <View
       className={cn("aspect-square", className)}
       // A shadow needs an opaque layer to be cast from: the mark's own circle
-      // is vector content, so back it with a matching disc.
-      style={glow ? GLOW : undefined}
+      // is vector content, so back it with a matching disc. It sits behind the
+      // mark in its own layer so `breathe` can fade just the glow.
+      style={glow && !breathe ? GLOW : undefined}
     >
+      {glow && breathe && (
+        <Animated.View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, GLOW, glowStyle]}
+        />
+      )}
       <Svg viewBox="0 0 260 260" width="100%" height="100%" fill="none">
         <Circle cx={130} cy={130} r={130} fill="url(#zenflow-sunrise)" />
         <Path

@@ -9,11 +9,15 @@ For: developers and clients of the Zenflow API. Live schema: Swagger UI at `<API
 - Error: `{ success: false, message, statusCode?, field? }`.
 - `POST /auth/otp/verify` reads the `x-timezone` header.
 
+## Legal pages
+
+`GET /privacy` and `GET /terms` are public HTML pages at the site root (not under `/api/v1`, no session), in English and Vietnamese: `?lang=en|vi`, else the browser's `Accept-Language`. Copy lives in `backend/src/legal/content/`; bump `LEGAL_UPDATED` in `legal.docs.ts` when it changes in substance. Contact address: `LEGAL_CONTACT_EMAIL` ([config](config.md)).
+
 ## Auth (`/auth`)
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/auth/otp/request` | Email a 6-digit OTP. No guard; rate-limited. |
+| POST | `/auth/otp/request` | Email a 6-digit OTP. No guard; rate-limited. 403 `EMAIL_DOMAIN_NOT_ALLOWED` if `ALLOWED_EMAIL_DOMAINS` is set and the address is outside it (prod: `dlu.edu.vn`). |
 | POST | `/auth/otp/verify` | Verify, create the user if new, start the session. `LocalAuthGuard`; rate-limited. |
 | GET | `/auth/me` | Current user. |
 | POST | `/auth/logout` | Destroy the session. |

@@ -71,12 +71,18 @@ export class ReminderSchedulerService {
 
   // ---- arming -------------------------------------------------------------
 
-  /** Arm everything due within {@link ARM_HORIZON_MS} (watcher: bootstrap + every minute). */
-  async sweep(): Promise<void> {
+  /**
+   * Arm everything due within {@link ARM_HORIZON_MS} (watcher: bootstrap + every
+   * minute). Returns how many reminder occurrences were queued for arming; the
+   * queue is only a cache of the DB, so this is also how it refills after a
+   * crash or a server move (job ids are stable, so re-arming is a no-op).
+   */
+  async sweep(): Promise<number> {
     try {
-      await this.syncScope();
+      return await this.syncScope();
     } catch (err) {
       this.logger.warn(`reminder sweep failed: ${(err as Error).message}`);
+      return 0;
     }
   }
 
@@ -89,7 +95,7 @@ export class ReminderSchedulerService {
     }
   }
 
-  private async syncScope(userId?: string): Promise<void> {
+  private async syncScope(userId?: string): Promise<number> {
     const now = new Date();
     const rows = await this.prisma.sessionReminder.findMany({
       where: {
@@ -111,13 +117,16 @@ export class ReminderSchedulerService {
       include: WITH_SESSION,
     });
 
+    let armed = 0;
     for (const row of rows) {
       const plan = this.planFor(row, now);
       if (!plan || plan.fireAt.getTime() - now.getTime() > ARM_HORIZON_MS) {
         continue;
       }
       await this.arm(row.id, plan.startsAt, plan.fireAt, now);
+      armed++;
     }
+    return armed;
   }
 
   private candidateStarts(row: ReminderRow, now: Date): Date[] {

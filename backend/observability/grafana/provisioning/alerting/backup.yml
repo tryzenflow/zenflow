@@ -7,7 +7,9 @@ apiVersion: 1
 # alerting at once. noData = alerting then means the container itself is gone. "Small" treats noData as OK so it stays quiet before the
 # first backup ("missing" already covers that). "Failed" rules read the per-run
 # ok gauge (backup/lib.sh record_run), so one failed run alerts on the next
-# evaluation instead of after the 7 h / 5 d silence; no data is OK for them. Contact point: contact-points.yml.
+# evaluation instead of after the 7 h / 5 d silence; no data is OK for them. The Vault and files
+# rules fall back to the PROD backup container's uptime only (staging has neither Vault nor a files
+# mount, so it stays quiet). Contact point: contact-points.yml.
 groups:
   - orgId: 1
     name: backups
@@ -118,6 +120,72 @@ groups:
             relativeTimeRange: {from: 600, to: 0}
             datasourceUid: prometheus
             model: {refId: A, expr: 'min(zenflow_backup_restore_last_run_ok)', instant: true}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, type: reduce, expression: A, reducer: last}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: lt, params: [1]}}]}
+      - uid: zenflow-backup-vault-missing
+        title: No Vault snapshot in 7 h
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          summary: No Vault snapshot in 7 h (or Vault is not being backed up; look for a WARN line in the backup container log)
+          runbook: docs/ops/backups.md
+        labels:
+          severity: critical
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model: {refId: A, expr: '(time() - max(zenflow_backup_vault_last_success_timestamp_seconds)) or (time() - max(container_start_time_seconds{name="zenflow-backup-prod"}))', instant: true}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, type: reduce, expression: A, reducer: last}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [25200]}}]}
+      - uid: zenflow-backup-files-missing
+        title: No uploaded-files backup in 36 h
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          summary: No uploaded-files archive in 36 h (or BACKUP_FILES_DIR is not mounted; look for an ERROR line in the backup container log)
+          runbook: docs/ops/backups.md
+        labels:
+          severity: critical
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model: {refId: A, expr: '(time() - max(zenflow_backup_files_last_success_timestamp_seconds)) or (time() - max(container_start_time_seconds{name="zenflow-backup-prod"}))', instant: true}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, type: reduce, expression: A, reducer: last}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [129600]}}]}
+      - uid: zenflow-backup-files-failed
+        title: Uploaded-files backup run failed
+        condition: C
+        for: 0s
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          summary: The last files backup run failed; the container log has the step and the error (see the Zenflow · Backups dashboard)
+          runbook: docs/ops/backups.md
+        labels:
+          severity: critical
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model: {refId: A, expr: 'min(zenflow_backup_files_last_run_ok)', instant: true}
           - refId: B
             datasourceUid: __expr__
             model: {refId: B, type: reduce, expression: A, reducer: last}

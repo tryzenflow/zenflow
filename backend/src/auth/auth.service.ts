@@ -4,6 +4,7 @@ import {
   BadRequestException,
   HttpException,
   Inject,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -12,7 +13,12 @@ import {
 } from "@nestjs/common";
 import type { Lang } from "@zenflow/shared";
 import { KillSwitchService } from "../common/killswitch/killswitch.service";
-import { generateOTP } from "./utils";
+import {
+  EMAIL_DOMAIN_NOT_ALLOWED,
+  allowedEmailDomains,
+  generateOTP,
+  isEmailDomainAllowed,
+} from "./utils";
 import { UsersService } from "../users/users.service";
 import { MailService } from "../mail/mail.service";
 
@@ -27,7 +33,23 @@ export class AuthService {
     private killSwitch: KillSwitchService,
   ) {}
 
+  /**
+   * `ALLOWED_EMAIL_DOMAINS` (production only) limits sign-in to those domains.
+   * Checked before a code is mailed, so nothing is sent to other addresses, and
+   * again at verify/create in case a code was issued before the rule shipped.
+   */
+  private assertEmailAllowed(email: string): void {
+    const allowed = allowedEmailDomains();
+    if (isEmailDomainAllowed(email, allowed)) return;
+    throw new ForbiddenException({
+      success: false,
+      message: `Sign-in is limited to ${allowed.map((d) => `@${d}`).join(", ")} emails`,
+      code: EMAIL_DOMAIN_NOT_ALLOWED,
+    });
+  }
+
   async requestOTPCode(email: string, lang?: Lang) {
+    this.assertEmailAllowed(email);
     try {
       const otpCode = generateOTP();
       await this.cacheManager.set(`otp:${email}`, otpCode);
@@ -49,6 +71,7 @@ export class AuthService {
   }
 
   async createUserIfNotExists(email: string, timezone: string) {
+    this.assertEmailAllowed(email);
     const user = await this.usersService.findByEmail(email);
     if (!user) {
       if (!(await this.killSwitch.isEnabled("signups"))) {
@@ -64,6 +87,7 @@ export class AuthService {
   }
 
   async verifyOTPCode(email: string, providedOtp: string) {
+    this.assertEmailAllowed(email);
     try {
       const otpCode = await this.cacheManager.get<string | null>(
         `otp:${email}`,

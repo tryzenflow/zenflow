@@ -32,6 +32,7 @@ interface FakeSeries {
   userId: string;
   type: string;
   rrule: string | null;
+  exdates?: string[];
   rep: { scheduledStartTime: Date; durationMinutes: number } | null;
 }
 
@@ -43,7 +44,9 @@ function makeFakePrisma(sessions: FakeSession[], seriesList: FakeSeries[]) {
           where: {
             userId: string;
             id?: { notIn: string[] };
-            NOT?: { seriesId: string };
+            AND?: Array<{
+              OR: Array<{ seriesId: null } | { seriesId: { not: string } }>;
+            }>;
             OR?: Array<
               { seriesId: null } | { series: { is: { rrule: null } } }
             >;
@@ -56,7 +59,14 @@ function makeFakePrisma(sessions: FakeSession[], seriesList: FakeSeries[]) {
             if (s.userId !== where.userId) return false;
             if (where.deleted === false && s.deleted) return false;
             if (where.id?.notIn.includes(s.id)) return false;
-            if (where.NOT && s.seriesId === where.NOT.seriesId) return false;
+            for (const clause of where.AND ?? []) {
+              const ok = clause.OR.some((c) =>
+                c.seriesId === null
+                  ? s.seriesId === null
+                  : s.seriesId !== null && s.seriesId !== c.seriesId.not,
+              );
+              if (!ok) return false;
+            }
             if (where.OR) {
               const matches = where.OR.some((cond) => {
                 if ("seriesId" in cond) return s.seriesId === cond.seriesId;
@@ -107,6 +117,7 @@ function makeFakePrisma(sessions: FakeSession[], seriesList: FakeSeries[]) {
             rows.map((s) => ({
               type: s.type,
               rrule: s.rrule,
+              exdates: s.exdates ?? [],
               sessions: s.rep ? [s.rep] : [],
             })),
           );
@@ -286,6 +297,34 @@ describe("loadDayLoad", () => {
       },
     ]);
     expect(workloadByType.DND).toEqual({ hours: 0.5, count: 1 });
+  });
+
+  it("does not count a deleted (exdate) occurrence of another recurring series", async () => {
+    const prisma = makeFakePrisma(
+      [],
+      [
+        {
+          id: "dnd-series-1",
+          userId: "u1",
+          type: "DND",
+          rrule: "FREQ=DAILY",
+          exdates: ["2026-06-15T22:00:00.000Z"],
+          rep: {
+            scheduledStartTime: new Date("2026-06-14T22:00:00.000Z"),
+            durationMinutes: 30,
+          },
+        },
+      ],
+    );
+
+    const { occupied } = await loadDayLoad(prisma as never, {
+      userId: "u1",
+      dayStart,
+      dayEnd,
+      timezone: TZ,
+    });
+
+    expect(occupied).toEqual([]);
   });
 
   it("excludeSeriesId drops that series from both the plain-row and recurring scans", async () => {
