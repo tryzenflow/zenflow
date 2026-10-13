@@ -152,11 +152,14 @@ The `docs` skill applies these rules.
 
 ## User-facing copy
 
-Applies to notifications, push, toasts and empty states (EN source strings; VI mirrors them).
+Applies to every string a user reads: notifications, push, toasts, empty states, sheet titles and subtitles, hints, labels and buttons (EN source strings; VI mirrors them).
 
 - **Title** is the news in 2–5 words: `6 new exams`, `A new assignment`, `3 tasks clash with your timetable`.
-- **Body** is one short imperative or question that says what to do next, ≤ 6 words: `Plan your revision now.`, `Reschedule them now?`.
-- No separators (`·`, `—`, `|`) inside a title or body, no source prefix (`LMS · …`), no boilerplate (`You have…`, `Synced from DLU`, `we detected`). Name the source only when it adds meaning, inside a sentence.
+- **Body** is one short imperative or question that says what to do next, ≤ 6 words: `Plan your revision now.`, `Reschedule them now?`. Say it once; leave out reassurance and asides (`Timetable classes and exams stay put.`).
+- **No separators** anywhere in a string: not `·`, `—`, `–`, `-`, `|` or `→` between ideas. Write two sentences, or join with a comma or a word (`Sync failing, last synced 5 min ago`, `Close and keep everything as scheduled`). Ranges (`9:00 – 10:00`) and compound words are not separators.
+- No source prefix (`LMS · …`), no boilerplate (`You have…`, `Synced from DLU`, `we detected`). Name the source only when it adds meaning, inside a sentence.
+- **Sentence case**: no ALL CAPS and no `uppercase` text styling, in EN or VI. Section labels read `Week view`, not `WEEK VIEW`.
+- Make the one number that matters stand out (a badge or bold, `Done 3/7`) and drop the explanation after it.
 - Put the action on the notification (button, tap target), not in the sentence.
 - Every new or changed string needs its VI entry (`backend/src/notifications/localize-notification.ts`, `mobile/lib/i18n-vi.ts`) and an updated spec.
 

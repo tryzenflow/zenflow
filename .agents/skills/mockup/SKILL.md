@@ -18,6 +18,7 @@ The screen or flow, plus any issue number or acceptance criteria.
 
 ## Rules
 Mockups are references, not production code: no data fetching, no real student data.
+Mockup copy follows AGENTS.md → User-facing copy: sentence case, no ALL CAPS, no separators (`·` `—` `–` `-` `|` `→`) in text, imperative titles.
 
 ## Output
 Changed files and open questions. Hand implementation to `calendar-mobile` (and `calendar-web` for the web port).
