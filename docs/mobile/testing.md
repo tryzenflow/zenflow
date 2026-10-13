@@ -92,3 +92,4 @@ A release `.apk` you can sideload onto any Android device or emulator (`adb inst
 
 - **Simulator `.app` (what CI produces, zipped).** Runs only in the iOS Simulator on a Mac (`xcrun simctl install booted Zenflow.app`). Needs no Apple account.
 - **Device `.ipa`.** What you install on a real iPhone or upload to TestFlight/App Store. iOS only runs code signed by Apple, so building one needs a paid Apple Developer account (distribution certificate + provisioning profile) and the real bundle id. Not set up yet; when it is, add an `xcodebuild archive` + `-exportArchive` job gated on those secrets.
+- **Unsigned `.ipa`** (`zenflow-ios-unsigned.ipa`). A device build with no signature, for sideloading: SideStore/AltStore re-sign it on the phone with a free Apple ID (7-day expiry, push and other paid entitlements unavailable).

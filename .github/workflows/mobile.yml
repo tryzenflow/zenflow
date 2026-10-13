@@ -198,6 +198,29 @@ jobs:
           name: zenflow-ios-simulator-app
           path: dist/zenflow-ios-simulator.zip
           if-no-files-found: error
+      # Unsigned device build for sideloading: SideStore/AltStore re-sign it on
+      # the phone with a free Apple ID, so CI needs no certificate or profile.
+      # Push and other paid entitlements do not survive free signing.
+      - name: Build for a device (unsigned)
+        working-directory: mobile/ios
+        run: |
+          xcodebuild \
+            -workspace Zenflow.xcworkspace -scheme Zenflow \
+            -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build-device \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+      - name: Package the unsigned .ipa
+        run: |
+          rm -rf Payload
+          mkdir -p Payload dist
+          cp -R mobile/ios/build-device/Build/Products/Release-iphoneos/Zenflow.app Payload/
+          zip -qry dist/zenflow-ios-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v7
+        with:
+          name: zenflow-ios-unsigned-ipa
+          path: dist/zenflow-ios-unsigned.ipa
+          if-no-files-found: error
 
   e2e-android:
     name: Maestro e2e (Android emulator)
