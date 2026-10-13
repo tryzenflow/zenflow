@@ -126,7 +126,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       {
         image: "./assets/images/splash.png",
         resizeMode: "contain",
-        backgroundColor: "#ffffff",
+        // The mark fills 560 of the PNG's 1024px, so 220 renders it at the
+        // 120pt `BootScreen` draws it at: the native → JS handover doesn't jump.
+        imageWidth: 220,
+        // Match the app's own backgrounds (`--background`), light and dark.
+        backgroundColor: "#FEFCFA",
+        dark: { backgroundColor: "#0F0D0A" },
       },
     ],
     "expo-status-bar",

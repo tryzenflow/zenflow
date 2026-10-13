@@ -20,6 +20,7 @@ import {
   clearCachedSessionUser,
   readCachedSessionUser,
 } from "@/lib/session";
+import { BootScreen } from "@/components/brand/boot-screen";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { isAxiosError } from "axios";
@@ -195,39 +196,28 @@ export default function RootLayout() {
     return () => clearTimeout(t);
   }, [loading]);
 
-  // Keep the splash screen up until BOTH fonts and the local session are resolved
+  // The native splash only has to cover font loading: once fonts are in, the
+  // `BootScreen` overlay below takes over (same logo, same spot) and carries
+  // the wait for the session / redirect. Two frames of grace so it has
+  // actually painted before the native splash lifts.
+  const [bootDone, setBootDone] = React.useState(false);
+  const bootReady = !loading && (routeSettled || splashTimedOut);
+  const handleBootDone = React.useCallback(() => setBootDone(true), []);
   React.useEffect(() => {
-    if (__DEV__) {
-      console.log(
-        "[_layout] fontsLoaded:",
-        fontsLoaded,
-        "fontError:",
-        fontError,
-        "loading:",
-        loading,
-      );
-    }
-    if (
-      (fontsLoaded || fontError) &&
-      !loading &&
-      (routeSettled || splashTimedOut)
-    ) {
-      // Two frames of grace so the redirected-to screen has actually painted
-      // under the splash before it lifts.
-      let cancelled = false;
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          if (cancelled) return;
-          SplashScreen.hideAsync().catch((err) => {
-            console.warn("[_layout] SplashScreen.hideAsync warning:", err);
-          });
-        }),
-      );
-      return () => {
-        cancelled = true;
-      };
-    }
-  }, [fontsLoaded, fontError, loading, routeSettled, splashTimedOut]);
+    if (!(fontsLoaded || fontError)) return;
+    let cancelled = false;
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        SplashScreen.hideAsync().catch((err) => {
+          console.warn("[_layout] SplashScreen.hideAsync warning:", err);
+        });
+      }),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [fontsLoaded, fontError]);
 
   if (!fontsLoaded && !fontError) {
     return null;
@@ -322,6 +312,8 @@ export default function RootLayout() {
       </ToastProvider>
 
       <PortalHost />
+      {/* Our own splash, over everything until the session + redirect settle. */}
+      {!bootDone && <BootScreen ready={bootReady} onDone={handleBootDone} />}
     </GestureHandlerRootView>
   );
 }
