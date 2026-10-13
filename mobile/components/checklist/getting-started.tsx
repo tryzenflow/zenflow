@@ -170,22 +170,27 @@ export function GettingStarted() {
 
       <BottomSheet>
         <BottomSheetContent ref={sheet.ref}>
-          <BottomSheetView hadHeader={false} className="gap-1 pt-2">
-            <View className="mb-2 px-1">
+          <BottomSheetView
+            hadHeader={false}
+            className="gap-1 pt-2"
+            // Only the home-indicator inset: the default adds a 20px gap that
+            // read as dead space under "Hide this checklist".
+            style={{ paddingBottom: insets.bottom + 6 }}
+          >
+            <View className="mb-2 flex-row items-center justify-between px-1">
               <Text className="text-[19px] font-bold tracking-tight">
                 {t("Getting started")}
               </Text>
-              <Text className="mt-[3px] text-[13px] text-muted-foreground">
-                {t(
-                  "{done} of {total} done. Steps tick off as you try them — tap one for a quick guide.",
-                  { done, total },
-                )}
-              </Text>
+              <View className="rounded-full bg-primary px-3 py-1">
+                <Text className="text-[15px] font-bold text-primary-foreground">
+                  {t("Done {done}/{total}", { done, total })}
+                </Text>
+              </View>
             </View>
 
             {groups.map((group) => (
               <View key={group.id} className="mt-1">
-                <Text className="px-1 pb-0.5 pt-2 text-[12px] font-medium text-muted-foreground">
+                <Text className="px-1 pb-1 pt-3 text-[17px] font-bold tracking-tight text-foreground">
                   {group.title}
                 </Text>
                 {group.items.map((item) => (
