@@ -5,6 +5,7 @@
     "ab-gap-primary-text-note-skeleton",
     "backup-failure-visibility",
     "checklist-day-sheet-spotlight",
+    "dlu-signups-backups-legal-pages",
     "env-upload-limits-storage-bar",
     "file-ids-queue-release",
     "file-range-requests",
@@ -17,6 +18,7 @@
     "offline-readonly-media",
     "release-note-files-undo-redo",
     "restore-saved-theme",
+    "sentence-case-copy-and-names",
     "short-user-facing-copy"
   ],
   "initialVersions": {
