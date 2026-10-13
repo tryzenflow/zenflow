@@ -431,6 +431,9 @@ export default {
     "Lịch này giờ kết thúc sau hạn chót.",
   "Scheduled after deadline": "Xếp sau hạn chót",
   "Moved {count} flexible tasks": "Đã dời {count} việc linh hoạt",
+  "Some sessions weren't moved": "Một số buổi chưa được dời",
+  "{count} stayed put because the new slot conflicted.":
+    "{count} buổi được giữ nguyên vì khung giờ mới bị trùng.",
   "To make room for the new session.": "Để nhường chỗ cho lịch mới.",
   "Moved to new slot": "Đã chuyển sang khung giờ mới",
   "{when}. Thanks, noted for next time.":

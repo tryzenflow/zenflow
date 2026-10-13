@@ -9,6 +9,7 @@ import {
   showBulkPickToast,
   showSeriesAlternativesPrompt,
   showSeriesPickToast,
+  showSkippedToast,
 } from "@/lib/task-toasts";
 import type { TimelineState } from "@/components/calendar/day-timeline";
 import {
@@ -453,14 +454,15 @@ export default function WeekScreen() {
       scope?: UpdateScope,
       skipConflicting?: boolean,
     ) => {
-      await updateSession(id, {
+      const res = await updateSession(id, {
         scheduledStartTime: startISO,
         durationMinutes,
         scope,
         skipConflicting,
       });
+      showSkippedToast(toast, res.skippedSessionIds);
     },
-    [],
+    [toast],
   );
 
   // A drag/reschedule that targets a session belonging to a series routes

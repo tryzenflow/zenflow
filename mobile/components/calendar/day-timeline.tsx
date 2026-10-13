@@ -18,7 +18,7 @@ import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import { useNow } from "@/hooks/use-now";
 import { useUserStore } from "@/hooks/use-user-store";
 import { isPastDeadlineDrop } from "@/lib/overdue";
-import { showErrorToast } from "@/lib/task-toasts";
+import { showErrorToast, showSkippedToast } from "@/lib/task-toasts";
 import { type PeekBlock, peekBlocksFromSegments } from "@/lib/peek";
 import { useSpotlight } from "@/hooks/use-spotlight";
 import { showMovedToast } from "@/lib/move-toast";
@@ -841,6 +841,7 @@ export function DayTimeline({
             skipConflicting,
           });
           const firstMove = completeStep("move-task");
+          showSkippedToast(toast, updated.skippedSessionIds);
 
           // Handle divergent response — show picker for primary vs alternative slot
           if (

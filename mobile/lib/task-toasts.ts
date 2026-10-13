@@ -255,6 +255,22 @@ export function showDisplacedToast(
   });
 }
 
+/** Info toast when "skip conflicting" left some series occurrences unmoved. */
+export function showSkippedToast(
+  toast: ToastFn,
+  skippedSessionIds: string[] | undefined,
+): void {
+  if (!skippedSessionIds?.length) return;
+  toast({
+    title: t("Some sessions weren't moved"),
+    description: t("{count} stayed put because the new slot conflicted.", {
+      count: skippedSessionIds.length,
+    }),
+    icon: "calendar-clock",
+    duration: 4000,
+  });
+}
+
 /**
  * Toast shown after the user picks the alternative slot in a divergent
  * placement (issue #41). Title "Moved to new slot", description "{when}. Thanks, noted for next time."
