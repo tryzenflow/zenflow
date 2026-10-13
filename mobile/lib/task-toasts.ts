@@ -132,13 +132,14 @@ export function placementToastMessage(
 
   const qualifier = placementQualifier(task, { timezone: user.timezone });
   const start = zonedDate(task.scheduledStartTime, user.timezone);
-  // The time is the news, so it leads the title; the date is the detail.
-  const when = format(start, "HH:mm");
+  // Date and time share the title (same shape as showMovedToast), so the date
+  // is not left hanging below as a description.
+  const when = `${format(start, "EEE, MMM d")}, ${format(start, "HH:mm")}`;
   const title =
     qualifier === "pastDeadline"
       ? t("Scheduled late for {when}", { when })
       : t("Scheduled for {when}", { when });
-  return { message: `${title}\n${format(start, "EEE MMM d")}`, variant: "success" };
+  return { message: title, variant: "success" };
 }
 
 const POLICY_LABEL: Record<InfeasiblePolicy, string> = {
@@ -315,7 +316,7 @@ export function showSeriesAlternativesPrompt(
         : "{count} sittings have an alternative",
       { count },
     ),
-    description: t("All {total} are already scheduled — swap any you like", {
+    description: t("All {total} are already scheduled. Swap any you like.", {
       total,
     }),
     variant: "tip",

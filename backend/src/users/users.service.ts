@@ -8,6 +8,7 @@ import { Prisma, type User } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateUserDto } from "./dto/create-user.dto";
+import { nameFromEmail } from "./name-from-email";
 import { langToDb } from "./user-response";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { remapExdatesForTimezone } from "../scheduler/core/recurrence";
@@ -31,7 +32,7 @@ export class UsersService {
       // first `POST /integrations` for that provider (see IntegrationsService),
       // not here — a user who never connects a DLU account never gets one.
       return await this.prisma.user.create({
-        data: { ...createUserDto, name: "New User" },
+        data: { ...createUserDto, name: nameFromEmail(createUserDto.email) },
       });
     } catch (error) {
       if (

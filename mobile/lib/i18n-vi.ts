@@ -1,7 +1,6 @@
 /** Vietnamese UI copy. English keys remain the English fallback. */
 export default {
   "Auto-scheduled": "Tự động xếp lịch",
-  "Continue · {count} tags": "Tiếp tục · {count} nhãn",
   "Tell Zenflow what needs doing. It finds the time.":
     "Bạn nói việc cần làm, Zenflow tìm thời gian phù hợp.",
   Account: "Tài khoản",
@@ -31,7 +30,8 @@ export default {
   "Choose your language": "Chọn ngôn ngữ",
   "Clear all": "Xóa tất cả",
   "Clear all notifications?": "Xóa tất cả thông báo?",
-  "Close — keeps everything as scheduled": "Đóng — giữ nguyên tất cả lịch",
+  "Close and keep everything as scheduled":
+    "Đóng và giữ nguyên tất cả lịch",
   Confirm: "Xác nhận",
   Connect: "Kết nối",
   "Connect your LMS or portal": "Kết nối LMS hoặc cổng sinh viên",
@@ -54,7 +54,8 @@ export default {
   "Disconnect {provider}?": "Ngắt kết nối {provider}?",
   "student portal": "cổng sinh viên",
   Dismiss: "Xóa",
-  "Dismiss — keeps the current time": "Đóng — giữ nguyên thời gian hiện tại",
+  "Dismiss and keep the current time":
+    "Đóng và giữ nguyên thời gian hiện tại",
   "Display name": "Tên hiển thị",
   "Do not disturb": "Không làm phiền",
   Due: "Hạn chót",
@@ -91,7 +92,8 @@ export default {
   Month: "Tháng",
   "Move session": "Chuyển lịch",
   "Move to…": "Chuyển đến…",
-  "Moving · release to reschedule": "Đang di chuyển · thả để xếp lại lịch",
+  "Moving. Release to reschedule":
+    "Đang di chuyển. Thả để xếp lại lịch",
   Name: "Tên",
   "New LMS assignments, scheduled for you":
     "Bài tập LMS mới được tự động xếp lịch",
@@ -118,12 +120,10 @@ export default {
   Password: "Mật khẩu",
   "Pick your tags": "Chọn nhãn",
   Preferences: "Tùy chọn",
-  "Prefilled from your email — edit if you like":
-    "Điền sẵn từ email — bạn có thể sửa",
   "Press and hold a session on your calendar to move or resize it.":
     "Nhấn giữ một lịch để di chuyển hoặc thay đổi thời lượng.",
-  "Press and hold, then drag onto another day this month — or tap Move to pick any date.":
-    "Nhấn giữ rồi kéo sang ngày khác trong tháng — hoặc nhấn Chuyển đến để chọn ngày.",
+  "Press and hold, then drag onto another day this month. Or tap Move to pick any date.":
+    "Nhấn giữ rồi kéo sang ngày khác trong tháng. Hoặc nhấn Chuyển đến để chọn ngày.",
   "Previous month": "Tháng trước",
   "Privacy Policy": "Chính sách quyền riêng tư",
   Profile: "Hồ sơ",
@@ -150,10 +150,10 @@ export default {
   "Set up": "Thiết lập",
   Settings: "Cài đặt",
   Showing: "Hiển thị",
-  "Showing the closest matches — refine your search to see more":
-    "Hiển thị kết quả gần nhất — tìm cụ thể hơn để xem thêm",
-  "Shown in the app and in reminders. We guessed it from your email.":
-    "Hiển thị trong ứng dụng và nhắc nhở. Tên được gợi ý từ email.",
+  "Showing the closest matches. Refine your search to see more.":
+    "Hiển thị kết quả gần nhất. Hãy tìm cụ thể hơn để xem thêm.",
+  "Shown in the app and in your reminders.":
+    "Hiển thị trong ứng dụng và trong nhắc nhở của bạn.",
   "Sign out": "Đăng xuất",
   "Signing out…": "Đang đăng xuất…",
   "Skip for now": "Bỏ qua lúc này",
@@ -168,11 +168,12 @@ export default {
   "Switch every undecided sitting to its alternative":
     "Chuyển các buổi chưa chọn sang giờ thay thế",
   "Sync failing": "Đồng bộ đang lỗi",
-  "Sync failing · last synced {time}": "Đồng bộ đang lỗi · lần cuối {time}",
+  "Sync failing, last synced {time}":
+    "Đồng bộ đang lỗi, lần cuối {time}",
   "Sync now": "Đồng bộ ngay",
   Tags: "Nhãn",
-  "Tap an alternative to swap that sitting — applied right away.":
-    "Nhấn giờ thay thế để chuyển buổi đó — áp dụng ngay.",
+  "Tap an alternative to swap that sitting. It applies right away.":
+    "Nhấn giờ thay thế để chuyển buổi đó. Áp dụng ngay.",
   "Terms of Service": "Điều khoản sử dụng",
   "That time was just taken": "Thời gian này vừa được sử dụng",
   "This and following": "Lần này và các lần sau",
@@ -197,7 +198,8 @@ export default {
   "Used to place sessions and reminders at the right local time.":
     "Dùng để xếp lịch và nhắc nhở đúng giờ địa phương.",
   "Verifying code…": "Đang xác thực mã…",
-  "Vietnamese · default": "Tiếng Việt · mặc định",
+  "Vietnamese (default)":
+    "Tiếng Việt (mặc định)",
   View: "Xem",
   "View on calendar": "Xem trên lịch",
   Week: "Tuần",
@@ -261,7 +263,8 @@ export default {
   "Sent to {email}": "Đã gửi đến {email}",
   "Created {date}": "Tạo ngày {date}",
   "From {date}": "Từ {date}",
-  "From {date} · starts {time}": "Từ {date} · bắt đầu {time}",
+  "From {date}, starts {time}":
+    "Từ {date}, bắt đầu {time}",
   "Move {title}": "Chuyển {title}",
   "Keep {time} {day}": "Giữ {time} {day}",
   "Switch to {time} {day}": "Chuyển sang {time} {day}",
@@ -276,8 +279,8 @@ export default {
   "Update your {provider} login": "Cập nhật đăng nhập {provider}",
   "Task created": "Đã tạo công việc",
   "{count} sittings have an alternative": "{count} buổi có giờ thay thế",
-  "All {total} are already scheduled — swap any you like":
-    "Cả {total} buổi đã có lịch — bạn có thể đổi buổi tùy ý",
+  "All {total} are already scheduled. Swap any you like.":
+    "Cả {total} buổi đã có lịch. Bạn có thể đổi buổi tùy ý.",
   "Updated {count} sittings": "Đã cập nhật {count} buổi",
   "{count} selected": "Đã chọn {count}",
   "Add your own tag…": "Thêm nhãn riêng…",
@@ -302,8 +305,10 @@ export default {
   Online: "Trực tuyến",
   Disconnected: "Đã ngắt kết nối",
   "Connecting…": "Đang kết nối…",
-  "{now} · nothing scheduled": "{now} · chưa có lịch",
-  "{now} · {count} tasks today": "{now} · {count} công việc hôm nay",
+  "{now}, nothing scheduled":
+    "{now}, chưa có lịch",
+  "{now}, {count} tasks today":
+    "{now}, {count} công việc hôm nay",
   "{sign}{count} days": "{sign}{count} ngày",
   Forbidden: "Bạn không có quyền thực hiện thao tác này.",
   "Provide both username and password to connect this provider for the first time.":
@@ -345,8 +350,8 @@ export default {
     "Chạm +, hoặc nhấn giữ một ô trống.",
   "Move a task":
     "Di chuyển công việc",
-  "Hold one of your tasks and drag it to reschedule in 15-minute steps. Timetable classes and exams stay put.":
-    "Nhấn giữ một công việc của bạn rồi kéo để đổi lịch theo từng 15 phút. Thời khóa biểu và lịch thi giữ nguyên.",
+  "Hold one of your tasks and drag it to reschedule in 15-minute steps.":
+    "Nhấn giữ một công việc của bạn rồi kéo để đổi lịch theo từng 15 phút.",
   "Hold a task for more actions":
     "Nhấn giữ công việc để xem thêm thao tác",
   "Hold it without moving. Move to… changes the day.":
@@ -361,14 +366,14 @@ export default {
     "Chạm vào một ngày trong tháng để xem công việc của ngày đó.",
   "Move a task to another day":
     "Chuyển công việc sang ngày khác",
-  "Hold one of your tasks in the day's list, then drag it onto another day. Timetable classes and exams stay put.":
-    "Nhấn giữ một công việc của bạn trong danh sách của ngày rồi kéo sang ngày khác. Thời khóa biểu và lịch thi giữ nguyên.",
+  "Hold one of your tasks in the day's list, then drag it onto another day.":
+    "Nhấn giữ một công việc của bạn trong danh sách của ngày rồi kéo sang ngày khác.",
   "Nice! You moved a task.": "Tuyệt! Bạn đã chuyển một công việc.",
   "Zenflow learns from every move to place tasks better.":
     "Zenflow học từ mỗi lần bạn chuyển để xếp lịch tốt hơn.",
   "Moved to {when}": "Đã chuyển sang {when}",
-  "{title} · {count} of {total} have alternatives":
-    "{title} · {count}/{total} buổi có thời gian khác",
+  "{title}, {count} of {total} have alternatives":
+    "{title}, {count}/{total} buổi có thời gian khác",
   "Pick a time, then confirm.":
     "Chọn một thời gian rồi xác nhận.",
   "Pick a time for each, then confirm.":
@@ -440,8 +445,6 @@ export default {
     "Giữ yên một việc để mở Dời sang… và các tùy chọn khác.",
   "Swipe a notification left to dismiss it.":
     "Vuốt thông báo sang trái để xóa.",
-  "Timetable classes and exams stay put when you drag.":
-    "Lớp thời khóa biểu và lịch thi sẽ đứng yên khi bạn kéo.",
   "Taking longer than usual…": "Lâu hơn bình thường một chút…",
   "Zenflow is open to DLU students for now. Use your @dlu.edu.vn email.":
     "Hiện Zenflow chỉ dành cho sinh viên DLU. Hãy dùng email @dlu.edu.vn của bạn.",
@@ -472,20 +475,20 @@ export default {
     "Bạn thao tác hơi nhanh. Chờ một chút rồi thử lại nhé.",
   "Your email is how you sign in, so it can't be changed here.":
     "Email dùng để đăng nhập nên không thể đổi ở đây.",
-  "You can also do this later in Settings → Connect your LMS or portal.":
-    "Bạn cũng có thể làm sau trong Cài đặt → Kết nối LMS hoặc cổng sinh viên.",
+  "You can also do this later in Settings, under Connect your LMS or portal.":
+    "Bạn cũng có thể làm sau trong Cài đặt, mục Kết nối LMS hoặc cổng sinh viên.",
   "Get a nudge when a session is near or your schedule changes. We'll ask for permission next.":
     "Nhận nhắc nhở khi sắp đến giờ hoặc lịch thay đổi. Tiếp theo, Zenflow sẽ xin quyền gửi thông báo.",
   "Zenflow keeps an eye on your timetable, exams and assignments, so they land on your calendar. Your login is only used to check your LMS and portal for you.":
     "Zenflow theo dõi thời khóa biểu, lịch thi và bài tập để mọi thứ tự vào lịch của bạn. Thông tin đăng nhập chỉ dùng để kiểm tra LMS và cổng sinh viên giúp bạn.",
   "Turn them on in system settings to get reminders. For now, they stay off.":
     "Bật trong cài đặt hệ thống để nhận nhắc nhở. Hiện tại thông báo vẫn đang tắt.",
-  "Optional · saved as your default reminder.":
-    "Tùy chọn · lưu làm nhắc nhở mặc định.",
+  "Optional. Saved as your default reminder.":
+    "Tùy chọn. Lưu làm nhắc nhở mặc định.",
   "Tags keep your tasks organised. Tap the ones you like, add your own, and rename them later.":
     "Nhãn giúp bạn sắp xếp công việc gọn gàng. Chạm để chọn nhãn gợi ý, thêm nhãn riêng và đổi tên sau.",
-  "{count} selected · saved to your account":
-    "Đã chọn {count} · lưu vào tài khoản của bạn",
+  "{count} selected, saved to your account":
+    "Đã chọn {count}, lưu vào tài khoản của bạn",
   "Easy on the eyes at night": "Dịu mắt khi dùng ban đêm",
   "How early should we remind you? You can change it per task.":
     "Bạn muốn được nhắc trước bao lâu? Có thể đổi riêng cho từng công việc.",
@@ -510,8 +513,8 @@ export default {
     "Lựa chọn của bạn giúp Zenflow hiểu khung giờ hợp với bạn. Các lịch khác vẫn giữ nguyên.",
   "Every notification will be removed for good. This can't be undone.":
     "Mọi thông báo sẽ bị xóa vĩnh viễn và không thể khôi phục.",
-  "{done} of {total} done. Steps tick off as you try them — tap one for a quick guide.":
-    "Xong {done}/{total}. Mỗi bước tự đánh dấu khi bạn thử — chạm vào bước để xem hướng dẫn.",
+  "Done {done}/{total}":
+    "Xong {done}/{total}",
   "Couldn't load this month": "Chưa tải được tháng này",
   "Couldn't load your day": "Chưa tải được lịch trong ngày",
   "Couldn't move that sitting": "Chưa chuyển được buổi này",

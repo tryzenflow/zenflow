@@ -91,7 +91,7 @@ function Cell({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View className="gap-2">
-      <Text className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
+      <Text className="text-[13px] font-semibold text-muted-foreground">
         {title}
       </Text>
       {children}

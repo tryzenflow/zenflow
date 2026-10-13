@@ -157,7 +157,7 @@ export function TagAutocomplete({
             <Text className="text-sm text-muted-foreground">
               {trimmed
                 ? t("No matching tags.")
-                : t("No tags yet — type to create one.")}
+                : t("No tags yet. Type to create one.")}
             </Text>
           </View>
         );

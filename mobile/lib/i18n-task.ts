@@ -108,12 +108,13 @@ const taskTranslations: Record<string, string> = {
   "You already have a reminder then.": "Đã có nhắc nhở vào thời điểm này.",
   "Edit reminder: {reminder}": "Sửa nhắc nhở: {reminder}",
   "Remove reminder: {reminder}": "Xóa nhắc nhở: {reminder}",
-  "{count} of {max} reminders set — tap one to change it.":
-    "Đã đặt {count}/{max} nhắc nhở — chạm để thay đổi.",
+  "{count} of {max} reminders set. Tap one to change it.":
+    "Đã đặt {count}/{max} nhắc nhở. Chạm để thay đổi.",
   "New tasks use your default reminder from Settings. Tap a reminder to change it. Up to {max} per task.":
     "Công việc mới dùng nhắc nhở mặc định trong Cài đặt. Chạm để thay đổi. Tối đa {max} nhắc nhở mỗi công việc.",
   "No matching tags.": "Không có nhãn phù hợp.",
-  "No tags yet — type to create one.": "Chưa có nhãn — nhập để tạo mới.",
+  "No tags yet. Type to create one.":
+    "Chưa có nhãn. Nhập để tạo mới.",
   "Add a tag…": "Thêm nhãn…",
   "Add tags": "Thêm nhãn",
   "Search or create a tag…": "Tìm hoặc tạo nhãn…",

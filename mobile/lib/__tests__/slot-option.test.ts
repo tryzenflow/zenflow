@@ -52,8 +52,8 @@ describe("buildSlotOptions", () => {
       TZ,
       NOW,
     );
-    expect(p.label).toBe("Today · 1:00 – 2:00 AM");
-    expect(a.label).toBe("Today · 5:00 – 6:00 AM");
+    expect(p.label).toBe("Today, 1:00 – 2:00 AM");
+    expect(a.label).toBe("Today, 5:00 – 6:00 AM");
     expect(a.dayDelta).toBe("");
   });
 

@@ -89,7 +89,7 @@ describe("placementToastMessage", () => {
     });
   });
 
-  it("splits a scheduled placement into a brief title and the time", () => {
+  it("puts the date and the time together in one title", () => {
     const { message } = placementToastMessage(
       {
         title: "x",
@@ -99,8 +99,8 @@ describe("placementToastMessage", () => {
       user,
     );
     const { title, description } = splitToastMessage(message);
-    expect(title).toBe("Scheduled for 9:00 AM");
-    expect(description).toBe("Mon Oct 12");
+    expect(title).toBe("Scheduled for Mon, Oct 12, 9:00 AM");
+    expect(description).toBeUndefined();
   });
 });
 

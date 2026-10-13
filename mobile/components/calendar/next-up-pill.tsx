@@ -39,7 +39,7 @@ export function NextUpPill({
   );
   const rel =
     minutes >= 1 && minutes <= SOON_MINUTES
-      ? ` · ${t("in {count} min", { count: minutes })}`
+      ? ` ${t("in {count} min", { count: minutes })}`
       : "";
 
   return (
@@ -74,7 +74,7 @@ export function NextUpPill({
               <Text numberOfLines={1} className="shrink text-xs">
                 <Text className="text-xs font-semibold">{t("Next up")}</Text>
                 <Text className="text-xs text-muted-foreground">
-                  {` · ${time} · ${status.title}${rel}`}
+                  {` ${time}, ${status.title}${rel}`}
                 </Text>
               </Text>
             </View>

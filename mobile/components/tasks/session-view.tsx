@@ -83,7 +83,7 @@ function repeatLabel(rrule: string | null): string | null {
         ? state.byday.map((d) => t(WEEKDAYS[d] ?? d)).join(", ")
         : t("Every week");
   return state.until
-    ? `${base} · ${t("until {date}", { date: state.until })}`
+    ? `${base}, ${t("until {date}", { date: state.until })}`
     : base;
 }
 
@@ -223,11 +223,11 @@ function SessionViewImpl({ task, values, tz }: SessionViewProps) {
     if (!task.scheduledStartTime) return null;
     const start = zonedDate(task.scheduledStartTime, tz);
     const end = new Date(start.getTime() + task.durationMinutes * 60_000);
-    return `${format(start, "EEE, MMM d")} · ${format(start, "HH:mm")} – ${format(end, "HH:mm")}`;
+    return `${format(start, "EEE, MMM d")}, ${format(start, "HH:mm")} – ${format(end, "HH:mm")}`;
   }, [task.scheduledStartTime, task.durationMinutes, tz]);
   const deadline =
     task.type === "TASK" && task.deadline
-      ? format(zonedDate(task.deadline, tz), "EEE, MMM d · HH:mm")
+      ? format(zonedDate(task.deadline, tz), "EEE, MMM d, HH:mm")
       : null;
   const overdue =
     task.type === "TASK" &&
