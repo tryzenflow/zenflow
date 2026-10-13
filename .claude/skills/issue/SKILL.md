@@ -18,5 +18,8 @@ A request, bug report, or an existing issue number to refine (`gh issue view <n>
 4. Check duplicates: `gh issue list --search "<keywords>" --state all`.
 5. Create: `gh issue create --title "type(scope): summary" --body-file - --label <type>,<areas>,<P-label>`.
 
+## Rules
+- Short and factual: problem, expected, steps. No background essays or notes ([AGENTS.md → Concise writing](../../../AGENTS.md#concise-writing)).
+
 ## Output
 The issue URL and number. Don't implement anything.

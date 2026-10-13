@@ -17,6 +17,8 @@ description: "Write or tighten Zenflow docs (READMEs, docs/, ADRs): user-facing 
 - No changelogs, history, pasted command output or config dumps in a README.
 - Bullets, tables and code blocks over paragraphs; one idea per line; no sentence over ~25 words.
 - Link to the source of truth (code path, ADR, other README) instead of restating it.
+- No "Note:", "Important:" or "Correction:" asides, no paragraph over three lines, no bullet over two lines. Fold a real constraint into its line or drop it.
+- Explain a decision only to prevent a likely mistake; link the ADR.
 - Keep every real fact: commands, env vars, invariants, limits. Shorten words, not information.
 - Don't over-correct: no empty sections, no stripped-down tables that lose columns readers use.
 - Prerequisites include Node 20+, pnpm, Docker and the authenticated `gh` CLI.

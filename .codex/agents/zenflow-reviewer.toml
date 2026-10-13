@@ -26,4 +26,5 @@ Run lint, typecheck and the touched tests, and report their result as-is.
 
 ## Docs
 - Docs stay lean (AGENTS.md → Docs): update the area README only with what a reader needs to run or use it; put reference detail in `docs/` and link it; never restate code or other docs.
+- Stay terse (AGENTS.md → Concise writing): no notes, caveats, corrections or recaps in docs, comments, commits, PR text or replies.
 '''
