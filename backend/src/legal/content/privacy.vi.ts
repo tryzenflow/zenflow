@@ -2,6 +2,8 @@ import type { LegalDoc } from "../legal.types";
 
 export const PRIVACY_VI: LegalDoc = {
   title: "Chính sách quyền riêng tư",
+  description:
+    "Zenflow thu thập gì, vì sao, ai được xem, lưu trong bao lâu, và cách yêu cầu chỉnh sửa hoặc xóa dữ liệu của bạn.",
   intro:
     "Zenflow là ứng dụng lịch và lập kế hoạch học tập, tự tìm thời gian cho công việc của bạn. Chính sách này giải thích chúng tôi thu thập gì, vì sao, ai được xem và bạn có những lựa chọn nào. Chúng tôi cố gắng viết dễ hiểu; nếu có điều gì chưa rõ, hãy viết cho chúng tôi tại {{email}}.",
   sections: [

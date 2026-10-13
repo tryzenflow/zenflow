@@ -2,6 +2,8 @@ import type { LegalDoc } from "../legal.types";
 
 export const TERMS_VI: LegalDoc = {
   title: "Điều khoản dịch vụ",
+  description:
+    "Quy tắc sử dụng Zenflow: tài khoản và nội dung của bạn, kết nối trường, sử dụng hợp lệ và trách nhiệm của chúng tôi.",
   intro:
     "Các điều khoản này là thỏa thuận giữa bạn và Zenflow khi bạn dùng ứng dụng và trang web Zenflow. Khi tạo tài khoản hoặc sử dụng Zenflow, bạn chấp nhận các điều khoản này. Nếu không đồng ý, vui lòng không sử dụng Zenflow. Câu hỏi: {{email}}.",
   sections: [

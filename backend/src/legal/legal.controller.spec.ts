@@ -45,6 +45,33 @@ describe("renderLegalPage", () => {
     expect(html).not.toContain("<b>@x.test");
   });
 
+  it("adds SEO metadata and an inline favicon, and absolute tags only with a base URL", () => {
+    const bare = renderLegalPage("privacy", "en", "a@x.test");
+    expect(bare).toContain('<meta name="description"');
+    expect(bare).toContain('<meta name="robots" content="index,follow">');
+    expect(bare).toContain(
+      'rel="icon" type="image/svg+xml" href="data:image/svg+xml,',
+    );
+    expect(bare).toContain('property="og:title"');
+    expect(bare).not.toContain('rel="canonical"');
+
+    const full = renderLegalPage(
+      "privacy",
+      "vi",
+      "a@x.test",
+      "https://z.test/",
+    );
+    expect(full).toContain(
+      '<link rel="canonical" href="https://z.test/privacy?lang=vi">',
+    );
+    expect(full).toContain(
+      'hreflang="en" href="https://z.test/privacy?lang=en"',
+    );
+    expect(full).toContain(
+      'property="og:url" content="https://z.test/privacy?lang=vi"',
+    );
+  });
+
   it("renders in the requested language with a switch to the other", () => {
     const html = renderLegalPage("terms", "vi", "a@x.test");
     expect(html).toContain('<html lang="vi">');

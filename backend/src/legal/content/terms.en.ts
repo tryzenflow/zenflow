@@ -2,6 +2,8 @@ import type { LegalDoc } from "../legal.types";
 
 export const TERMS_EN: LegalDoc = {
   title: "Terms of Service",
+  description:
+    "The rules for using Zenflow: your account and content, campus connections, acceptable use, and our responsibilities.",
   intro:
     "These terms are the agreement between you and Zenflow when you use the Zenflow app and website. By creating an account or using Zenflow you accept them. If you do not agree, please do not use Zenflow. Questions: {{email}}.",
   sections: [

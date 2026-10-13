@@ -6,6 +6,10 @@ import type { LegalLang, LegalPage } from "./legal.types";
 
 const PLACEHOLDER_EMAIL = "[set LEGAL_CONTACT_EMAIL]";
 
+/** Static page: no scripts, nothing to fetch; `img-src data:` is for the inline favicon. */
+const CSP =
+  "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+
 /** `?lang=` wins; otherwise the browser's preference; Vietnamese users are the default audience, English is the fallback for everyone else. */
 export function pickLang(
   query: string | undefined,
@@ -30,10 +34,7 @@ export class LegalController {
   @Header("Content-Type", "text/html; charset=utf-8")
   @Header("Cache-Control", "public, max-age=3600")
   @Header("Vary", "Accept-Language")
-  @Header(
-    "Content-Security-Policy",
-    "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
-  )
+  @Header("Content-Security-Policy", CSP)
   privacy(
     @Query("lang") lang?: string,
     @Headers("accept-language") acceptLanguage?: string,
@@ -45,10 +46,7 @@ export class LegalController {
   @Header("Content-Type", "text/html; charset=utf-8")
   @Header("Cache-Control", "public, max-age=3600")
   @Header("Vary", "Accept-Language")
-  @Header(
-    "Content-Security-Policy",
-    "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
-  )
+  @Header("Content-Security-Policy", CSP)
   terms(
     @Query("lang") lang?: string,
     @Headers("accept-language") acceptLanguage?: string,
@@ -63,6 +61,12 @@ export class LegalController {
   ): string {
     const email =
       this.config.get<string>("LEGAL_CONTACT_EMAIL") || PLACEHOLDER_EMAIL;
-    return renderLegalPage(page, pickLang(lang, acceptLanguage), email);
+    return renderLegalPage(
+      page,
+      pickLang(lang, acceptLanguage),
+      email,
+      // Public origin for canonical/hreflang/og:url; those tags are omitted when unset.
+      this.config.get<string>("PUBLIC_URL") || undefined,
+    );
   }
 }

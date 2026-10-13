@@ -2,6 +2,8 @@ import type { LegalDoc } from "../legal.types";
 
 export const PRIVACY_EN: LegalDoc = {
   title: "Privacy Policy",
+  description:
+    "What Zenflow collects, why, who sees it, how long it is kept, and how to ask for your data to be corrected or deleted.",
   intro:
     "Zenflow is a calendar and study planner that finds time for your tasks. This policy explains what we collect, why, who sees it, and the choices you have. We have tried to keep it plain; if something is unclear, write to us at {{email}}.",
   sections: [

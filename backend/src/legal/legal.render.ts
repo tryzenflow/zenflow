@@ -84,15 +84,39 @@ footer a[aria-current]{color:var(--fg);text-decoration:none;font-weight:600}
 
 const LOGO = `<svg width="30" height="30" viewBox="0 0 260 260" fill="none" aria-hidden="true"><circle cx="130" cy="130" r="130" fill="url(#g)"/><path d="M220.5 51.5C220.5 51.5 172.668 65.7587 147.635 89.6235C122.602 113.488 136.249 158.201 104.912 183.517C80.2542 203.436 33 199.5 33 199.5" stroke="#FFF085" stroke-width="24" stroke-linecap="round"/><defs><linearGradient id="g" x1="48.5" y1="31.5" x2="222.5" y2="220.5" gradientUnits="userSpaceOnUse"><stop stop-color="#FF6900"/><stop offset=".3236" stop-color="#F0B100"/><stop offset="1" stop-color="#D8F999"/></linearGradient></defs></svg>`;
 
+/** The brand mark as a data URI, so the favicon needs no extra request or file. */
+const FAVICON = `data:image/svg+xml,${encodeURIComponent(
+  LOGO.replace(' width="30" height="30"', "").replace(
+    ' aria-hidden="true"',
+    ' xmlns="http://www.w3.org/2000/svg"',
+  ),
+)}`;
+
+/**
+ * `baseUrl` (the public origin, e.g. `https://zenflow.alphatrann.com`) turns on the
+ * absolute tags (canonical, hreflang alternates, `og:url`); without it they are left out.
+ */
 export function renderLegalPage(
   page: LegalPage,
   lang: LegalLang,
   email: string,
+  baseUrl?: string,
 ): string {
   const doc = LEGAL_DOCS[page][lang];
   const chrome = LEGAL_CHROME[lang];
   const other: LegalLang = lang === "en" ? "vi" : "en";
   const pages: LegalPage[] = ["privacy", "terms"];
+
+  const origin = baseUrl?.replace(/\/+$/, "");
+  const abs = (l: LegalLang) => `${origin}/${page}?lang=${l}`;
+  const absoluteTags = origin
+    ? [
+        `<link rel="canonical" href="${escapeHtml(abs(lang))}">`,
+        `<link rel="alternate" hreflang="${lang}" href="${escapeHtml(abs(lang))}">`,
+        `<link rel="alternate" hreflang="${other}" href="${escapeHtml(abs(other))}">`,
+        `<meta property="og:url" content="${escapeHtml(abs(lang))}">`,
+      ].join("\n")
+    : "";
 
   const sections = doc.sections.map((s, i) => ({
     id: `s${i + 1}`,
@@ -128,7 +152,18 @@ export function renderLegalPage(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>${escapeHtml(chrome.siteTitle(doc.title))}</title>
-<link rel="alternate" hreflang="${other}" href="/${page}?lang=${other}">
+<meta name="description" content="${escapeHtml(doc.description)}">
+<meta name="robots" content="index,follow">
+<meta name="theme-color" content="#fefcfa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f0d0a" media="(prefers-color-scheme: dark)">
+<link rel="icon" type="image/svg+xml" href="${escapeHtml(FAVICON)}">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Zenflow">
+<meta property="og:title" content="${escapeHtml(chrome.siteTitle(doc.title))}">
+<meta property="og:description" content="${escapeHtml(doc.description)}">
+<meta property="og:locale" content="${lang === "vi" ? "vi_VN" : "en_US"}">
+<meta property="og:locale:alternate" content="${other === "vi" ? "vi_VN" : "en_US"}">
+${absoluteTags}
 <style>${STYLE}</style>
 </head>
 <body>

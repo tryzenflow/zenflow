@@ -11,6 +11,8 @@ export interface LegalSection {
 
 export interface LegalDoc {
   title: string;
+  /** One sentence for search results and link previews. */
+  description: string;
   intro: string;
   sections: LegalSection[];
 }
