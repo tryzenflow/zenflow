@@ -17,7 +17,7 @@ For: developers and clients of the Zenflow API. Live schema: Swagger UI at `<API
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/auth/otp/request` | Email a 6-digit OTP. No guard; rate-limited. |
+| POST | `/auth/otp/request` | Email a 6-digit OTP. No guard; rate-limited. 403 `EMAIL_DOMAIN_NOT_ALLOWED` if `ALLOWED_EMAIL_DOMAINS` is set and the address is outside it (prod: `dlu.edu.vn`). |
 | POST | `/auth/otp/verify` | Verify, create the user if new, start the session. `LocalAuthGuard`; rate-limited. |
 | GET | `/auth/me` | Current user. |
 | POST | `/auth/logout` | Destroy the session. |

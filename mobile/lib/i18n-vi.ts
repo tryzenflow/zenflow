@@ -443,6 +443,8 @@ export default {
   "Timetable classes and exams stay put when you drag.":
     "Lớp thời khóa biểu và lịch thi sẽ đứng yên khi bạn kéo.",
   "Taking longer than usual…": "Lâu hơn bình thường một chút…",
+  "Zenflow is open to DLU students for now. Use your @dlu.edu.vn email.":
+    "Hiện Zenflow chỉ dành cho sinh viên DLU. Hãy dùng email @dlu.edu.vn của bạn.",
   "Some sessions weren't moved": "Một số buổi chưa được dời",
   "{count} stayed put because the new slot conflicted.":
     "{count} buổi được giữ nguyên vì khung giờ mới bị trùng.",

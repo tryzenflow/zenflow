@@ -22,6 +22,7 @@ For: developers and operators setting up the API. Source of truth: the Joi schem
 | `COOKIE_SECURE` / `COOKIE_SAMESITE` | `true` / `lax` | Cross-site prod needs `true` + `none`. |
 | `MAIL_HOST` / `MAIL_PORT` / `MAIL_SECURE` / `MAIL_USER` / `MAIL_PASSWORD` / `MAIL_FROM` | none / 587 / `false` / unset / unset / none | `MAIL_HOST` and `MAIL_FROM` required. No `MAIL_USER` = unauthenticated SMTP (Mailpit). |
 | `LEGAL_CONTACT_EMAIL` | unset | Contact address shown on `/privacy` and `/terms`. Unset renders a visible `[set LEGAL_CONTACT_EMAIL]` placeholder, so set it in prod before publishing the links. |
+| `ALLOWED_EMAIL_DOMAINS` | unset | Comma-separated domains allowed to sign in (a subdomain of one also passes). Unset = anyone. Set in `backend/env/prod.env` only, so dev/staging stay open. Enforced on OTP request, verify, and on every authenticated request, so existing sessions of other domains are dropped (accounts are kept). Error code `EMAIL_DOMAIN_NOT_ALLOWED`. |
 | `MASTER_LMS_ENCRYPTION_KEY_V1` / `MASTER_PORTAL_ENCRYPTION_KEY_V1` | none | Required. 64 hex chars (`openssl rand -hex 32`). Add `_V<n>` and set `MASTER_KEY_CURRENT_VERSION` to rotate. |
 | `MASTER_KEY_CURRENT_VERSION` | `1` | Master-key version used for new wraps; its `_V<n>` keys must exist. |
 | `FILE_URL_SECRET` | none | Required, 32+ chars. HMAC for signed file URLs. Notes store no sig, so rotating needs no rewrite. |

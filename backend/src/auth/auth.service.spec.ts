@@ -3,6 +3,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import {
   BadRequestException,
+  ForbiddenException,
   InternalServerErrorException,
   NotFoundException,
   ServiceUnavailableException,
@@ -171,6 +172,50 @@ describe("AuthService", () => {
       await expect(
         service.verifyOTPCode("a@example.com", "123456"),
       ).rejects.toThrow(InternalServerErrorException);
+    });
+  });
+
+  describe("ALLOWED_EMAIL_DOMAINS", () => {
+    const original = process.env.ALLOWED_EMAIL_DOMAINS;
+    beforeEach(() => {
+      process.env.ALLOWED_EMAIL_DOMAINS = "dlu.edu.vn";
+    });
+    afterEach(() => {
+      if (original === undefined) delete process.env.ALLOWED_EMAIL_DOMAINS;
+      else process.env.ALLOWED_EMAIL_DOMAINS = original;
+    });
+
+    it("sends no code to an address outside the list", async () => {
+      await expect(
+        service.requestOTPCode("someone@gmail.com"),
+      ).rejects.toMatchObject({
+        constructor: ForbiddenException,
+        response: { code: "EMAIL_DOMAIN_NOT_ALLOWED" },
+      });
+      expect(cacheManager.set).not.toHaveBeenCalled();
+      expect(mailService.sendLoginEmail).not.toHaveBeenCalled();
+    });
+
+    it("sends a code to an allowed address", async () => {
+      await service.requestOTPCode("2012345@DLU.edu.vn");
+      expect(mailService.sendLoginEmail).toHaveBeenCalled();
+    });
+
+    it("refuses to verify or create an account outside the list, even for an existing user", async () => {
+      usersService.findByEmail.mockResolvedValue(existingUser);
+      await expect(
+        service.verifyOTPCode("someone@gmail.com", "123456"),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(
+        service.createUserIfNotExists("someone@gmail.com", "UTC"),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(usersService.create).not.toHaveBeenCalled();
+    });
+
+    it("changes nothing when the variable is unset", async () => {
+      delete process.env.ALLOWED_EMAIL_DOMAINS;
+      await service.requestOTPCode("someone@gmail.com");
+      expect(mailService.sendLoginEmail).toHaveBeenCalled();
     });
   });
 });

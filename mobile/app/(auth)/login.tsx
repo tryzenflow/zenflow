@@ -236,8 +236,12 @@ export default function LoginScreen() {
       } else {
         const message =
           isAxiosError(error) && error.response
-            ? (error.response.data?.message ??
-              t("Couldn't send the code. Try again."))
+            ? error.response.data?.code === "EMAIL_DOMAIN_NOT_ALLOWED"
+              ? t(
+                  "Zenflow is open to DLU students for now. Use your @dlu.edu.vn email.",
+                )
+              : (error.response.data?.message ??
+                t("Couldn't send the code. Try again."))
             : t("No connection. Check your internet and try again.");
         setError("email", { type: "manual", message });
       }
