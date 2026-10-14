@@ -81,7 +81,7 @@ is mounted under the splash so the launch URL `/` resolves, then the guards narr
 
 | Route               | Screen                                                                            |
 | ------------------- | --------------------------------------------------------------------------------- |
-| `/(auth)/login`     | email then OTP; timezone captured on verify                                       |
+| `/(auth)/login`     | student ID or email then OTP; timezone captured on verify                         |
 | `/(onboarding)`     | first-run setup (tag picker)                                                      |
 | `/(app)` (Week)     | home: paginated day timeline + 7-day chip strip                                   |
 | `/(app)/month`      | Monday-first month grid                                                           |

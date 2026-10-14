@@ -79,6 +79,9 @@ export default {
   Email: "Email",
   "End time": "Giờ kết thúc",
   "Enter your code": "Nhập mã xác thực",
+  "Enter your student ID.": "Nhập mã sinh viên.",
+  "Sign in with email": "Đăng nhập bằng email",
+  "Sign in with student ID": "Đăng nhập bằng mã sinh viên",
   "Every occurrence in the series moves to the new time.":
     "Tất cả lần lặp sẽ chuyển sang thời gian mới.",
   "Every sitting keeps its date but moves to the new time.":

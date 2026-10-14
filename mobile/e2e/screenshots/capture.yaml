@@ -12,6 +12,8 @@ appId: com.zenflow.app
 - assertVisible:
     id: login.email
 - tapOn:
+    id: login.use-email
+- tapOn:
     id: login.email
 - inputText: ${EMAIL}
 - tapOn:
