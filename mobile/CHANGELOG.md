@@ -1,5 +1,16 @@
 # mobile
 
+## 0.1.0-beta.10
+
+### Patch Changes
+
+- 2162717: New landing page at zenflow.alphatrann.com with a download link, FAQ and share cards. Android builds are
+  now signed with a release key and offer new versions inside the app. Onboarding is shorter: name, campus
+  connect, notifications. Empty days offer "Import my timetable", and the second slot in the A/B pick reads
+  "thay thế" in Vietnamese.
+  - @zenflow/shared@0.1.0-beta.10
+  - @zenflow/core@0.1.0-beta.10
+
 ## 0.1.0-beta.9
 
 ### Patch Changes
