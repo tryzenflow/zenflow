@@ -1,4 +1,5 @@
 import type { SessionCardState, SessionType } from "@zenflow/shared";
+import { SESSION_TONE_CLASSES, type SessionTone } from "./palette";
 
 interface StateInput {
   type: SessionType;
@@ -45,18 +46,22 @@ export function withOverlap(
   return "conflict";
 }
 
-/** Semantic status classes — left-accent border + background per state. */
+function cardClasses(tone: SessionTone): string {
+  const c = SESSION_TONE_CLASSES[tone];
+  return `${c.tint} ${c.stripe} ${c.text}`;
+}
+
+/** Block classes per state: tone tint, 3px stripe and AA ink. */
 export const TASK_CARD_CLASSES: Record<SessionCardState, string> = {
-  fluid: "glass-task border-l-primary",
-  conflict:
-    "bg-amber-50/40 dark:bg-amber-950/10 border-l-amber-500 text-amber-950 dark:text-amber-100",
-  assignment:
-    "bg-teal-50/50 dark:bg-teal-950/20 border-l-teal-500 text-teal-900 dark:text-teal-100",
-  exam: "bg-rose-50/50 dark:bg-rose-950/20 border-l-rose-500 text-rose-900 dark:text-rose-100",
-  lecture:
-    "bg-sky-50/50 dark:bg-sky-950/20 border-l-sky-500 text-sky-900 dark:text-sky-100",
-  // Blocked / protected time: a dashed slate accent + muted slate wash. The
-  // mockup dresses this same slot with a diagonal hatch (`hatch-dnd`); the
-  // apps keep it flat since neither RN nor the web card carries that utility.
-  dnd: "bg-slate-100/60 dark:bg-slate-800/25 border-l-slate-400 [border-left-style:dashed]",
+  fluid: cardClasses("task"),
+  conflict: cardClasses("conflict"),
+  assignment: cardClasses("assignment"),
+  exam: cardClasses("exam"),
+  lecture: cardClasses("lecture"),
+  // Blocked time: muted lavender with a dashed stripe; the hatch is drawn by
+  // the block itself.
+  dnd: cardClasses("dnd"),
 };
+
+/** Classes for a late or overdue block. */
+export const LATE_CARD_CLASSES = cardClasses("late");

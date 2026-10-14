@@ -1,12 +1,13 @@
 import type { SessionType } from "@zenflow/shared";
 import { differenceInCalendarDays, format } from "date-fns";
+import { SESSION_TONE_CLASSES, SESSION_TYPE_TONE } from "./palette";
 import { zonedDate } from "./tz";
 
 /**
  * Per-session-type presentation — human label and Tailwind tint classes, keyed
  * by the raw {@link SessionType} (not the derived `SessionCardState`, so a
- * conflicting `TASK` still reads as a Task). The tints match
- * {@link TASK_CARD_CLASSES} so a badge, a left-accent and a month pill agree.
+ * conflicting `TASK` still reads as a Task). Classes come from
+ * {@link SESSION_TONE_CLASSES} so a badge, a stripe and a month pill agree.
  * Per-type icons live in each app's `session-type-badge` component (they pull
  * in a platform icon set this RN-and-DOM-free module must not).
  */
@@ -20,37 +21,17 @@ export interface SessionTypeMeta {
   dotClass: string;
 }
 
+const meta = (label: string, type: SessionType): SessionTypeMeta => {
+  const c = SESSION_TONE_CLASSES[SESSION_TYPE_TONE[type]];
+  return { label, badgeClass: c.badge, textClass: c.text, dotClass: c.dot };
+};
+
 export const SESSION_TYPE_META: Record<SessionType, SessionTypeMeta> = {
-  TASK: {
-    label: "Task",
-    badgeClass: "border-brand-orange/40 bg-brand-orange/15",
-    textClass: "text-brand-orange",
-    dotClass: "bg-brand-orange",
-  },
-  ASSIGNMENT: {
-    label: "Assignment",
-    badgeClass: "border-teal-500/40 bg-teal-500/15",
-    textClass: "text-teal-700 dark:text-teal-300",
-    dotClass: "bg-teal-500",
-  },
-  EXAM: {
-    label: "Exam",
-    badgeClass: "border-rose-500/40 bg-rose-500/15",
-    textClass: "text-rose-600 dark:text-rose-300",
-    dotClass: "bg-rose-500",
-  },
-  LECTURE: {
-    label: "Lecture",
-    badgeClass: "border-sky-500/40 bg-sky-500/15",
-    textClass: "text-sky-700 dark:text-sky-300",
-    dotClass: "bg-sky-500",
-  },
-  DND: {
-    label: "Do not disturb",
-    badgeClass: "border-slate-400/40 bg-slate-500/15",
-    textClass: "text-muted-foreground",
-    dotClass: "bg-slate-400",
-  },
+  TASK: meta("Task", "TASK"),
+  ASSIGNMENT: meta("Assignment", "ASSIGNMENT"),
+  EXAM: meta("Exam", "EXAM"),
+  LECTURE: meta("Lecture", "LECTURE"),
+  DND: meta("Do not disturb", "DND"),
 };
 
 /** Canonical display order for a set of session types — insertion order of
