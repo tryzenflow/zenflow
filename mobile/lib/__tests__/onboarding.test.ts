@@ -38,7 +38,7 @@ describe("routeForSession", () => {
 describe("step navigation", () => {
   it("walks forward and clamps", () => {
     expect(nextStep("name")).toBe("dlu");
-    expect(nextStep("tags")).toBe("done");
+    expect(nextStep("notifications")).toBe("done");
     expect(nextStep("done")).toBe("done");
   });
   it("walks back and clamps; no back on first/done", () => {

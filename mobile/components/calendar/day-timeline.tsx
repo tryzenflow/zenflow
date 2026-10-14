@@ -6,7 +6,14 @@ import { useLanguage } from "@/hooks/use-language";
 import { locale } from "@/lib/i18n";
 import { format, formatTitle } from "@/lib/i18n";
 import { listSessions, updateSession } from "@/api/tasks";
-import { AlertTriangle, Plus, RefreshCcw, RotateCw } from "@/components/Icons";
+import {
+  AlertTriangle,
+  GraduationCap,
+  Plus,
+  RefreshCcw,
+  RotateCw,
+} from "@/components/Icons";
+import { useDluConnected } from "@/hooks/use-dlu-connected";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
@@ -806,6 +813,17 @@ export function DayTimeline({
   // next quarter hour when today is already past it) — it never creates a
   // session by itself.
   const router = useRouter();
+  const dluConnected = useDluConnected();
+  const openTimetableImport = useCallback(
+    () =>
+      navigateOnce(() =>
+        router.navigate({
+          pathname: "/(app)/settings",
+          params: { focus: "dlu" },
+        } as Href),
+      ),
+    [router],
+  );
   const openNewTaskForm = useCallback(() => {
     let startMin = EMPTY_ZONE_START_MIN;
     if (isToday) {
@@ -1248,6 +1266,22 @@ export function DayTimeline({
                     <Text className="text-center text-[12px] text-muted-foreground">
                       {t("Nothing scheduled for this day")}
                     </Text>
+                    {dluConnected === false && (
+                      <Pressable
+                        onPress={openTimetableImport}
+                        accessibilityRole="button"
+                        hitSlop={8}
+                        className="mt-2 flex-row items-center gap-1.5 rounded-full bg-brand-orange px-3.5 py-2 active:opacity-80"
+                      >
+                        <GraduationCap
+                          size={15}
+                          className="text-primary-foreground"
+                        />
+                        <Text className="text-[13px] font-semibold text-primary-foreground">
+                          {t("Import my timetable")}
+                        </Text>
+                      </Pressable>
+                    )}
                   </Pressable>
                 )}
 

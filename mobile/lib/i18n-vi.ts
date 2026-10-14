@@ -1,5 +1,16 @@
 /** Vietnamese UI copy. English keys remain the English fallback. */
 export default {
+  "Import my timetable": "Nhập thời khóa biểu",
+  "Your password is stored encrypted. Disconnect in Settings to delete it.":
+    "Mật khẩu được lưu mã hóa. Ngắt kết nối trong Cài đặt để xóa.",
+  "Update available": "Có bản cập nhật",
+  "Version {version} is ready.": "Phiên bản {version} đã sẵn sàng.",
+  Update: "Cập nhật",
+  "Downloading update": "Đang tải bản cập nhật",
+  "Keep Zenflow open.": "Giữ Zenflow mở.",
+  "Update failed": "Cập nhật thất bại",
+  "Open the download page instead.": "Hãy mở trang tải xuống.",
+  "Open page": "Mở trang",
   "Auto-scheduled": "Tự động xếp lịch",
   "Tell Zenflow what needs doing. It finds the time.":
     "Bạn nói việc cần làm, Zenflow tìm thời gian phù hợp.",
@@ -20,7 +31,7 @@ export default {
   "All switched": "Đã đổi tất cả",
   "Allow notifications": "Cho phép thông báo",
   "Also fits before the deadline": "Cũng phù hợp trước hạn chót",
-  "Alternative times": "Thời gian khác",
+  "Alternative times": "Thời gian thay thế",
   "Always use Dark mode": "Luôn dùng chế độ tối",
   "Always use Light mode": "Luôn dùng chế độ sáng",
   Appearance: "Giao diện",
@@ -168,7 +179,7 @@ export default {
   "Stay ahead of deadlines": "Chủ động trước hạn chót",
   "Student ID": "Mã sinh viên",
   "Student portal": "Cổng sinh viên",
-  "Switch all to alternatives": "Chuyển tất cả sang giờ khác",
+  "Switch all to alternatives": "Chuyển tất cả sang giờ thay thế",
   "Switch every undecided sitting to its alternative":
     "Chuyển các buổi chưa chọn sang giờ thay thế",
   "Sync failing": "Đồng bộ đang lỗi",
@@ -377,7 +388,7 @@ export default {
     "Zenflow học từ mỗi lần bạn chuyển để xếp lịch tốt hơn.",
   "Moved to {when}": "Đã chuyển sang {when}",
   "{title}, {count} of {total} have alternatives":
-    "{title}, {count}/{total} buổi có thời gian khác",
+    "{title}, {count}/{total} buổi có thời gian thay thế",
   "Pick a time, then confirm.":
     "Chọn một thời gian rồi xác nhận.",
   "Pick a time for each, then confirm.":
@@ -385,13 +396,13 @@ export default {
   "Confirm the selected times":
     "Xác nhận các thời gian đã chọn",
   "Select the alternative time":
-    "Chọn thời gian khác",
+    "Chọn thời gian thay thế",
   "Select the alternative for every sitting":
-    "Chọn thời gian khác cho mọi buổi",
+    "Chọn thời gian thay thế cho mọi buổi",
   "Select the alternative":
-    "Chọn thời gian khác",
+    "Chọn thời gian thay thế",
   "Select all alternatives":
-    "Chọn tất cả thời gian khác",
+    "Chọn tất cả thời gian thay thế",
   "Add a session to this day":
     "Thêm buổi vào ngày này",
   "Tap to add a session":

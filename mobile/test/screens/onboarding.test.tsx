@@ -70,16 +70,13 @@ const secondary = () => screen.getByTestId("onboarding.secondary");
 const next = async (title: string) =>
   waitFor(() => expect(screen.getByText(title)).toBeTruthy());
 
-// Preselected on a fresh account (lib/onboarding.ts initialTagSelection).
+// Created for a fresh account when onboarding finishes (lib/onboarding.ts initialTagSelection).
 const DEFAULT_TAGS = ["Study", "Exam", "Assignment", "Project"];
 
 const TITLES = [
   "What should we call you?",
   "Connect your LMS or portal",
   "Stay ahead of deadlines",
-  "Where are you?",
-  "Default reminder",
-  "Pick your tags",
   "You’re all set",
 ];
 
@@ -170,7 +167,7 @@ describe("OnboardingScreen", () => {
     it("turns notifications on quietly and advances", async () => {
       await openNotifications();
       fireEvent.click(primary());
-      await next("Where are you?");
+      await next("You’re all set");
       expect(notif.setEnabled).toHaveBeenCalledWith(true, { quiet: true });
     });
 
@@ -186,7 +183,7 @@ describe("OnboardingScreen", () => {
     it("'Not now' turns notifications off and advances", async () => {
       await openNotifications();
       fireEvent.click(screen.getByText("Not now"));
-      await next("Where are you?");
+      await next("You’re all set");
       expect(notif.setEnabled).toHaveBeenCalledWith(false);
     });
 
@@ -200,62 +197,21 @@ describe("OnboardingScreen", () => {
     });
   });
 
-  describe("preference steps", () => {
-    it("saves a timezone choice and the default reminder through the shared updater", async () => {
+  describe("finish", () => {
+    async function openSummary() {
       renderScreen(<OnboardingScreen />);
-      await skipTo("Where are you?");
-      fireEvent.click(screen.getByText("Detected from device"));
-      expect(notif.update).toHaveBeenCalledWith({ timezone: expect.anything() });
-      fireEvent.click(primary());
-      await next("Default reminder");
-      fireEvent.click(screen.getByText("5 min before"));
-      expect(notif.update).toHaveBeenCalledWith({ defaultReminder: 5 });
-    });
-
-    it("stays on the step with a toast when a preference save fails", async () => {
-      notif.update.mockResolvedValue(false);
-      renderScreen(<OnboardingScreen />);
-      await skipTo("Where are you?");
-      fireEvent.click(screen.getByText("Detected from device"));
-      await waitFor(() => expect(screen.getByText("Couldn't save")).toBeTruthy());
-      fireEvent.click(primary());
-      await waitFor(() => expect(screen.getByText("Where are you?")).toBeTruthy());
-    });
-  });
-
-  describe("tags and finish", () => {
-    async function openTags() {
-      renderScreen(<OnboardingScreen />);
-      await skipTo("Pick your tags");
+      await skipTo("You’re all set");
     }
 
-    function clearTags() {
-      for (const name of DEFAULT_TAGS) fireEvent.click(screen.getByText(name));
-    }
-
-    it("posts the preselected tags minus any toggled off in one bulk call", async () => {
-      await openTags();
-      fireEvent.click(screen.getByText("Exam")); // deselect one of the four defaults
-      fireEvent.click(primary());
-      await next("You’re all set");
-      expect(bulkBodies).toHaveLength(1);
-      expect(bulkBodies[0].names).toEqual(["Study", "Assignment", "Project"]);
-      expect(screen.getByText("3 selected")).toBeTruthy();
-    });
-
-    it("skips tags without creating any once the selection is cleared", async () => {
-      await openTags();
-      clearTags();
-      fireEvent.click(secondary());
-      await next("You’re all set");
-      expect(bulkBodies).toEqual([]);
+    it("has no timezone, reminder or tags steps", async () => {
+      await openSummary();
+      expect(screen.queryByText("Where are you?")).toBeNull();
+      expect(screen.queryByText("Default reminder")).toBeNull();
+      expect(screen.queryByText("Pick your tags")).toBeNull();
     });
 
     it("lists skipped steps on the summary and reopens one, returning to the summary", async () => {
-      await openTags();
-      clearTags();
-      fireEvent.click(secondary());
-      await next("You’re all set");
+      await openSummary();
       const setUp = screen.getAllByText("Set up");
       expect(setUp.length).toBe(2); // LMS + notifications were skipped
       fireEvent.click(setUp[0]);
@@ -264,20 +220,35 @@ describe("OnboardingScreen", () => {
       await next("You’re all set");
     });
 
-    it("completes onboarding with onboarded:true", async () => {
-      await openTags();
-      clearTags();
-      fireEvent.click(secondary());
-      await next("You’re all set");
+    it("creates the default tags in one bulk call and completes onboarding", async () => {
+      await openSummary();
+      fireEvent.click(screen.getByText("Open my calendar"));
+      await waitFor(() => expect(patches).toContainEqual({ onboarded: true }));
+      expect(bulkBodies).toHaveLength(1);
+      expect(bulkBodies[0].names).toEqual(DEFAULT_TAGS);
+    });
+
+    it("keeps tags the user already has and adds no duplicates", async () => {
+      server.use(
+        http.get(`${API}/tags`, () =>
+          HttpResponse.json({ data: { tags: [{ id: "1", name: "Study" }] } }),
+        ),
+      );
+      await openSummary();
+      fireEvent.click(screen.getByText("Open my calendar"));
+      await waitFor(() => expect(patches).toContainEqual({ onboarded: true }));
+      expect(bulkBodies).toEqual([]);
+    });
+
+    it("still completes when the tag setup fails", async () => {
+      server.use(http.get(`${API}/tags`, () => HttpResponse.json({ message: "no" }, { status: 500 })));
+      await openSummary();
       fireEvent.click(screen.getByText("Open my calendar"));
       await waitFor(() => expect(patches).toContainEqual({ onboarded: true }));
     });
 
     it("toasts and stays on the summary when completing fails", async () => {
-      await openTags();
-      clearTags();
-      fireEvent.click(secondary());
-      await next("You’re all set");
+      await openSummary();
       server.use(http.patch(BASIC_INFO, () => HttpResponse.json({ message: "no" }, { status: 500 })));
       fireEvent.click(screen.getByText("Open my calendar"));
       await waitFor(() => expect(screen.getByText("Couldn't save")).toBeTruthy());

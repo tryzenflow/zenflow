@@ -10,9 +10,6 @@ export const ONBOARDING_STEPS = [
   "name",
   "dlu",
   "notifications",
-  "timezone",
-  "reminder",
-  "tags",
   "done",
 ] as const;
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
