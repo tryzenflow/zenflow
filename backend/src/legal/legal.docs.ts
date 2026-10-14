@@ -47,7 +47,7 @@ export const LEGAL_CHROME: Record<LegalLang, LegalChrome> = {
     languageShort: "EN",
     rightsReserved: "All rights reserved.",
     contentsLabel: "Contents",
-    siteTitle: (title) => `Zenflow ${title}`,
+    siteTitle: (title) => `Zenflow | ${title}`,
     formatDate: (iso) => {
       const { y, m, d } = parts(iso);
       return `${MONTHS_EN[m - 1]} ${d}, ${y}`;
@@ -62,7 +62,7 @@ export const LEGAL_CHROME: Record<LegalLang, LegalChrome> = {
     languageShort: "VI",
     rightsReserved: "Bảo lưu mọi quyền.",
     contentsLabel: "Mục lục",
-    siteTitle: (title) => `${title} của Zenflow`,
+    siteTitle: (title) => `Zenflow | ${title}`,
     formatDate: (iso) => {
       const { y, m, d } = parts(iso);
       return `${d} tháng ${m}, ${y}`;
