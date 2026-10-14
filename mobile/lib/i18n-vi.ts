@@ -4,6 +4,10 @@ export default {
   "Tell Zenflow what needs doing. It finds the time.":
     "Bạn nói việc cần làm, Zenflow tìm thời gian phù hợp.",
   Account: "Tài khoản",
+  "No conflict-free slot before the deadline":
+    "Không có khung giờ trống trước hạn chót",
+  "Accept conflicts, or accept a late deadline.":
+    "Chấp nhận trùng lịch hoặc chấp nhận quá hạn.",
   "Accept conflicts": "Chấp nhận trùng lịch",
   "Accept late deadline": "Chấp nhận quá hạn",
   "Add session": "Thêm lịch",
@@ -122,8 +126,8 @@ export default {
   Preferences: "Tùy chọn",
   "Press and hold a session on your calendar to move or resize it.":
     "Nhấn giữ một lịch để di chuyển hoặc thay đổi thời lượng.",
-  "Press and hold, then drag onto another day this month. Or tap Move to pick any date.":
-    "Nhấn giữ rồi kéo sang ngày khác trong tháng. Hoặc nhấn Chuyển đến để chọn ngày.",
+  "Hold and drag to another day, or tap the icon to pick a date.":
+    "Nhấn giữ rồi kéo sang ngày khác, hoặc chạm biểu tượng để chọn ngày.",
   "Previous month": "Tháng trước",
   "Privacy Policy": "Chính sách quyền riêng tư",
   Profile: "Hồ sơ",
