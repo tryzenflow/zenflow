@@ -83,7 +83,7 @@ Install Maestro first: <https://docs.maestro.dev/getting-started/installing-maes
 | --- | --- | --- |
 | `build-android` | PRs touching `mobile/` or `packages/` (called from `ci.yml`), nightly, `release/**`, manual | `zenflow-android-apk` → `zenflow-android.apk` |
 | `e2e-android` | same, except releases | `maestro-android-results`: junit, failure screenshots, screen recording, logcat, `api.log` |
-| `build-ios` | PRs that change native config (`app.config.ts`, `plugins/`, `patches/`, `package.json`, `assets/`), nightly, `release/**`, manual, releases | `zenflow-ios-unsigned-ipa` → `zenflow-ios-unsigned.ipa` |
+| `build-ios` | nightly, `release/**`, manual, releases (never in a PR) | `zenflow-ios-unsigned-ipa` → `zenflow-ios-unsigned.ipa` |
 
 In a PR, `ci.yml` calls it after lint, typecheck and unit tests pass, and `CI ok` requires it. There is no iOS e2e.
 

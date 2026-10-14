@@ -26,7 +26,6 @@ jobs:
       image: ${{ steps.diff.outputs.image }}
       frontend: ${{ steps.diff.outputs.frontend }}
       mobile: ${{ steps.diff.outputs.mobile }}
-      mobile_native: ${{ steps.diff.outputs.mobile_native }}
       prisma: ${{ steps.diff.outputs.prisma }}
       deploy: ${{ steps.diff.outputs.deploy }}
       agents: ${{ steps.diff.outputs.agents }}
@@ -38,7 +37,7 @@ jobs:
         run: |
           out() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
           if [ "${{ github.event_name }}" != "pull_request" ]; then
-            for k in backend bandit image frontend mobile mobile_native prisma deploy agents; do out "$k" true; done
+            for k in backend bandit image frontend mobile prisma deploy agents; do out "$k" true; done
             exit 0
           fi
           files=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}")
@@ -56,8 +55,6 @@ jobs:
           flag frontend "^(frontend/|packages/|$root|\.github/(workflows/ci\.yml|actions/))"
           # Mobile: the app and the packages it imports.
           flag mobile "^(mobile/|packages/|$root|\.github/workflows/(ci|mobile)\.yml$|\.github/actions/)"
-          # Native config: where a prebuild or pod install can break.
-          flag mobile_native '^(mobile/(app\.config\.ts|plugins/|package\.json|patches/|assets/)|\.github/workflows/mobile\.yml$)'
           flag prisma '^(backend/prisma/|backend/package\.json$|\.github/workflows/ci\.yml$)'
           flag deploy '^(backend/(compose\.|ops/|env/|nginx/|observability/|killswitch|certs/|docker-entrypoint\.sh$|src/app\.module\.ts$)|scripts/deploy/|\.github/workflows/ci\.yml$)'
           flag agents '^(\.agents/|\.claude/|\.codex/|scripts/sync-agents\.mjs$|AGENTS\.md$|CLAUDE\.md$|\.github/workflows/ci\.yml$)'
@@ -340,9 +337,9 @@ jobs:
           cache-from: type=gha,scope=bandit
           cache-to: type=gha,mode=max,scope=bandit
 
-  # Native app: Android build + Maestro e2e, after the cheap gates are green
-  # (unit tests already ran above, so the workflow skips its own). iOS builds
-  # only when native config changed. Not in the PR for docs-only changes.
+  # Android build + Maestro e2e, after the cheap gates are green (unit tests
+  # already ran above, so the workflow skips its own). The e2e needs the APK, so
+  # that build is part of it. The iOS build waits for merge (release-beta).
   mobile:
     name: Mobile (build + e2e)
     needs: [changes, lint, typecheck, unit-tests]
@@ -352,7 +349,7 @@ jobs:
       variant: e2e
       skip_e2e: false
       skip_tests: true
-      skip_ios: ${{ needs.changes.outputs.mobile_native != 'true' }}
+      skip_ios: true
     permissions:
       contents: read
 
