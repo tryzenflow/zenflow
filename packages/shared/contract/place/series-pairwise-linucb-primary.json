@@ -6,7 +6,7 @@
     "timingsMs"
   ],
   "request": {
-    "contractVersion": 1,
+    "contractVersion": 2,
     "requestId": "00000000-0000-4000-8000-000000000002-3",
     "mode": "PLACE",
     "nowMs": 1789977600000,
@@ -701,9 +701,9 @@
     }
   },
   "response": {
-    "contractVersion": 1,
+    "contractVersion": 2,
     "requestId": "00000000-0000-4000-8000-000000000002-3",
-    "paramsVersion": "py-arms6-v3-cf48d841c47f",
+    "paramsVersion": "py-arms6-v3-09152c3b4a67",
     "results": [
       {
         "id": "s0",
@@ -800,12 +800,12 @@
       }
     ],
     "timingsMs": {
-      "decode": 0.604,
-      "context": 0.06,
-      "predict": 0.509,
-      "scan": 4.399,
+      "decode": 0.131,
+      "context": 0.028,
+      "predict": 0.138,
+      "scan": 0.66,
       "displace": 0.0,
-      "total": 6.379
+      "total": 1.156
     }
   }
 }

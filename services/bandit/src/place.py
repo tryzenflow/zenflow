@@ -33,7 +33,7 @@ from src.core import constants as consts
 from src.core.arms import seeded_tie_break_order
 from src.core.context_vector import build_context_vector
 from src.core.displacement import (
-    flexible_from_dicts,
+    FlexibleTask,
     last_resort_pin,
     pick_late_slot,
     pick_min_conflict_slot,
@@ -388,31 +388,42 @@ class _Placer:
         plan = plan_displacement(
             m.duration_minutes,
             req.deadline_ms,
-            flexible_from_dicts(
-                [
-                    {
-                        "id": f.id,
-                        "durationMinutes": f.duration_minutes,
-                        "deadlineMs": f.deadline_ms,
-                        "startMs": f.start_ms,
-                    }
-                    for f in ctx.flexible
-                ]
-            ),
+            [
+                FlexibleTask(
+                    f.id,
+                    f.duration_minutes,
+                    f.deadline_ms,
+                    f.start_ms,
+                    f.anchor,
+                    f.completed,
+                    f.series_id,
+                )
+                for f in ctx.flexible
+            ],
             _ivals(ctx.fixed),
             req.now_ms,
             [(ds, de), (ds - consts.DAY_MS, de + consts.DAY_MS)],
             _ivals(ctx.horizon_occupied),
             req.deadline_ms + consts.INFEASIBLE_HORIZON_DAYS * consts.DAY_MS,
+            timezone=self.tz,
+            chosen_moves=ctx.chosen_moves,
         )
         if plan.kind == "placed" and plan.start_ms is not None:
+            # A Chosen session never moves without the user's go-ahead.
+            ask = ctx.chosen_moves == "ASK" and plan.moves_chosen
             return base.model_copy(
                 update={
-                    "outcome": "DISPLACED",
+                    "outcome": "NEEDS_CONFIRMATION" if ask else "DISPLACED",
                     "applied_policy": "HEURISTIC",
                     "start_ms": plan.start_ms,
                     "moves": [
-                        Move(id=v.id, from_ms=v.from_ms, to_ms=v.to_ms)
+                        Move(
+                            id=v.id,
+                            from_ms=v.from_ms,
+                            to_ms=v.to_ms,
+                            anchor="CHOSEN" if v.anchor == "CHOSEN" else "AUTO",
+                            cost=v.cost,
+                        )
                         for v in plan.moves
                     ],
                 }

@@ -136,15 +136,19 @@ describe("PythonPlacer.placeSingle (python answers)", () => {
   });
 
   it("applies displacement moves and reports them", async () => {
-    const moved = member({
-      outcome: "DISPLACED",
-      moves: [{ id: "x", fromMs: 1, toMs: 2 }],
-    });
+    const move = {
+      id: "x",
+      fromMs: 1,
+      toMs: 2,
+      anchor: "AUTO" as const,
+      cost: 1,
+    };
+    const moved = member({ outcome: "DISPLACED", moves: [move] });
     const { placer, displacement } = await make({ place: ok([moved]) });
     const res = await placer.placeSingle(user, task, "create", now);
     expect(displacement.applyMoves).toHaveBeenCalledWith(
       "u1",
-      [{ id: "x", fromMs: 1, toMs: 2 }],
+      [move],
       expect.any(Function),
     );
     expect(res.displaced).toHaveLength(1);

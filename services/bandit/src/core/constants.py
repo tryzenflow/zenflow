@@ -48,6 +48,14 @@ LINUCB_PREF_WEIGHT = 1.0
 # Displacement (issue #62 B).
 MAX_DISPLACED_TASKS = 6
 
+# Anchors and displacement cost (issue #250, ADR-0022). A flexible session
+# starting within FROZEN_WINDOW_HOURS of now never moves. A move costs its
+# anchor's base plus the hours moved, plus CROSS_DAY when its local day changes.
+FROZEN_WINDOW_HOURS = 2
+DISPLACE_COST_AUTO = 1
+DISPLACE_COST_CHOSEN = 10
+DISPLACE_COST_CROSS_DAY = 10
+
 # Placement scan scope (ADR-0003; owned by Python, echoed via ``paramsVersion``).
 SCAN_CAP_DAYS = 30
 MAX_SERIES_PER_DAY = 1

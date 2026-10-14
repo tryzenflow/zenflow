@@ -21,6 +21,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from src.api import app  # noqa: E402
 from src.core.constants import FEATURE_DIM  # noqa: E402
+from src.schemas_place import PLACEMENT_CONTRACT_VERSION  # noqa: E402
 
 OUT = Path(__file__).resolve().parents[3] / "packages/shared/contract/place"
 NOW = 1_789_977_600_000  # Mon 2026-09-21 08:00 UTC
@@ -64,7 +65,7 @@ def member(policy: str, both: bool = False) -> dict[str, Any]:
 
 def base(**kw: Any) -> dict[str, Any]:
     req: dict[str, Any] = {
-        "contractVersion": 1,
+        "contractVersion": PLACEMENT_CONTRACT_VERSION,
         "requestId": REQ_ID,
         "mode": "PLACE",
         "nowMs": NOW,
@@ -108,6 +109,38 @@ FLEX = [
 ]
 
 
+def anchored(chosen_moves: str | None) -> dict[str, Any]:
+    """ADR-0022: lecture 08-10, Chosen c 10-11, Auto a 11-12, free 12-14,
+    Pinned p 14-15, completed d 15-16, free 16-17, wall from 17:00."""
+    flexible = [
+        {"id": "c", "durationMinutes": 60, "deadlineMs": NOW + 7 * DAY,
+         "startMs": NOW + 2 * H, "anchor": "CHOSEN"},
+        {"id": "a", "durationMinutes": 60, "deadlineMs": NOW + 7 * DAY,
+         "startMs": NOW + 3 * H, "anchor": "AUTO"},
+        {"id": "p", "durationMinutes": 60, "deadlineMs": NOW + 7 * DAY,
+         "startMs": NOW + 6 * H, "anchor": "PINNED"},
+        {"id": "d", "durationMinutes": 60, "deadlineMs": NOW + 7 * DAY,
+         "startMs": NOW + 7 * H, "anchor": "AUTO", "completed": True},
+    ]  # fmt: skip
+    lecture = (NOW, NOW + 2 * H)
+    wall = (NOW + 9 * H, NOW + 16 * H)
+    occ = [lecture, *((f["startMs"], f["startMs"] + H) for f in flexible), wall]
+    ctx: dict[str, Any] = {
+        "flexible": flexible,
+        "fixed": [{"startMs": a, "endMs": b} for a, b in (lecture, wall)],
+        "horizonOccupied": [{"startMs": a, "endMs": b} for a, b in occ],
+    }
+    if chosen_moves:
+        ctx["chosenMoves"] = chosen_moves
+    return base(
+        requestId=REQ_ID + "-2",
+        deadlineMs=NOW + 4 * H,
+        days=[day(0, occ)],
+        members=[{**member("HEURISTIC"), "durationMinutes": 120}],
+        infeasible=ctx,
+    )
+
+
 def blocked(policy: str | None) -> dict[str, Any]:
     iv = [{"startMs": NOW - H, "endMs": NOW + DAY}]
     ctx: dict[str, Any] = {"flexible": [], "fixed": iv, "horizonOccupied": iv}
@@ -142,7 +175,9 @@ CASES: list[tuple[str, str, dict[str, Any]]] = [
     (
         "single-displaced",
         "08:00-12:00 is two movable 2 h tasks (deadline next day); the new 60 min "
-        "task has deadline 12:00. Call 2 repacks with an EDF cascade.",
+        "task has deadline 12:00. f1 starts within 2 h of now (frozen), so the "
+        "cheapest plan takes 10:00 and shifts f2 to 11:00 (cost 1+1). Anchors "
+        "are omitted, so both default to AUTO.",
         base(
             requestId=REQ_ID + "-2",
             deadlineMs=NOW + 4 * H,
@@ -150,6 +185,19 @@ CASES: list[tuple[str, str, dict[str, Any]]] = [
             members=[member("HEURISTIC")],
             infeasible={"flexible": FLEX, "fixed": [], "horizonOccupied": []},
         ),
+    ),
+    (
+        "single-needs-confirmation",
+        "A 120 min task due 12:00 needs 10-12, held by Chosen c and Auto a. The "
+        "cheapest plan moves both (c 10+2, a 1+2), so Python asks first: "
+        "NEEDS_CONFIRMATION with the full plan. Pinned p and completed d stay.",
+        anchored(None),
+    ),
+    (
+        "single-displaced-chosen-allowed",
+        "Same calendar with chosenMoves ALLOW (the user confirmed): the same "
+        "plan comes back as DISPLACED.",
+        anchored("ALLOW"),
     ),
     (
         "single-accepted-conflicts",
