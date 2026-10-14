@@ -84,22 +84,22 @@ const Toaster = ({ ...props }: ToasterProps) => {
       // index.css); type is signalled only by the small tinted icon.
       icons={{
         success: (
-          <ToastIcon className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+          <ToastIcon className="bg-session-done/[0.14] text-session-done-ink">
             <CircleCheckIcon className="size-4" />
           </ToastIcon>
         ),
         info: (
-          <ToastIcon className="bg-sky-500/15 text-sky-600 dark:text-sky-400">
+          <ToastIcon className="bg-session-lecture/[0.14] text-session-lecture-ink">
             <InfoIcon className="size-4" />
           </ToastIcon>
         ),
         warning: (
-          <ToastIcon className="bg-amber-500/15 text-amber-600 dark:text-amber-400">
+          <ToastIcon className="bg-session-conflict/20 text-session-conflict-ink">
             <TriangleAlertIcon className="size-4" />
           </ToastIcon>
         ),
         error: (
-          <ToastIcon className="bg-rose-500/15 text-rose-600 dark:text-rose-400">
+          <ToastIcon className="bg-destructive/15 text-destructive">
             <OctagonXIcon className="size-4" />
           </ToastIcon>
         ),

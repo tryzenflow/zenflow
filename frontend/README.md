@@ -87,9 +87,9 @@ Screens, session form, calendar, notifications and toasts: [docs/frontend/screen
 - **Desktop only**: no mobile breakpoints unless asked.
 - Repo-wide rules: [AGENTS.md](../AGENTS.md).
 
-### Design system: Warm Sunrise
+### Design system: Blueberry milk
 
-- Taupe base + Amber accent as OKLch tokens in `src/index.css` (`:root` and `.dark`); brand ramp orange, yellow, lime.
+- Milk base, blueberry primary and butter accent as tokens in `src/index.css` (`:root` and `.dark`); session tones (`session-<tone>`, `session-<tone>-ink`) come from `packages/core/src/palette.ts`.
 - Glass utilities: `.glass-task`, `.glass-header`, `.glass-panel`, `.glass-notice` (backdrop blur).
 - Dark mode via `next-themes`: full token inversion, visible borders.
 
