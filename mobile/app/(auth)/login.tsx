@@ -432,7 +432,7 @@ export default function LoginScreen() {
                 }}
                 className="mt-2.5 self-start"
               >
-                <Text className="text-[13px] font-semibold text-brand-orange">
+                <Text className="text-[13px] font-semibold text-primary">
                   {loginMode === "id"
                     ? t("Sign in with email")
                     : t("Sign in with student ID")}
