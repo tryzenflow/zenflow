@@ -14,7 +14,7 @@ import {
   getMonthGridDays,
   groupSessionsByDate,
 } from "@/lib/month-date-math";
-import { isPastDeadlineDrop } from "@/lib/overdue";
+import { isPastDeadlineDrop, isSessionPastDeadline } from "@/lib/overdue";
 import {
   fetchDaySessions,
   getCachedDaySessions,
@@ -24,9 +24,10 @@ import {
 } from "@/lib/session-cache";
 import {
   MONTH_PILL_CLASSES,
-  MONTH_PILL_TEXT_CLASSES,
+  pillTextColor,
   deriveState,
 } from "@/lib/task-card";
+import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
 import {
   SESSION_TYPE_META,
@@ -525,6 +526,11 @@ export const MonthPage = memo(function MonthPage({
   const ghostSession = dragging?.task ?? null;
   const ghostState = ghostSession ? deriveState(ghostSession) : null;
   const GhostIcon = ghostSession ? sessionTypeIcon(ghostSession.type) : null;
+  const { isDarkColorScheme } = useColorScheme();
+  const ghostLate = ghostSession ? isSessionPastDeadline(ghostSession) : false;
+  const ghostColor = ghostState
+    ? pillTextColor(ghostState, ghostLate, isDarkColorScheme)
+    : undefined;
 
   return (
     <View ref={pageRef} onLayout={measureGeometry} className="flex-1">
@@ -558,7 +564,9 @@ export const MonthPage = memo(function MonthPage({
               // three sides, and an uncolored `border` there falls back to
               // black instead of inheriting.
               "flex-row items-center gap-1 rounded-md border-l-2 px-1.5 py-1 shadow-lg",
-              MONTH_PILL_CLASSES[ghostState],
+              ghostLate
+                ? "border-l-amber-500 bg-amber-500/15"
+                : MONTH_PILL_CLASSES[ghostState],
             )}
           >
             <GhostIcon
@@ -567,13 +575,14 @@ export const MonthPage = memo(function MonthPage({
             />
             <Text
               numberOfLines={1}
-              className={cn(
-                "flex-1 text-[10px] font-semibold",
-                MONTH_PILL_TEXT_CLASSES[ghostState],
-              )}
+              className="flex-1 text-[10px] font-semibold"
+              style={{ color: ghostColor }}
             >
               {ghostSession.scheduledStartTime && (
-                <Text className="text-[10px] font-normal text-muted-foreground">
+                <Text
+                  className="text-[10px] font-normal"
+                  style={{ color: ghostColor }}
+                >
                   {format(
                     zonedDate(ghostSession.scheduledStartTime, tz),
                     "H:mm",

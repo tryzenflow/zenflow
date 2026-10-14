@@ -79,7 +79,7 @@ import Animated, {
 import { NowIndicator } from "./now-indicator";
 import { SessionBlock } from "./task-block";
 import { useOffline } from "@/hooks/use-offline";
-import { TimeGutter } from "./time-gutter";
+import { TIME_GUTTER_WIDTH, TimeGutter } from "./time-gutter";
 import type {
   PendingSessionUpdate,
   UpdateRecurringScope,
@@ -142,7 +142,7 @@ function stackShifts(
   return shifts;
 }
 
-const GUTTER_WIDTH = 64;
+const GUTTER_WIDTH = TIME_GUTTER_WIDTH;
 const HOUR_HEIGHT_DEFAULT = 132;
 const HOUR_HEIGHT_MIN = 80;
 const HOUR_HEIGHT_MAX = 200;
@@ -1321,14 +1321,22 @@ export function DayTimeline({
                   pointerEvents="none"
                   className="absolute left-0 right-0 z-20 border-t-2 border-dashed border-brand-orange"
                   style={dragLineStyle}
-                >
-                  <View className="absolute right-2 -translate-y-1/2 rounded-md bg-brand-orange px-1.5 py-px">
-                    <Text className="text-[10px] font-bold text-primary-foreground">
-                      {dragChipLabel}
-                    </Text>
-                  </View>
-                </Animated.View>
+                />
               </View>
+
+              {/* Time chip rides the same line but sits in the gutter, clear of
+                  the blocks' glass, which blurred it when it lived on the grid. */}
+              <Animated.View
+                pointerEvents="none"
+                className="absolute left-0 z-20"
+                style={[{ width: GUTTER_WIDTH }, dragLineStyle]}
+              >
+                <View className="absolute right-2 -translate-y-1/2 rounded-md bg-brand-orange px-1.5 py-px">
+                  <Text className="text-[11px] font-bold text-primary-foreground">
+                    {dragChipLabel}
+                  </Text>
+                </View>
+              </Animated.View>
             </Animated.View>
           </GestureDetector>
         )}

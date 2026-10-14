@@ -236,7 +236,7 @@ export const SessionListSheet = forwardRef<
             />
             <Text className="flex-1 text-[12px] leading-snug text-muted-foreground">
               {t(
-                "Press and hold, then drag onto another day this month. Or tap Move to pick any date.",
+                "Hold and drag to another day, or tap the icon to pick a date.",
               )}
             </Text>
           </View>
@@ -265,7 +265,9 @@ export const SessionListSheet = forwardRef<
 SessionListSheet.displayName = "SessionListSheet";
 
 const ROW_STATE_LABELS: Record<SessionCardState, string> = {
-  fluid: t("Auto-scheduled"),
+  get fluid() {
+    return t("Auto-scheduled");
+  },
   get conflict() {
     return t("Conflict");
   },
@@ -420,6 +422,13 @@ const SessionListRow = memo(function SessionListRow({
             >
               {task.title}
             </Text>
+          </View>
+          <View className="mt-0.5 flex-row items-center gap-2">
+            <Text className="shrink text-[12.5px] text-muted-foreground">
+              {continuation
+                ? t("Continued from yesterday")
+                : ROW_STATE_LABELS[state]}
+            </Text>
             {late && (
               <View className="flex-none flex-row items-center gap-1 rounded border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5">
                 <AlertTriangle
@@ -432,11 +441,6 @@ const SessionListRow = memo(function SessionListRow({
               </View>
             )}
           </View>
-          <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
-            {continuation
-              ? t("Continued from yesterday")
-              : ROW_STATE_LABELS[state]}
-          </Text>
         </View>
         {onReschedule && !continuation && !offline && (
           <Pressable

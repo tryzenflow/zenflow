@@ -27,3 +27,29 @@ export const MONTH_PILL_TEXT_CLASSES: Record<SessionCardState, string> = {
   lecture: "text-sky-700 dark:text-sky-300",
   dnd: "text-muted-foreground",
 };
+
+/** Explicit `#rrggbb` label colors for {@link MONTH_PILL_TEXT_CLASSES}, per scheme.
+ * The drag ghost floats in a rotated animated layer where the `dark:` utilities
+ * rendered black text, so it paints from these instead. Tailwind 700/600 on
+ * light, 300 on dark; brand orange and muted match the tokens. */
+const PILL_TEXT_COLORS: Record<
+  SessionCardState | "late",
+  { light: string; dark: string }
+> = {
+  fluid: { light: "#ea580c", dark: "#fb923c" },
+  conflict: { light: "#b45309", dark: "#fcd34d" },
+  assignment: { light: "#0f766e", dark: "#5eead4" },
+  exam: { light: "#e11d48", dark: "#fda4af" },
+  lecture: { light: "#0369a1", dark: "#7dd3fc" },
+  dnd: { light: "#6b6560", dark: "#a8a29e" },
+  late: { light: "#b45309", dark: "#fcd34d" },
+};
+
+/** Label color for a month pill, overdue winning over the state. */
+export function pillTextColor(
+  state: SessionCardState,
+  late: boolean,
+  dark: boolean,
+): string {
+  return PILL_TEXT_COLORS[late ? "late" : state][dark ? "dark" : "light"];
+}
