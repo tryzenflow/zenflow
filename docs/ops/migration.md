@@ -42,7 +42,7 @@ Reminders need no restore. They are Postgres rows, and the watcher re-arms the q
 Keep the old host untouched until the end.
 
 1. **Prepare the host.** Docker, firewall and users per [server-access.md](server-access.md). Clone the repo into `$DEPLOY_PATH`.
-2. **Lower DNS TTL** for `zenflow.alphatrann.com` and the Grafana and MinIO hosts a day ahead.
+2. **Lower DNS TTL** for every host in [domains.md](domains.md) a day ahead.
 3. **Take last backups** on the old host. Stop the writers first to lose less:
    ```bash
    cd $DEPLOY_PATH/backend
