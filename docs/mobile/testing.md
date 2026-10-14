@@ -77,6 +77,15 @@ pnpm e2e flows/06-logout.yaml     # one flow
 
 Install Maestro first: <https://docs.maestro.dev/getting-started/installing-maestro>. Results (junit, screenshots, logs) go to `mobile/e2e/results/` (gitignored).
 
+### Landing page screenshots
+
+`pnpm --filter mobile e2e:screenshots` signs in as a seeded fixture student and writes four WebP shots (`week`, `month`, `settings`, `new-task`) to `backend/src/landing/assets/`, where the landing page picks them up. The flow is `e2e/screenshots/capture.yaml`, the runner `e2e/screenshots.sh`.
+
+- Needs the E2E build on a booted emulator or simulator, plus the dev stack, API and fake DLU server ([fixtures README](../../backend/scripts/fixtures/dlu/README.md)).
+- `SEED=1` seeds the first fixture student first; `EMAIL=...` signs in as someone else.
+- The runner sets a 09:41 status bar on Android (`adb`) or iOS (`simctl`), and needs `cwebp` (`brew install webp`) for WebP.
+- Prefer an Android emulator: the landing page says Android.
+
 ## CI (`.github/workflows/mobile.yml`)
 
 | Job | When | Output |

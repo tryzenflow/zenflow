@@ -21,7 +21,8 @@
     "test": "pnpm test:unit && pnpm test:component",
     "test:unit": "vitest run",
     "test:component": "vitest run -c vitest.component.config.ts",
-    "e2e": "bash e2e/run.sh"
+    "e2e": "bash e2e/run.sh",
+    "e2e:screenshots": "bash e2e/screenshots.sh"
   },
   "dependencies": {
     "@10play/tentap-editor": "^1.0.1",
