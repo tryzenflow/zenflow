@@ -13,7 +13,7 @@ import { Text } from "@/components/ui/text";
 import { NAV_THEME } from "@/lib/constants";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
-import type { SessionFormType } from "@zenflow/core";
+import { SESSION_TONES, type SessionFormType } from "@zenflow/core";
 import { Pressable, View } from "react-native";
 
 type TabKey = "TASK" | "FIXED";
@@ -36,15 +36,15 @@ const FIXED_TYPES: {
 ];
 
 /**
- * Accent per session type, matching the calendar blocks' left border. Hex, not
+ * Accent per session type, the AA ink of the calendar block tone. Hex, not
  * classes: NativeWind color interop on lucide icons is unreliable on native.
  */
 const TYPE_ACCENT: Record<SessionFormType, { light: string; dark: string }> = {
-  TASK: { light: NAV_THEME.light.primary, dark: NAV_THEME.dark.primary },
-  ASSIGNMENT: { light: "#0d9488", dark: "#2dd4bf" },
-  EXAM: { light: "#e11d48", dark: "#fb7185" },
-  LECTURE: { light: "#0284c7", dark: "#38bdf8" },
-  DND: { light: "#64748b", dark: "#94a3b8" },
+  TASK: SESSION_TONES.task.ink,
+  ASSIGNMENT: SESSION_TONES.assignment.ink,
+  EXAM: SESSION_TONES.exam.ink,
+  LECTURE: SESSION_TONES.lecture.ink,
+  DND: SESSION_TONES.dnd.ink,
 };
 
 const isFixed = (t: SessionFormType) => t !== "TASK";

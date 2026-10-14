@@ -90,13 +90,13 @@ function repeatLabel(rrule: string | null): string | null {
 const TAG_MAX_CHARS = 20;
 const TAGS_SHOWN = 3;
 
-/** Orange chip like the form's tag pills; long names are trimmed. */
+/** Blueberry chip like the form's tag pills; long names are trimmed. */
 function TagChip({ name }: { name: string }) {
   const short =
     name.length > TAG_MAX_CHARS ? `${name.slice(0, TAG_MAX_CHARS - 1)}…` : name;
   return (
-    <View className="rounded-full border border-brand-orange/45 bg-brand-orange/15 px-3 py-1.5">
-      <Text className="text-[13px] font-semibold text-brand-orange">
+    <View className="rounded-full border border-primary/40 bg-primary/[0.12] dark:bg-primary/[0.22] px-3 py-1.5">
+      <Text className="text-[13px] font-semibold text-session-task-ink">
         {short}
       </Text>
     </View>
@@ -130,7 +130,7 @@ function TagChips({ tags }: { tags: string[] }) {
 
 const URL_RE = /^https?:\/\/\S+$/i;
 
-/** A room or building as plain text; a link as tappable, underlined orange text (one line). */
+/** A room or building as plain text; a link as tappable, underlined primary text (one line). */
 function LocationValue({ location }: { location: string }) {
   const url = location.trim();
   if (!URL_RE.test(url)) {

@@ -169,7 +169,7 @@ export function TagAutocomplete({
             className="mb-2 flex-row items-center gap-2.5 rounded-xl border border-border bg-card px-4 py-3.5"
           >
             <Plus size={16} className="shrink-0 text-muted-foreground" />
-            <Text className="flex-1 text-[15px] font-semibold text-brand-orange">
+            <Text className="flex-1 text-[15px] font-semibold text-session-task-ink">
               {t('Create "{name}"', { name: row.name })}
             </Text>
           </Pressable>
@@ -226,13 +226,13 @@ export function TagAutocomplete({
                   "flex-row items-center gap-1 rounded-full border py-1.5 pl-3 pr-1.5",
                   isPending
                     ? "border-dashed border-primary/50 bg-primary/10"
-                    : "border-brand-orange/45 bg-brand-orange/15",
+                    : "border-primary/40 bg-primary/[0.12] dark:bg-primary/[0.22]",
                 )}
               >
                 <Text
                   className={cn(
                     "text-[13px] font-medium",
-                    isPending ? "text-primary" : "text-brand-orange",
+                    isPending ? "text-primary" : "text-session-task-ink",
                   )}
                 >
                   #{tag}
@@ -245,7 +245,7 @@ export function TagAutocomplete({
                 >
                   <X
                     size={11}
-                    className={isPending ? "text-primary" : "text-brand-orange"}
+                    className={isPending ? "text-primary" : "text-session-task-ink"}
                   />
                 </Pressable>
               </View>

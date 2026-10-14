@@ -85,7 +85,7 @@ const MAX_START_MIN = 23 * 60 + 45;
  * carries the user-tz wall clock in its local fields) plus a Start/End
  * `TimePickerInline` pair (minutes-of-day, 15-min grid) — Clockify-style: the
  * session may cross midnight (`endMinutes <= startMinutes`), in which case the
- * End picker gets a primary-orange "+1" badge and the length is computed as
+ * End picker gets a primary "+1" badge and the length is computed as
  * running into the next day, rather than requiring a second date input. The
  * confirm path rebuilds a wall-clock `Date` from the date + start time and
  * runs it through `zonedWallClockToUtc`, exactly like

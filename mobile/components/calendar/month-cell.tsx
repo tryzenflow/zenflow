@@ -19,6 +19,7 @@ import { isSessionPastDeadline } from "@/lib/overdue";
 import { SESSION_TYPE_META } from "@zenflow/core";
 import {
   MONTH_PILL_CLASSES,
+  MONTH_PILL_LATE_CLASSES,
   MONTH_PILL_TEXT_CLASSES,
   deriveState,
 } from "@/lib/task-card";
@@ -188,7 +189,7 @@ export const MonthCell = memo(function MonthCell({
         "overflow-hidden border-b border-r border-border p-[5px] pb-[6px]",
         outside ? "bg-muted/40" : "bg-transparent",
         isToday &&
-          "border-t-2 border-t-orange-500 bg-orange-50 dark:bg-orange-950/20",
+          "border-t-2 border-t-primary bg-primary/[0.08] dark:bg-primary/[0.14]",
         (isDropTarget || isJustDropped) && "bg-primary/[0.14]",
       )}
     >
@@ -273,7 +274,7 @@ const MonthPill = memo(function MonthPill({ session, hidden }: MonthPillProps) {
       style={hidden ? { opacity: 0 } : undefined}
       className={cn(
         "flex-row items-center gap-1 rounded-[5px] border-l-2 px-1.5 py-0.5",
-        late ? "border-l-amber-500 bg-amber-500/15" : MONTH_PILL_CLASSES[state],
+        late ? MONTH_PILL_LATE_CLASSES : MONTH_PILL_CLASSES[state],
         continuation &&
           "rounded-t-none border-t-[1.5px] border-t-muted-foreground/50 [border-top-style:dashed]",
       )}
@@ -281,7 +282,7 @@ const MonthPill = memo(function MonthPill({ session, hidden }: MonthPillProps) {
       {late ? (
         <AlertTriangle
           size={9}
-          className="shrink-0 text-amber-700 dark:text-amber-300"
+          className="shrink-0 text-session-late-ink"
         />
       ) : continuation ? (
         <Text className="shrink-0 text-[9px] leading-none text-muted-foreground">
@@ -298,7 +299,7 @@ const MonthPill = memo(function MonthPill({ session, hidden }: MonthPillProps) {
         className={cn(
           "flex-1 text-[9.5px] font-semibold leading-tight",
           late
-            ? "text-amber-700 dark:text-amber-300"
+            ? "text-session-late-ink"
             : MONTH_PILL_TEXT_CLASSES[state],
         )}
       >

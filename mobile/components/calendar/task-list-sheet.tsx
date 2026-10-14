@@ -430,12 +430,12 @@ const SessionListRow = memo(function SessionListRow({
                 : ROW_STATE_LABELS[state]}
             </Text>
             {late && (
-              <View className="flex-none flex-row items-center gap-1 rounded border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5">
+              <View className="flex-none flex-row items-center gap-1 rounded border border-session-late/40 bg-session-late/[0.12] dark:bg-session-late/[0.22] px-1.5 py-0.5">
                 <AlertTriangle
                   size={10}
-                  className="text-amber-700 dark:text-amber-300"
+                  className="text-session-late-ink"
                 />
-                <Text className="text-[10px] font-semibold leading-[13px] text-amber-700 dark:text-amber-300">
+                <Text className="text-[10px] font-semibold leading-[13px] text-session-late-ink">
                   {t("Overdue")}
                 </Text>
               </View>

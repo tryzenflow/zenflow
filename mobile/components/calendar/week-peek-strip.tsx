@@ -1,5 +1,6 @@
 import { useLanguage } from "@/hooks/use-language";
 import { DAY_MINUTES, type PeekBlock } from "@/lib/peek";
+import { SESSION_TONES, hexAlpha } from "@zenflow/core";
 import { useState } from "react";
 import { View } from "react-native";
 
@@ -9,12 +10,12 @@ export const PEEK_STRIP_W = 14;
 
 /** Block fill per task state, matching the day grid's state treatment. */
 export const PEEK_BLOCK_COLORS: Record<PeekBlock["state"], string> = {
-  fluid: `rgba(255, 142, 62, 0.55)`,
-  conflict: "rgba(245, 158, 11, 0.6)",
-  assignment: "rgba(20, 184, 166, 0.55)",
-  exam: "rgba(244, 63, 94, 0.6)",
-  lecture: "rgba(14, 165, 233, 0.55)",
-  dnd: "rgba(148, 163, 184, 0.45)",
+  fluid: hexAlpha(SESSION_TONES.task.base, 0.6),
+  conflict: hexAlpha(SESSION_TONES.conflict.base, 0.7),
+  assignment: hexAlpha(SESSION_TONES.assignment.base, 0.6),
+  exam: hexAlpha(SESSION_TONES.exam.base, 0.6),
+  lecture: hexAlpha(SESSION_TONES.lecture.base, 0.6),
+  dnd: hexAlpha(SESSION_TONES.dnd.base, 0.5),
 };
 
 /** Right-edge sliver showing the next day's tasks as mini blocks, positioned

@@ -1,4 +1,4 @@
-import { SESSION_TYPE_META } from "@zenflow/core";
+import { SESSION_TONE_CLASSES, SESSION_TYPE_META } from "@zenflow/core";
 import {
   notificationCategory,
   notificationEventKind,
@@ -32,7 +32,7 @@ export function notificationVisual(eventName: string): {
   if (isConflict(eventName))
     return {
       Icon: TriangleAlert,
-      tint: "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300",
+      tint: cn(SESSION_TONE_CLASSES.conflict.badge, SESSION_TONE_CLASSES.conflict.text),
     };
   const type = CATEGORY_TYPE[notificationCategory(eventName)];
   if (!type)

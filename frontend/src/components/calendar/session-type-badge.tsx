@@ -1,4 +1,4 @@
-import { SESSION_TYPE_META } from "@zenflow/core";
+import { SESSION_TONE_CLASSES, SESSION_TYPE_META } from "@zenflow/core";
 import type { SessionType } from "@zenflow/shared";
 import {
   CheckSquare,
@@ -74,13 +74,13 @@ export function OverdueBadge({
     <span
       className={cn(
         "inline-flex items-center gap-1 self-start rounded border px-1.5 py-0.5",
-        "border-red-500/40 bg-red-500/15",
+        SESSION_TONE_CLASSES.late.badge,
         className,
       )}
     >
-      <CircleAlert className="size-3 text-red-600 dark:text-red-300" />
+      <CircleAlert className="size-3 text-session-late-ink" />
       {!iconOnly && (
-        <span className="text-[9px] font-semibold leading-none text-red-600 dark:text-red-300">
+        <span className="text-[9px] font-semibold leading-none text-session-late-ink">
           Overdue
         </span>
       )}

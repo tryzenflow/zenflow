@@ -1,4 +1,5 @@
 import { useUserStore } from "@/hooks/use-user-store";
+import { SESSION_TONE_CLASSES } from "@zenflow/core";
 import { cn } from "@/lib/utils";
 import type { Event, SessionCardState, ViewMode } from "@zenflow/shared";
 import { toZonedTime } from "date-fns-tz";
@@ -51,22 +52,19 @@ function groupByDay(
 /** Row treatment per state — mirrors the calendar card colours (mockup 02). */
 const AGENDA_ROW: Record<SessionCardState, string> = {
   fluid: "border-border bg-card hover:bg-sidebar-accent",
-  conflict:
-    "border-amber-400/50 bg-amber-50/60 dark:border-amber-900/20 dark:bg-amber-950/10",
-  assignment:
-    "border-teal-400/50 bg-teal-50/60 dark:border-teal-900/20 dark:bg-teal-950/20",
-  exam: "border-rose-400/50 bg-rose-50/60 dark:border-rose-900/20 dark:bg-rose-950/20",
-  lecture:
-    "border-sky-400/50 bg-sky-50/60 dark:border-sky-900/20 dark:bg-sky-950/20",
-  dnd: "border-slate-400/50 border-dashed bg-slate-50/60 dark:border-slate-700/40 dark:bg-slate-900/20",
+  conflict: SESSION_TONE_CLASSES.conflict.badge,
+  assignment: SESSION_TONE_CLASSES.assignment.badge,
+  exam: SESSION_TONE_CLASSES.exam.badge,
+  lecture: SESSION_TONE_CLASSES.lecture.badge,
+  dnd: `${SESSION_TONE_CLASSES.dnd.badge} border-dashed`,
 };
 
 const AGENDA_TIME: Record<SessionCardState, string> = {
   fluid: "text-muted-foreground",
-  conflict: "text-amber-600 dark:text-amber-400",
-  assignment: "text-teal-600 dark:text-teal-400",
-  exam: "text-rose-600 dark:text-rose-400",
-  lecture: "text-sky-600 dark:text-sky-400",
+  conflict: SESSION_TONE_CLASSES.conflict.text,
+  assignment: SESSION_TONE_CLASSES.assignment.text,
+  exam: SESSION_TONE_CLASSES.exam.text,
+  lecture: SESSION_TONE_CLASSES.lecture.text,
   dnd: "text-muted-foreground",
 };
 
@@ -79,11 +77,11 @@ const AGENDA_TAG: Partial<Record<SessionCardState, string>> = {
 };
 
 const AGENDA_TAG_BADGE: Partial<Record<SessionCardState, string>> = {
-  conflict: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-400",
-  assignment: "bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-400",
-  exam: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-400",
-  lecture: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-400",
-  dnd: "bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-300",
+  conflict: `${SESSION_TONE_CLASSES.conflict.tint} ${SESSION_TONE_CLASSES.conflict.text}`,
+  assignment: `${SESSION_TONE_CLASSES.assignment.tint} ${SESSION_TONE_CLASSES.assignment.text}`,
+  exam: `${SESSION_TONE_CLASSES.exam.tint} ${SESSION_TONE_CLASSES.exam.text}`,
+  lecture: `${SESSION_TONE_CLASSES.lecture.tint} ${SESSION_TONE_CLASSES.lecture.text}`,
+  dnd: `${SESSION_TONE_CLASSES.dnd.tint} ${SESSION_TONE_CLASSES.dnd.text}`,
 };
 
 function AgendaItem({ block, tz }: { block: Event; tz: string }) {
@@ -258,7 +256,7 @@ export function SidebarBody({ agenda, view }: SidebarProps) {
           </li>
           <li>
             Overlapping sessions are flagged as{" "}
-            <span className="font-semibold text-amber-600">conflicts</span>.
+            <span className="font-semibold text-session-conflict-ink">conflicts</span>.
           </li>
         </ul>
       </div>

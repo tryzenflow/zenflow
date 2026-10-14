@@ -32,7 +32,7 @@ You own `mobile/` and the `mockups/` it is designed from (Expo SDK 58, RN 0.88, 
 Follow `docs/mobile/design.md` (Sunrise Flow); read it before UI work.
 - Glass is warm light on floating chrome only, with an opaque fallback; never on content.
 - Time flows: day, week and tab changes slide in the direction of time. Use `lib/motion.ts` presets, springs, interruptible, at most 300 ms, gated by `useReducedMotion()`.
-- One focal "sun" per screen; ration orange.
+- One focal "sun" per screen; ration blueberry; cherry only for late and overdue.
 - Brand and hero surfaces use custom SVG from `components/brand/`, not lucide; the logo appears only where the doc says.
 - Haptics on commit only; targets at least 44pt; offline is an icon plus a short line, not an error.
 

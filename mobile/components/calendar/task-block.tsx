@@ -22,7 +22,14 @@ import {
   zonedDate,
   zonedWallClockToUtc,
 } from "@zenflow/core";
-import type { BlockLayout } from "@zenflow/core";
+import {
+  type BlockLayout,
+  SESSION_STRIPE_WIDTH,
+  SESSION_TONE_CLASSES,
+  SESSION_TONES,
+  hexAlpha,
+  sessionTone,
+} from "@zenflow/core";
 import type { DaySegment } from "@zenflow/shared";
 import { toZonedTime } from "date-fns-tz";
 import * as Haptics from "expo-haptics";
@@ -81,9 +88,9 @@ const AUTOSCROLL_BAND_TOP = 140;
 const AUTOSCROLL_BAND_BOTTOM = 90;
 
 const TAG_TINTS = [
-  "border-orange-400/40 bg-orange-100/15 dark:border-orange-500/40 dark:bg-orange-500/10",
-  "border-yellow-400/45 bg-yellow-100/15 dark:border-yellow-500/45 dark:bg-yellow-500/10",
-  "border-lime-400/55 bg-lime-100/25 dark:border-lime-500/55 dark:bg-lime-500/15",
+  "border-brand-blueberry/40 bg-brand-blueberry/[0.12] dark:bg-brand-blueberry/[0.22]",
+  "border-brand-butter/60 bg-brand-butter/20 dark:bg-brand-butter/[0.22]",
+  "border-session-done/45 bg-session-done/[0.14] dark:bg-session-done/[0.22]",
 ];
 
 function tagTint(tag: string) {
@@ -124,7 +131,7 @@ function joinRange(start: string, end: string) {
 
 /** The compact deadline marker sitting after the time range on a scheduled
  * block. Two states: a muted upcoming pill (`Clock` + relative label) and an
- * amber "late" pill (`AlertTriangle`) once the block starts past its deadline —
+ * cherry "late" pill (`AlertTriangle`) once the block starts past its deadline —
  * the latter is also the annotation for a confirmed past-deadline drag. */
 function DueChip({ late, label }: { late: boolean; label: string }) {
   useLanguage();
@@ -132,13 +139,13 @@ function DueChip({ late, label }: { late: boolean; label: string }) {
     <View
       className={cn(
         "flex-row items-center gap-1 rounded px-1 py-0.5",
-        late ? "bg-amber-500/15" : "bg-muted",
+        late ? "bg-session-late/[0.14] dark:bg-session-late/[0.22]" : "bg-muted",
       )}
     >
       {late ? (
         <AlertTriangle
           size={9}
-          className="text-amber-700 dark:text-amber-300"
+          className="text-session-late-ink"
         />
       ) : (
         <Clock size={12} className="text-muted-foreground" />
@@ -146,7 +153,7 @@ function DueChip({ late, label }: { late: boolean; label: string }) {
       <Text
         className={cn(
           "text-xs font-medium leading-none",
-          late ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground",
+          late ? "text-session-late-ink" : "text-muted-foreground",
         )}
       >
         {t("Due")}{' '}
@@ -232,7 +239,7 @@ interface SessionBlockProps {
    * clear — the floating tab-bar pill in Week view sits there. */
   bottomInset?: number;
   /** Play a one-shot "just landed here" entrance (slide in from the right +
-   * scale up + a brief amber ring) — set right after this session was created,
+   * scale up + a brief primary ring) — set right after this session was created,
    * rescheduled, or the calendar teleported to it. */
   flash?: boolean;
   /** Carry the checklist's "Move a task" / "Hold a task" spotlight anchors (the
@@ -732,83 +739,27 @@ function SessionBlockImpl({
   // between renders makes NativeWind "upgrade" the component mid-life, which
   // crashed the block right after a save (the flash).
   const flashRing = flashing
-    ? "ring-2 ring-amber-400"
+    ? "ring-2 ring-primary"
     : "ring-1 ring-transparent";
   // DND diagonal hatch (`.hatch-dnd` in mockups/day-view.html). Explicit line
   // segments: an SVG `<Pattern>` clipped its 1px stroke at the tile edge.
   const dndHatchPath =
     state === "dnd" ? hatchPath(screenWidth, height, HATCH_SPACING) : "";
-  const dndHatchStroke = isDarkColorScheme
-    ? "rgb(148,163,184)" // slate-400
-    : "rgb(100,116,139)"; // slate-500
-  // Translucent fills (no opaque layer anywhere) so overlapping blocks blend.
-  // One even 1px rim per state (a thick left border + rounded corners drew a
-  // mitred, uneven outline); the coloured accent is a separate rounded bar
-  // inset inside the block, like Apple Calendar.
-  const stateClasses = overdue
-    ? `${flashRing} bg-red-500/[0.12] dark:bg-red-500/[0.22]`
-    : state === "dnd"
-      ? `${flashRing} bg-slate-500/[0.07] dark:bg-slate-400/[0.14]`
-      : state === "assignment"
-        ? `${flashRing} bg-teal-400/[0.12] dark:bg-teal-400/[0.16]`
-        : state === "exam"
-          ? `${flashRing} bg-rose-400/[0.12] dark:bg-rose-400/[0.16]`
-          : state === "lecture"
-            ? `${flashRing} bg-sky-400/[0.12] dark:bg-sky-400/[0.16]`
-            : `${flashRing} bg-primary/[0.11] dark:bg-primary/[0.16]`;
+  const dndHatchStroke = SESSION_TONES.dnd.ink[isDarkColorScheme ? "dark" : "light"];
+  // Translucent tone fill (12% light, 22% dark) so overlapping blocks blend.
+  // One even 1px rim per tone; the 3px stripe is a separate rounded bar inset
+  // inside the block, like Apple Calendar.
+  const tone = sessionTone(state, overdue);
+  const stateClasses = `${flashRing} ${SESSION_TONE_CLASSES[tone].tint}`;
   // Solid single-colour rim, drawn as its own overlay ABOVE the blur: a border on
   // the blurred container itself came out jagged (the blur mask isn't anti-aliased).
-  const edgeColor = isDarkColorScheme
-    ? overdue
-      ? "#ef4444"
-      : state === "dnd"
-        ? "#64748b"
-        : state === "assignment"
-          ? "#14b8a6"
-          : state === "exam"
-            ? "#f43f5e"
-            : state === "lecture"
-              ? "#0ea5e9"
-              : "#f97316"
-    : overdue
-      ? "#f87171"
-      : state === "dnd"
-        ? "#94a3b8"
-        : state === "assignment"
-          ? "#5eead4"
-          : state === "exam"
-            ? "#fda4af"
-            : state === "lecture"
-              ? "#7dd3fc"
-              : "#fdba74";
+  const edgeColor = hexAlpha(SESSION_TONES[tone].base, isDarkColorScheme ? 0.45 : 0.55);
   const topRadius = segment.continued ? 0 : 14;
   const bottomRadius = segment.continues && !drawsThrough ? 0 : 14;
 
-  const accentColor = overdue
-    ? "#ef4444"
-    : state === "dnd"
-      ? "#94a3b8"
-      : state === "assignment"
-        ? "#14b8a6"
-        : state === "exam"
-          ? "#f43f5e"
-          : state === "lecture"
-            ? "#0ea5e9"
-            : isDarkColorScheme
-              ? "#ff7a24"
-              : "#ff8e3e";
-  // Meta/time text: a deeper shade of the block's own colour (lighter in dark mode).
-  const timeClass = overdue
-    ? "text-red-800 dark:text-red-200"
-    : state === "dnd"
-      ? "text-slate-700 dark:text-slate-300"
-      : state === "assignment"
-        ? "text-teal-800 dark:text-teal-200"
-        : state === "exam"
-          ? "text-rose-800 dark:text-rose-200"
-          : state === "lecture"
-            ? "text-sky-800 dark:text-sky-200"
-            : "text-orange-800 dark:text-orange-200";
+  const accentColor = SESSION_TONES[tone].base;
+  // Meta/time text: the tone's AA ink.
+  const timeClass = SESSION_TONE_CLASSES[tone].text;
 
   const horizontal = {
     left: leftOffset + nestOffset,
@@ -898,8 +849,8 @@ function SessionBlockImpl({
               top: 6,
               bottom: 6,
               left: 6,
-              width: 4,
-              borderRadius: 2,
+              width: SESSION_STRIPE_WIDTH,
+              borderRadius: SESSION_STRIPE_WIDTH / 2,
               backgroundColor: accentColor,
             }}
           />
@@ -951,11 +902,11 @@ function SessionBlockImpl({
                 />
               )}
               {/* Overdue marker: a bare icon beside the type icon (no chip —
-                  the card is already red). */}
+                  the card is already cherry). */}
               {overdue && (
                 <AlertCircle
                   size={15}
-                  color={isDarkColorScheme ? "#fca5a5" : "#dc2626"}
+                  color={SESSION_TONES.late.ink[isDarkColorScheme ? "dark" : "light"]}
                   style={{ flexShrink: 0 }}
                 />
               )}

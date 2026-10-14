@@ -20,8 +20,8 @@ import Svg, {
 
 const GLOW = {
   borderRadius: 999,
-  backgroundColor: "#F0B100",
-  shadowColor: "#FF6900",
+  backgroundColor: "#6C7BF7",
+  shadowColor: "#6C7BF7",
   shadowOpacity: 0.4,
   shadowRadius: 16,
   shadowOffset: { width: 0, height: 8 },
@@ -38,7 +38,7 @@ export function Logo({
   breathe = false,
 }: {
   className?: string;
-  /** Orange drop shadow, as in mockups/login.html (`shadow-lg shadow-brand-orange/30`). */
+  /** Blueberry drop shadow under the mark. */
   glow?: boolean;
   /** Slowly swell the glow (needs `glow`). Static under Reduce Motion. */
   breathe?: boolean;
@@ -75,7 +75,7 @@ export function Logo({
         <Circle cx={130} cy={130} r={130} fill="url(#zenflow-sunrise)" />
         <Path
           d="M220.5 51.5C220.5 51.5 172.668 65.7587 147.635 89.6235C122.602 113.488 136.249 158.201 104.912 183.517C80.2542 203.436 32.9999 199.5 32.9999 199.5"
-          stroke="#FFF085"
+          stroke="#FBFAF7"
           strokeWidth={24}
           strokeLinecap="round"
         />
@@ -88,9 +88,9 @@ export function Logo({
             y2={220.5}
             gradientUnits="userSpaceOnUse"
           >
-            <Stop stopColor="#FF6900" offset={0} />
-            <Stop stopColor="#F0B100" offset={0.323567} />
-            <Stop stopColor="#D8F999" offset={1} />
+            <Stop stopColor="#6C7BF7" offset={0} />
+            <Stop stopColor="#5AB2FF" offset={0.323567} />
+            <Stop stopColor="#FFD66B" offset={1} />
           </LinearGradient>
         </Defs>
       </Svg>

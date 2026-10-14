@@ -24,6 +24,7 @@ import {
 } from "@/lib/session-cache";
 import {
   MONTH_PILL_CLASSES,
+  MONTH_PILL_LATE_CLASSES,
   pillTextColor,
   deriveState,
 } from "@/lib/task-card";
@@ -559,13 +560,13 @@ export const MonthPage = memo(function MonthPage({
           <View
             className={cn(
               // Keeps the pills' `border-l-2` accent rather than the mockup's
-              // all-round `border border-brand-orange/45`: RN has no
+              // all-round border: RN has no
               // per-state border color in `MONTH_PILL_CLASSES` for the other
               // three sides, and an uncolored `border` there falls back to
               // black instead of inheriting.
               "flex-row items-center gap-1 rounded-md border-l-2 px-1.5 py-1 shadow-lg",
               ghostLate
-                ? "border-l-amber-500 bg-amber-500/15"
+                ? MONTH_PILL_LATE_CLASSES
                 : MONTH_PILL_CLASSES[ghostState],
             )}
           >

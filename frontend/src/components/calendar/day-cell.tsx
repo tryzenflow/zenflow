@@ -19,7 +19,7 @@ export function Cell({ quarter, hour, id }: DayCellProps) {
       ref={setNodeRef}
       className={cn(
         "absolute w-full transition-colors",
-        isOver && "bg-brand-lime/25",
+        isOver && "bg-primary/15",
       )}
       style={{
         top: `calc(var(--week-cells-height) / 4 * ${quarter})`,

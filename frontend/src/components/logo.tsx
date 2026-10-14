@@ -2,8 +2,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Zenflow sunrise mark — mirrors `public/logo.svg` (the favicon/PWA icon):
- * a warm orange→amber→lime gradient disc with a pale flowing "zen" stroke.
- * The mixed gradient keeps the mark from reading as a flat single-amber blob.
+ * a blueberry to sky to butter gradient disc with a milk "zen" stroke.
  *
  * Animation: a continuous, gentle "breathing" scale on the mark plus a
  * hover-driven lift + rotate on the wrapper (kept on separate elements so the
@@ -29,7 +28,7 @@ export function Logo({ className }: { className?: string }) {
         <circle cx="130" cy="130" r="130" fill="url(#zenflow-sunrise)" />
         <path
           d="M220.5 51.5C220.5 51.5 172.668 65.7587 147.635 89.6235C122.602 113.488 136.249 158.201 104.912 183.517C80.2542 203.436 32.9999 199.5 32.9999 199.5"
-          stroke="#FFF085"
+          stroke="#FBFAF7"
           strokeWidth="24"
           strokeLinecap="round"
         />
@@ -42,9 +41,9 @@ export function Logo({ className }: { className?: string }) {
             y2="220.5"
             gradientUnits="userSpaceOnUse"
           >
-            <stop stopColor="#FF6900" />
-            <stop offset="0.323567" stopColor="#F0B100" />
-            <stop offset="1" stopColor="#D8F999" />
+            <stop stopColor="#6C7BF7" />
+            <stop offset="0.323567" stopColor="#5AB2FF" />
+            <stop offset="1" stopColor="#FFD66B" />
           </linearGradient>
         </defs>
       </svg>

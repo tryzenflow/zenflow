@@ -410,8 +410,8 @@ export default {
     "Thêm buổi vào ngày này",
   "Tap to add a session":
     "Chạm để thêm buổi",
-  "Tap +, or tap the orange area on an empty day.":
-    "Chạm +, hoặc chạm vùng màu cam trong ngày trống.",
+  "Tap +, or tap the blue area on an empty day.":
+    "Chạm +, hoặc chạm vùng màu xanh trong ngày trống.",
   "Prepare for {title}":
     "Chuẩn bị cho {title}",
   "Nothing scheduled for this day":

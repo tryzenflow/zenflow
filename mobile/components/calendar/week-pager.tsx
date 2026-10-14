@@ -77,8 +77,7 @@ const SETTLE = {
  * sheet — long-press a block). */
 const NAV_EDGE_ZONE = 56;
 const NAV_HOLD_MS = 340;
-const BRAND_ORANGE_LIGHT = "255, 142, 62";
-const BRAND_ORANGE_DARK = "255, 122, 36";
+const BLUEBERRY_RGB = "108, 123, 247";
 
 /** Stable empty peek list — a fresh `[]` each render would re-run the strip's
  * memo for nothing. */
@@ -224,7 +223,7 @@ function WeekPagerImpl(
   const borderColor = isDarkColorScheme
     ? NAV_THEME.dark.border
     : NAV_THEME.light.border;
-  const orangeRgb = isDarkColorScheme ? BRAND_ORANGE_DARK : BRAND_ORANGE_LIGHT;
+
 
   // The live window: always the focused day centered between its two
   // neighbors. The focused page is therefore ALWAYS index 1 — rest is
@@ -1179,7 +1178,7 @@ function WeekPagerImpl(
           ]}
         >
           <LinearGradient
-            colors={[`rgba(${orangeRgb}, 0.34)`, `rgba(${orangeRgb}, 0)`]}
+            colors={[`rgba(${BLUEBERRY_RGB}, 0.34)`, `rgba(${BLUEBERRY_RGB}, 0)`]}
             start={{ x: 0, y: 0.5 }}
             end={{ x: 1, y: 0.5 }}
             style={StyleSheet.absoluteFill}
@@ -1192,7 +1191,7 @@ function WeekPagerImpl(
           ]}
         >
           <LinearGradient
-            colors={[`rgba(${orangeRgb}, 0)`, `rgba(${orangeRgb}, 0.34)`]}
+            colors={[`rgba(${BLUEBERRY_RGB}, 0)`, `rgba(${BLUEBERRY_RGB}, 0.34)`]}
             start={{ x: 0, y: 0.5 }}
             end={{ x: 1, y: 0.5 }}
             style={StyleSheet.absoluteFill}
