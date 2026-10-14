@@ -108,6 +108,45 @@ export class SessionsController {
     return { success: true, message: "Slot pick recorded", data };
   }
 
+  @Post(":id/complete")
+  async complete(@Param("id") id: string, @CurrentUser() user: User) {
+    const data = await this.sessionsService.setCheckOff(
+      id,
+      "complete",
+      true,
+      user,
+    );
+    return { success: true, message: "Session completed", data };
+  }
+
+  @Delete(":id/complete")
+  async uncomplete(@Param("id") id: string, @CurrentUser() user: User) {
+    const data = await this.sessionsService.setCheckOff(
+      id,
+      "complete",
+      false,
+      user,
+    );
+    return { success: true, message: "Completion undone", data };
+  }
+
+  @Post(":id/skip")
+  async skip(@Param("id") id: string, @CurrentUser() user: User) {
+    const data = await this.sessionsService.setCheckOff(id, "skip", true, user);
+    return { success: true, message: "Session skipped", data };
+  }
+
+  @Delete(":id/skip")
+  async unskip(@Param("id") id: string, @CurrentUser() user: User) {
+    const data = await this.sessionsService.setCheckOff(
+      id,
+      "skip",
+      false,
+      user,
+    );
+    return { success: true, message: "Skip undone", data };
+  }
+
   // NOTE: must precede @Delete(":id") so "series" isn't matched as an :id.
   @Delete("series/:seriesId")
   async removeSeries(

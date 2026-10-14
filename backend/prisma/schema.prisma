@@ -57,6 +57,9 @@ model User {
 
   banditArmStates BanditArmState[]
 
+  occurrenceStates SessionOccurrenceState[]
+  streak           UserStreak?
+
   // Issue #56: which portal sections / Moodle courses this student is
   // confirmed in, so an ingestion pass can be served from the shared
   // occurrence cache without walking their timetable.
@@ -237,6 +240,11 @@ model Session {
   // notification. Always null for a user-created (non-ingested) session.
   syncMissedAt    DateTime?
 
+  // Done or skipped (issue #247). Mutually exclusive; both clear on undo.
+  // Unused on a recurring representative: occurrences use SessionOccurrenceState.
+  completedAt DateTime?
+  skipped     Boolean   @default(false)
+
   // Per-user labels (implicit many-to-many).
   tags Tag[]
 
@@ -324,6 +332,7 @@ model Session {
   @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([note(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([location(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([userId, completedAt])
 }
 
 model SessionSeries {
@@ -337,9 +346,44 @@ model SessionSeries {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  sessions Session[]
+  sessions         Session[]
+  occurrenceStates SessionOccurrenceState[]
 
   @@index([userId])
+}
+
+/// Done or skipped state of one virtual occurrence of a recurring series (issue #247).
+/// A row exists only while the occurrence is done or skipped.
+model SessionOccurrenceState {
+  id              String    @id @default(uuid())
+  occurrenceStart DateTime
+  completedAt     DateTime?
+  skipped         Boolean   @default(false)
+
+  seriesId String
+  series   SessionSeries @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([seriesId, occurrenceStart])
+  @@index([userId, completedAt])
+}
+
+/// Daily completion streak, recomputed from completion days on every check-off and read (issue #247).
+model UserStreak {
+  userId           String   @id
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  current          Int      @default(0)
+  longest          Int      @default(0)
+  freezesAvailable Int      @default(0)
+  /// Days (YYYY-MM-DD, user tz) inside the current streak covered by a freeze.
+  frozenDays       String[] @default([])
+  /// Last day (YYYY-MM-DD, user tz) with a completed session.
+  lastActiveDay    String?  @db.VarChar(10)
+  updatedAt        DateTime @updatedAt
 }
 
 // Excludes DND; at most twice per session (enforced in DTO + RemindersService).
@@ -403,13 +447,13 @@ model SlotProposal {
   // behind the chosen slot, kept so a delayed MOVE / RETAINED reward can call
   // `/update` for the right arm (`docs/adr/0001-linucb-model-design.md` §9).
   // Empty / null when the primary policy was the heuristic.
-  featureVector    Float[]        @default([])
-  selectedArm      SchedulingArm?
+  featureVector   Float[]        @default([])
+  selectedArm     SchedulingArm?
   // Applied LinUCB slot-score weights (`wL` = 1, `wS` = proximity-scaled
   // stability, `services/bandit/src/core/slot_score.py::stability_weight`);
   // null when the primary policy was the pref-only heuristic.
-  linucbWeight     Float?
-  stabilityWeight  Float?
+  linucbWeight    Float?
+  stabilityWeight Float?
 
   // Provenance (ADR-0003): which implementation produced the placement, so A/B
   // analysis can exclude degraded (frozen-TS-fallback) events.
@@ -446,6 +490,8 @@ enum SessionEventType {
   MOVE // user drag or resize of a scheduled TASK (negative signal)
   RETAINED // session elapsed without ever being moved (positive signal)
   SYSTEM_MOVE // scheduler-initiated move (displacement / conflict reschedule): reward 0, no preference update
+  COMPLETE // user checked the session off; removed on undo
+  SKIP // user marked the session skipped (missed); removed on undo
 }
 
 /// Range-partitioned by month on `occurredAt` (hand-written migration, ADR-0016); children are `SessionEvent_YYYY_MM`.
@@ -719,11 +765,11 @@ model PortalSection {
   // timetableThroughDate is a date, not an ISO week number: HK02 straddles New
   // Year and week numbers wrap 52 (or 53) -> 1, so "covered through week N" is
   // not a numeric comparison. semester.ts walks Mondays for the same reason.
-  timetableRefreshedAt  DateTime?
-  timetableThroughDate  DateTime?
+  timetableRefreshedAt DateTime?
+  timetableThroughDate DateTime?
 
-  occurrences     PortalSectionOccurrence[]
-  enrollments     PortalSectionEnrollment[]
+  occurrences PortalSectionOccurrence[]
+  enrollments PortalSectionEnrollment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

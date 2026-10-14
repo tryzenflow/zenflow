@@ -20,6 +20,8 @@ export function makeSession(overrides: Partial<Session> = {}): Session {
     sessionTotal: null,
     reminders: [],
     late: false,
+    completedAt: null,
+    skipped: false,
     createdAt: "2026-10-01T00:00:00.000Z",
     updatedAt: "2026-10-01T00:00:00.000Z",
     ...overrides,

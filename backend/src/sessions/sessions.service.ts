@@ -4,6 +4,7 @@ import type {
   RemoveSessionResponse,
   RemoveSessionSeriesResponse,
   RemoveTimetableGroupResponse,
+  SessionCheckOffResponse,
   SessionDetailResponse,
   SessionSuggestionsResponse,
   SessionsListResponse,
@@ -20,16 +21,21 @@ import { SessionCrudService } from "./session-crud.service";
 import { SeriesService } from "./series.service";
 import { SessionUpdateService } from "./session-update.service";
 import { SlotPickService } from "./slot-pick.service";
+import {
+  type CheckOffKind,
+  SessionCheckOffService,
+} from "./session-check-off.service";
 import { NoteFilesService } from "../files/note-files.service";
 import { RemindersService } from "../reminders/reminders.service";
 
 /**
- * Thin facade the controller calls — its 10 methods delegate to the collaborator
+ * Thin facade the controller calls — its methods delegate to the collaborator
  * services, one concern each:
  *  - {@link SessionCrudService}   create / list / suggestions / findById / remove
  *  - {@link SessionUpdateService} `PATCH /sessions/:id`
  *  - {@link SeriesService}        every `SessionSeries` lifecycle op
  *  - {@link SlotPickService}      `POST /sessions/:id/slot-pick`
+ *  - {@link SessionCheckOffService} `POST|DELETE /sessions/:id/complete|skip`
  *
  * The wire contract is unchanged — see `sessions.controller.ts`.
  */
@@ -40,6 +46,7 @@ export class SessionsService {
     private readonly series: SeriesService,
     private readonly updates: SessionUpdateService,
     private readonly slotPickService: SlotPickService,
+    private readonly checkOff: SessionCheckOffService,
     private readonly reminders: RemindersService,
     private readonly noteFiles: NoteFilesService,
   ) {}
@@ -127,6 +134,16 @@ export class SessionsService {
   ): Promise<SlotPickResponse> {
     const res = await this.slotPickService.recordPick(id, dto, user);
     return res;
+  }
+
+  /** Set (`on`) or undo the done or skipped state of a session or occurrence. */
+  setCheckOff(
+    id: string,
+    kind: CheckOffKind,
+    on: boolean,
+    user: User,
+  ): Promise<SessionCheckOffResponse> {
+    return this.checkOff.set(id, kind, on, user);
   }
 
   async truncateSeriesFrom(

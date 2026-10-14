@@ -12,6 +12,7 @@ import { MailService } from "./mail/mail.service";
 import { MailModule } from "./mail/mail.module";
 import { UsersModule } from "./users/users.module";
 import { SessionsModule } from "./sessions/sessions.module";
+import { StreaksModule } from "./streaks/streaks.module";
 import { TagsModule } from "./tags/tags.module";
 import { FilesModule } from "./files/files.module";
 import { SchedulerModule } from "./scheduler/scheduler.module";
@@ -537,6 +538,7 @@ const jobModules = [
     AuthModule,
     MailModule,
     SessionsModule,
+    StreaksModule,
     CryptoModule,
     LMSModule,
     PortalAPIModule,
