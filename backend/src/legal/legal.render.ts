@@ -17,12 +17,10 @@ export function escapeHtml(text: string): string {
 function inline(text: string, email: string): string {
   const safe = escapeHtml(text);
   const mail = escapeHtml(email);
+  // Host before email: the contact address shares the domain.
   return safe
-    .replaceAll("{{email}}", `<a href="mailto:${mail}">${mail}</a>`)
-    .replaceAll(
-      "zenflow.alphatrann.com",
-      '<span class="nh">zenflow.alphatrann.com</span>',
-    );
+    .replaceAll("usezenflow.com", '<span class="nh">usezenflow.com</span>')
+    .replaceAll("{{email}}", `<a href="mailto:${mail}">${mail}</a>`);
 }
 
 function block(b: LegalBlock, email: string): string {
@@ -93,7 +91,7 @@ export const FAVICON = `data:image/svg+xml,${encodeURIComponent(
 )}`;
 
 /**
- * `baseUrl` (the public origin, e.g. `https://zenflow.alphatrann.com`) turns on the
+ * `baseUrl` (the public origin, e.g. `https://usezenflow.com`) turns on the
  * absolute tags (canonical, hreflang alternates, `og:url`); without it they are left out.
  */
 export function renderLegalPage(

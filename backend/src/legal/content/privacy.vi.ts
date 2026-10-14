@@ -10,7 +10,7 @@ export const PRIVACY_VI: LegalDoc = {
     {
       heading: "1. Chúng tôi là ai",
       body: [
-        'Zenflow do Trần Thái Anh ("chúng tôi"), một nhà phát triển cá nhân, vận hành tại zenflow.alphatrann.com. Chúng tôi quyết định cách thức và mục đích sử dụng dữ liệu cá nhân của bạn, nên là bên kiểm soát dữ liệu. Zenflow là dự án đang ở giai đoạn đầu.',
+        'Zenflow do Trần Thái Anh ("chúng tôi"), một nhà phát triển cá nhân, vận hành tại usezenflow.com. Chúng tôi quyết định cách thức và mục đích sử dụng dữ liệu cá nhân của bạn, nên là bên kiểm soát dữ liệu. Zenflow là dự án đang ở giai đoạn đầu.',
       ],
     },
     {
