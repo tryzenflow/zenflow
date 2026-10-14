@@ -43,6 +43,7 @@ Drag, resize and reschedule are all `PATCH /sessions/:id` (a `MOVE` signal).
 | POST | `/sessions` | Create. `TASK` takes the best free slot (or a materialized series). Fixed and `DND` take the given time and optional `rrule` |
 | GET | `/sessions?view=&date=` | `day`, `week` or `month` window plus unplaced. Series fan out to virtual rows |
 | GET | `/sessions/suggestions?q=&limit=` | Title autocomplete, newest first |
+| GET | `/sessions/search?q=&anchor=&cursor=&direction=&limit=` | Search title, note text, location and tags. Pages by start time from `anchor` (default now) |
 | GET | `/sessions/deadline-options?anchor=` | Six deadline quick-chip instants |
 | GET | `/sessions/:id` | Detail. Occurrence id: `<seriesId>::<startISO>` (URL-encoded) |
 | PATCH | `/sessions/:id` | Metadata, drag, resize, `rrule`, `sessionCount`. `scope` and `skipConflicting` narrow a series change |
@@ -56,6 +57,8 @@ Drag, resize and reschedule are all `PATCH /sessions/:id` (a `MOVE` signal).
 - **Infeasible deadline:** displacement repacks flexible tasks on the deadline day (EDF, `SYSTEM_MOVE` events, `displacedSessions[]`).
 - If that fails: `409 SCHEDULE_INFEASIBLE` with `options: ["ACCEPT_CONFLICTS","ACCEPT_LATE_DEADLINE"]`. The client retries with `infeasiblePolicy`.
 - Every `Session` carries `late: boolean`.
+- **Search:** every word of `q` must match; empty `q` lists all. `direction` is `forward` (start at or after) or `backward` (before); each page is ascending.
+- Search returns `{ sessions, nextCursor }`; pass `nextCursor` with the same `direction`. Recurring series add occurrences up to a year past the cursor once stored rows run out. Unscheduled rows are skipped.
 - **Reminders:** `POST` and `PATCH` accept `reminders?: number[]` (minutes before start, max 2, not for `DND`). Responses carry `reminders: number[]`.
 - Omitted on create: one at `defaultReminderMinutes` (none if 0). Omitted on `PATCH`: unchanged.
 - Reminders past or under 60 s away are skipped and listed in `skippedReminders`.

@@ -4,6 +4,7 @@ import { SessionCrudService } from "./session-crud.service";
 import { SeriesService } from "./series.service";
 import { SessionUpdateService } from "./session-update.service";
 import { SlotPickService } from "./slot-pick.service";
+import { SessionSearchService } from "./session-search.service";
 import { SessionsController } from "./sessions.controller";
 import { PrismaModule } from "../prisma/prisma.module";
 import { TagsModule } from "../tags/tags.module";
@@ -26,6 +27,7 @@ import { SchedulerModule } from "../scheduler/scheduler.module";
     SeriesService,
     SessionUpdateService,
     SlotPickService,
+    SessionSearchService,
   ],
   exports: [SessionsService],
 })
