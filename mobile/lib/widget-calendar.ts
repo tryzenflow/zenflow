@@ -1,3 +1,4 @@
+import { zonedWallClockToUtc } from '@zenflow/core';
 import type { WidgetEvent, WidgetSnapshot } from './widget-snapshot';
 
 export interface CalendarDay {
@@ -25,11 +26,11 @@ export function calendarDate(instant: string | number, timezone: string): string
   }
 }
 
-export function monthCalendar(snapshot: WidgetSnapshot | null, selectedDate?: string, now = Date.now()) {
+export function monthCalendar(snapshot: WidgetSnapshot | null, now = Date.now()) {
   const timezone = snapshot?.tz || 'UTC';
   const today = calendarDate(now, timezone);
   const month = today.slice(0, 7);
-  const selected = selectedDate?.slice(0, 7) === month ? selectedDate : today;
+  const selected = today;
   const [year, monthNumber] = month.split('-').map(Number);
   const firstWeekday = (new Date(Date.UTC(year, monthNumber - 1, 1)).getUTCDay() + 6) % 7;
   const daysInMonth = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
@@ -42,10 +43,28 @@ export function monthCalendar(snapshot: WidgetSnapshot | null, selectedDate?: st
     }),
   ];
   while (days.length % 7) days.push(null);
-  const events = (snapshot?.calendarEvents ?? snapshot?.events ?? [])
+  const allEvents = [...(snapshot?.calendarEvents ?? []), ...(snapshot?.events ?? [])];
+  const events = allEvents
     .filter((event) => calendarDate(event.start, timezone) === selected)
+    .filter((event) => event.type !== 'DND')
+    .filter((event, index, all) => all.findIndex((item) => item.id === event.id) === index)
     .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
   return { month, selected, today, days, events };
+}
+
+export function widgetMonthHref() {
+  return 'zenflow://month';
+}
+
+export function widgetEventHref(id: string) {
+  return `zenflow://task/${encodeURIComponent(id)}/edit`;
+}
+
+export function widgetNewTaskHref(date: string, timezone: string) {
+  const [year, month, day] = date.split('-').map(Number);
+  const wall = new Date(year, month - 1, day, 23, 45);
+  const deadline = zonedWallClockToUtc(wall, timezone).toISOString();
+  return `zenflow://task/new?start=${encodeURIComponent(deadline)}&deadline=${encodeURIComponent(deadline)}`;
 }
 
 export function widgetEventTime(event: WidgetEvent, timezone: string, language: 'en' | 'vi') {

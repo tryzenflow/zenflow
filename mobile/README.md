@@ -115,9 +115,11 @@ Backend: `backend/src/devices/`, `backend/src/notifications/`.
 
 ## Android home screen widgets
 
-- Add **Zenflow next up** (small), **Zenflow next up wide** (medium), or **Zenflow month** (large) from the Android widget picker.
-- Next up widgets show the next session. The month widget shows a Monday-first calendar and sessions for the selected day.
-- Tap a day to change the agenda, or + to create a session.
+- Add **Zenflow month** (4×2) from the Android widget picker.
+- The widget shows a Monday-first calendar and today's sessions.
+- Do not disturb sessions stay hidden.
+- Tap a session to open its details.
+- Tap the calendar to open Month view, or + to open a new task with today's deadline preselected.
 - Sign-in, calendar refreshes and session changes refresh widgets. Android also requests an update every 30 minutes.
 - A signed-out widget prompts sign-in. An account with no upcoming session shows an empty state.
 - The widget needs a fresh Android dev-client build after installation: `pnpm android`.

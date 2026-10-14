@@ -26,14 +26,3 @@ export async function writeWidgetSnapshot(snapshot: WidgetSnapshot | null) {
   if (snapshot) await AsyncStorage.setItem(KEY, JSON.stringify(snapshot));
   else await AsyncStorage.removeItem(KEY);
 }
-
-const CALENDAR_DATE_KEY = 'zenflow.widget.calendar-date.v1';
-
-export async function readWidgetCalendarDate(): Promise<string | undefined> {
-  const date = await AsyncStorage.getItem(CALENDAR_DATE_KEY).catch(() => null);
-  return date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : undefined;
-}
-
-export async function writeWidgetCalendarDate(date: string) {
-  await AsyncStorage.setItem(CALENDAR_DATE_KEY, date);
-}

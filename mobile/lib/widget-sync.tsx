@@ -3,9 +3,8 @@ import { zonedNow } from "@zenflow/core";
 import { Platform } from "react-native";
 import { requestWidgetUpdate } from "react-native-android-widget";
 import { MonthAgendaWidget } from "@/components/widget/month-agenda-widget";
-import { NextUpWidget } from "@/components/widget/next-up-widget";
 import { loadWidgetHorizon, makeWidgetSnapshot } from "./widget-snapshot";
-import { readWidgetCalendarDate, writeWidgetSnapshot } from "./widget-storage";
+import { writeWidgetSnapshot } from "./widget-storage";
 
 let user: User | null = null;
 let cachedSessions: Session[] = [];
@@ -31,20 +30,10 @@ function enqueueSnapshot() {
     .catch(() => {})
     .then(async () => {
       await writeWidgetSnapshot(snapshot);
-      const selectedDate = await readWidgetCalendarDate();
       await requestWidgetUpdate({
-        widgetName: "MonthAgenda",
-        renderWidget: () => <MonthAgendaWidget snapshot={snapshot} selectedDate={selectedDate} />,
+        widgetName: "NextUpMedium",
+        renderWidget: (info) => <MonthAgendaWidget snapshot={snapshot} compact width={info.width} />,
       });
-      for (const [widgetName, size] of [
-        ["NextUpSmall", "small"],
-        ["NextUpMedium", "medium"],
-      ] as const) {
-        await requestWidgetUpdate({
-          widgetName,
-          renderWidget: () => <NextUpWidget snapshot={snapshot} size={size} />,
-        });
-      }
     })
     .catch(() => {});
 }
@@ -57,18 +46,23 @@ async function refreshWidgetHorizon() {
   const today = zonedNow(currentUser.timezone || "UTC");
   try {
     const { listSessions } = await import("@/api/tasks");
-    const [sessions, thisMonth, nextMonth] = await Promise.all([
+    const [horizon, thisMonth, nextMonth, todaySessions] = await Promise.allSettled([
       loadWidgetHorizon(today, async (monday) => (await listSessions("week", monday)).sessions),
       listSessions("month", today),
       listSessions("month", new Date(today.getFullYear(), today.getMonth() + 1, 1)),
+      listSessions("day", today),
     ]);
     if (
       epoch !== userEpoch ||
       requestEpoch !== horizonRequestEpoch ||
       user?.id !== currentUser.id
     ) return;
-    horizonSessions = sessions;
-    calendarSessions = [...thisMonth.sessions, ...nextMonth.sessions];
+    if (horizon.status === "fulfilled") horizonSessions = horizon.value;
+    calendarSessions = [
+      ...(thisMonth.status === "fulfilled" ? thisMonth.value.sessions : []),
+      ...(nextMonth.status === "fulfilled" ? nextMonth.value.sessions : []),
+      ...(todaySessions.status === "fulfilled" ? todaySessions.value.sessions : []),
+    ];
     enqueueSnapshot();
   } catch {
     // Keep saved events when offline.
