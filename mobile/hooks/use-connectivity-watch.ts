@@ -49,6 +49,10 @@ export function useConnectivityWatch(): void {
     // the same offline -> online refresh.
     const unsubscribeStore = useConnectivity.subscribe((s) => {
       if (s.online && !wasOnline) {
+        // Stale flags from failed refreshes would keep the cloud-off glyph up
+        // for pages that never refetch (unmounted, or still fresh). A page
+        // whose refetch fails again re-flags itself.
+        s.clearStale();
         notifySessionsMutated();
         void warmCalendar();
         void syncPendingPrefs();
