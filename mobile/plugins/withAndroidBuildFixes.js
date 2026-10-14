@@ -52,7 +52,14 @@ function withKotlinVersionPin(config) {
   return withGradleProperties(config, (config) => {
     config.modResults = config.modResults.filter(
       (item) =>
-        !(item.type === "property" && (item.key === "android.kotlinVersion" || item.key === "android.minSdkVersion")),
+        !(
+          item.type === "property" &&
+          [
+            "android.kotlinVersion",
+            "android.minSdkVersion",
+            "android.enableMinifyInReleaseBuilds",
+          ].includes(item.key)
+        ),
     );
     config.modResults.push({
       type: "property",
@@ -63,6 +70,13 @@ function withKotlinVersionPin(config) {
       type: "property",
       key: "android.minSdkVersion",
       value: "24",
+    });
+    // R8 strips WorkManager's generated Room database class. AndroidX Startup
+    // then crashes before MainActivity can open in a release build.
+    config.modResults.push({
+      type: "property",
+      key: "android.enableMinifyInReleaseBuilds",
+      value: "false",
     });
     return config;
   });
