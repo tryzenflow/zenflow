@@ -52,6 +52,8 @@ export function toSessionDto(row: SessionRow): SharedSession {
       .map((r) => r.remindBeforeMinutes)
       .sort((a, b) => b - a),
     late: isLate(row),
+    completedAt: row.completedAt ? row.completedAt.toISOString() : null,
+    skipped: row.skipped,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

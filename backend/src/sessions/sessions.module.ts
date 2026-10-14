@@ -10,6 +10,8 @@ import { TagsModule } from "../tags/tags.module";
 import { RemindersModule } from "../reminders/reminders.module";
 import { FilesModule } from "../files/files.module";
 import { SchedulerModule } from "../scheduler/scheduler.module";
+import { StreaksModule } from "../streaks/streaks.module";
+import { SessionCheckOffService } from "./session-check-off.service";
 
 @Module({
   imports: [
@@ -18,6 +20,7 @@ import { SchedulerModule } from "../scheduler/scheduler.module";
     SchedulerModule,
     RemindersModule,
     FilesModule,
+    StreaksModule,
   ],
   controllers: [SessionsController],
   providers: [
@@ -26,6 +29,7 @@ import { SchedulerModule } from "../scheduler/scheduler.module";
     SeriesService,
     SessionUpdateService,
     SlotPickService,
+    SessionCheckOffService,
   ],
   exports: [SessionsService],
 })

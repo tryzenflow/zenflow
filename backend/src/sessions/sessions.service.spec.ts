@@ -7,6 +7,7 @@ import { TaskPlacementService } from "../scheduler/io/task-placement.service";
 import { SchedulingFeedbackService } from "../scheduler/io/scheduling-feedback.service";
 import { ScheduleInfeasibleException } from "../scheduler/schedule-infeasible.exception";
 import { SessionsService } from "./sessions.service";
+import { SessionCheckOffService } from "./session-check-off.service";
 import { SessionCrudService } from "./session-crud.service";
 import { SeriesService } from "./series.service";
 import { SessionUpdateService } from "./session-update.service";
@@ -60,6 +61,8 @@ function session(overrides: Partial<SessionRow> & { id: string }): SessionRow {
     retainedAt: null,
     syncConfirmedAt: null,
     syncMissedAt: null,
+    completedAt: null,
+    skipped: false,
     deleted: false,
     userId: user.id,
     seriesId: null,
@@ -168,6 +171,7 @@ async function makeService(
       { provide: TaskPlacementService, useValue: placement },
       { provide: SchedulingFeedbackService, useValue: feedback },
       { provide: RemindersService, useValue: fakeReminders() },
+      { provide: SessionCheckOffService, useValue: {} },
       {
         provide: NoteFilesService,
         useValue: {
@@ -262,6 +266,8 @@ describe("SessionsService.create", () => {
       sessionTotal: null,
       late: false,
       displacedSessions: [],
+      completedAt: null,
+      skipped: false,
       reminders: [60],
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
@@ -616,7 +622,10 @@ describe("SessionsService.list", () => {
   it("scopes the query to the user", async () => {
     const rows = [session({ id: "session-1" })];
     const findMany = jest.fn().mockResolvedValue(rows);
-    const prisma = { session: { findMany } };
+    const prisma = {
+      session: { findMany },
+      sessionOccurrenceState: { findMany: jest.fn().mockResolvedValue([]) },
+    };
     const service = await makeService(
       prisma,
       fakeTagsService(),
@@ -656,7 +665,10 @@ describe("SessionsService.list", () => {
       scheduledStartTime: new Date("2026-06-01T12:00:00.000Z"),
     });
     const findMany = jest.fn().mockResolvedValue([rep]);
-    const prisma = { session: { findMany } };
+    const prisma = {
+      session: { findMany },
+      sessionOccurrenceState: { findMany: jest.fn().mockResolvedValue([]) },
+    };
     const service = await makeService(
       prisma,
       fakeTagsService(),
@@ -676,6 +688,53 @@ describe("SessionsService.list", () => {
     expect(result.sessions.every((s) => s.type === "DND")).toBe(true);
   });
 
+  it("stamps a done occurrence from SessionOccurrenceState and leaves the rest open", async () => {
+    const series: SessionSeries = {
+      id: "series-1",
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      type: "LECTURE",
+      deadline: null,
+      rrule: "FREQ=DAILY",
+      exdates: [],
+      userId: user.id,
+    };
+    const rep = session({
+      id: "lecture-rep",
+      type: "LECTURE",
+      seriesId: "series-1",
+      series,
+      scheduledStartTime: new Date("2026-06-01T12:00:00.000Z"),
+    });
+    const done = new Date("2026-06-15T12:00:00.000Z");
+    const prisma = {
+      session: { findMany: jest.fn().mockResolvedValue([rep]) },
+      sessionOccurrenceState: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            seriesId: "series-1",
+            occurrenceStart: done,
+            completedAt: new Date("2026-06-15T13:00:00.000Z"),
+            skipped: false,
+          },
+        ]),
+      },
+    };
+    const service = await makeService(prisma, fakeTagsService());
+
+    const { sessions } = await service.list(
+      { view: "week", date: "2026-06-15" },
+      user,
+    );
+
+    const stamped = sessions.find(
+      (s) => s.id === `series-1::${done.toISOString()}`,
+    );
+    expect(stamped?.completedAt).toBe("2026-06-15T13:00:00.000Z");
+    expect(
+      sessions.filter((s) => s.completedAt !== null || s.skipped),
+    ).toHaveLength(1);
+  });
+
   it("includes a plain session that starts the previous day and crosses midnight into the requested day", async () => {
     // "day" view for 2026-06-10 (UTC) — an 8h DND block starting 22:00 on
     // 2026-06-09 runs until 06:00 on 2026-06-10, so it overlaps the window.
@@ -687,7 +746,10 @@ describe("SessionsService.list", () => {
       scheduledStartTime: new Date("2026-06-09T22:00:00.000Z"),
     });
     const findMany = jest.fn().mockResolvedValue([crossing]);
-    const prisma = { session: { findMany } };
+    const prisma = {
+      session: { findMany },
+      sessionOccurrenceState: { findMany: jest.fn().mockResolvedValue([]) },
+    };
     const service = await makeService(
       prisma,
       fakeTagsService(),
@@ -727,7 +789,10 @@ describe("SessionsService.list", () => {
     // The prisma double still "returns" the row (as the widened query would),
     // to prove list() itself filters it out by the overlap guard.
     const findMany = jest.fn().mockResolvedValue([noOverlap]);
-    const prisma = { session: { findMany } };
+    const prisma = {
+      session: { findMany },
+      sessionOccurrenceState: { findMany: jest.fn().mockResolvedValue([]) },
+    };
     const service = await makeService(
       prisma,
       fakeTagsService(),
@@ -750,7 +815,10 @@ describe("SessionsService.list", () => {
       scheduledStartTime: null,
     });
     const findMany = jest.fn().mockResolvedValue([unscheduled]);
-    const prisma = { session: { findMany } };
+    const prisma = {
+      session: { findMany },
+      sessionOccurrenceState: { findMany: jest.fn().mockResolvedValue([]) },
+    };
     const service = await makeService(
       prisma,
       fakeTagsService(),
@@ -787,7 +855,10 @@ describe("SessionsService.list", () => {
       scheduledStartTime: new Date("2026-06-01T22:00:00.000Z"),
     });
     const findMany = jest.fn().mockResolvedValue([rep]);
-    const prisma = { session: { findMany } };
+    const prisma = {
+      session: { findMany },
+      sessionOccurrenceState: { findMany: jest.fn().mockResolvedValue([]) },
+    };
     const service = await makeService(
       prisma,
       fakeTagsService(),
@@ -833,7 +904,10 @@ describe("SessionsService.suggestions", () => {
       }),
     ];
     const findMany = jest.fn().mockResolvedValue(rows);
-    const prisma = { session: { findMany } };
+    const prisma = {
+      session: { findMany },
+      sessionOccurrenceState: { findMany: jest.fn().mockResolvedValue([]) },
+    };
     const service = await makeService(
       prisma,
       fakeTagsService(),
@@ -864,7 +938,10 @@ describe("SessionsService.suggestions", () => {
       }),
     ];
     const findMany = jest.fn().mockResolvedValue(rows);
-    const prisma = { session: { findMany } };
+    const prisma = {
+      session: { findMany },
+      sessionOccurrenceState: { findMany: jest.fn().mockResolvedValue([]) },
+    };
     const service = await makeService(
       prisma,
       fakeTagsService(),
@@ -891,7 +968,10 @@ describe("SessionsService.suggestions", () => {
       }),
     ];
     const findMany = jest.fn().mockResolvedValue(rows);
-    const prisma = { session: { findMany } };
+    const prisma = {
+      session: { findMany },
+      sessionOccurrenceState: { findMany: jest.fn().mockResolvedValue([]) },
+    };
     const service = await makeService(
       prisma,
       fakeTagsService(),

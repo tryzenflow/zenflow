@@ -40,6 +40,25 @@ import { mapSessionPrismaError } from "./prisma-error";
 import { placeOrDiscard } from "./placement-compensation";
 import { NO_FEASIBLE_SLOT_MESSAGE, SeriesService } from "./series.service";
 
+type OccurrenceCheckOff = Pick<SharedSession, "completedAt" | "skipped">;
+
+const occurrenceStateKey = (seriesId: string, start: Date): string =>
+  `${seriesId}|${start.getTime()}`;
+
+/** An occurrence's done or skipped state; a missing row means neither. */
+function occurrenceCheckOff(
+  states: Map<string, OccurrenceCheckOff>,
+  seriesId: string,
+  start: Date,
+): OccurrenceCheckOff {
+  return (
+    states.get(occurrenceStateKey(seriesId, start)) ?? {
+      completedAt: null,
+      skipped: false,
+    }
+  );
+}
+
 /**
  * Plain session CRUD: `create` (dispatches by type — single `TASK`,
  * recurring-fixed, one-off-fixed; a `sessionCount > 1` `TASK` goes to
@@ -281,6 +300,13 @@ export class SessionCrudService {
       include: WITH_TAGS_AND_SERIES,
     });
 
+    const states = await this.occurrenceStates(
+      user.id,
+      rows,
+      new Date(displayStart.getTime() - DAY_MS),
+      displayEnd,
+    );
+
     const sessions: SharedSession[] = [];
     for (const row of rows) {
       if (row.seriesId && row.series?.rrule && row.scheduledStartTime) {
@@ -301,6 +327,7 @@ export class SessionCrudService {
             ...base,
             id: occurrenceId(row.seriesId, occ),
             scheduledStartTime: occ.toISOString(),
+            ...occurrenceCheckOff(states, row.seriesId, occ),
           });
         }
       } else {
@@ -320,6 +347,38 @@ export class SessionCrudService {
     }
 
     return { sessions };
+  }
+
+  /** Done or skipped occurrences of the recurring reps in `rows`, keyed by {@link occurrenceStateKey}. */
+  private async occurrenceStates(
+    userId: string,
+    rows: {
+      seriesId: string | null;
+      series: { rrule: string | null } | null;
+    }[],
+    from: Date,
+    to: Date,
+  ): Promise<Map<string, OccurrenceCheckOff>> {
+    const seriesIds = rows
+      .filter((r) => r.seriesId && r.series?.rrule)
+      .map((r) => r.seriesId as string);
+    if (seriesIds.length === 0) return new Map();
+    const found = await this.prisma.sessionOccurrenceState.findMany({
+      where: {
+        userId,
+        seriesId: { in: seriesIds },
+        occurrenceStart: { gte: from, lt: to },
+      },
+    });
+    return new Map(
+      found.map((s) => [
+        occurrenceStateKey(s.seriesId, s.occurrenceStart),
+        {
+          completedAt: s.completedAt?.toISOString() ?? null,
+          skipped: s.skipped,
+        },
+      ]),
+    );
   }
 
   async suggestions(
@@ -377,7 +436,19 @@ export class SessionCrudService {
       });
       if (!rep)
         throw new NotFoundException(`Cannot find session with id ${id}`);
-      return { ...toSessionDto(rep), id, scheduledStartTime: occ.startISO };
+      const start = new Date(occ.startISO);
+      const states = await this.occurrenceStates(
+        user.id,
+        [rep],
+        start,
+        new Date(start.getTime() + 1),
+      );
+      return {
+        ...toSessionDto(rep),
+        id,
+        scheduledStartTime: occ.startISO,
+        ...occurrenceCheckOff(states, occ.seriesId, start),
+      };
     }
 
     const session = await this.prisma.session.findFirst({
