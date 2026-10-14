@@ -1,5 +1,11 @@
 # @zenflow/core
 
+## 0.1.0-beta.9
+
+### Patch Changes
+
+- @zenflow/shared@0.1.0-beta.9
+
 ## 0.1.0-beta.8
 
 ### Minor Changes
