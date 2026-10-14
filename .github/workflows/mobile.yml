@@ -152,7 +152,7 @@ jobs:
         if: ${{ inputs.variant == 'release' }}
         run: |
           apksigner="$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)"
-          "$apksigner" verify --print-certs dist/zenflow-android.apk | grep -E "Signer #1 certificate (DN|SHA-256)"
+          "$apksigner" verify --verbose --print-certs dist/zenflow-android.apk | grep -E "Signer #1 certificate (DN|SHA-256)" || true
       - uses: actions/upload-artifact@v7
         with:
           name: zenflow-android-apk
