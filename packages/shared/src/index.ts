@@ -11,3 +11,4 @@ export * from "./push";
 export * from "./placement";
 export * from "./file";
 export * from "./file-limits";
+export * from "./streak";
