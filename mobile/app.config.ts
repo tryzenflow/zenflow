@@ -20,8 +20,17 @@ const googleServicesFile = existsSync("./google-services.json")
 // One version for the whole repo (changesets fixed group): mobile/package.json
 // is the source. Store builds need a plain x.y.z, so a `-beta.N` suffix becomes
 // the build number instead.
-const [appVersion, prerelease] = require("./package.json").version.split("-");
+const fullVersion: string = require("./package.json").version;
+const [appVersion, prerelease] = fullVersion.split("-");
 const betaNumber = Number(prerelease?.split(".")[1] ?? 0);
+
+// Android only installs an update whose versionCode is higher, so it must grow with the
+// version: major.minor.patch.beta packs into one number, and a stable release (no `-beta.N`)
+// outranks every beta of the same x.y.z. Betas shipped before this used `betaNumber + 1`
+// (at most a few dozen), which any value here beats.
+const [major, minor, patch] = appVersion.split(".").map(Number);
+const androidVersionCode =
+  major * 1_000_000 + minor * 10_000 + patch * 100 + (prerelease ? betaNumber : 99);
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -72,7 +81,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       backgroundColor: "#ffffff",
     },
     package: "com.zenflow.app",
-    versionCode: betaNumber + 1,
+    versionCode: androidVersionCode,
+    // Needed to hand a downloaded APK to the system installer (lib/app-update).
+    permissions: ["android.permission.REQUEST_INSTALL_PACKAGES"],
+    // The default template asks for "draw over other apps", which Play Protect flags.
+    blockedPermissions: ["android.permission.SYSTEM_ALERT_WINDOW"],
     ...(googleServicesFile ? { googleServicesFile } : {}),
     // Resize the visible window when the keyboard opens instead of the
     // default pan behavior — required for `KeyboardAvoidingView`
@@ -144,6 +157,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     typedRoutes: true,
   },
   extra: {
+    // The full version including `-beta.N`, which `version` above drops. The updater
+    // compares it with the latest GitHub release tag.
+    releaseVersion: fullVersion,
     eas: {
       projectId: "",
     },

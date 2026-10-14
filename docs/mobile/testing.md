@@ -95,7 +95,7 @@ Builds run on GitHub runners via `expo prebuild` (no Expo/EAS account).
 
 ### Android artifact: `.apk`
 
-A release `.apk` for sideloading (`adb install zenflow-android.apk`). Signed with the Expo debug keystore: fine for testing, not the Play Store (needs a release keystore and `.aab`).
+A release `.apk` for sideloading (`adb install zenflow-android.apk`). Release builds sign with the keystore from the `ANDROID_KEYSTORE_*` secrets ([releasing.md](../ops/releasing.md#android-signing-and-updates)); without them (PRs, e2e, forks) the Expo debug key is used. The Play Store needs an `.aab`.
 
 ### iOS artifact: `.app` vs `.ipa`
 

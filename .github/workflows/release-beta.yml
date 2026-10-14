@@ -85,6 +85,8 @@ jobs:
     needs: detect
     if: needs.detect.outputs.new == 'true' && needs.detect.outputs.mobile == 'true'
     uses: ./.github/workflows/mobile.yml
+    # The release keystore secrets (ANDROID_KEYSTORE_BASE64 and friends).
+    secrets: inherit
     with:
       variant: release
       # Repository variable: the API the shipped app talks to (e.g. staging).
@@ -181,8 +183,7 @@ jobs:
               printf '\n\nThe app files are the build from %s; the app did not change in this version.\n' "$from" >> notes.md
             fi
           fi
-          flags=""
-          [ "$PRERELEASE" = "true" ] && flags="--prerelease"
-          # shellcheck disable=SC2086
+          # Never a pre-release here: /releases/latest (the landing page's download
+          # link) skips pre-releases, and the app's updater reads the newest release.
           GH_TOKEN="$PUBLIC_RELEASES_TOKEN" gh release create "$tag" assets/* \
-            --repo "$PUBLIC_REPO" --title "$tag" --notes-file notes.md $flags
+            --repo "$PUBLIC_REPO" --title "$tag" --notes-file notes.md --latest
