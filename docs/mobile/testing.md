@@ -83,9 +83,10 @@ Install Maestro first: <https://docs.maestro.dev/getting-started/installing-maes
 | --- | --- | --- |
 | `build-android` | PRs touching `mobile/` or `packages/` (called from `ci.yml`), nightly, `release/**`, manual | `zenflow-android-apk` → `zenflow-android.apk` |
 | `e2e-android` | same, except releases | `maestro-android-results`: junit, failure screenshots, screen recording, logcat, `api.log` |
-| `build-ios` | nightly, `release/**`, manual, releases (never in a PR) | `zenflow-ios-unsigned-ipa` → `zenflow-ios-unsigned.ipa` |
+| `build-ios` | nightly, `release/**`, manual with `run_ios_e2e` (simulator `.app`); releases (unsigned `.ipa`). Never in a PR | `zenflow-ios-simulator-app` → `zenflow-ios-simulator.zip`, or `zenflow-ios-unsigned-ipa` → `zenflow-ios-unsigned.ipa` |
+| `e2e-ios` | nightly, `release/**`, manual with `run_ios_e2e` (advisory) | `maestro-ios-results` |
 
-In a PR, `ci.yml` calls it after lint, typecheck and unit tests pass, and `CI ok` requires it. There is no iOS e2e.
+In a PR, `ci.yml` calls it after lint, typecheck and unit tests pass, and `CI ok` requires the Android jobs. iOS runs only nightly and on `release/**`.
 
 Builds run on GitHub runners via `expo prebuild` (no Expo/EAS account).
 
@@ -96,7 +97,9 @@ Builds run on GitHub runners via `expo prebuild` (no Expo/EAS account).
 
 A release `.apk` for sideloading (`adb install zenflow-android.apk`). Signed with the Expo debug keystore: fine for testing, not the Play Store (needs a release keystore and `.aab`).
 
-### iOS artifact: `.ipa`
+### iOS artifact: `.app` vs `.ipa`
+
+- **Simulator `.app` (e2e only, zipped).** Runs only in the iOS Simulator on a Mac (`xcrun simctl install booted Zenflow.app`). Needs no Apple account.
 
 - **Device `.ipa`:** for real iPhones, TestFlight and the App Store. Needs a paid Apple Developer account (certificate and provisioning profile). Not set up.
 - **Unsigned `.ipa`** (`zenflow-ios-unsigned.ipa`). A device build with no signature, for sideloading: SideStore/AltStore re-sign it on the phone with a free Apple ID (7-day expiry, push and other paid entitlements unavailable).

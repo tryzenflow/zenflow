@@ -339,7 +339,7 @@ jobs:
 
   # Android build + Maestro e2e, after the cheap gates are green (unit tests
   # already ran above, so the workflow skips its own). The e2e needs the APK, so
-  # that build is part of it. The iOS build waits for merge (release-beta).
+  # that build is part of it. iOS build and e2e run nightly and on release/**.
   mobile:
     name: Mobile (build + e2e)
     needs: [changes, lint, typecheck, unit-tests]

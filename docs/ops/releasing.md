@@ -8,7 +8,7 @@
 2. Merging to `main` runs [`release-beta.yml`](../../.github/workflows/release-beta.yml). It opens or updates a **"chore: version packages"** PR (bumps `package.json`s, writes `CHANGELOG.md`s, syncs the root version and compose image defaults via `scripts/sync-version.mjs`).
 3. Merging that PR publishes a GitHub pre-release `vX.Y.Z-beta.N` with:
    - `zenflow-android.apk`
-   - `zenflow-ios-unsigned.ipa` (sideload only; a signed device `.ipa` needs an Apple Developer account, see [mobile/testing.md](../mobile/testing.md#ios-artifact-ipa))
+   - `zenflow-ios-unsigned.ipa` (sideload only; a signed device `.ipa` needs an Apple Developer account, see [mobile/testing.md](../mobile/testing.md#ios-artifact-app-vs-ipa))
    - Notes from `backend/CHANGELOG.md`
 
    App files build only if `mobile/` or `packages/` changed since the last tag. Otherwise the release has notes only.
