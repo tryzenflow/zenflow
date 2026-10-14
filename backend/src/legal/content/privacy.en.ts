@@ -10,7 +10,7 @@ export const PRIVACY_EN: LegalDoc = {
     {
       heading: "1. Who we are",
       body: [
-        'Zenflow is operated by Tran Thai Anh ("we", "us"), an individual developer, at zenflow.alphatrann.com. We decide how and why your personal data is used, so we are the controller of it. Zenflow is an early-stage project.',
+        'Zenflow is operated by Tran Thai Anh ("we", "us"), an individual developer, at usezenflow.com. We decide how and why your personal data is used, so we are the controller of it. Zenflow is an early-stage project.',
       ],
     },
     {

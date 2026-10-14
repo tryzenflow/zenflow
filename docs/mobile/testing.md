@@ -100,7 +100,7 @@ In a PR, `ci.yml` calls it after lint, typecheck and unit tests pass, and `CI ok
 Builds run on GitHub runners via `expo prebuild` (no Expo/EAS account).
 
 - `e2e` (default): emulator-host API URL, cleartext HTTP allowed (`plugins/withE2eCleartext.js`, `ZENFLOW_E2E=1` only).
-- `release`: run the workflow manually. API defaults to `https://zenflow.alphatrann.com/api/v1`, or pass `api_url`.
+- `release`: run the workflow manually. API defaults to `https://api.usezenflow.com/api/v1`, or pass `api_url`.
 
 ### Android artifact: `.apk`
 

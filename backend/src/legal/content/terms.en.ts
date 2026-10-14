@@ -5,7 +5,7 @@ export const TERMS_EN: LegalDoc = {
   description:
     "The rules for using Zenflow: your account and content, campus connections, acceptable use, and our responsibilities.",
   intro:
-    "These terms are the agreement between you and Zenflow when you use the Zenflow app and website. By creating an account or using Zenflow you accept them. If you do not agree, please do not use Zenflow. Questions: {{email}}.",
+    "These terms are the agreement between you and Zenflow when you use the Zenflow app and the website at usezenflow.com. By creating an account or using Zenflow you accept them. If you do not agree, please do not use Zenflow. Questions: {{email}}.",
   sections: [
     {
       heading: "1. Who provides Zenflow",

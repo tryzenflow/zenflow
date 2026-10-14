@@ -29,7 +29,6 @@ import { z } from "zod";
 import { requestOtp, verifyOtp } from "@/api/auth";
 import { updateBasicInfo } from "@/api/users";
 import { LanguageSelect } from "@/components/language-select";
-import { getBaseURL } from "@/lib/api-client";
 import { type LegalPage, legalUrl } from "@/lib/legal-links";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
@@ -188,12 +187,11 @@ function OtpBoxes({
 }
 
 function openLegal(page: LegalPage) {
-  const url = legalUrl(page, getBaseURL());
+  const url = legalUrl(page);
   // Loaded on tap: the native module isn't needed to render the screen.
-  if (url)
-    void import("expo-web-browser")
-      .then((WebBrowser) => WebBrowser.openBrowserAsync(url))
-      .catch(() => {});
+  void import("expo-web-browser")
+    .then((WebBrowser) => WebBrowser.openBrowserAsync(url))
+    .catch(() => {});
 }
 
 export default function LoginScreen() {
