@@ -3,9 +3,9 @@ name: Version & Release (beta)
 # Changesets-driven, modelled on limitkit's release.yml:
 #   1. Merging changesets to main opens/updates a "version packages" PR.
 #   2. Merging that PR bumps every package (one fixed version), so the next run
-#      of this workflow sees a version with no tag yet, builds the Android APK,
-#      the iOS simulator app and an unsigned iOS .ipa (for sideloading), and publishes a GitHub *pre-release* vX.Y.Z-beta.N
-#      with both attached.
+#      of this workflow sees a version with no tag yet, builds the Android APK
+#      and an unsigned iOS .ipa (for sideloading), and publishes a GitHub
+#      *pre-release* vX.Y.Z-beta.N with both attached.
 # Pre-releases never trigger the production deploy (release.yml skips them).
 
 on:
@@ -90,6 +90,8 @@ jobs:
       # Repository variable: the API the shipped app talks to (e.g. staging).
       api_url: ${{ vars.MOBILE_API_URL }}
       skip_e2e: true
+      # Already tested in the PR that produced this commit.
+      skip_tests: true
 
   release:
     name: Publish GitHub release
@@ -125,7 +127,7 @@ jobs:
           flags=""
           [ "$PRERELEASE" = "true" ] && flags="--prerelease"
           assets=""
-          [ -d dist ] && assets="dist/zenflow-android.apk dist/zenflow-ios-simulator.zip dist/zenflow-ios-unsigned.ipa"
+          [ -d dist ] && assets="dist/zenflow-android.apk dist/zenflow-ios-unsigned.ipa"
           gh release create "v$VERSION" $assets \
             --target "$GITHUB_SHA" --title "v$VERSION" --notes-file notes.md $flags
 

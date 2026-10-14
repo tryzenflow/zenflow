@@ -1,7 +1,10 @@
 name: Images & staging deploy
 
 # Merge to main => build + push images tagged with the commit SHA (and
-# :latest), then deploy that SHA to staging automatically.
+# :latest), then deploy that SHA to staging automatically. An image whose inputs
+# did not change is not rebuilt: its :latest manifest is re-tagged with the new
+# SHA (deploy.yml and release.yml need both images for every SHA). A merge that
+# touches neither image nor deploy config does not redeploy staging.
 on:
   push:
     branches: [main]
@@ -15,7 +18,38 @@ permissions:
   contents: read
 
 jobs:
+  detect:
+    name: Which images changed?
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      api: ${{ steps.d.outputs.api }}
+      bandit: ${{ steps.d.outputs.bandit }}
+      deploy: ${{ steps.d.outputs.deploy }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: d
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          out() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
+          all() { out api true; out bandit true; out deploy true; exit 0; }
+          # Manual runs, first pushes and unreachable bases rebuild everything.
+          [ "${{ github.event_name }}" = "push" ] || all
+          case "$BEFORE" in ""|0000000000000000000000000000000000000000) all ;; esac
+          git cat-file -e "$BEFORE^{commit}" 2>/dev/null || all
+          files=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
+          flag() { if echo "$files" | grep -qE "$2"; then out "$1" true; else out "$1" false; fi; }
+          # backend/Dockerfile context (see .dockerignore): backend, packages/shared, root manifests.
+          flag api '^(backend/|packages/shared/|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|package\.json$|\.npmrc$|\.dockerignore$|build_images\.sh$)'
+          flag bandit '^(services/bandit/|build_images\.sh$)'
+          # Staging config comes from the SHA, so deploy config changes redeploy too.
+          flag deploy '^(backend/|services/bandit/|packages/shared/|scripts/deploy/|pnpm-lock\.yaml$|package\.json$|build_images\.sh$)'
+
   build-push:
+    needs: detect
     name: Build & push images
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -38,16 +72,32 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: build_images.sh (push)
+      # Unchanged image: point the new SHA at its :latest manifest (seconds, no
+      # rebuild). No :latest yet (first run) means it must be built.
+      - name: Re-tag unchanged images, build the rest
         env:
           REGISTRY: ${{ steps.meta.outputs.registry }}
           TAG: ${{ steps.meta.outputs.tag }}
+          CHANGED_API: ${{ needs.detect.outputs.api }}
+          CHANGED_BANDIT: ${{ needs.detect.outputs.bandit }}
           PUSH: "1"
-        run: ./build_images.sh
+        run: |
+          build=""
+          for img in api bandit; do
+            case "$img" in api) changed="$CHANGED_API" ;; bandit) changed="$CHANGED_BANDIT" ;; esac
+            ref="$REGISTRY/zenflow-$img"
+            if [ "$changed" != "true" ] && docker buildx imagetools inspect "$ref:latest" >/dev/null 2>&1; then
+              docker buildx imagetools create -t "$ref:$TAG" "$ref:latest"
+            else
+              build="$build $img"
+            fi
+          done
+          [ -z "$build" ] || IMAGES="$build" ./build_images.sh
 
   deploy-staging:
     name: Deploy to staging
-    needs: build-push
+    needs: [detect, build-push]
+    if: needs.detect.outputs.deploy == 'true'
     uses: ./.github/workflows/deploy.yml
     with:
       environment: staging

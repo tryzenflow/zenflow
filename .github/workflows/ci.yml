@@ -22,33 +22,45 @@ jobs:
     timeout-minutes: 5
     outputs:
       backend: ${{ steps.diff.outputs.backend }}
+      bandit: ${{ steps.diff.outputs.bandit }}
       image: ${{ steps.diff.outputs.image }}
+      frontend: ${{ steps.diff.outputs.frontend }}
+      mobile: ${{ steps.diff.outputs.mobile }}
+      mobile_native: ${{ steps.diff.outputs.mobile_native }}
+      prisma: ${{ steps.diff.outputs.prisma }}
+      deploy: ${{ steps.diff.outputs.deploy }}
+      agents: ${{ steps.diff.outputs.agents }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - id: diff
         run: |
+          out() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
           if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "backend=true" >> "$GITHUB_OUTPUT"
-            echo "image=true" >> "$GITHUB_OUTPUT"
+            for k in backend bandit image frontend mobile mobile_native prisma deploy agents; do out "$k" true; done
             exit 0
           fi
           files=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}")
+          flag() { if echo "$files" | grep -qE "$2"; then out "$1" true; else out "$1" false; fi; }
+          # Shared inputs every TypeScript package builds from.
+          root='pnpm-lock\.yaml$|pnpm-workspace\.yaml$|package\.json$|\.npmrc$'
           # Backend tests: the API, the shared packages it imports, the
           # dependency lockfile/workspace, and the CI wiring that runs them.
-          if echo "$files" | grep -qE '^(backend/|packages/|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|package\.json$|\.npmrc$|\.github/(workflows/ci\.yml|actions/|scripts/))'; then
-            echo "backend=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "backend=false" >> "$GITHUB_OUTPUT"
-          fi
+          flag backend "^(backend/(src|test|prisma|scripts)/|backend/(package\.json|tsconfig[^/]*\.json|nest-cli\.json|eslint\.config\.mjs|compose\.test\.yml)$|packages/|$root|\.github/(workflows/ci\.yml|actions/|scripts/))"
+          # Bandit service: its code and tests (the backend e2e also boots it).
+          flag bandit '^(services/bandit/|\.github/workflows/ci\.yml)'
           # API image: its Dockerfile context (see .dockerignore): backend,
-          # packages/shared, root manifests.
-          if echo "$files" | grep -qE '^(backend/|packages/shared/|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|package\.json$|\.npmrc$|\.dockerignore$|\.github/workflows/ci\.yml$)'; then
-            echo "image=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "image=false" >> "$GITHUB_OUTPUT"
-          fi
+          # packages/shared, root manifests. Bandit image: services/bandit.
+          flag image "^(backend/|packages/shared/|$root|\.dockerignore$|build_images\.sh$|\.github/workflows/(ci|images)\.yml$)"
+          flag frontend "^(frontend/|packages/|$root|\.github/(workflows/ci\.yml|actions/))"
+          # Mobile: the app and the packages it imports.
+          flag mobile "^(mobile/|packages/|$root|\.github/workflows/(ci|mobile)\.yml$|\.github/actions/)"
+          # Native config: where a prebuild or pod install can break.
+          flag mobile_native '^(mobile/(app\.config\.ts|plugins/|package\.json|patches/|assets/)|\.github/workflows/mobile\.yml$)'
+          flag prisma '^(backend/prisma/|backend/package\.json$|\.github/workflows/ci\.yml$)'
+          flag deploy '^(backend/(compose\.|ops/|env/|nginx/|observability/|killswitch|certs/|docker-entrypoint\.sh$|src/app\.module\.ts$)|scripts/deploy/|\.github/workflows/ci\.yml$)'
+          flag agents '^(\.agents/|\.claude/|\.codex/|scripts/sync-agents\.mjs$|AGENTS\.md$|CLAUDE\.md$|\.github/workflows/ci\.yml$)'
 
   lint:
     name: Lint (changed files)
@@ -100,10 +112,13 @@ jobs:
       - uses: ./.github/actions/setup
       - if: needs.changes.outputs.backend == 'true'
         run: pnpm --filter backend test
-      - run: pnpm --filter mobile test
+      - if: needs.changes.outputs.mobile == 'true'
+        run: pnpm --filter mobile test
 
   bandit-tests:
     name: Unit tests (bandit, python)
+    needs: changes
+    if: needs.changes.outputs.bandit == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -121,6 +136,8 @@ jobs:
 
   prisma-check:
     name: Prisma migrations match schema
+    needs: changes
+    if: needs.changes.outputs.prisma == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
@@ -156,7 +173,7 @@ jobs:
   backend-e2e:
     name: Backend e2e (app, queue, backup)
     needs: changes
-    if: needs.changes.outputs.backend == 'true'
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.bandit == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     services:
@@ -209,6 +226,8 @@ jobs:
 
   frontend-e2e:
     name: Frontend e2e (Playwright)
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.backend == 'true' || needs.changes.outputs.bandit == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -303,6 +322,40 @@ jobs:
           out=$(docker run --rm -v "$RUNNER_TEMP/v:/run/secrets/v:ro" -e FOO_FILE=/run/secrets/v zenflow-api:ci sh -c 'echo "$FOO"')
           [ "$out" = "s3cret" ]
 
+  docker-build-bandit:
+    name: Bandit image builds (no push)
+    needs: changes
+    if: needs.changes.outputs.bandit == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v7
+        with:
+          context: services/bandit
+          file: services/bandit/Dockerfile
+          push: false
+          tags: zenflow-bandit:ci
+          cache-from: type=gha,scope=bandit
+          cache-to: type=gha,mode=max,scope=bandit
+
+  # Native app: Android build + Maestro e2e, after the cheap gates are green
+  # (unit tests already ran above, so the workflow skips its own). iOS builds
+  # only when native config changed. Not in the PR for docs-only changes.
+  mobile:
+    name: Mobile (build + e2e)
+    needs: [changes, lint, typecheck, unit-tests]
+    if: needs.changes.outputs.mobile == 'true'
+    uses: ./.github/workflows/mobile.yml
+    with:
+      variant: e2e
+      skip_e2e: false
+      skip_tests: true
+      skip_ios: ${{ needs.changes.outputs.mobile_native != 'true' }}
+    permissions:
+      contents: read
+
   gitleaks:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
@@ -327,6 +380,8 @@ jobs:
 
   vault:
     name: Vault (prod-only) config + compose validation
+    needs: changes
+    if: needs.changes.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -527,6 +582,8 @@ jobs:
 
   agents:
     name: Agent config in sync (.agents -> .claude, .codex)
+    needs: changes
+    if: needs.changes.outputs.agents == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -552,6 +609,8 @@ jobs:
       - backend-e2e
       - frontend-e2e
       - docker-build
+      - docker-build-bandit
+      - mobile
       - gitleaks
       - vault
       - agents
