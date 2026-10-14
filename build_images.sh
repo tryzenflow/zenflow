@@ -6,6 +6,7 @@
 #   TAG       primary tag (default: backend/package.json version; CI passes the git SHA)
 #   PUSH      1 = also `docker push` every tag (requires a prior `docker login`)
 #   LATEST    1 (default) also tag :latest
+#   IMAGES    space-separated subset of "api bandit" to build (default: both)
 set -eu
 
 VERSION="$(node -p "require('./backend/package.json').version")"
@@ -28,5 +29,11 @@ build() {
 }
 
 # Build context for backend/Dockerfile is the monorepo root.
-build zenflow-api . backend/Dockerfile
-build zenflow-bandit services/bandit services/bandit/Dockerfile
+IMAGES="${IMAGES:-api bandit}"
+for img in $IMAGES; do
+  case "$img" in
+    api) build zenflow-api . backend/Dockerfile ;;
+    bandit) build zenflow-bandit services/bandit services/bandit/Dockerfile ;;
+    *) echo "unknown image: $img" >&2; exit 1 ;;
+  esac
+done

@@ -263,9 +263,10 @@ export function BootScreen({
           Zenflow
         </Text>
         <SunArc animate={!reduceMotion} />
-        <View className="h-[44px] w-[280px] items-center">
+        <View className="min-h-[63px] w-[300px] items-center">
           <Animated.View
             key={hint}
+            className="w-full"
             entering={reduceMotion ? undefined : FadeIn.duration(DURATION.slow)}
             exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.fast)}
           >

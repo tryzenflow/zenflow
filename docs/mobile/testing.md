@@ -81,12 +81,14 @@ Install Maestro first: <https://docs.maestro.dev/getting-started/installing-maes
 
 | Job | When | Output |
 | --- | --- | --- |
-| `build-android` | PRs touching `mobile/` or `packages/` **labelled `build-mobile`**, nightly, `release/**`, manual | `zenflow-android-apk` → `zenflow-android.apk` |
-| `build-ios` | same | `zenflow-ios-simulator-app` → `zenflow-ios-simulator.zip` |
-| `e2e-android` | nightly, `release/**`, manual | `maestro-android-results`: junit, failure screenshots, screen recording, logcat, `api.log` |
-| `e2e-ios` | `release/**`, or manual with `run_ios_e2e` (advisory) | `maestro-ios-results` |
+| `build-android` | PRs touching `mobile/` or `packages/` (called from `ci.yml`), nightly, `release/**`, manual | `zenflow-android-apk` → `zenflow-android.apk` |
+| `e2e-android` | same, except releases | `maestro-android-results`: junit, failure screenshots, screen recording, logcat, `api.log` |
+| `build-ios` | nightly, `release/**`, manual with `run_ios_e2e` (simulator `.app`); releases (unsigned `.ipa`). Never in a PR | `zenflow-ios-simulator-app` → `zenflow-ios-simulator.zip`, or `zenflow-ios-unsigned-ipa` → `zenflow-ios-unsigned.ipa` |
+| `e2e-ios` | nightly, `release/**`, manual with `run_ios_e2e` (advisory) | `maestro-ios-results` |
 
-Builds run on GitHub runners via `expo prebuild` (no Expo/EAS account). It is not part of the required `ci-ok` check.
+In a PR, `ci.yml` calls it after lint, typecheck and unit tests pass, and `CI ok` requires the Android jobs. iOS runs only nightly and on `release/**`.
+
+Builds run on GitHub runners via `expo prebuild` (no Expo/EAS account).
 
 - `e2e` (default): emulator-host API URL, cleartext HTTP allowed (`plugins/withE2eCleartext.js`, `ZENFLOW_E2E=1` only).
 - `release`: run the workflow manually. API defaults to `https://zenflow.alphatrann.com/api/v1`, or pass `api_url`.
@@ -97,6 +99,7 @@ A release `.apk` for sideloading (`adb install zenflow-android.apk`). Signed wit
 
 ### iOS artifact: `.app` vs `.ipa`
 
-- **Simulator `.app` (what CI produces, zipped).** Runs only in the iOS Simulator on a Mac (`xcrun simctl install booted Zenflow.app`). Needs no Apple account.
+- **Simulator `.app` (e2e only, zipped).** Runs only in the iOS Simulator on a Mac (`xcrun simctl install booted Zenflow.app`). Needs no Apple account.
+
 - **Device `.ipa`:** for real iPhones, TestFlight and the App Store. Needs a paid Apple Developer account (certificate and provisioning profile). Not set up.
 - **Unsigned `.ipa`** (`zenflow-ios-unsigned.ipa`). A device build with no signature, for sideloading: SideStore/AltStore re-sign it on the phone with a free Apple ID (7-day expiry, push and other paid entitlements unavailable).

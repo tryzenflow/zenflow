@@ -39,7 +39,7 @@ Pulls a student's Moodle assignments/quizzes, class timetable and exam schedule 
 
 ## Cross-student occurrence cache
 
-Off by default (`INGESTION_OCCURRENCE_CACHE_ENABLED`). Timetable meetings and Moodle items are cached once per section or course instead of per student.
+On in staging and prod (`INGESTION_OCCURRENCE_CACHE_ENABLED`); off by default elsewhere. Timetable meetings and Moodle items are cached once per section or course instead of per student.
 
 - A pass is served from cache only if discovery is fresh, the confirmed set is non-empty, and every unit was read within `INGESTION_CACHE_TTL_MS` (7 days) and covers the term.
 - Past the TTL, one student's live walk refreshes the section and populates every classmate.

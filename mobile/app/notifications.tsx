@@ -10,7 +10,6 @@ import {
   Trash2,
   X,
 } from "@/components/Icons";
-import { Glass } from "@/components/ui/glass";
 import { Text } from "@/components/ui/text";
 import { rescheduleWithToast } from "@/lib/reschedule-toast";
 import { useToast } from "@/components/ui/toast";
@@ -33,7 +32,6 @@ import {
   Modal,
   Pressable,
   RefreshControl,
-  StyleSheet,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -220,8 +218,7 @@ export default function NotificationsScreen() {
         <View className="h-1 w-10 rounded-full bg-muted-foreground/30" />
       </View>
       {/* Header — one row, one primary action per mode */}
-      <Glass radius={0} clear intensity={50} style={{ borderWidth: 0, borderBottomWidth: StyleSheet.hairlineWidth }}>
-      <View className="h-14 flex-row items-center gap-2 px-3">
+      <View className="h-14 flex-row items-center gap-2 border-b border-border/70 bg-background px-3">
         {isSelecting ? (
           <>
             <Pressable
@@ -301,7 +298,6 @@ export default function NotificationsScreen() {
           </>
         )}
       </View>
-      </Glass>
 
       {/* Body */}
       {loading ? (

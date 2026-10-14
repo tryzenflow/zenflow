@@ -504,12 +504,23 @@ function Toast({
         </View>
 
         {buttons.length > 0 && (
-          <View
-            className="mt-2.5 flex-row flex-wrap justify-end"
-            style={{ gap: 8 }}
-          >
-            {buttons.map((b) => {
-              const tint = b.color?.[isDarkColorScheme ? "dark" : "light"];
+          <View className="mt-3 flex-row" style={{ gap: 8 }}>
+            {buttons.map((b, i) => {
+              const primary = i === 0;
+              const label = (
+                <Text
+                  className="text-center text-[13px] font-semibold"
+                  style={{
+                    color: primary
+                      ? onFill(accent)
+                      : isDarkColorScheme
+                        ? "#fff"
+                        : palette.text,
+                  }}
+                >
+                  {b.label}
+                </Text>
+              );
               return (
                 <Pressable
                   key={b.label}
@@ -518,25 +529,28 @@ function Toast({
                     dismiss(0);
                   }}
                   hitSlop={8}
-                  style={{
-                    borderRadius: 999,
-                    borderWidth: 1,
-                    borderColor: tint ? `${tint}66` : palette.border,
-                    paddingHorizontal: 14,
-                    paddingVertical: 5,
-                    backgroundColor: tint
-                      ? tint
-                      : isDarkColorScheme
-                        ? "rgba(255, 255, 255, 0.06)"
-                        : "rgba(0, 0, 0, 0.04)",
-                  }}
+                  style={{ flex: 1 }}
                 >
-                  <Text
-                    className="text-[13px] font-semibold"
-                    style={{ color: tint ? onFill(tint) : palette.text }}
-                  >
-                    {b.label}
-                  </Text>
+                  {primary ? (
+                    <View
+                      style={{
+                        borderRadius: 999,
+                        paddingHorizontal: 12,
+                        paddingVertical: 9,
+                        backgroundColor: accent,
+                      }}
+                    >
+                      {label}
+                    </View>
+                  ) : (
+                    <Glass
+                      radius={999}
+                      frosted
+                      style={{ paddingHorizontal: 12, paddingVertical: 9 }}
+                    >
+                      {label}
+                    </Glass>
+                  )}
                 </Pressable>
               );
             })}

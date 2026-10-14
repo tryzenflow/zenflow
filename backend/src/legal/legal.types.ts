@@ -29,7 +29,7 @@ export interface LegalChrome {
   /** Footer copyright line after the name, e.g. "All rights reserved." */
   rightsReserved: string;
   contentsLabel: string;
-  /** Page `<title>` from the document title; no separator characters. */
+  /** Page `<title>`: "Zenflow | <document title>". */
   siteTitle: (title: string) => string;
   /** ISO date formatted for display. */
   formatDate: (iso: string) => string;
