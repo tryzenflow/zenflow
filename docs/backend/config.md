@@ -23,7 +23,8 @@ For: developers and operators setting up the API. Source of truth: the Joi schem
 | `COOKIE_SECURE` / `COOKIE_SAMESITE` | `true` / `lax` | Cross-site prod needs `true` + `none`. |
 | `MAIL_HOST` / `MAIL_PORT` / `MAIL_SECURE` / `MAIL_USER` / `MAIL_PASSWORD` / `MAIL_FROM` | none / 587 / `false` / unset / unset / none | `MAIL_HOST` and `MAIL_FROM` required. No `MAIL_USER` = unauthenticated SMTP (Mailpit). |
 | `LEGAL_CONTACT_EMAIL` | unset | Contact on `/privacy` and `/terms`. Unset shows a `[set LEGAL_CONTACT_EMAIL]` placeholder. Set in prod. |
-| `PUBLIC_URL` | unset | Public origin for canonical, hreflang and `og:url` tags on `/privacy` and `/terms`. Unset omits them. |
+| `PUBLIC_URL` | unset | Public origin for canonical, hreflang, `og:url` and share-image tags on `/`, `/privacy` and `/terms`. Unset omits them. |
+| `APK_URL` | latest `tryzenflow/releases` APK | Download link on the landing page (`/`). |
 | `ALLOWED_EMAIL_DOMAINS` | unset | Comma-separated sign-in domains (subdomains pass). Unset: anyone. Set in `backend/env/prod.env` only. Enforced on OTP request, verify and every authenticated request, so other domains' sessions drop. Error `EMAIL_DOMAIN_NOT_ALLOWED`. |
 | `MASTER_LMS_ENCRYPTION_KEY_V1` / `MASTER_PORTAL_ENCRYPTION_KEY_V1` | none | Required. 64 hex chars (`openssl rand -hex 32`). Add `_V<n>` and set `MASTER_KEY_CURRENT_VERSION` to rotate. |
 | `MASTER_KEY_CURRENT_VERSION` | `1` | Master-key version used for new wraps; its `_V<n>` keys must exist. |

@@ -6,7 +6,8 @@ import { NestExpressApplication } from "@nestjs/platform-express";
 import { Logger } from "nestjs-pino";
 import { AppModule } from "./app.module";
 import session from "express-session";
-import { ValidationPipe } from "@nestjs/common";
+import { RequestMethod, ValidationPipe } from "@nestjs/common";
+import { join } from "node:path";
 import { ConfigService } from "@nestjs/config";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import type { Redis } from "ioredis";
@@ -53,7 +54,21 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   // The public legal pages live at the site root (`/privacy`, `/terms`), so the
   // app stores and the login screen can link to short stable URLs.
-  app.setGlobalPrefix("api/v1", { exclude: ["privacy", "terms"] });
+  // The landing page (`/`), `robots.txt` and `sitemap.xml` sit there too, and its
+  // screenshots are served from `/landing`.
+  app.setGlobalPrefix("api/v1", {
+    exclude: [
+      { path: "/", method: RequestMethod.GET },
+      "privacy",
+      "terms",
+      "robots.txt",
+      "sitemap.xml",
+    ],
+  });
+  app.useStaticAssets(join(__dirname, "landing", "assets"), {
+    prefix: "/landing/",
+    maxAge: "7d",
+  });
   // Comma-separated list: the web frontend and Expo's web dev server are
   // separate origins. `cors` only echoes a single origin back, so this must be
   // an array for it to match the request and reflect the right one.

@@ -2,8 +2,6 @@ import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import * as Joi from "@hapi/joi";
 import { PrismaModule } from "./prisma/prisma.module";
-import { AppService } from "./app.service";
-import { AppController } from "./app.controller";
 import { AuthModule } from "./auth/auth.module";
 import { CacheModule } from "@nestjs/cache-manager";
 import { createKeyv } from "@keyv/redis";
@@ -35,7 +33,6 @@ import {
   consumesQueue,
   envFilePath,
   getRole,
-  runsHttp,
   runsWatcher,
 } from "./common/config/role";
 import { QueueModule } from "./queue/queue.module";
@@ -49,6 +46,7 @@ import { SchedulerWorkerModule } from "./scheduler/scheduler-worker.module";
 import { RemindersWorkerModule } from "./reminders/reminders-worker.module";
 import { HealthModule } from "./health/health.module";
 import { LegalModule } from "./legal/legal.module";
+import { LandingModule } from "./landing/landing.module";
 
 const configEnvFile = envFilePath();
 // `<PREFIX>_HOST` / `_PORT` / `_PASSWORD` for one Redis instance (connections.ts).
@@ -562,9 +560,9 @@ const jobModules = [
     RemindersModule,
     HealthModule,
     LegalModule,
+    LandingModule,
     ...jobModules,
   ],
-  providers: [AppService, MailService],
-  controllers: runsHttp(role) ? [AppController] : [],
+  providers: [MailService],
 })
 export class AppModule {}

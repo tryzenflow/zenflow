@@ -82,10 +82,10 @@ footer a[aria-current]{color:var(--fg);text-decoration:none;font-weight:600}
 @media (max-width:480px){body{font-size:16.5px}.lead{font-size:17px}h2{font-size:19.5px}}
 `;
 
-const LOGO = `<svg width="30" height="30" viewBox="0 0 260 260" fill="none" aria-hidden="true"><circle cx="130" cy="130" r="130" fill="url(#g)"/><path d="M220.5 51.5C220.5 51.5 172.668 65.7587 147.635 89.6235C122.602 113.488 136.249 158.201 104.912 183.517C80.2542 203.436 33 199.5 33 199.5" stroke="#FFF085" stroke-width="24" stroke-linecap="round"/><defs><linearGradient id="g" x1="48.5" y1="31.5" x2="222.5" y2="220.5" gradientUnits="userSpaceOnUse"><stop stop-color="#FF6900"/><stop offset=".3236" stop-color="#F0B100"/><stop offset="1" stop-color="#D8F999"/></linearGradient></defs></svg>`;
+export const LOGO = `<svg width="30" height="30" viewBox="0 0 260 260" fill="none" aria-hidden="true"><circle cx="130" cy="130" r="130" fill="url(#g)"/><path d="M220.5 51.5C220.5 51.5 172.668 65.7587 147.635 89.6235C122.602 113.488 136.249 158.201 104.912 183.517C80.2542 203.436 33 199.5 33 199.5" stroke="#FFF085" stroke-width="24" stroke-linecap="round"/><defs><linearGradient id="g" x1="48.5" y1="31.5" x2="222.5" y2="220.5" gradientUnits="userSpaceOnUse"><stop stop-color="#FF6900"/><stop offset=".3236" stop-color="#F0B100"/><stop offset="1" stop-color="#D8F999"/></linearGradient></defs></svg>`;
 
 /** The brand mark as a data URI, so the favicon needs no extra request or file. */
-const FAVICON = `data:image/svg+xml,${encodeURIComponent(
+export const FAVICON = `data:image/svg+xml,${encodeURIComponent(
   LOGO.replace(' width="30" height="30"', "").replace(
     ' aria-hidden="true"',
     ' xmlns="http://www.w3.org/2000/svg"',
