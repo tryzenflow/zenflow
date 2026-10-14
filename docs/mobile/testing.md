@@ -36,7 +36,7 @@ Covered now, by file in `mobile/test/screens/`:
 
 | File | Covers |
 | --- | --- |
-| `login` | invalid email, OTP request success/server error/429 lockout/offline, verify success/wrong code, change email |
+| `login` | student ID and full email, invalid email, OTP request success/server error/429 lockout/offline, verify success/wrong code/pasted code, change email |
 | `onboarding` | step order, name save, skip paths, notifications step (on, blocked, not now), preference saves and rollback, tags bulk, summary "Set up" detour, `onboarded: true` and its failure |
 | `week` | header range and today chip, blocks from `GET /sessions` in the user's timezone, tap and recurring-id routing, empty-day add, day switching and "Jump to today", `date` deep link, "Next up" pill |
 | `month` | grid and adjacent days, pills, month navigation, "Jump to today", load-failure toast |

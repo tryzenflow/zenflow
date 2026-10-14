@@ -41,6 +41,14 @@ import { useUserStore } from "@/hooks/use-user-store";
 import { cacheSessionUser } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { hideEmail } from "@/utils/hide-email";
+import {
+  extractOtp,
+  type LoginMode,
+  loginEmail,
+  parseLoginInput,
+  STUDENT_EMAIL_DOMAIN,
+  switchLoginMode,
+} from "@/lib/login-id";
 import { Loader2Icon } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -81,6 +89,7 @@ function LockoutNotice({ children }: { children: ReactNode }) {
   );
 }
 
+// The `email` field holds the raw input: a student ID or a full address.
 const emailSchema = z.object({
   email: z.email({
     get message() {
@@ -89,8 +98,15 @@ const emailSchema = z.object({
   }),
 });
 
+const idSchema = z.object({
+  email: z.string().regex(/^\d+$/, {
+    get message() {
+      return t("Enter your student ID.");
+    },
+  }),
+});
+
 const otpSchema = z.object({
-  email: z.email(),
   otp: z.string().length(6, {
     get message() {
       return t("Your one-time password must be 6 digits.");
@@ -149,18 +165,23 @@ function OtpBoxes({
           </Text>
         </View>
       ))}
+      {/* Covers the boxes so autofill and long-press paste have a real
+          target. No `maxLength`: it would cut a pasted message before
+          `extractOtp` finds the code. `one-time-code` maps to Android's OTP
+          autofill hint and to iOS `oneTimeCode`. */}
       <TextInput
         ref={inputRef}
         value={value}
-        onChangeText={(v) =>
-          onChangeText(v.replace(/[^0-9]/g, "").slice(0, OTP_LENGTH))
-        }
+        onChangeText={(v) => onChangeText(extractOtp(v, OTP_LENGTH))}
         testID="login.otp"
         keyboardType="number-pad"
-        maxLength={OTP_LENGTH}
+        autoComplete="one-time-code"
+        textContentType="oneTimeCode"
+        importantForAutofill="yes"
         editable={!disabled}
         autoFocus
-        className="absolute h-px w-px opacity-0"
+        caretHidden
+        className="absolute inset-0 opacity-0"
       />
     </Pressable>
   );
@@ -186,6 +207,9 @@ export default function LoginScreen() {
   const muted = theme.mutedForeground;
 
   const [stage, setStage] = useState<"email" | "otp">("email");
+  const [loginMode, setLoginMode] = useState<LoginMode>("id");
+  // The address the code went to; verify and resend use it.
+  const [sentTo, setSentTo] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   // Rate-limit UI state (issue #14 — LimitKit on the backend):
@@ -204,28 +228,32 @@ export default function LoginScreen() {
 
   const form = useForm<FormValues>({
     resolver: zodResolver(
-      stage === "email" ? emailSchema : otpSchema,
+      stage === "otp"
+        ? otpSchema
+        : loginMode === "id"
+          ? idSchema
+          : emailSchema,
     ) as Resolver<FormValues>,
     defaultValues: { email: "", otp: "" },
     mode: "onSubmit",
     reValidateMode: "onSubmit",
   });
 
-  const { handleSubmit, setError, clearErrors, watch, getValues } = form;
-  const email = watch("email");
+  const { handleSubmit, setError, clearErrors } = form;
 
   // No local redirect here: the root layout's `AuthGate` is the single
   // source of truth for post-auth navigation and reacts to `setUser` below
   // on its own. A screen-local `router.replace` here used to race it.
 
-  const handleEmailRequest = async (data: EmailFormValues) => {
+  const handleEmailRequest = async (address: string) => {
     if (requestLockout.active) return;
     setSubmitting(true);
     clearErrors("email");
     try {
-      await requestOtp(data.email, getLanguage());
+      await requestOtp(address, getLanguage());
       toast(t("Check your inbox"), "info", { icon: Mail });
       requestLockout.clear();
+      setSentTo(address);
       setStage("otp");
       form.setValue("otp", "");
       otpLockout.clear();
@@ -255,7 +283,7 @@ export default function LoginScreen() {
     setSubmitting(true);
     clearErrors("otp");
     try {
-      const result = await verifyOtp(getValues("email"), data.otp);
+      const result = await verifyOtp(sentTo, data.otp);
       let user: User = result.data;
       // New users land on onboarding next — "back" would be wrong for them.
       if (user.onboardedAt) {
@@ -290,7 +318,8 @@ export default function LoginScreen() {
   };
 
   const onSubmit: SubmitHandler<FormValues> = async (data) => {
-    if (stage === "email") await handleEmailRequest(data as EmailFormValues);
+    if (stage === "email")
+      await handleEmailRequest(loginEmail(data.email, loginMode));
     else await handleOtpVerify(data as OtpFormValues);
   };
 
@@ -313,7 +342,7 @@ export default function LoginScreen() {
             <Text className="text-[14px] text-center text-muted-foreground">
               {stage === "email"
                 ? t("Tell Zenflow what needs doing. It finds the time.")
-                : t("Sent to {email}", { email: hideEmail(email) })}
+                : t("Sent to {email}", { email: hideEmail(sentTo) })}
             </Text>
           </View>
         </View>
@@ -338,22 +367,77 @@ export default function LoginScreen() {
                 name="email"
                 render={({ field }) => (
                   <FormInput
+                    // Remount on a mode flip so the new keyboard type applies.
+                    key={loginMode}
                     name={field.name}
-                    label={t("Email")}
+                    label={loginMode === "id" ? t("Student ID") : t("Email")}
                     labelClassName="text-[14px] font-semibold"
                     testID="login.email"
-                    placeholder="m@example.com"
-                    keyboardType="email-address"
+                    placeholder={
+                      loginMode === "id"
+                        ? "2012345"
+                        : `name@${STUDENT_EMAIL_DOMAIN}`
+                    }
+                    keyboardType={
+                      loginMode === "id" ? "number-pad" : "email-address"
+                    }
                     autoCapitalize="none"
-                    autoComplete="email"
+                    autoCorrect={false}
+                    autoComplete={loginMode === "id" ? "username" : "email"}
+                    autoFocus={loginMode === "email"}
                     editable={!submitting && !requestLockout.active}
                     value={field.value}
                     onBlur={field.onBlur}
-                    onChange={field.onChange}
-                    className="h-[50px] rounded-xl border-glass-edge/35 bg-glass/10 px-4 dark:border-glass-edge/25 dark:bg-glass/[0.03] web:focus-visible:border-ring web:focus-visible:ring-ring/50 web:focus-visible:ring-[3px]"
+                    onChange={(text) => {
+                      const next = parseLoginInput(text, loginMode);
+                      if (next.mode !== loginMode) {
+                        clearErrors("email");
+                        setLoginMode(next.mode);
+                      }
+                      field.onChange(next.value);
+                    }}
+                    rightElement={
+                      loginMode === "id" ? (
+                        <Text
+                          testID="login.email-suffix"
+                          className="text-base text-muted-foreground"
+                        >
+                          @{STUDENT_EMAIL_DOMAIN}
+                        </Text>
+                      ) : undefined
+                    }
+                    className={cn(
+                      "h-[50px] rounded-xl border-glass-edge/35 bg-glass/10 px-4 dark:border-glass-edge/25 dark:bg-glass/[0.03] web:focus-visible:border-ring web:focus-visible:ring-ring/50 web:focus-visible:ring-[3px]",
+                      loginMode === "id" && "pr-[116px]",
+                    )}
                   />
                 )}
               />
+              {/* Number keypads have no `@` key, so lecturers switch here. */}
+              <Pressable
+                testID={
+                  loginMode === "id" ? "login.use-email" : "login.use-id"
+                }
+                accessibilityRole="button"
+                hitSlop={14}
+                disabled={submitting || requestLockout.active}
+                onPress={() => {
+                  const to = loginMode === "id" ? "email" : "id";
+                  clearErrors("email");
+                  setLoginMode(to);
+                  form.setValue(
+                    "email",
+                    switchLoginMode(form.getValues("email"), to),
+                  );
+                }}
+                className="mt-2.5 self-start"
+              >
+                <Text className="text-[13px] font-semibold text-brand-orange">
+                  {loginMode === "id"
+                    ? t("Sign in with email")
+                    : t("Sign in with student ID")}
+                </Text>
+              </Pressable>
               {requestLockout.active && (
                 <LockoutNotice>
                   {t("Too many requests. Wait a moment, then try again.")}
@@ -459,7 +543,7 @@ export default function LoginScreen() {
                   variant="ghost"
                   testID="login.resend"
                   disabled={submitting}
-                  onPress={() => handleEmailRequest({ email })}
+                  onPress={() => handleEmailRequest(sentTo)}
                   className="w-full rounded-xl"
                 >
                   <Text className="text-sm font-semibold text-muted-foreground">

@@ -3,6 +3,9 @@
 appId: com.zenflow.app
 ---
 - runScript: ../scripts/new-user.js
+# Test accounts are full addresses, not student IDs.
+- tapOn:
+    id: login.use-email
 - tapOn:
     id: login.email
 - inputText: ${output.email}
