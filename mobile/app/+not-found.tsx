@@ -9,7 +9,6 @@ import { View } from "react-native";
 export default function NotFoundScreen() {
   useLanguage();
   const pathname = usePathname();
-  console.log({ pathname });
   const user = useUserStore((s) => s.user);
   const loading = useUserStore((s) => s.loading);
 

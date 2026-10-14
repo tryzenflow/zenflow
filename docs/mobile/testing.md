@@ -77,6 +77,15 @@ pnpm e2e flows/06-logout.yaml     # one flow
 
 Install Maestro first: <https://docs.maestro.dev/getting-started/installing-maestro>. Results (junit, screenshots, logs) go to `mobile/e2e/results/` (gitignored).
 
+### Landing page screenshots
+
+`pnpm --filter mobile e2e:screenshots` signs in as a seeded fixture student and writes four WebP shots (`week`, `month`, `settings`, `new-task`) to `backend/src/landing/assets/`, where the landing page picks them up. The flow is `e2e/screenshots/capture.yaml`, the runner `e2e/screenshots.sh`.
+
+- Needs the E2E build on a booted emulator or simulator, plus the dev stack, API and fake DLU server ([fixtures README](../../backend/scripts/fixtures/dlu/README.md)).
+- `SEED=1` seeds the first fixture student first; `EMAIL=...` signs in as someone else.
+- The runner sets a 09:41 status bar on Android (`adb`) or iOS (`simctl`), and needs `cwebp` (`brew install webp`) for WebP.
+- Prefer an Android emulator: the landing page says Android.
+
 ## CI (`.github/workflows/mobile.yml`)
 
 | Job | When | Output |
@@ -95,7 +104,7 @@ Builds run on GitHub runners via `expo prebuild` (no Expo/EAS account).
 
 ### Android artifact: `.apk`
 
-A release `.apk` for sideloading (`adb install zenflow-android.apk`). Signed with the Expo debug keystore: fine for testing, not the Play Store (needs a release keystore and `.aab`).
+A release `.apk` for sideloading (`adb install zenflow-android.apk`). Release builds sign with the keystore from the `ANDROID_KEYSTORE_*` secrets ([releasing.md](../ops/releasing.md#android-signing-and-updates)); without them (PRs, e2e, forks) the Expo debug key is used. The Play Store needs an `.aab`.
 
 ### iOS artifact: `.app` vs `.ipa`
 

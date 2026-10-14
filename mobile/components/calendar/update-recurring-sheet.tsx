@@ -268,8 +268,18 @@ export const UpdateRecurringSheet = forwardRef<
                         "rounded-b-none border-b-0 border-primary bg-primary/10",
                     )}
                   >
-                    <View className="h-9 w-9 items-center justify-center rounded-xl bg-muted">
-                      <Icon size={17} className="text-muted-foreground" />
+                    <View
+                      className={cn(
+                        "h-9 w-9 items-center justify-center rounded-xl bg-muted",
+                        isExpanded && "bg-primary/15",
+                      )}
+                    >
+                      <Icon
+                        size={17}
+                        className={
+                          isExpanded ? "text-primary" : "text-muted-foreground"
+                        }
+                      />
                     </View>
                     <View className="min-w-0 flex-1">
                       <Text className="text-[15px] font-semibold text-foreground">
@@ -282,7 +292,9 @@ export const UpdateRecurringSheet = forwardRef<
                     {!immediate && (
                       <CalendarClock
                         size={16}
-                        className="text-muted-foreground"
+                        className={
+                          isExpanded ? "text-primary" : "text-muted-foreground"
+                        }
                       />
                     )}
                   </Pressable>

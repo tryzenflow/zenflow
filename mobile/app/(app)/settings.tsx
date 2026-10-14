@@ -25,7 +25,7 @@ import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { resetTimelineScroll } from "@/lib/timeline-scroll";
 import { useColorScheme } from "@/lib/useColorScheme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { type Href, useRouter } from "expo-router";
+import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import {
   loadIntegrationCache,
   saveIntegrationCache,
@@ -52,10 +52,18 @@ export default function SettingsScreen() {
     scrollTo: (o: { y: number; animated: boolean }) => void;
   }>(null);
   const dluY = useRef(0);
+  // `?focus=dlu` (the calendar's "Import my timetable") lands on the LMS and portal section.
+  const { focus } = useLocalSearchParams<{ focus?: string }>();
   const notif = useNotificationState();
   const integrations = useIntegrationStore((s) => s.integrations);
   const integrationsLoading = useIntegrationStore((s) => s.loading);
   const dluConnected = integrations.some((i) => i.connected);
+
+  // Settings stays mounted between visits, so the layout scroll below only covers the first one.
+  useEffect(() => {
+    if (focus !== "dlu" || dluY.current === 0) return;
+    scrollRef.current?.scrollTo({ y: dluY.current, animated: true });
+  }, [focus]);
 
   useEffect(() => {
     let mounted = true;
@@ -189,6 +197,9 @@ export default function SettingsScreen() {
         <View
           onLayout={(e) => {
             dluY.current = e.nativeEvent.layout.y;
+            if (focus === "dlu") {
+              scrollRef.current?.scrollTo({ y: dluY.current, animated: true });
+            }
           }}
         >
           <OfflineLock>

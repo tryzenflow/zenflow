@@ -8,15 +8,10 @@ import {
   Bell,
   Check,
   ChevronLeft,
-  Clock,
   GraduationCap,
-  MapPin,
-  Search,
   Sliders,
-  Tag,
   User,
 } from "@/components/Icons";
-import { TagPicker } from "@/components/onboarding/tag-picker";
 import { DluAccountsSection } from "@/components/settings/dlu-accounts-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,24 +26,15 @@ import {
   FIRST_STEP,
   type OnboardingStep,
   canGoBack,
-  filterTimezones,
-  gmtOffset,
   initialTagSelection,
+  newTagsForBulk,
   nextStep,
   prevStep,
   stepProgress,
-  tagsForBulk,
-  utcOffsetMinutes,
 } from "@/lib/onboarding";
-import {
-  LANGUAGES,
-  REMINDERS,
-  allTimezones,
-  deviceTimezone,
-} from "@/lib/preferences";
-import { DEVICE_TIMEZONE } from "@/lib/preferences-sync";
+import { LANGUAGES } from "@/lib/preferences";
 import { cn } from "@/lib/utils";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   AppState,
@@ -105,6 +91,11 @@ const COPY = {
         "You can also do this later in Settings, under Connect your LMS or portal.",
       );
     },
+    get trust() {
+      return t(
+        "Your password is stored encrypted. Disconnect in Settings to delete it.",
+      );
+    },
   },
   notifications: {
     get title() {
@@ -144,51 +135,6 @@ const COPY = {
       return t("Open system settings");
     },
   },
-  timezone: {
-    get title() {
-      return t("Where are you?");
-    },
-    get body() {
-      return t("Used to place sessions and reminders at the right local time.");
-    },
-    get detected() {
-      return t("Detected from device");
-    },
-    get search() {
-      return t("Search all timezones");
-    },
-    get refine() {
-      return t("Showing the closest matches. Refine your search to see more.");
-    },
-  },
-  reminder: {
-    get title() {
-      return t("Default reminder");
-    },
-    get body() {
-      return t(
-        "How early should we remind you? You can change it per task.",
-      );
-    },
-    get hint() {
-      return t("Optional. Saved as your default reminder.");
-    },
-  },
-  tags: {
-    get title() {
-      return t("Pick your tags");
-    },
-    get body() {
-      return t(
-        "Tags keep your tasks organised. Tap the ones you like, add your own, and rename them later.",
-      );
-    },
-    footer: (n: number) =>
-      t(
-        "{count} selected, saved to your account",
-        { count: n },
-      ),
-  },
   done: {
     get title() {
       return t("You’re all set");
@@ -210,31 +156,11 @@ const COPY = {
   },
 } as const;
 
-/** Max timezones listed at once; more matches prompt a "refine" hint. */
-const TZ_LIMIT = 50;
-
 const STEP_ICON: Partial<Record<OnboardingStep, typeof User>> = {
   name: User,
   dlu: GraduationCap,
   notifications: Bell,
-  timezone: MapPin,
-  reminder: Clock,
-  tags: Tag,
 };
-
-function RadioDot({ selected }: { selected: boolean }) {
-  useLanguage();
-  return (
-    <View
-      className={cn(
-        "size-[22px] shrink-0 items-center justify-center rounded-full border-2",
-        selected ? "border-primary bg-primary" : "border-border",
-      )}
-    >
-      {selected && <Check size={14} className="text-primary-foreground" />}
-    </View>
-  );
-}
 
 /** Rounded card whose children are separated by hairlines. */
 function Group({ children }: { children: React.ReactNode }) {
@@ -252,34 +178,6 @@ function Group({ children }: { children: React.ReactNode }) {
         </View>
       ))}
     </View>
-  );
-}
-
-function Row({
-  selected,
-  onPress,
-  children,
-  className,
-}: {
-  selected: boolean;
-  onPress: () => void;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  useLanguage();
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="radio"
-      accessibilityState={{ checked: selected }}
-      className={cn(
-        "flex-row items-center gap-3 px-4 py-3.5",
-        selected && "bg-primary/10",
-        className,
-      )}
-    >
-      {children}
-    </Pressable>
   );
 }
 
@@ -304,22 +202,12 @@ export default function OnboardingScreen() {
     user?.name && user.name !== DEFAULT_USER_NAME ? user.name : "",
   );
   const [blocked, setBlocked] = useState(false);
-  const [tzQuery, setTzQuery] = useState("");
-  const [tags, setTags] = useState<string[]>([]);
-  const [tagsLoaded, setTagsLoaded] = useState(false);
-  const [savedTagCount, setSavedTagCount] = useState(0);
 
   useEffect(() => {
     listIntegrations()
       .then(setIntegrations)
       .catch(() => {})
       .finally(() => setLoading(false));
-    listTags()
-      .then((existing) =>
-        setTags(initialTagSelection(existing.map((t) => t.name))),
-      )
-      .catch(() => setTags(initialTagSelection([])))
-      .finally(() => setTagsLoaded(true));
   }, [setIntegrations, setLoading]);
 
   // Returning from system settings with permission granted clears the hint.
@@ -351,17 +239,6 @@ export default function OnboardingScreen() {
     }
   };
   const dluConnected = integrations.some((i) => i.connected);
-  const device = useMemo(() => deviceTimezone(), []);
-  // The offset math behind `filterTimezones` builds an `Intl.DateTimeFormat`
-  // per zone (hundreds of ms of synchronous JS) — only pay it on the step that
-  // lists zones, not at screen mount where it delayed everything after it.
-  const zones = useMemo(
-    () =>
-      step === "timezone"
-        ? filterTimezones(allTimezones(), tzQuery, TZ_LIMIT, device)
-        : [],
-    [step, tzQuery, device],
-  );
 
   async function run(fn: () => Promise<undefined | false>) {
     setBusy(true);
@@ -374,44 +251,13 @@ export default function OnboardingScreen() {
     }
   }
 
-  // Preference saves started by tapping a choice; Continue/Skip/finish wait
-  // for them so onboarding can't move on (or complete) with a save pending
-  // that might still fail and roll the choice back.
-  const pendingSaves = useRef(new Set<Promise<boolean>>());
-
-  function savePref(patch: Parameters<typeof update>[0]) {
-    const p = (async () => {
-      if (await update(patch)) return true;
-      toast(COPY.saveFailed);
-      return false;
-    })();
-    pendingSaves.current.add(p);
-    void p.finally(() => pendingSaves.current.delete(p));
-    return p;
-  }
-
-  /** Wait for in-flight saves; false if any failed (toast already shown). */
-  async function settleSaves() {
-    const results = await Promise.all([...pendingSaves.current]);
-    return results.every(Boolean);
-  }
-
-  /** Advance once pending saves finish; stay on the step if one failed. */
-  const advance = () =>
-    run(async () => ((await settleSaves()) ? undefined : false));
+  const advance = () => go();
 
   const saveName = () =>
     run(async () => {
       const trimmed = name.trim();
       if (!trimmed || trimmed === user?.name) return;
       updateUser(await updateBasicInfo({ name: trimmed }));
-    });
-
-  const saveTags = () =>
-    run(async () => {
-      const names = tagsForBulk(tags);
-      if (names.length > 0) await createTagsBulk(names);
-      setSavedTagCount(names.length);
     });
 
   /**
@@ -472,13 +318,21 @@ export default function OnboardingScreen() {
     go();
   }
 
+  /** The tag picker step is gone: everyone starts with the suggested defaults (best effort, tags are editable in Settings). */
+  async function seedDefaultTags() {
+    try {
+      const existing = (await listTags()).map((tag) => tag.name);
+      const names = newTagsForBulk(initialTagSelection(existing), existing);
+      if (names.length > 0) await createTagsBulk(names);
+    } catch {
+      // Not worth blocking the first run on.
+    }
+  }
+
   async function finish() {
     setBusy(true);
     try {
-      if (!(await settleSaves())) {
-        setBusy(false);
-        return;
-      }
+      await seedDefaultTags();
       // Idempotent; the root AuthGate then routes to the app.
       updateUser(await updateBasicInfo({ onboarded: true }));
     } catch {
@@ -550,6 +404,9 @@ export default function OnboardingScreen() {
         <View>
           <DluAccountsSection hideLabel />
           <Text className="mt-3.5 px-1 text-[12px] leading-snug text-muted-foreground">
+            {COPY.dlu.trust}
+          </Text>
+          <Text className="mt-1.5 px-1 text-[12px] leading-snug text-muted-foreground">
             {COPY.dlu.hint}
           </Text>
         </View>
@@ -655,146 +512,6 @@ export default function OnboardingScreen() {
         </>
       );
       break;
-    case "timezone":
-      ({ title, body } = COPY.timezone);
-      content = (
-        <View>
-          <Pressable
-            onPress={() => void savePref({ timezone: DEVICE_TIMEZONE })}
-            accessibilityRole="radio"
-            accessibilityState={{ checked: prefs.timezoneMode === "device" }}
-            className={cn(
-              "flex-row items-center gap-3 rounded-2xl border px-4 py-3.5",
-              prefs.timezoneMode === "device"
-                ? "border-primary/50 bg-primary/10"
-                : "border-border bg-card",
-            )}
-          >
-            <MapPin size={20} className="text-primary" />
-            <View className="flex-1">
-              <Text className="text-[12.5px] font-semibold text-muted-foreground">
-                {COPY.timezone.detected}
-              </Text>
-              <Text className="text-[15px] font-semibold">
-                {device}
-                <Text className="font-normal text-muted-foreground">
-                  {gmtOffset(device) ? ` (${gmtOffset(device)})` : ""}
-                </Text>
-              </Text>
-            </View>
-            <RadioDot selected={prefs.timezoneMode === "device"} />
-          </Pressable>
-          <View className="mt-4">
-            <Input
-              value={tzQuery}
-              onChangeText={setTzQuery}
-              placeholder={COPY.timezone.search}
-              autoCapitalize="none"
-              autoCorrect={false}
-              rightElement={
-                <Search size={18} className="text-muted-foreground" />
-              }
-            />
-          </View>
-          <View className="mt-3">
-            <Group>
-              {zones.map((z) => {
-                const on =
-                  prefs.timezoneMode === "explicit" && prefs.timezone === z;
-                return (
-                  <Row
-                    key={z}
-                    selected={on}
-                    onPress={() => void savePref({ timezone: z })}
-                    className="justify-between"
-                  >
-                    <Text
-                      className={cn(
-                        "flex-1 text-[15px]",
-                        on ? "font-semibold" : "font-medium",
-                      )}
-                    >
-                      {z}
-                    </Text>
-                    <Text className="text-[13px] text-muted-foreground">
-                      {gmtOffset(z)}
-                    </Text>
-                    {on && <RadioDot selected />}
-                  </Row>
-                );
-              })}
-            </Group>
-            {zones.length >= TZ_LIMIT && (
-              <Text className="mt-3 px-1 text-center text-[12.5px] text-muted-foreground">
-                {COPY.timezone.refine}
-              </Text>
-            )}
-          </View>
-        </View>
-      );
-      footer = (
-        <>
-          {primary(COPY.continue, advance)}
-          {ghost(COPY.skipForNow, advance)}
-        </>
-      );
-      break;
-    case "reminder":
-      ({ title, body } = COPY.reminder);
-      content = (
-        <View>
-          <Group>
-            {REMINDERS.map((r) => {
-              const on = prefs.defaultReminder === r.value;
-              return (
-                <Row
-                  key={r.value}
-                  selected={on}
-                  onPress={() => void savePref({ defaultReminder: r.value })}
-                  className="justify-between"
-                >
-                  <Text
-                    className={cn(
-                      "flex-1 text-[15px]",
-                      on ? "font-semibold" : "font-medium",
-                    )}
-                  >
-                    {r.label}
-                  </Text>
-                  <RadioDot selected={on} />
-                </Row>
-              );
-            })}
-          </Group>
-          <Text className="mt-3 px-1 text-[12px] text-muted-foreground">
-            {COPY.reminder.hint}
-          </Text>
-        </View>
-      );
-      footer = (
-        <>
-          {primary(COPY.continue, advance)}
-          {ghost(COPY.skipForNow, advance)}
-        </>
-      );
-      break;
-    case "tags":
-      ({ title, body } = COPY.tags);
-      content = tagsLoaded ? (
-        <View>
-          <TagPicker selected={tags} onChange={setTags} />
-          <Text className="mt-3 px-1 text-[12.5px] text-muted-foreground">
-            {COPY.tags.footer(tagsForBulk(tags).length)}
-          </Text>
-        </View>
-      ) : null;
-      footer = (
-        <>
-          {primary(COPY.continue, saveTags, !tagsLoaded)}
-          {tagsForBulk(tags).length === 0 && ghost(COPY.skipForNow, advance)}
-        </>
-      );
-      break;
     case "done": {
       ({ title, body } = COPY.done);
       const rows: {
@@ -820,14 +537,6 @@ export default function OnboardingScreen() {
           skipped: !notif.active,
           step: "notifications",
         },
-        { k: t("Timezone"), v: prefs.timezone },
-        {
-          k: t("Default reminder"),
-          v:
-            REMINDERS.find((r) => r.value === prefs.defaultReminder)?.label ??
-            "",
-        },
-        { k: t("Tags"), v: t("{count} selected", { count: savedTagCount }) },
       ];
       content = (
         <Group>

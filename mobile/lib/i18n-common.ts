@@ -52,7 +52,7 @@ export default {
   Theme: "Giao diện",
   Add: "Thêm",
   "{count} sitting has an alternative":
-    "{count} buổi có thời gian khác để chọn",
+    "{count} buổi có thời gian thay thế để chọn",
   "Location must be at most 200 characters.":
     "Địa điểm không được vượt quá 200 ký tự.",
   "This part didn't load. Everything else still works.":
