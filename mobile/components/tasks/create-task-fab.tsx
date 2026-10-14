@@ -48,7 +48,7 @@ export function CreateSessionFab({ tz }: { tz: string }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   return (
-    // Wrapper + button carry the two halves of the shared amber glow (see
+    // Wrapper + button carry the two halves of the shared blueberry glow (see
     // `lib/fab-glow.ts`) — the same treatment the tab bar's Optimize button
     // gets, so the two floating actions read as one family.
     <View

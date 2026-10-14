@@ -96,12 +96,12 @@ function ChipPill({ index, chipWidth }: { index: number; chipWidth: number }) {
           width: chipWidth,
           borderRadius: 12,
           backgroundColor: isDarkColorScheme
-            ? "rgba(255, 122, 36, 0.16)"
-            : "rgba(255, 142, 62, 0.12)",
+            ? "rgba(108, 123, 247, 0.22)"
+            : "rgba(108, 123, 247, 0.12)",
           borderWidth: 1,
           borderColor: isDarkColorScheme
-            ? "rgba(255, 150, 80, 0.26)"
-            : "rgba(255, 142, 62, 0.22)",
+            ? "rgba(154, 164, 250, 0.3)"
+            : "rgba(108, 123, 247, 0.24)",
         },
         style,
       ]}

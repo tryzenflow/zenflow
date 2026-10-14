@@ -12,6 +12,7 @@ import {
   notificationCategory,
   notificationEventKind,
 } from "@zenflow/shared";
+import { SESSION_TONE_CLASSES, SESSION_TONES } from "@zenflow/core";
 import { t } from "./i18n";
 
 export const CATEGORY_LABEL: Record<NotificationCategory, string> = {
@@ -47,9 +48,9 @@ export function notificationVisual(eventName: string): {
     return {
       Icon: AlertTriangle,
       label: t("{category} conflict", { category: CATEGORY_LABEL[category] }),
-      tint: "border-amber-500/40 bg-amber-500/15",
-      iconColor: "#d97706",
-      accent: { light: "#d97706", dark: "#fbbf24" },
+      tint: SESSION_TONE_CLASSES.conflict.badge,
+      iconColor: SESSION_TONES.conflict.ink.light,
+      accent: SESSION_TONES.conflict.ink,
     };
   }
   switch (category) {
@@ -57,33 +58,33 @@ export function notificationVisual(eventName: string): {
       return {
         Icon: ClipboardList,
         label: CATEGORY_LABEL.ASSIGNMENT,
-        tint: "border-teal-500/40 bg-teal-500/15",
-        iconColor: "#0f766e",
-        accent: { light: "#0f766e", dark: "#2dd4bf" },
+        tint: SESSION_TONE_CLASSES.assignment.badge,
+        iconColor: SESSION_TONES.assignment.ink.light,
+        accent: SESSION_TONES.assignment.ink,
       };
     case "EXAM":
       return {
         Icon: Notebook,
         label: CATEGORY_LABEL.EXAM,
-        tint: "border-rose-500/40 bg-rose-500/15",
-        iconColor: "#e11d48",
-        accent: { light: "#e11d48", dark: "#fb7185" },
+        tint: SESSION_TONE_CLASSES.exam.badge,
+        iconColor: SESSION_TONES.exam.ink.light,
+        accent: SESSION_TONES.exam.ink,
       };
     case "LECTURE":
       return {
         Icon: GraduationCap,
         label: CATEGORY_LABEL.LECTURE,
-        tint: "border-sky-500/40 bg-sky-500/15",
-        iconColor: "#0369a1",
-        accent: { light: "#0369a1", dark: "#38bdf8" },
+        tint: SESSION_TONE_CLASSES.lecture.badge,
+        iconColor: SESSION_TONES.lecture.ink.light,
+        accent: SESSION_TONES.lecture.ink,
       };
     default:
       return {
         Icon: Bell,
         label: CATEGORY_LABEL.REMINDER,
-        tint: "border-primary/40 bg-primary/15",
-        iconColor: "#f97316",
-        accent: { light: "#f97316", dark: "#fb923c" },
+        tint: SESSION_TONE_CLASSES.task.badge,
+        iconColor: SESSION_TONES.task.ink.light,
+        accent: SESSION_TONES.task.ink,
       };
   }
 }
@@ -102,5 +103,5 @@ export function notificationToastVisual(eventName: string | undefined): {
   } catch {
     // Unrecognized eventName — fall through to the bell.
   }
-  return { icon: Bell, accent: { light: "#f97316", dark: "#fb923c" } };
+  return { icon: Bell, accent: SESSION_TONES.task.ink };
 }

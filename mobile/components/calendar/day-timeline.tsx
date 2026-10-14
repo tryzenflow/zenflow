@@ -357,7 +357,7 @@ export function DayTimeline({
   const autoScrollDeltaSV = useSharedValue(0);
   // Live drop-preview slot (minutes of day), written directly on the UI
   // thread by whichever block is being dragged (see `task-block.tsx`'s pan
-  // gesture) — the orange drop-line below reads this instead of `dragSnap`
+  // gesture) — the drop-line below reads this instead of `dragSnap`
   // state so its position never lags the finger. Sentinel `-1` = hidden.
   const dragPreviewMinSV = useSharedValue(-1);
   const scrollYRef = useRef(0);
@@ -1053,7 +1053,7 @@ export function DayTimeline({
     height: baseHourHeight.value * 24,
   }));
 
-  // The orange drop-line's position — driven straight from the UI-thread
+  // The drop-line's position — driven straight from the UI-thread
   // `dragPreviewMinSV` (see `task-block.tsx`'s pan gesture) instead of the
   // `dragSnap` React state, so it snaps to the finger with zero bridge
   // latency instead of lagging a state round-trip behind. Hidden (opacity 0)
@@ -1251,7 +1251,7 @@ export function DayTimeline({
                     onPress={openNewTaskForm}
                     accessibilityRole="button"
                     accessibilityLabel={t("Add a session to this day")}
-                    className="absolute items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-brand-orange/70 bg-brand-orange/5 active:bg-brand-orange/10"
+                    className="absolute items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-primary/70 bg-primary/5 active:bg-primary/10"
                     style={{
                       left: BLOCK_GUTTER,
                       right: BLOCK_GUTTER,
@@ -1259,8 +1259,8 @@ export function DayTimeline({
                       height: (EMPTY_ZONE_MINUTES / DAILY_HORIZON) * totalHeight,
                     }}
                   >
-                    <Plus size={20} className="text-brand-orange" />
-                    <Text className="text-center text-[14px] font-semibold text-brand-orange">
+                    <Plus size={20} className="text-session-task-ink" />
+                    <Text className="text-center text-[14px] font-semibold text-session-task-ink">
                       {t("Tap to add a session")}
                     </Text>
                     <Text className="text-center text-[12px] text-muted-foreground">
@@ -1271,7 +1271,7 @@ export function DayTimeline({
                         onPress={openTimetableImport}
                         accessibilityRole="button"
                         hitSlop={8}
-                        className="mt-2 flex-row items-center gap-1.5 rounded-full bg-brand-orange px-3.5 py-2 active:opacity-80"
+                        className="mt-2 flex-row items-center gap-1.5 rounded-full bg-primary px-3.5 py-2 active:opacity-80"
                       >
                         <GraduationCap
                           size={15}
@@ -1353,7 +1353,7 @@ export function DayTimeline({
 
                 <Animated.View
                   pointerEvents="none"
-                  className="absolute left-0 right-0 z-20 border-t-2 border-dashed border-brand-orange"
+                  className="absolute left-0 right-0 z-20 border-t-2 border-dashed border-primary"
                   style={dragLineStyle}
                 />
               </View>
@@ -1365,7 +1365,7 @@ export function DayTimeline({
                 className="absolute left-0 z-20"
                 style={[{ width: GUTTER_WIDTH }, dragLineStyle]}
               >
-                <View className="absolute right-2 -translate-y-1/2 rounded-md bg-brand-orange px-1.5 py-px">
+                <View className="absolute right-2 -translate-y-1/2 rounded-md bg-primary px-1.5 py-px">
                   <Text className="text-[11px] font-bold text-primary-foreground">
                     {dragChipLabel}
                   </Text>

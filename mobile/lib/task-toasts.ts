@@ -1,7 +1,7 @@
 import { t } from "./i18n";
 import { format } from "./i18n";
 import type { ToastIcon, useToast } from "@/components/ui/toast";
-import { placementQualifier, zonedDate } from "@zenflow/core";
+import { SESSION_TONES, placementQualifier, zonedDate } from "@zenflow/core";
 import {
   type DisplacedSession,
   type InfeasiblePolicy,
@@ -319,7 +319,7 @@ export function showSeriesAlternativesPrompt(
     action: {
       label: t("View"),
       onPress: onView,
-      color: { light: "#f97316", dark: "#fb923c" },
+      color: SESSION_TONES.task.ink,
     },
   });
 }

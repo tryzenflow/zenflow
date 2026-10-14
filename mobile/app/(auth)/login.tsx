@@ -23,6 +23,7 @@ import {
   type TextInputInstance,
   View,
 } from "react-native";
+import { SESSION_TONES } from "@zenflow/core";
 import type { User } from "@zenflow/shared";
 import { z } from "zod";
 
@@ -68,12 +69,13 @@ function getRetryAfterSeconds(error: unknown): number {
   return DEFAULT_RETRY_AFTER_SECONDS;
 }
 
-/** Amber clock icon + message, matching mockups/login.html's "Locked" frames. */
+/** Butter clock icon + message, matching mockups/login.html's "Locked" frames. */
 function LockoutNotice({ children }: { children: ReactNode }) {
   useLanguage();
+  const { isDarkColorScheme } = useColorScheme();
   return (
     <View className="mt-2 flex-row items-start gap-1.5">
-      <WaitIcon size={15} color="#F0B101" />
+      <WaitIcon size={15} color={SESSION_TONES.conflict.ink[isDarkColorScheme ? "dark" : "light"]} />
       <Text className="flex-1 text-[13px] font-medium text-foreground">
         {children}
       </Text>
@@ -381,7 +383,7 @@ export default function LoginScreen() {
                   )}
                 >
                   <BackIcon size={15} color={theme.primary} />
-                  <Text className="text-[13px] font-semibold text-brand-orange">
+                  <Text className="text-[13px] font-semibold text-session-task-ink">
                     {t("Change email")}
                   </Text>
                 </View>
@@ -507,8 +509,8 @@ export default function LoginScreen() {
         </Glass>
         </View>
 
-        {/* Foreground colour, not muted/orange: this sits on the backdrop's orange
-            glow, where grey and orange text both lose contrast. */}
+        {/* Foreground colour, not muted or primary: this sits on the backdrop's
+            glow, where both lose contrast. */}
         <Text className="mt-[22px] px-2.5 text-center text-[13px] leading-[19px] text-foreground/80">
           {t("By continuing, you agree to our")}{" "}
           <Text

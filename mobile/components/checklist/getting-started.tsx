@@ -46,7 +46,7 @@ const BELL_CLEARANCE = 60;
  * when the user does it (`completeStep`); the pill goes away when every step
  * is done or the user hides it. Render it once in the Week and Month screens.
  *
- * Deliberately loud — the same amber glow as the + button, and a slow, soft
+ * Deliberately loud — the same blueberry glow as the + button, and a slow, soft
  * pulse until the first step is ticked — because a first-run guide nobody
  * notices is no guide. Tapping a step closes the sheet, switches to the screen
  * that step lives on and spotlights the control (`SpotlightAnchor`).

@@ -45,6 +45,7 @@ import {
   type LucideIcon,
   X,
 } from "../Icons";
+import { SESSION_TONES } from "@zenflow/core";
 import { Glass } from "./glass";
 import { Text } from "./text";
 
@@ -104,8 +105,8 @@ const TOAST_VARIANTS: Record<
     Icon: AlertCircle,
   },
   warning: {
-    badge: "bg-amber-500/15",
-    icon: "text-amber-600 dark:text-amber-400",
+    badge: "bg-session-conflict/20",
+    icon: "text-session-conflict-ink",
     Icon: AlertTriangle,
   },
   success: {
@@ -140,21 +141,20 @@ type ToastVariant = keyof typeof TOAST_VARIANTS;
  * `bg-*` tokens on a reanimated `Animated.View` proved unreliable on native
  * (the card rendered untinted with an invisible icon), so the toast paints its
  * icon, badge tint, confirm button and progress bar straight from these instead
- * of relying on utility classes. Amber/blue/green mirror the Tailwind 600/400
- * pairs the web toast uses.
+ * of relying on utility classes. Colours are the palette's AA inks.
  */
 const VARIANT_ACCENT: Record<ToastVariant, ToastAccent> = {
   // Plain notices read as info — blue, not the foreground ink.
-  default: { light: "#2563eb", dark: "#60a5fa" },
-  destructive: { light: "#e7000b", dark: "#ff6467" },
-  warning: { light: "#d97706", dark: "#fbbf24" },
-  success: { light: "#059669", dark: "#34d399" },
-  info: { light: "#2563eb", dark: "#60a5fa" },
-  tip: { light: "#f97316", dark: "#fb923c" },
+  default: SESSION_TONES.lecture.ink,
+  destructive: { light: "#3A3B52", dark: "#E4E4F0" },
+  warning: SESSION_TONES.conflict.ink,
+  success: SESSION_TONES.done.ink,
+  info: SESSION_TONES.lecture.ink,
+  tip: SESSION_TONES.task.ink,
 };
 
-/** `--primary-foreground`: the dark ink used on every orange/primary fill. */
-const ON_PRIMARY = "#2B1406";
+/** `--primary-foreground`: the dark ink used on every primary fill. */
+const ON_PRIMARY = "#15161F";
 
 function luminance(hex: string): number {
   const [r, g, b] = [1, 3, 5].map((i) => {

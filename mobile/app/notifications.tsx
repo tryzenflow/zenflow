@@ -552,7 +552,7 @@ function NotificationRowItem({
                 onPress={onRescheduleAll}
                 disabled={rescheduling}
                 hitSlop={6}
-                className="mt-2 flex-row items-center gap-1.5 self-start rounded-full bg-amber-600 px-3 py-1 active:opacity-80"
+                className="mt-2 flex-row items-center gap-1.5 self-start rounded-full bg-primary px-3 py-1 active:opacity-80"
               >
                 {rescheduling ? (
                   <ActivityIndicator size="small" color="#ffffff" />

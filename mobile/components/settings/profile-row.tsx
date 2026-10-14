@@ -41,8 +41,8 @@ function maskEmail(email: string) {
 }
 
 const AVATAR_GRADIENT = {
-  light: ["#FF8E3E", "#F0B101", "#D8F998"],
-  dark: ["#FF7A24", "#F6B915", "#CBED86"],
+  light: ["#6C7BF7", "#5AB2FF", "#FFD66B"],
+  dark: ["#6C7BF7", "#5AB2FF", "#FFD66B"],
 };
 
 /**

@@ -634,7 +634,7 @@ export default function OnboardingScreen() {
           className={cn("px-6 pt-3", step === "done" && "items-center pt-8")}
         >
           {step === "done" ? (
-            <View className="mb-5 size-16 items-center justify-center rounded-full bg-brand-orange">
+            <View className="mb-5 size-16 items-center justify-center rounded-full bg-primary">
               <Check size={30} className="text-primary-foreground" />
             </View>
           ) : Hero ? (
