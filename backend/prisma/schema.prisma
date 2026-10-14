@@ -1,13 +1,15 @@
 generator client {
-  provider      = "prisma-client-js"
-  output        = "../generated/prisma"
-  engineType    = "binary"
-  binaryTargets = "native"
+  provider        = "prisma-client-js"
+  output          = "../generated/prisma"
+  engineType      = "binary"
+  binaryTargets   = "native"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pg_trgm]
 }
 
 enum Language {
@@ -164,6 +166,8 @@ model Tag {
 
   @@unique([userId, name])
   @@index([userId])
+  // Trigram index for GET /sessions/search.
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 enum SessionType {
@@ -316,6 +320,10 @@ model Session {
   @@index([seriesId, createdAt])
   @@index([userId, scheduleStudyUnitId])
   @@index([userId, lmsCourseId])
+  // Trigram indexes for GET /sessions/search.
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([note(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([location(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 model SessionSeries {

@@ -17,6 +17,8 @@ import { SlotPickDto } from "./dto/slot-pick.dto";
 import { ListSessionsDto } from "./dto/list-sessions.dto";
 import { ListSessionSuggestionsDto } from "./dto/list-session-suggestions.dto";
 import { DeadlineOptionsDto } from "./dto/deadline-options.dto";
+import { SearchSessionsDto } from "./dto/search-sessions.dto";
+import { SessionSearchService } from "./session-search.service";
 import { SignNoteFilesInterceptor } from "./sign-note-files.interceptor";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
@@ -27,7 +29,10 @@ import { deadlineOptions } from "./utils/deadline-options";
 @UseGuards(CookieAuthGuard)
 @UseInterceptors(SignNoteFilesInterceptor)
 export class SessionsController {
-  constructor(private readonly sessionsService: SessionsService) {}
+  constructor(
+    private readonly sessionsService: SessionsService,
+    private readonly searchService: SessionSearchService,
+  ) {}
 
   @Post()
   async create(@Body() dto: CreateSessionDto, @CurrentUser() user: User) {
@@ -55,6 +60,17 @@ export class SessionsController {
     return {
       success: true,
       message: `Found ${data.suggestions.length} suggestions`,
+      data,
+    };
+  }
+
+  // NOTE: must precede @Get(":id") so "search" isn't matched as an :id.
+  @Get("search")
+  async search(@Query() dto: SearchSessionsDto, @CurrentUser() user: User) {
+    const data = await this.searchService.search(dto, user);
+    return {
+      success: true,
+      message: `Found ${data.sessions.length} sessions`,
       data,
     };
   }
