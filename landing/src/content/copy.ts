@@ -61,8 +61,6 @@ export interface Copy {
   blipsBody: string;
   featuresLabel: string;
   features: { icon: IconName; title: string; body: string }[];
-  quotesLabel: string;
-  quotes: { quote: string; name: string }[];
   counters: { value: number; label: string }[];
   finalTitle: string;
   finalBody: string;
@@ -189,14 +187,6 @@ export const COPY: Record<Lang, Copy> = {
         title: "Private by design",
         body: "Your password is stored encrypted. Disconnect and it is deleted.",
       },
-    ],
-    quotesLabel: "What students say",
-    quotes: [
-      { quote: "I stopped writing deadlines on my hand.", name: "Linh, IT year 2" },
-      { quote: "It found time for my essay that I did not know I had.", name: "Khoa, Economics year 3" },
-      { quote: "My exam moved and my plan moved with it.", name: "Trang, Biology year 1" },
-      { quote: "One calendar for classes and homework at last.", name: "Minh, Law year 2" },
-      { quote: "The reminders come right when I need them.", name: "An, Tourism year 4" },
     ],
     counters: [
       { value: 96, label: "Slots checked every day" },
@@ -347,14 +337,6 @@ export const COPY: Record<Lang, Copy> = {
         title: "Riêng tư từ thiết kế",
         body: "Mật khẩu được lưu mã hóa. Ngắt kết nối là xóa.",
       },
-    ],
-    quotesLabel: "Sinh viên nói gì",
-    quotes: [
-      { quote: "Mình không còn ghi hạn nộp lên tay nữa.", name: "Linh, CNTT năm 2" },
-      { quote: "Nó tìm ra giờ viết tiểu luận mà mình không nghĩ là có.", name: "Khoa, Kinh tế năm 3" },
-      { quote: "Lịch thi đổi và kế hoạch cũng đổi theo.", name: "Trang, Sinh học năm 1" },
-      { quote: "Cuối cùng cũng có một lịch cho cả giờ học lẫn bài tập.", name: "Minh, Luật năm 2" },
-      { quote: "Lời nhắc đến đúng lúc mình cần.", name: "An, Du lịch năm 4" },
     ],
     counters: [
       { value: 96, label: "Khung giờ được xét mỗi ngày" },

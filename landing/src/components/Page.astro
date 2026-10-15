@@ -8,7 +8,6 @@ import Footer from "./Footer.astro";
 import Hero from "./Hero.astro";
 import HowSection from "./HowSection.astro";
 import PhoneSection from "./PhoneSection.astro";
-import Quotes from "./Quotes.astro";
 
 interface Props {
   lang: Lang;
@@ -23,7 +22,6 @@ const { lang } = Astro.props;
     <HowSection lang={lang} />
     <BlipParade lang={lang} />
     <Bento lang={lang} />
-    <Quotes lang={lang} />
     <FinalCta lang={lang} />
   </main>
   <Footer lang={lang} />
