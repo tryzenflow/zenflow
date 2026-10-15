@@ -1,6 +1,5 @@
 packages:
   - "frontend"
-  - "landing"
   - "backend"
   - "mobile"
   - "mobile/*"
