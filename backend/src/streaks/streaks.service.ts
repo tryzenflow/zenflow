@@ -5,8 +5,8 @@ import { PrismaService } from "../prisma/prisma.service";
 import { computeStreak, dayKey } from "./core/streak";
 
 /**
- * Per-user daily streak. Recomputed from completion days (plain sessions and
- * recurring occurrences) on each read or check-off, so undo and day rollover
+ * Per-user daily streak. Recomputed from the days a TASK session or
+ * occurrence was completed (classes, exams and do-not-disturb never count) on each read or check-off, so undo and day rollover
  * need no bookkeeping; the result is persisted to `UserStreak`.
  */
 @Injectable()
@@ -17,11 +17,20 @@ export class StreaksService {
     const tz = user.timezone;
     const [sessions, occurrences] = await Promise.all([
       this.prisma.session.findMany({
-        where: { userId: user.id, deleted: false, completedAt: { not: null } },
+        where: {
+          userId: user.id,
+          deleted: false,
+          type: "TASK",
+          completedAt: { not: null },
+        },
         select: { completedAt: true },
       }),
       this.prisma.sessionOccurrenceState.findMany({
-        where: { userId: user.id, completedAt: { not: null } },
+        where: {
+          userId: user.id,
+          completedAt: { not: null },
+          series: { type: "TASK" },
+        },
         select: { completedAt: true },
       }),
     ]);

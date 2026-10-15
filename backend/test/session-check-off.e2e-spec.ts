@@ -63,6 +63,20 @@ async function lecture(student: Student, over: Record<string, unknown> = {}) {
   return data<CreateSessionResponse>(res);
 }
 
+async function task(student: Student, over: Record<string, unknown> = {}) {
+  const res = await student.agent
+    .post(SESSIONS)
+    .send({
+      type: "TASK",
+      title: "Revise graphs",
+      durationMinutes: 60,
+      deadline: iso(Date.now() + 3 * DAY),
+      ...over,
+    })
+    .expect(201);
+  return data<CreateSessionResponse>(res);
+}
+
 async function events(sessionId: string) {
   return prisma.sessionEvent.findMany({
     where: { sessionId, eventType: { in: ["COMPLETE", "SKIP"] } },
@@ -73,7 +87,7 @@ async function events(sessionId: string) {
 describe("completing a session", () => {
   it("round-trips complete and undo", async () => {
     const student = await signUp("done");
-    const s = await lecture(student);
+    const s = await task(student);
 
     const done = data<SessionCheckOffResponse>(
       await student.agent.post(path(s.id, "complete")).expect(201),
@@ -190,10 +204,21 @@ describe("recurring occurrences", () => {
 });
 
 describe("GET /users/me/streak", () => {
-  it("counts days with at least one completed session", async () => {
+  it("ignores completed lectures", async () => {
+    const student = await signUp("streak-lecture");
+    const l = await lecture(student);
+    await student.agent.post(path(l.id, "complete")).expect(201);
+
+    const streak = data<StreakResponse>(
+      await student.agent.get(STREAK).expect(200),
+    );
+    expect(streak).toMatchObject({ current: 0, todayDone: false });
+  });
+
+  it("counts days with at least one completed task", async () => {
     const student = await signUp("streak");
-    const a = await lecture(student, { title: "A" });
-    const b = await lecture(student, { title: "B" });
+    const a = await task(student, { title: "A" });
+    const b = await task(student, { title: "B" });
     await student.agent.post(path(a.id, "complete")).expect(201);
     await student.agent.post(path(b.id, "complete")).expect(201);
 

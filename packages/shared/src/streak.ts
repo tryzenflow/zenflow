@@ -7,7 +7,7 @@ export const STREAK_MAX_FREEZES = 2;
 
 /**
  * A user's daily completion streak (`GET /users/me/streak`). A day counts when
- * at least one session was completed on it, in the user's timezone. A missed
+ * at least one task (not a class, exam or do-not-disturb block) was completed on it, in the user's timezone. A missed
  * past day spends a banked freeze instead of breaking the streak; today never
  * breaks it.
  */
