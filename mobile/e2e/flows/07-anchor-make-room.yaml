@@ -10,7 +10,10 @@ tags: [anchor]
 # The keyboard is still opening on the CI emulator and drops the first keys.
 - waitForAnimationToEnd:
     timeout: 3000
-- inputText: E2E chosen block
+- runFlow:
+    file: ../subflows/type-title.yaml
+    env:
+      TITLE: E2E chosen block
 - pressKey: Enter
 - scrollUntilVisible:
     element:
@@ -35,7 +38,10 @@ tags: [anchor]
 # The keyboard is still opening on the CI emulator and drops the first keys.
 - waitForAnimationToEnd:
     timeout: 3000
-- inputText: E2E urgent essay
+- runFlow:
+    file: ../subflows/type-title.yaml
+    env:
+      TITLE: E2E urgent essay
 - pressKey: Enter
 - scrollUntilVisible:
     element:

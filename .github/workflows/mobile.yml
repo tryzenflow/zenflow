@@ -320,9 +320,12 @@ jobs:
           target: google_apis
           profile: pixel_6
           disk-size: 4096M
+          cores: 4
+          ram-size: 4096M
+          heap-size: 512M
           disable-animations: true
           script: bash mobile/e2e/ci-android.sh
-      - name: Upload screenshots, video and reports
+      - name: Upload screenshots and reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
@@ -393,7 +396,7 @@ jobs:
           kill -INT $rec || true
           mkdir -p e2e/results && mv e2e-video.mp4 e2e/results/ 2>/dev/null || true
           exit $status
-      - name: Upload screenshots, video and reports
+      - name: Upload screenshots and reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
