@@ -30,6 +30,8 @@ For developers and API clients. Live schema: Swagger UI at `<API_URL>/api`.
 | PATCH | `/users/update/basic-info` | Name, timezone, lang, `defaultReminderMinutes` |
 | GET | `/users/me/preference-matrix` | 168-float matrix for the Insights heatmap |
 | GET | `/users/me/streak` | Daily completion streak (`Streak`) |
+| GET | `/users/me/daily-push` | Morning brief and evening check-in times (`DailyPushSettings`) |
+| PUT | `/users/me/daily-push` | Set both times (`HH:mm`, user tz) or `null` to turn one off |
 
 - `timezone` is set at signup (`x-timezone`) and editable. Changing it re-keys recurring `exdates`.
 - `defaultReminderMinutes`: 0 none, default 10.

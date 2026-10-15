@@ -60,7 +60,7 @@ export class FcmSender implements OnApplicationShutdown {
       return { sent: 0, invalidTokens: [] };
     }
 
-    const data = toStringMap(msg.data);
+    const data = { ...toStringMap(msg.data), ...msg.extra };
     const invalidTokens: string[] = [];
     let sent = 0;
 

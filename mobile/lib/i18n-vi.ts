@@ -563,4 +563,17 @@ export default {
   "Next up": "Sắp tới",
   "Next up: {title}, {time}": "Sắp tới: {title}, {time}",
   "in {count} min": "sau {count} phút",
+  "Daily plan": "Kế hoạch hằng ngày",
+  "Morning brief": "Tóm tắt buổi sáng",
+  "Today's classes and study blocks.": "Lớp học và giờ học tập hôm nay.",
+  "Evening check-in": "Kiểm tra buổi tối",
+  "Mark today's sessions done or missed.":
+    "Đánh dấu buổi hôm nay là xong hoặc bỏ lỡ.",
+  "Skipped on do-not-disturb days.":
+    "Không gửi vào ngày có giờ không làm phiền.",
+  Done: "Xong",
+  Missed: "Bỏ lỡ",
+  "Marked done": "Đã đánh dấu xong",
+  "Marked missed": "Đã đánh dấu bỏ lỡ",
+  "Could not save. Try again.": "Không thể lưu. Hãy thử lại.",
 } as Record<string, string>;

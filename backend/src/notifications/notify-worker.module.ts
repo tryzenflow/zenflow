@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { OutboundBreakerModule } from "../common/outbound-breaker.module";
 import { DevicesModule } from "../devices/devices.module";
+import { DailyPushModule } from "../daily-push/daily-push.module";
 import { QueueModule } from "../queue/queue.module";
 import { PrismaModule } from "../prisma/prisma.module";
 import { RemindersSchedulerModule } from "../reminders/reminders-scheduler.module";
@@ -13,6 +14,7 @@ import { NotifyProcessor } from "./notify.processor";
     QueueModule,
     OutboundBreakerModule,
     DevicesModule,
+    DailyPushModule,
     RemindersSchedulerModule,
   ],
   providers: [NotifyProcessor],

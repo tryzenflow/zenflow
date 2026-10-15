@@ -27,7 +27,16 @@ export type NotifyJobData =
   /** Native push for one provider of a notification row. */
   | { type: "push"; notificationId: string; provider: PushProvider }
   /** Fire one session reminder; `startsAt` (ISO) is the occurrence it was armed for. */
-  | { type: "reminder"; reminderId: string; startsAt: string };
+  | { type: "reminder"; reminderId: string; startsAt: string }
+  /** Morning brief or evening check-in for one user and local day, one provider. */
+  | {
+      type: "daily";
+      userId: string;
+      kind: "morning" | "evening";
+      /** `YYYY-MM-DD` in the user's timezone. */
+      localDate: string;
+      provider: PushProvider;
+    };
 
 export type PushProvider = "fcm" | "apns";
 

@@ -180,3 +180,57 @@ export function localizeNotification<
   }
   return { ...row, title, content };
 }
+
+/** Daily brief counts and the first item of the day (issue #255). */
+export interface DailyBriefCopyInput {
+  classes: number;
+  blocks: number;
+  firstTitle: string;
+  /** `HH:mm` in the user's timezone. */
+  firstTime: string;
+}
+
+/** Morning brief push: counts as the title, the first item as the body. */
+export function dailyBriefCopy(
+  input: DailyBriefCopyInput,
+  lang?: string,
+): { title: string; body: string } {
+  const { classes, blocks, firstTitle, firstTime } = input;
+  if (lang === "VI_VN") {
+    const parts = [
+      classes > 0 ? `${classes} tiết học` : null,
+      blocks > 0 ? `${blocks} buổi học tập` : null,
+    ].filter(Boolean);
+    return {
+      title: parts.join(", "),
+      body: `Tiếp theo: ${firstTitle} lúc ${firstTime}`,
+    };
+  }
+  const parts = [
+    classes > 0 ? `${classes} ${classes === 1 ? "class" : "classes"}` : null,
+    blocks > 0
+      ? `${blocks} ${blocks === 1 ? "study block" : "study blocks"}`
+      : null,
+  ].filter(Boolean);
+  return {
+    title: parts.join(", "),
+    body: `First up: ${firstTitle} at ${firstTime}`,
+  };
+}
+
+/** Evening check-in push: the action buttons carry the choice, so the copy only asks. */
+export function dailyCheckinCopy(lang?: string): {
+  title: string;
+  body: string;
+} {
+  if (lang === "VI_VN") {
+    return {
+      title: "Kiểm tra hôm nay",
+      body: "Đánh dấu các buổi hôm nay là xong hoặc bỏ lỡ.",
+    };
+  }
+  return {
+    title: "Check in on today",
+    body: "Mark today's sessions done or missed.",
+  };
+}
