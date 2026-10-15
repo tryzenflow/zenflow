@@ -218,9 +218,9 @@ def test_reaction_draws_are_shared_across_worlds_and_threshold_gates_moves() -> 
     assert decide(p, d1, int(starts[3]), 0.0, starts, flat) is None  # nothing to gain
     big = np.zeros(10)
     big[7] = 50.0
-    eager = d1.__class__(0.0, 0.0, np.zeros_like(d1.eps_slots))
+    eager = d1.__class__(0.0, 0.0, np.zeros_like(d1.eps_slots), 0.0)
     assert decide(p, eager, int(starts[3]), 0.0, starts, big) == int(starts[7])
-    lazy = d1.__class__(0.0, 0.999999, np.zeros_like(d1.eps_slots))
+    lazy = d1.__class__(0.0, 0.999999, np.zeros_like(d1.eps_slots), 0.0)
     assert (
         decide(p, lazy, int(starts[3]), 0.0, starts, big) is None
     )  # cannot be bothered

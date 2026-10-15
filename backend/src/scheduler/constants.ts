@@ -63,13 +63,14 @@ export const STABILITY_WEIGHT = 0.1;
 export const STABILITY_SATURATION_HOURS = 4;
 
 /**
- * Reward written on the `SessionEvent` for each outcome of the move-or-keep
- * model. A user drag/resize of a scheduled TASK is a negative signal; a TASK
- * that elapses unmoved (detected by the RETAINED sweep) is a positive one.
- * `CREATE` events carry a neutral 0.
+ * Reward written on the `SessionEvent` for each outcome (ADR-0022). A user
+ * drag/resize of a scheduled TASK is graded by displacement (`MOVE`). An
+ * unmoved TASK is positive when checked off in its slot and negative when
+ * skipped or missed. `CREATE` events carry a neutral 0.
  */
 export const SESSION_MOVE_REWARD = -1.0;
-export const SESSION_RETAINED_REWARD = 1.0;
+export const SESSION_COMPLETED_REWARD = 1.0;
+export const SESSION_MISSED_REWARD = -1.0;
 
 /**
  * Disjoint LinUCB scheduling parameters

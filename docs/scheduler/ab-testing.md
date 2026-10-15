@@ -53,15 +53,16 @@ LinUCB reward to avoid misattributing credit and mixing signal scales.
 ## 5. Reward — the only thing that updates learned state
 
 `preferenceMatrix` and LinUCB `(A, b)` are updated **only** by the move-or-keep signal
-(`MOVE` graded by drag distance, `RETAINED = +1`; [ADR-0001](../adr/0001-linucb-model-design.md)
-§7, [`services/bandit/README.md`](../../services/bandit/README.md)). Pairwise choices and
+(`MOVE` graded by drag distance, a checked-off placement `+1`, a skipped or missed one `-1`;
+[ADR-0001](../adr/0001-linucb-model-design.md) §7, [ADR-0022](../adr/0022-completion-reward.md),
+[`services/bandit/README.md`](../../services/bandit/README.md)). Pairwise choices and
 👍/👎 are offline-analysis data, nothing more.
 
 ## 6. Metrics
 
 **Primary:** schedule acceptance rate (`SlotProposal.acceptedWithoutModification`).
 
-**Secondary:** retention rate (`RETAINED` vs `MOVE`), drag frequency/distance, deletion
+**Secondary:** completion rate (`COMPLETE` vs `SKIP` / `MISSED`), drag frequency/distance, deletion
 rate, like/dislike rate, pairwise win rate, time to first modification, policy divergence.
 
 ## 7. Cold-start / adaptation

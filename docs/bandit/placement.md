@@ -20,7 +20,8 @@ One request = one placement event: a single `TASK` or one materialized series. A
 
 | Event | Reward |
 | --- | --- |
-| `RETAINED` | `+1` |
+| Completed in slot (`COMPLETE`, unmoved) | `+1` |
+| Skipped or missed (`SKIP`, `MISSED`, unmoved) | `-1` |
 | `MOVE` | `-clamp(abs(dragDistanceMinutes) / 240, 0, 1)` |
 | resize-only `MOVE` (`dragDistanceMinutes == 0`) | `0` |
 | `CREATE` | never sent |
