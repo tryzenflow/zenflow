@@ -110,7 +110,12 @@ export function GlassButton({
             intensity={40}
             style={
               iconOnly
-                ? { width: GLASS_SIZE, height: GLASS_SIZE }
+                ? {
+                    width: GLASS_SIZE,
+                    height: GLASS_SIZE,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }
                 : {
                     height: GLASS_SIZE,
                     minWidth: GLASS_SIZE,
