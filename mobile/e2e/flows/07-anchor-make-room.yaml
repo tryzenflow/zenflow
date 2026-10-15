@@ -7,6 +7,9 @@ tags: [anchor]
     id: fab.new-task
 - tapOn:
     id: task.title
+# The keyboard is still opening on the CI emulator and drops the first keys.
+- waitForAnimationToEnd:
+    timeout: 3000
 - inputText: E2E chosen block
 - pressKey: Enter
 - scrollUntilVisible:
@@ -29,6 +32,9 @@ tags: [anchor]
     id: fab.new-task
 - tapOn:
     id: task.title
+# The keyboard is still opening on the CI emulator and drops the first keys.
+- waitForAnimationToEnd:
+    timeout: 3000
 - inputText: E2E urgent essay
 - pressKey: Enter
 - scrollUntilVisible:
