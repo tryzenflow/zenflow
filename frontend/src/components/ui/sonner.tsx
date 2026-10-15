@@ -1,12 +1,12 @@
 import {
   CircleCheckIcon,
   InfoIcon,
-  Loader2Icon,
   OctagonXIcon,
   TriangleAlertIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Toaster as Sonner, ToasterProps } from "sonner";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
 /** Small colored glyph in a soft tinted disc — the only color a toast carries. */
@@ -105,7 +105,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
         ),
         loading: (
           <ToastIcon className="bg-muted text-muted-foreground">
-            <Loader2Icon className="size-4 animate-spin" />
+            <Spinner className="size-4" />
           </ToastIcon>
         ),
       }}

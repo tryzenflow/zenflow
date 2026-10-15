@@ -20,7 +20,7 @@ import {
   InputOTPSlot,
 } from "@/components/ui/input-otp";
 import { cn } from "@/lib/utils";
-import { Loader2 } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { hideEmail } from "@/utils/hide-email";
@@ -240,7 +240,7 @@ export function LoginForm({
           )}
 
           <Button type="submit" disabled={loading} className="w-full">
-            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {loading && <Spinner className="mr-2 h-4 w-4" />}
             {stage === "email" ? "Send OTP" : "Login"}
           </Button>
         </form>

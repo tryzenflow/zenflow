@@ -24,6 +24,31 @@ body {
   }
 }
 
+/* Spinner (components/ui/spinner.tsx): the logo curve turns once and eases to
+   rest; each trail lags a little more and fades. */
+.zf-spinner path {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  animation: zf-swirl 1.6s cubic-bezier(0.72, 0, 0.22, 1) infinite;
+}
+.zf-spinner [data-trail="1"] { opacity: 0.55; animation-delay: 35ms; }
+.zf-spinner [data-trail="2"] { opacity: 0.4; animation-delay: 70ms; }
+.zf-spinner [data-trail="3"] { opacity: 0.28; animation-delay: 106ms; }
+.zf-spinner [data-trail="4"] { opacity: 0.18; animation-delay: 141ms; }
+@keyframes zf-swirl {
+  0% { transform: rotate(0); }
+  72%, 100% { transform: rotate(360deg); }
+}
+@keyframes zf-fade {
+  from { opacity: 1; }
+  to { opacity: 0.55; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .zf-spinner { animation: zf-fade 1.4s ease-in-out infinite alternate; }
+  .zf-spinner path { animation: none; }
+  .zf-spinner [data-trail]:not([data-trail="0"]) { display: none; }
+}
+
 /* Ring-glow pulse that fires once on a newly scheduled task block. Applied to
    the inner card div so it doesn't conflict with dnd-kit's outer transform. */
 @keyframes block-highlight {
