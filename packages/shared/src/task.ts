@@ -297,6 +297,12 @@ export interface CreateTaskInput {
    * `now … deadline` (see `services/bandit/README.md`).
    */
   sessionCount?: number;
+  /**
+   * Minutes of each session when a series splits one total unevenly. Length
+   * equals `sessionCount`, each a multiple of 15; `durationMinutes` is then the
+   * average. Omitted → every session is `durationMinutes`.
+   */
+  sessionDurations?: number[];
   tags?: string[];
   /**
    * Minutes-before-start reminders (max MAX_REMINDERS_PER_SESSION, each an

@@ -94,11 +94,18 @@ export class SessionCrudService {
       // Pre-flight feasibility — BEFORE any row is inserted, so an
       // infeasible request never leaves an unplaced task/series behind (no
       // rollback needed; see NO_FEASIBLE_SLOT_MESSAGE).
+      const durations = dto.sessionDurations;
+      if (durations && durations.length !== sessionCount) {
+        throw new BadRequestException(
+          "sessionDurations must have one entry per session.",
+        );
+      }
       if (sessionCount > 1) {
         const feasible = await this.taskPlacement.canPlaceSeries({
           user,
           durationMinutes: dto.durationMinutes,
           sessionCount,
+          durations,
           deadline,
           now,
         });

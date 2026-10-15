@@ -230,6 +230,7 @@ export class TaskPlacementService {
     user: User;
     durationMinutes: number;
     sessionCount: number;
+    durations?: number[];
     deadline: Date;
     now: Date;
   }): Promise<boolean> {

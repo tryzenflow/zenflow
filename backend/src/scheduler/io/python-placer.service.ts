@@ -143,6 +143,8 @@ export class PythonPlacer {
     user: User;
     durationMinutes: number;
     sessionCount: number;
+    /** Per-session minutes; defaults to `durationMinutes` each. */
+    durations?: number[];
     deadline: Date;
     now: Date;
   }): Promise<boolean> {
@@ -151,7 +153,7 @@ export class PythonPlacer {
       { length: args.sessionCount },
       (_, i) => ({
         id: `${PREFLIGHT_TASK_ID}-${i}`,
-        durationMinutes: args.durationMinutes,
+        durationMinutes: args.durations?.[i] ?? args.durationMinutes,
       }),
     );
     const req = await this.gateway.buildRequest({

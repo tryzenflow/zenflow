@@ -112,6 +112,16 @@ export class CreateSessionDto {
   @Max(MAX_SESSION_COUNT)
   sessionCount?: number;
 
+  /** Minutes of each session of a series (see `CreateSessionInput.sessionDurations`). */
+  @IsOptional()
+  @ValidateIf((o: CreateSessionDto) => o.type === "TASK")
+  @IsArray()
+  @ArrayMaxSize(MAX_SESSION_COUNT)
+  @IsInt({ each: true })
+  @Min(TIME_GRANULARITY, { each: true })
+  @IsDivisibleBy(TIME_GRANULARITY, { each: true })
+  sessionDurations?: number[];
+
   /** ISO-8601 start — required for the fixed types (`ASSIGNMENT`/`EXAM`/`LECTURE`/`DND`). */
   @ValidateIf((o: CreateSessionDto) => o.type !== "TASK")
   @IsISO8601()

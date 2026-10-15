@@ -96,7 +96,7 @@ export class SeriesService {
             title: dto.title,
             note: dto.note ?? null,
             location: dto.location ?? null,
-            durationMinutes: dto.durationMinutes,
+            durationMinutes: dto.sessionDurations?.[i] ?? dto.durationMinutes,
             deadline,
             seriesId: series.id,
             sessionIndex: i + 1,
