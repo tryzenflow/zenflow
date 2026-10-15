@@ -64,7 +64,7 @@ export class ApnsSender implements OnApplicationShutdown {
     note.pushType = "alert";
     note.sound = pushSoundFile(msg.tone);
     note.alert = { title: msg.title, body: msg.body };
-    note.payload = toStringMap(msg.data);
+    note.payload = { ...toStringMap(msg.data), ...msg.extra };
     // node-apn maps `category` onto `aps.category` at runtime; its typings omit the setter.
     if (msg.category) (note as { category?: string }).category = msg.category;
 
