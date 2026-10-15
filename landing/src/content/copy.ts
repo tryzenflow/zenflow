@@ -55,9 +55,9 @@ export interface Copy {
   week: { days: string[]; label: string };
   howLabel: string;
   how: { title: string; body: string }[];
-  blipsLabel: string;
-  blipsTitle: string;
-  blipsBody: string;
+  spiritsLabel: string;
+  spiritsTitle: string;
+  spiritsBody: string;
   featuresLabel: string;
   features: { icon: IconName; title: string; body: string }[];
   finalTitle: string;
@@ -145,9 +145,9 @@ export const COPY: Record<Lang, Copy> = {
         body: "Tự chọn giờ trống, né giờ học với task khác, tới giờ thì nhắc bạn.",
       },
     ],
-    blipsLabel: "Sắp có",
-    blipsTitle: "Gặp hội Blip",
-    blipsBody: "Làm xong task để ấp một bé Blip.",
+    spiritsLabel: "Sắp có",
+    spiritsTitle: "Thu phục linh thú",
+    spiritsBody: "Làm xong task để ấp một linh thú.",
     featuresLabel: "Làm ra cho đúng kiểu sinh viên xoay xở",
     features: [
       {
@@ -286,9 +286,9 @@ export const COPY: Record<Lang, Copy> = {
         body: "It grabs a free slot that dodges classes and other tasks, then pings you.",
       },
     ],
-    blipsLabel: "Coming soon",
-    blipsTitle: "Meet the Blips",
-    blipsBody: "Finish tasks to hatch one.",
+    spiritsLabel: "Coming soon",
+    spiritsTitle: "Collect the spirits",
+    spiritsBody: "Finish tasks to hatch one.",
     featuresLabel: "Built for how students actually plan",
     features: [
       {
