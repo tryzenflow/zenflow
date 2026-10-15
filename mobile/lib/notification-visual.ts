@@ -1,20 +1,25 @@
-import {
-  AlertTriangle,
-  Bell,
-  ClipboardList,
-  GraduationCap,
-  type LucideIcon,
-  Notebook,
-  Star,
-} from "@/components/Icons";
+import { AlertTriangle, Bell, type LucideIcon, Star } from "@/components/Icons";
+import { sessionTypeIcon } from "@/components/calendar/session-type-badge";
 import type { ToastAccent } from "@/components/ui/toast";
 import {
   type NotificationCategory,
+  type SessionType,
   notificationCategory,
   notificationEventKind,
 } from "@zenflow/shared";
-import { SESSION_TONE_CLASSES, SESSION_TONES } from "@zenflow/core";
+import {
+  SESSION_TONE_CLASSES,
+  SESSION_TONES,
+  SESSION_TYPE_TONE,
+} from "@zenflow/core";
 import { t } from "./i18n";
+
+/** The calendar type a category's row stands for, so it takes that type's colour and icon. */
+const CATEGORY_SESSION_TYPE: Partial<Record<NotificationCategory, SessionType>> = {
+  ASSIGNMENT: "ASSIGNMENT",
+  EXAM: "EXAM",
+  LECTURE: "LECTURE",
+};
 
 export const CATEGORY_LABEL: Record<NotificationCategory, string> = {
   get ASSIGNMENT() {
@@ -35,8 +40,8 @@ export const CATEGORY_LABEL: Record<NotificationCategory, string> = {
 };
 
 /**
- * Icon and colors for a notification's eventName, matching
- * mockups/detected-items.html. Shared by the inbox rows and the live
+ * Icon and colors for a notification's eventName. Session categories take the
+ * calendar block's own type colour and icon. Shared by the inbox rows and the live
  * notification toast, so both show the same glyph for the same kind.
  * `iconColor` is the inbox's single ink; `accent` adds a dark-scheme pair.
  */
@@ -60,37 +65,19 @@ export function notificationVisual(eventName: string): {
       accent: ink,
     };
   }
+  const sessionType = CATEGORY_SESSION_TYPE[category];
+  if (sessionType) {
+    const tone = SESSION_TYPE_TONE[sessionType];
+    const { ink } = SESSION_TONES[tone];
+    return {
+      Icon: sessionTypeIcon(sessionType),
+      label: CATEGORY_LABEL[category],
+      tint: SESSION_TONE_CLASSES[tone].badge,
+      ink,
+      accent: ink,
+    };
+  }
   switch (category) {
-    case "ASSIGNMENT": {
-      const ink = { light: "#0f766e", dark: "#2dd4bf" };
-      return {
-        Icon: ClipboardList,
-        label: CATEGORY_LABEL.ASSIGNMENT,
-        tint: "border-teal-500/50 bg-teal-500/20",
-        ink,
-        accent: ink,
-      };
-    }
-    case "EXAM": {
-      const ink = { light: "#be123c", dark: "#fb7185" };
-      return {
-        Icon: Notebook,
-        label: CATEGORY_LABEL.EXAM,
-        tint: "border-rose-500/50 bg-rose-500/20",
-        ink,
-        accent: ink,
-      };
-    }
-    case "LECTURE": {
-      const ink = { light: "#0369a1", dark: "#38bdf8" };
-      return {
-        Icon: GraduationCap,
-        label: CATEGORY_LABEL.LECTURE,
-        tint: "border-sky-500/50 bg-sky-500/20",
-        ink,
-        accent: ink,
-      };
-    }
     case "MARKS": {
       const ink = { light: "#6d28d9", dark: "#a78bfa" };
       return {
