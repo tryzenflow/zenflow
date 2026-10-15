@@ -3,7 +3,12 @@ import { getDeadlineOptions } from "@/api/tasks";
 import { useLanguage } from "@/hooks/use-language";
 import { useComposerStore } from "@/lib/composer-store";
 import { t } from "@/lib/i18n";
-import { sittingLength, snapCount, splitCounts, variedSittings } from "@/lib/split-sittings";
+import {
+  defaultSittingCount,
+  sittingMinutes,
+  snapCount,
+  splitCounts,
+} from "@/lib/split-sittings";
 import { clockLabel } from "@/lib/slider-math";
 import { BottomSheetTextInput } from "@/components/ui/bottom-sheet";
 import { ChipGroup } from "@/components/ui/chip-group";
@@ -14,6 +19,8 @@ import { TimelineTimePicker } from "@/components/ui/timeline-time-picker";
 import { WeekStripDatePicker } from "@/components/ui/week-strip-date-picker";
 import { cn } from "@/lib/utils";
 import {
+  MAX_TASK_SESSION_COUNT,
+  MAX_TASK_TOTAL_MINUTES,
   type SessionFormValues,
   hhmmToMinutes,
   maxFeasibleSessionCount,
@@ -33,8 +40,6 @@ import type { UseFormReturn } from "react-hook-form";
 export const END_OF_DAY = 23 * 60 + 59;
 export const END_OF_DAY_SECONDS = 59;
 
-/** Most sittings the split stepper offers. The server allows more; this keeps the strip readable. */
-const MAX_SPLIT_CHOICES = 8;
 
 /**
  * A wall-clock date (`YYYY-MM-DD`) and minutes of day, as one UTC instant.
@@ -170,9 +175,31 @@ export function DeadlineField({
 
 const DURATION_CHOICES = [30, 60, 120, 180] as const;
 
+/** One day of work in the Days unit. */
+const WORK_DAY_MINUTES = 8 * 60;
+/** Longest total the Hours unit offers; Days covers the rest. */
+const HOURS_MAX = 12 * 60;
+
+type DurationUnit = "hours" | "days";
+
+const DURATION_UNITS: { value: DurationUnit; label: string }[] = [
+  { value: "hours", label: "Hours" },
+  { value: "days", label: "Days" },
+];
+
+/** "2 days (16 h)": half days on the 15-minute grid. */
+function workDaysLabel(minutes: number): string {
+  const days = minutes / WORK_DAY_MINUTES;
+  return t("{days} days ({hours})", {
+    days: Number.isInteger(days) ? String(days) : days.toFixed(1),
+    hours: durationLabel(minutes),
+  });
+}
+
 /**
- * Length of the task as chips (30 min, 1 h, 2 h, 3 h) and Custom, which reveals
- * a slider in 15 minute steps.
+ * Length of the whole task as chips (30 min, 1 h, 2 h, 3 h) and Custom, which
+ * reveals Hours (15 minute steps up to 12 h) or Days (half days of 8 h work,
+ * up to 120 h). The split below follows the total.
  */
 export function DurationField({
   form,
@@ -184,9 +211,25 @@ export function DurationField({
   useLanguage();
   const value = form.watch("duration") ?? 60;
   const [customOpen, setCustomOpen] = useState(false);
+  const [unit, setUnit] = useState<DurationUnit>(
+    value > HOURS_MAX ? "days" : "hours",
+  );
   const isChoice = (DURATION_CHOICES as readonly number[]).includes(value);
   const customActive = customOpen || !isChoice;
   const error = form.formState.errors.duration?.message;
+
+  function setDuration(minutes: number) {
+    form.setValue("duration", minutes, { shouldValidate: true });
+    form.setValue("sessionCount", defaultSittingCount(minutes), {
+      shouldValidate: true,
+    });
+  }
+
+  function pickUnit(next: DurationUnit) {
+    setUnit(next);
+    if (next === "days" && value < WORK_DAY_MINUTES) setDuration(WORK_DAY_MINUTES);
+    if (next === "hours" && value > HOURS_MAX) setDuration(HOURS_MAX);
+  }
 
   return (
     <FieldCard label="Duration" error={error} testID="task.duration">
@@ -196,21 +239,44 @@ export function DurationField({
         disabled={disabled}
         onChange={(v) => {
           setCustomOpen(false);
-          form.setValue("duration", Number(v), { shouldValidate: true });
+          setDuration(Number(v));
         }}
         onCustom={() => setCustomOpen(true)}
         customActive={customActive}
         options={DURATION_CHOICES.map((m) => ({ value: String(m), label: durationLabel(m) }))}
       />
       {customActive && (
-        <DurationSlider
-          testID="task.duration.slider"
-          label="Duration"
-          value={value}
-          max={480}
-          disabled={disabled}
-          onChange={(v) => form.setValue("duration", v, { shouldValidate: true })}
-        />
+        <View className="gap-3">
+          <ChipGroup<DurationUnit>
+            testID="task.duration.unit"
+            value={unit}
+            disabled={disabled}
+            onChange={pickUnit}
+            options={DURATION_UNITS}
+          />
+          {unit === "hours" ? (
+            <DurationSlider
+              testID="task.duration.slider"
+              label="Duration"
+              value={Math.min(value, HOURS_MAX)}
+              max={HOURS_MAX}
+              disabled={disabled}
+              onChange={setDuration}
+            />
+          ) : (
+            <DurationSlider
+              testID="task.duration.days"
+              label="Duration"
+              value={Math.max(value, WORK_DAY_MINUTES)}
+              min={WORK_DAY_MINUTES}
+              max={MAX_TASK_TOTAL_MINUTES}
+              step={WORK_DAY_MINUTES / 2}
+              valueLabel={workDaysLabel}
+              disabled={disabled}
+              onChange={setDuration}
+            />
+          )}
+        </View>
       )}
     </FieldCard>
   );
@@ -218,9 +284,9 @@ export function DurationField({
 
 /**
  * How many sittings the task splits into. When creating, the duration above is
- * the whole task and it splits into equal sittings (so only counts that divide
- * it evenly are offered); when editing, each sitting keeps its length and the
- * count grows or shrinks the series.
+ * the whole task and it splits into sittings within 15 minutes of each other;
+ * when editing, each sitting keeps its length and the count grows or shrinks
+ * the series.
  */
 export function SplitField({
   form,
@@ -240,9 +306,9 @@ export function SplitField({
 
   // Creating: the divisors of the total. Editing: every count that fits.
   const counts = useMemo(() => {
-    if (splitTotal) return splitCounts(duration, MAX_SPLIT_CHOICES);
+    if (splitTotal) return splitCounts(duration);
     const feasible = Math.min(
-      MAX_SPLIT_CHOICES,
+      MAX_TASK_SESSION_COUNT,
       Math.max(1, maxFeasibleSessionCount(deadline, duration, from)),
     );
     return Array.from({ length: feasible }, (_, i) => i + 1);
@@ -255,10 +321,12 @@ export function SplitField({
     }
   }, [counts, count, form]);
 
-  const each = splitTotal ? sittingLength(duration, count) : duration;
   const parts = splitTotal
-    ? variedSittings(duration, count)
-    : Array.from({ length: count }, () => each);
+    ? sittingMinutes(duration, count)
+    : Array.from({ length: count }, () => duration);
+  const each = parts[0];
+  const last = parts[parts.length - 1];
+  const longer = parts.filter((m) => m === each).length;
   const index = Math.max(0, counts.indexOf(count));
 
   function step(dir: -1 | 1) {
@@ -269,7 +337,7 @@ export function SplitField({
   return (
     <FieldCard
       label="Split into sittings"
-      hint={splitTotal ? "Splits the total into sittings of about the same length, at most one a day." : undefined}
+      hint={splitTotal ? "Splits the task into shorter sessions." : undefined}
       testID="task.split"
       trailing={
         <View className="flex-row items-center gap-3">
@@ -299,16 +367,27 @@ export function SplitField({
       <Text testID="task.split.summary" className="text-[15px] font-medium text-foreground">
         {count === 1
           ? durationLabel(duration)
-          : splitTotal
-            ? t("{count} sittings of about {duration}", { count, duration: durationLabel(each) })
+          : last !== each
+            ? t("{count} sittings of {duration} and {rest} of {last}", {
+                count: longer,
+                duration: durationLabel(each),
+                rest: count - longer,
+                last: durationLabel(last),
+              })
             : t("{count} sittings of {duration}", { count, duration: durationLabel(each) })}
       </Text>
-      <View testID="task.split.strip" className="flex-row gap-1.5">
+      <View
+        testID="task.split.strip"
+        className={cn("flex-row", parts.length > 12 ? "gap-0.5" : "gap-1.5")}
+      >
         {parts.map((minutes, i) => (
           <View
             key={i}
-            className="h-9 flex-1 rounded-lg border border-primary/35 bg-primary/15"
-            style={{ flexGrow: minutes }}
+            className={cn(
+              "h-9 border border-primary/35 bg-primary/15",
+              parts.length > 12 ? "rounded-sm" : "rounded-lg",
+            )}
+            style={{ flexGrow: minutes, flexShrink: 1, flexBasis: 0 }}
           />
         ))}
       </View>

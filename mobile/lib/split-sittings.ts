@@ -1,10 +1,18 @@
+import { MAX_TASK_SESSION_COUNT } from "@zenflow/core";
 import { SLOT_MINUTES } from "@zenflow/shared";
 
+/** Longest sitting a split offers. Longer tasks need more sittings. */
+export const MAX_SITTING_MINUTES = 4 * 60;
+
+/** Sitting length a long task splits into by default. */
+const DEFAULT_SITTING_MINUTES = 2 * 60;
+
 /**
- * Sizes of the sittings a task splits into, in minutes. The total is kept
- * exactly on the 15-minute grid: the first sittings take the extra slot, so
- * `[180, 2]` gives `[90, 90]` and `[120, 3]` gives `[45, 45, 30]`. A task
- * shorter than its count of slots yields one sitting per slot instead.
+ * Sizes of the sittings a task splits into, in minutes. The slots are dealt out
+ * evenly and the first sittings take the extra ones, so no two sittings differ
+ * by more than 15 minutes: `[120, 3]` gives `[45, 45, 30]` and `[120, 6]` gives
+ * `[30, 30, 15, 15, 15, 15]`. A task shorter than its count of slots yields one
+ * sitting per slot.
  */
 export function sittingMinutes(total: number, count: number): number[] {
   const slots = Math.max(1, Math.round(total / SLOT_MINUTES));
@@ -17,31 +25,28 @@ export function sittingMinutes(total: number, count: number): number[] {
 }
 
 /**
- * Sizes of the sittings with a little variation around the even split, still
- * summing to `total` on the 15-minute grid: 8 hours in 4 gives
- * `[135, 105, 135, 105]` minutes rather than four flat 2-hour blocks. Paired
- * sittings trade slots (one up, one down), the sign alternating pair by pair,
- * and none drops below one slot. The same input always gives the same output.
+ * Counts a task of `total` minutes can split into: enough that no sitting runs
+ * over {@link MAX_SITTING_MINUTES}, up to `max` and one sitting per slot.
  */
-export function variedSittings(total: number, count: number): number[] {
-  const slots = sittingMinutes(total, count).map((m) => m / SLOT_MINUTES);
-  const n = slots.length;
-  const shift = Math.max(1, Math.round(slots[n - 1] * 0.125));
-  for (let i = 0; i < Math.floor(n / 2); i++) {
-    const j = n - 1 - i;
-    const d = Math.min(shift, slots[i] - 1, slots[j] - 1);
-    if (d <= 0) continue;
-    const sign = i % 2 === 0 ? 1 : -1;
-    slots[i] += sign * d;
-    slots[j] -= sign * d;
-  }
-  return slots.map((s) => s * SLOT_MINUTES);
+export function splitCounts(
+  total: number,
+  max: number = MAX_TASK_SESSION_COUNT,
+): number[] {
+  const slots = Math.max(1, Math.round(total / SLOT_MINUTES));
+  const hi = Math.max(1, Math.min(slots, max));
+  const lo = Math.min(hi, Math.max(1, Math.ceil(total / MAX_SITTING_MINUTES)));
+  return Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
 }
 
-/** Counts a task of `total` minutes can split into: one to `max`, one sitting per slot at most. */
-export function splitCounts(total: number, max: number): number[] {
-  const slots = Math.max(1, Math.round(total / SLOT_MINUTES));
-  return Array.from({ length: Math.min(slots, max) }, (_, i) => i + 1);
+/**
+ * Count a new task of `total` minutes starts with: one sitting up to
+ * {@link MAX_SITTING_MINUTES}, then two-hour sittings, so 8 hours gives 4 and
+ * 120 hours gives 60.
+ */
+export function defaultSittingCount(total: number): number {
+  if (total <= MAX_SITTING_MINUTES) return 1;
+  const counts = splitCounts(total);
+  return snapCount(counts, Math.ceil(total / DEFAULT_SITTING_MINUTES));
 }
 
 /** The largest valid count not above `want`, or the smallest one. */
@@ -49,9 +54,4 @@ export function snapCount(counts: number[], want: number): number {
   let best = counts[0] ?? 1;
   for (const c of counts) if (c <= want) best = c;
   return best;
-}
-
-/** Minutes of each sitting when `total` splits into `count` equal sittings. */
-export function sittingLength(total: number, count: number): number {
-  return Math.round(total / Math.max(1, count));
 }
