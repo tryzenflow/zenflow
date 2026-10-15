@@ -5,15 +5,13 @@ import { Eye, Pencil, X } from "@/components/Icons";
 import { SunriseBackdrop } from "@/components/brand/sunrise-backdrop";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { Glass } from "@/components/ui/glass";
+import { GlassButton, GlassSegmented } from "@/components/ui/glass-button";
 import { Text } from "@/components/ui/text";
-import { cn } from "@/lib/utils";
-import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { type ReactNode, createContext, useContext, useRef } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   type ScrollViewInstance,
   StyleSheet,
@@ -103,45 +101,28 @@ function ModeToggle({
   value: boolean;
   onValueChange: (value: boolean) => void;
 }) {
-  const Segment = ({
-    editing,
-    Icon,
-    label,
-  }: {
-    editing: boolean;
-    Icon: typeof Eye;
-    label: string;
-  }) => {
-    const active = value === editing;
-    return (
-      <Pressable
-        onPress={() => {
-          if (active) return;
-          Haptics.selectionAsync().catch(() => {});
-          onValueChange(editing);
-        }}
-        accessibilityRole="button"
-        accessibilityState={{ selected: active }}
-        accessibilityLabel={label}
-        testID={editing ? "task.mode.edit" : "task.mode.view"}
-        hitSlop={4}
-        className={cn(
-          "h-9 w-11 items-center justify-center rounded-full",
-          active && "bg-primary",
-        )}
-      >
-        <Icon
-          size={20}
-          className={active ? "text-primary-foreground" : "text-muted-foreground"}
-        />
-      </Pressable>
-    );
-  };
   return (
-    <Glass radius={22} intensity={30} style={{ padding: 3, flexDirection: "row" }}>
-      <Segment editing={false} Icon={Eye} label={t("View")} />
-      <Segment editing Icon={Pencil} label={t("Edit")} />
-    </Glass>
+    <GlassSegmented
+      value={value ? "edit" : "view"}
+      onValueChange={(next) => {
+        if (next === (value ? "edit" : "view")) return;
+        onValueChange(next === "edit");
+      }}
+      segments={[
+        {
+          value: "view",
+          icon: Eye,
+          accessibilityLabel: t("View"),
+          testID: "task.mode.view",
+        },
+        {
+          value: "edit",
+          icon: Pencil,
+          accessibilityLabel: t("Edit"),
+          testID: "task.mode.edit",
+        },
+      ]}
+    />
   );
 }
 
@@ -207,14 +188,12 @@ export function SessionFormScreen({
         <View className="flex-row items-center gap-2.5">
           {headerRight}
           {editSwitch && <ModeToggle {...editSwitch} />}
-          <Pressable
+          <GlassButton
             testID="task.close"
+            icon={X}
             onPress={() => safeBack(router)}
             accessibilityLabel={t("Close")}
-            className="h-10 w-10 items-center justify-center"
-          >
-            <X size={20} className="text-muted-foreground" />
-          </Pressable>
+          />
         </View>
       </View>
 

@@ -1,5 +1,6 @@
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
+import { GlassButton } from "@/components/ui/glass-button";
 import { Check, X } from "@/components/Icons";
 import {
   BottomSheet,
@@ -282,14 +283,13 @@ const SeriesSlotPickSheet = forwardRef<
                     })}
               </Text>
             </View>
-            <Pressable
+            <GlassButton
               onPress={handleDismiss}
               disabled={busy}
+              icon={X}
               accessibilityLabel={t("Close and keep everything as scheduled")}
-              className="inline-flex size-8 items-center justify-center shrink-0"
-            >
-              <X size={15} className="text-muted-foreground" />
-            </Pressable>
+              style={{ marginRight: -6 }}
+            />
           </View>
 
           {/* Column headings, once, above every row — like the checklist's groups. */}
