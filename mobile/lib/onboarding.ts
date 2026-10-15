@@ -8,6 +8,7 @@ import { BULK_TAGS_MAX, TAG_NAME_MAX } from "@zenflow/shared";
 
 export const ONBOARDING_STEPS = [
   "name",
+  "focus",
   "dlu",
   "notifications",
   "done",
@@ -76,11 +77,6 @@ export const SUGGESTED_TAGS = [
   "Errands",
 ] as const;
 
-export const DEFAULT_TICKED_TAGS: readonly string[] = SUGGESTED_TAGS.slice(
-  0,
-  4,
-);
-
 /** Trim + collapse whitespace; null if empty or too long. */
 export function normalizeTagName(raw: string): string | null {
   const name = raw.trim().replace(/\s+/g, " ");
@@ -89,23 +85,6 @@ export function normalizeTagName(raw: string): string | null {
 }
 
 const sameTag = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
-
-/**
- * Initial ticked set. Resuming (existing tags include a suggestion the user
- * already saved) keeps exactly those; otherwise the defaults, plus any other
- * existing tags (e.g. created by an LMS/portal sync during onboarding).
- */
-export function initialTagSelection(existing: readonly string[]): string[] {
-  const resumed = existing.some((e) =>
-    SUGGESTED_TAGS.some((name) => sameTag(t(name), e)),
-  );
-  if (resumed) return [...existing];
-  const defaults = DEFAULT_TICKED_TAGS.map((name) => t(name));
-  return [
-    ...defaults,
-    ...existing.filter((e) => !defaults.some((d) => sameTag(d, e))),
-  ];
-}
 
 /** Suggestions followed by any other (existing/custom) selected tags. */
 export function tagOptions(selected: readonly string[]): string[] {

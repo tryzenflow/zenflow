@@ -3,7 +3,6 @@ import {
   addCustomTag,
   canGoBack,
   filterTimezones,
-  initialTagSelection,
   mergeTagNames,
   newTagsForBulk,
   nextStep,
@@ -37,38 +36,23 @@ describe("routeForSession", () => {
 
 describe("step navigation", () => {
   it("walks forward and clamps", () => {
-    expect(nextStep("name")).toBe("dlu");
+    expect(nextStep("name")).toBe("focus");
+    expect(nextStep("focus")).toBe("dlu");
     expect(nextStep("notifications")).toBe("done");
     expect(nextStep("done")).toBe("done");
   });
   it("walks back and clamps; no back on first/done", () => {
-    expect(prevStep("dlu")).toBe("name");
+    expect(prevStep("dlu")).toBe("focus");
+    expect(prevStep("focus")).toBe("name");
     expect(prevStep("name")).toBe("name");
     expect(canGoBack("name")).toBe(false);
+    expect(canGoBack("focus")).toBe(true);
     expect(canGoBack("dlu")).toBe(true);
     expect(canGoBack("done")).toBe(false);
   });
 });
 
 describe("tags", () => {
-  it("pre-ticks the first four, or resumes existing", () => {
-    expect(initialTagSelection([])).toEqual([
-      "Study",
-      "Exam",
-      "Assignment",
-      "Project",
-    ]);
-    // Sync-created tags (LMS/portal) don't count as resuming: defaults stay ticked.
-    expect(initialTagSelection(["Thesis"])).toEqual([
-      "Study",
-      "Exam",
-      "Assignment",
-      "Project",
-      "Thesis",
-    ]);
-    // Resuming with saved suggestions keeps exactly those.
-    expect(initialTagSelection(["Lab", "Thesis"])).toEqual(["Lab", "Thesis"]);
-  });
   it("toggles case-insensitively", () => {
     expect(toggleTag(["Study"], "study")).toEqual([]);
     expect(toggleTag([], "Lab")).toEqual(["Lab"]);

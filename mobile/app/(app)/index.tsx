@@ -23,10 +23,7 @@ import {
 } from "@/components/calendar/block-actions-sheet";
 import { CalendarHeader } from "@/components/calendar/calendar-header";
 import { MonthView } from "@/components/calendar/month-view";
-import {
-  SessionSearchSheet,
-  type SessionSearchSheetHandle,
-} from "@/components/calendar/session-search-sheet";
+import { SessionSearchView } from "@/components/calendar/session-search-view";
 import { TodayButton } from "@/components/calendar/today-button";
 import {
   type CalendarView,
@@ -181,7 +178,8 @@ export default function CalendarScreen() {
   const rescheduleSheetRef = useRef<RescheduleSheetHandle>(null);
   const updateScopeSheetRef = useRef<UpdateRecurringSheetHandle>(null);
   const blockActionsSheetRef = useRef<BlockActionsSheetHandle>(null);
-  const searchSheetRef = useRef<SessionSearchSheetHandle>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const closeSearch = useCallback(() => setSearchOpen(false), []);
 
   const handleWeekDragBegin = useCallback(() => {
     pagerRef.current?.beginHeaderWeekDrag();
@@ -362,7 +360,7 @@ export default function CalendarScreen() {
         view={view}
         onViewChange={handleViewChange}
         offlineKey={`${view}:${dateKey(focusedDate)}`}
-        onSearch={() => searchSheetRef.current?.open()}
+        onSearch={() => setSearchOpen(true)}
       />
 
       {view === "day" ? (
@@ -451,7 +449,7 @@ export default function CalendarScreen() {
         onRequestScopedUpdate={handleRequestScopedUpdate}
       />
       <UpdateRecurringSheet ref={updateScopeSheetRef} />
-      <SessionSearchSheet ref={searchSheetRef} />
+      {searchOpen ? <SessionSearchView onClose={closeSearch} /> : null}
     </View>
   );
 }
