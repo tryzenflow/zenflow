@@ -21,3 +21,10 @@ export const ANCHOR_LABEL_KEYS: Record<SessionAnchor, string> = {
   CHOSEN: "Time set by you",
   PINNED: "Pinned in place",
 };
+
+/** One-line explanation of an anchor state, under its label. */
+export const ANCHOR_HINT_KEYS: Record<SessionAnchor, string> = {
+  AUTO: "The scheduler can move it to make room.",
+  CHOSEN: "You set this time. The scheduler asks before it moves it.",
+  PINNED: "The scheduler never moves it.",
+};

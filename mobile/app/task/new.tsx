@@ -1,8 +1,20 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { format } from "@/lib/i18n";
-import { createSession } from "@/api/tasks";
+import {
+  confirmPlacement,
+  createSession,
+  getSessionDetails,
+  undoPlacement,
+} from "@/api/tasks";
+import {
+  MakeRoomSheet,
+  type MakeRoomSheetHandle,
+} from "@/components/calendar/make-room-sheet";
 import { TaskComposer } from "@/components/tasks/composer/task-composer";
+import { getPlacementPlan } from "@/lib/make-room";
+import { showMovedToast } from "@/lib/move-toast";
+import { notifySessionsMutated } from "@/lib/session-cache";
 import { useCourseNames } from "@/hooks/use-course-names";
 import { DRAFT_NEW, useComposerStore } from "@/lib/composer-store";
 import {
@@ -38,10 +50,12 @@ import {
 import {
   type CreateSessionInput,
   DEFAULT_REMINDER_MINUTES,
+  type PlacementPlan,
+  type Session,
 } from "@zenflow/shared";
 
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 const DEFAULT_DURATION = 60;
 const DEFAULT_SESSION_COUNT = 1;
@@ -192,6 +206,7 @@ function NewSessionForm() {
   const courses = useCourseNames();
 
   const uploads = useUploadTracker();
+  const makeRoom = useRef<MakeRoomSheetHandle>(null);
 
   async function onSubmit(values: SessionFormValues) {
     if (!user) return;
@@ -236,6 +251,90 @@ function NewSessionForm() {
         safeBack(router);
       }
     };
+    // The plan moves a session the user chose: nothing is saved until they
+    // pick an action in the Make room sheet (ADR-0022).
+    const openMakeRoom = async (plan: PlacementPlan) => {
+      const moved = await Promise.all(
+        plan.moves.map((move) => getSessionDetails(move.id).catch(() => null)),
+      );
+      const createLate = async () => {
+        try {
+          await handleCreated(
+            await createSession({
+              ...toCreateInput(values, tz),
+              infeasiblePolicy: "ACCEPT_LATE_DEADLINE",
+            } as Parameters<typeof createSession>[0]),
+          );
+        } catch (error) {
+          const again = getPlacementPlan(error);
+          if (again) return openMakeRoom(again);
+          showErrorToast(toast, error, t("Couldn't create the session"), "calendar-x");
+        }
+      };
+      makeRoom.current?.open({
+        subtitle: t("{title} needs a time. These sessions move to fit it.", {
+          title: values.title,
+        }),
+        plan,
+        title: values.title,
+        durationMinutes: values.duration ?? DEFAULT_DURATION,
+        sessions: moved.filter((s): s is Session => s !== null),
+        actions: [
+          {
+            id: "move",
+            label: t("Move it"),
+            run: async () => {
+              try {
+                const confirmed = await confirmPlacement(plan.id);
+                // The confirm answers with an undo group: Undo removes the new
+                // session and puts the moved ones back.
+                if (confirmed.session.scheduledStartTime) {
+                  showMovedToast(toast, {
+                    to: zonedDate(confirmed.session.scheduledStartTime, tz),
+                    withTime: true,
+                    onUndo: () =>
+                      void undoPlacement(confirmed.undoGroupId)
+                        .then(() => notifySessionsMutated())
+                        .catch((error) =>
+                          showErrorToast(
+                            toast,
+                            error,
+                            t("Couldn't move this session"),
+                            "calendar-x",
+                          ),
+                        ),
+                  });
+                }
+                await handleCreated({
+                  ...confirmed.session,
+                  displacedSessions: confirmed.displacedSessions,
+                  undoGroupId: confirmed.undoGroupId,
+                  slotProposalId: null,
+                  primarySlot: null,
+                  alternativeSlot: null,
+                  divergent: false,
+                });
+              } catch (error) {
+                showErrorToast(
+                  toast,
+                  error,
+                  t("The plan changed. Try again."),
+                  "calendar-x",
+                );
+              }
+            },
+          },
+          {
+            id: "late",
+            label: t("Keep mine and accept late"),
+            variant: "outline",
+            run: createLate,
+          },
+          { id: "pick", label: t("Pick another time"), variant: "ghost", run: () => {} },
+        ],
+      });
+    };
+
     await withInfeasibleRetry(
       toast,
       (infeasiblePolicy) =>
@@ -244,13 +343,19 @@ function NewSessionForm() {
           ...(infeasiblePolicy ? { infeasiblePolicy } : {}),
         } as Parameters<typeof createSession>[0]),
       handleCreated,
-      (error) =>
+      (error) => {
+        const plan = getPlacementPlan(error);
+        if (plan) {
+          void openMakeRoom(plan);
+          return;
+        }
         showErrorToast(
           toast,
           error,
           t("Couldn't create the session"),
           "calendar-x",
-        ),
+        );
+      },
     );
   }
 
@@ -271,18 +376,21 @@ function NewSessionForm() {
         });
 
   return (
-    <TaskComposer
-      mode="create"
-      form={form}
-      tz={tz}
-      title={t("New session")}
-      subtitle={subtitle}
-      courses={courses}
-      busy={loading}
-      onNoteUpload={uploads.track}
-      onValid={(values) => void onSubmit(values)}
-      onInvalid={onInvalid}
-      onDismiss={() => safeBack(router)}
-    />
+    <>
+      <TaskComposer
+        mode="create"
+        form={form}
+        tz={tz}
+        title={t("New session")}
+        subtitle={subtitle}
+        courses={courses}
+        busy={loading}
+        onNoteUpload={uploads.track}
+        onValid={(values) => void onSubmit(values)}
+        onInvalid={onInvalid}
+        onDismiss={() => safeBack(router)}
+      />
+      <MakeRoomSheet ref={makeRoom} tz={tz} />
+    </>
   );
 }

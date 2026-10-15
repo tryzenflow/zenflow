@@ -20,7 +20,9 @@ import {
   hexAlpha,
   sessionTone,
 } from "@zenflow/core";
-import type { DaySegment } from "@zenflow/shared";
+import type { DaySegment, SessionAnchor } from "@zenflow/shared";
+import { Hand, Lock } from "@/components/Icons";
+import { anchorMark } from "@/lib/anchor";
 import { useCourseColourStore } from "@/hooks/use-course-colours";
 import { courseStyleFor } from "@/lib/course-colour";
 import { sessionTypeIcon } from "./session-type-badge";
@@ -124,6 +126,8 @@ function joinRange(start: string, end: string) {
 
 interface DragSnap {
   startMin: number;
+  /** The dragged session, so a week drag can preview what its drop would shift. */
+  taskId?: string;
 }
 
 interface SessionBlockProps {
@@ -141,6 +145,8 @@ interface SessionBlockProps {
   deadline?: string | null;
   /** `Session.late` — placed past its deadline ("accept late deadline"). */
   late?: boolean;
+  /** `Session.anchor`: a hand marks a time the user chose, a lock a pinned one. */
+  anchor?: SessionAnchor;
   onReschedule?: (taskId: string, startISO: string) => void;
   onDragStateChange?: (snap: DragSnap | null) => void;
   onDragEnd?: (snap: DragSnap | null) => void;
@@ -201,6 +207,7 @@ function SessionBlockImpl({
   blockWidth,
   deadline,
   late = false,
+  anchor,
   onReschedule,
   onDragStateChange,
   onDragEnd,
@@ -444,9 +451,9 @@ function SessionBlockImpl({
 
   const reportSnap = useCallback(
     (min: number) => {
-      onDragStateChange?.({ startMin: min });
+      onDragStateChange?.({ startMin: min, taskId: segment.taskId });
     },
-    [onDragStateChange],
+    [onDragStateChange, segment.taskId],
   );
 
   const reportDragEnd = useCallback(() => {
@@ -723,6 +730,9 @@ function SessionBlockImpl({
   // The type icon wears the course ink on a course block, so the type stays
   // visible without a badge.
   const TypeIcon = sessionTypeIcon(segment.type);
+  // A hand on a time the user chose, a lock on a pinned one; none otherwise.
+  const mark = anchorMark(anchor);
+  const MarkIcon = mark === "hand" ? Hand : mark === "lock" ? Lock : null;
 
   const horizontal = {
     left: leftOffset + nestOffset,
@@ -867,6 +877,11 @@ function SessionBlockImpl({
               >
                 {segment.title}
               </Text>
+              {MarkIcon && (
+                <View testID={`anchor-mark.${segment.taskId}`} className="shrink-0">
+                  <MarkIcon size={11} className={timeClass} />
+                </View>
+              )}
               {tier === "time" && (
                 <Text
                   className={cn("shrink-0 text-[11px] font-medium leading-[14px]", timeClass)}
@@ -892,6 +907,11 @@ function SessionBlockImpl({
                 >
                   {segment.title}
                 </Text>
+                {MarkIcon && (
+                  <View testID={`anchor-mark.${segment.taskId}`} className="shrink-0">
+                    <MarkIcon size={12} className={timeClass} />
+                  </View>
+                )}
               </View>
               <Text
                 className={cn("text-[12px] font-medium leading-[15px]", timeClass)}

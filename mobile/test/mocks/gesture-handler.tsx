@@ -44,6 +44,17 @@ function taps(g: Gesture): Gesture[] {
   return g._children.flatMap(taps);
 }
 
+function pans(g: Gesture): Gesture[] {
+  if (g._kind === "Pan") return g._enabled ? [g] : [];
+  return g._children.flatMap(pans);
+}
+
+/**
+ * Vertical translation (px) the next simulated pan reports. A double click on a
+ * gesture-driven block plays one whole drag: start, one move, end.
+ */
+export const panTranslation = { y: 0 };
+
 export const GestureDetector = ({
   gesture,
   children,
@@ -55,8 +66,19 @@ export const GestureDetector = ({
     if (!gesture) return;
     for (const tap of taps(gesture as Gesture)) tap._handlers.onEnd?.({}, true);
   };
+  const onDoubleClick = () => {
+    if (!gesture) return;
+    for (const pan of pans(gesture as Gesture)) {
+      const h = pan._handlers;
+      const translationY = panTranslation.y;
+      h.onStart?.({});
+      h.onUpdate?.({ translationX: 0, translationY, absoluteY: 0 });
+      h.onEnd?.({ translationX: 0, translationY, absoluteY: 0 });
+      h.onFinalize?.({});
+    }
+  };
   return (
-    <div style={{ display: "contents" }} onClick={onClick}>
+    <div style={{ display: "contents" }} onClick={onClick} onDoubleClick={onDoubleClick}>
       {children}
     </div>
   );

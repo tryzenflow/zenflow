@@ -484,10 +484,10 @@ export const MonthPage = memo(function MonthPage({
     // before the API call. `resetDragState` already ran, so a cancel just
     // leaves the pill where it was.
     if (isPastDeadlineDrop(newStartISO, original.deadline)) {
-      confirm(t("Schedule after the deadline?"), {
+      confirm(t("Past the deadline?"), {
         description: t("This session will start past its due time."),
-        confirmLabel: t("Schedule anyway"),
-        cancelLabel: t("Cancel"),
+        confirmLabel: t("Keep late"),
+        cancelLabel: t("Snap back"),
         onConfirm: () => {
           void applyMove();
         },
