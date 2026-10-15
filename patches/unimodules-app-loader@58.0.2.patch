@@ -1,0 +1,12 @@
+diff --git a/expo-module.config.json b/expo-module.config.json
+index 628baee8b3421fd025171d664a3ccb5ff05a8430..798db1715648cbfacbfc7c0976178c1ee2c59875 100644
+--- a/expo-module.config.json
++++ b/expo-module.config.json
+@@ -4,6 +4,7 @@
+     "publication": {
+       "groupId": "host.exp.exponent",
+       "artifactId": "org.unimodules.apploader",
++      "version": "58.0.2",
+       "repository": "local-maven-repo"
+     }
+   }

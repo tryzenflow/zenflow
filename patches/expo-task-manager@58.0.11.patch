@@ -1,0 +1,12 @@
+diff --git a/expo-module.config.json b/expo-module.config.json
+index 1213ef509d21a98aba1711264823f7343fc08f5b..9acf40897fb477df1a88d0e97078c6cdfeeac884 100644
+--- a/expo-module.config.json
++++ b/expo-module.config.json
+@@ -9,6 +9,7 @@
+     "publication": {
+       "groupId": "host.exp.exponent",
+       "artifactId": "expo.modules.taskmanager",
++      "version": "58.0.11",
+       "repository": "local-maven-repo"
+     }
+   }
