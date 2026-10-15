@@ -6,7 +6,7 @@
     "timingsMs"
   ],
   "request": {
-    "contractVersion": 1,
+    "contractVersion": 2,
     "requestId": "00000000-0000-4000-8000-000000000001-2",
     "mode": "PREFLIGHT",
     "nowMs": 1789977600000,
@@ -247,7 +247,7 @@
     }
   },
   "response": {
-    "contractVersion": 1,
+    "contractVersion": 2,
     "requestId": "00000000-0000-4000-8000-000000000001-2",
     "paramsVersion": "ignored",
     "results": [
