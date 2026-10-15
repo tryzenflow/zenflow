@@ -136,14 +136,4 @@ describe("WeekScreen", () => {
     await waitFor(() => expect(requests).toContain("day:2026-10-22"));
     vi.mocked(useLocalSearchParams).mockReturnValue({} as never);
   });
-
-  it("announces the next upcoming session", async () => {
-    // 15:00 local, after 'now' (12:00): the pill points at it.
-    sessions = [
-      makeSession({ id: "later", type: "TASK", title: "Evening review", scheduledStartTime: "2026-10-15T08:00:00.000Z" }),
-    ];
-    renderScreen(<WeekScreen />);
-    await block("later");
-    await waitFor(() => expect(screen.getByLabelText(/^Next up:/)).toBeTruthy());
-  });
 });

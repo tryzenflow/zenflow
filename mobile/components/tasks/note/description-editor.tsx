@@ -748,7 +748,7 @@ export function DescriptionFieldEditor({
       </View>
 
       {/* Floating glass bar (iOS Notes style): rides above the keyboard,
-          same translucent fill / hairline border / sheen as the Next up pill. */}
+          same translucent fill / hairline border / sheen as the glass pills elsewhere. */}
       <Animated.View
         pointerEvents={ready ? "box-none" : "none"}
         style={[

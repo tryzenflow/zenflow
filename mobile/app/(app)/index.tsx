@@ -1,4 +1,3 @@
-import { TodayCard } from "@/components/calendar/today-card";
 import { navigateOnce } from "@/lib/nav";
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
@@ -496,11 +495,6 @@ export default function CalendarScreen() {
           />
 
           <View className="flex-1">
-            <TodayCard
-              tz={tz}
-              visible={dateKey(visibleDate) === dateKey(zonedNow(tz))}
-              onOpenSession={handleSessionPress}
-            />
             <WeekPager
               ref={pagerRef}
               focusedDate={focusedDate}

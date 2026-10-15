@@ -14,6 +14,8 @@ import {
   SESSION_TONE_CLASSES,
   SESSION_TONES,
   SESSION_TYPE_META,
+  SESSION_TYPE_TONE,
+  hexAlpha,
 } from "@zenflow/core";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
@@ -76,6 +78,8 @@ export function SessionTypeBadge({
         meta.badgeClass,
         className,
       )}
+      // Explicit rim: the `border-session-*` class alone left RN's black default in places.
+      style={{ borderColor: hexAlpha(SESSION_TONES[SESSION_TYPE_TONE[type]].base, 0.4) }}
     >
       <Icon size={iconSize} className={meta.textClass} />
       {showLabel && (

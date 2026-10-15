@@ -1,5 +1,6 @@
 import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
 import { t } from "@/lib/i18n";
+import { SessionTypeBadge, sessionTypeIcon } from "./session-type-badge";
 import { useLanguage } from "@/hooks/use-language";
 import { locale } from "@/lib/i18n";
 import { Text } from "@/components/ui/text";
@@ -775,6 +776,8 @@ function SessionBlockImpl({
   // visible without a badge.
   // A hand on a time the user chose, a lock on a pinned one; none otherwise.
   const mark = anchorMark(anchor);
+  const TypeIcon = sessionTypeIcon(segment.type);
+  const typeInk = SESSION_TONES[tone].ink[isDarkColorScheme ? "dark" : "light"];
   const MarkIcon = mark === "hand" ? Hand : mark === "lock" ? Lock : null;
 
   const horizontal = {
@@ -927,13 +930,14 @@ function SessionBlockImpl({
           )}
           {tier !== "full" ? (
             // Short blocks: one row. Under 24px the title alone; under 44px the
-            // title and start time. No badges or chips at any tier.
+            // title and start time, led by the type icon.
             <View
               key="compact"
               className="w-full min-w-0 flex-row items-center gap-1.5"
             >
               {/* Explicit px line heights: `leading-none` clipped the tops of
                   the glyphs on Android. */}
+              <TypeIcon size={11} color={typeInk} />
               <Text
                 className="min-w-0 flex-1 text-[11px] font-semibold leading-[14px]"
                 style={COMPACT_TEXT_STYLE}
@@ -961,6 +965,7 @@ function SessionBlockImpl({
           ) : (
             <Fragment key="full">
               <View className="w-full min-w-0 flex-row items-center gap-1.5">
+                <SessionTypeBadge type={segment.type} size="md" className="shrink-0" />
                 <Text
                   className="min-w-0 shrink text-[12px] font-semibold leading-4"
                                     numberOfLines={1}
