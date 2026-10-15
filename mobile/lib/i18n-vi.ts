@@ -562,4 +562,7 @@ export default {
   "Next up": "Sắp tới",
   "Next up: {title}, {time}": "Sắp tới: {title}, {time}",
   "in {count} min": "sau {count} phút",
+  "Course colour": "Màu môn học",
+  "Colour {n}": "Màu {n}",
+  "Reset to automatic": "Đặt lại màu tự động",
 } as Record<string, string>;

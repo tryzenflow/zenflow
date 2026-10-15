@@ -37,6 +37,9 @@ import { type ListRenderItemInfo, Pressable, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
 import { useOffline } from "@/hooks/use-offline";
+import { useCourseColourStore } from "@/hooks/use-course-colours";
+import { courseStyleFor } from "@/lib/course-colour";
+import { useColorScheme } from "@/lib/useColorScheme";
 import type { MonthDragHandle } from "./month-page";
 import { sessionTypeIcon } from "./session-type-badge";
 
@@ -316,6 +319,16 @@ const SessionListRow = memo(function SessionListRow({
   const state = deriveState(task);
   const TypeIcon = sessionTypeIcon(task.type);
   const late = isSessionPastDeadline(task);
+  const { isDarkColorScheme } = useColorScheme();
+  const courseOverrides = useCourseColourStore((s) => s.overrides);
+  // Course colour on the type icon; the type itself stays legible by its shape.
+  const courseInk = late
+    ? undefined
+    : courseStyleFor(
+        task.courseKey ?? null,
+        courseOverrides,
+        isDarkColorScheme ? "dark" : "light",
+      )?.ink;
   // The tail `groupSessionsByDate` synthesizes on the next day for a session
   // crossing midnight — same underlying session as a row on yesterday's
   // sheet, not a second one, so it isn't independently draggable/reschedulable
@@ -411,7 +424,11 @@ const SessionListRow = memo(function SessionListRow({
         ) : (
           <TypeIcon
             size={16}
-            className={cn("flex-none", SESSION_TYPE_META[task.type].textClass)}
+            color={courseInk}
+            className={cn(
+              "flex-none",
+              !courseInk && SESSION_TYPE_META[task.type].textClass,
+            )}
           />
         )}
         <View className="min-w-0 flex-1">

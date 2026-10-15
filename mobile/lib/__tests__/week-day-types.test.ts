@@ -23,6 +23,7 @@ function session(overrides: Partial<Session>): Session {
     seriesId: null,
     rrule: null,
     timetableGroupId: null,
+    courseKey: null,
     sessionIndex: null,
     sessionTotal: null,
     createdAt: "2026-09-01T00:00:00.000Z",
