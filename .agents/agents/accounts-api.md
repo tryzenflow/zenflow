@@ -12,9 +12,14 @@ owns:
   - backend/src/reminders/**
   - backend/src/mail/**
   - backend/src/legal/**
+  - backend/src/landing/**
+  - backend/src/streaks/**
+  - backend/src/daily-push/**
+  - backend/src/course-colours/**
   - backend/src/files/**
   - backend/src/prisma/**
   - backend/scripts/with-database-url.cjs
+  - backend/scripts/landing-assets.mjs
   - backend/src/common/**
   - backend/src/health/**
   - backend/src/crypto/**
