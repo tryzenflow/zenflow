@@ -29,8 +29,8 @@ import {
 import { UNDO_WINDOW_MS, deferCommit } from "@/lib/undo";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
-import { setPendingSlotPick } from "@/lib/pending-slot-pick";
-import { divergentSittings } from "@/lib/series-alternatives";
+import { offerApplyToAll } from "@/lib/recurring-scope";
+import { rememberPlacement } from "@/lib/slot-alternatives";
 import { isSessionPastDeadline } from "@/lib/overdue";
 import {
   RESCHEDULE_HINT,
@@ -195,45 +195,9 @@ function EditSessionForm() {
       updated: Awaited<ReturnType<typeof updateSession>>,
     ) => {
       void uploads.settle(values.note);
-      // Handle divergent response — hand the primary-vs-alternative pick off
-      // to the week view, which owns the slot-pick sheet and presents it over
-      // the calendar (`useFocusEffect`, app/(app)/index.tsx).
-      if (
-        updated.divergent &&
-        updated.slotProposalId &&
-        updated.primarySlot &&
-        updated.alternativeSlot
-      ) {
-        setPendingSlotPick({
-          kind: "single",
-          session: updated,
-          primarySlot: updated.primarySlot,
-          alternativeSlot: updated.alternativeSlot,
-          slotProposalId: updated.slotProposalId,
-          tz,
-        });
-        await warmLandingDay(updated.primarySlot, tz);
-        goToCalendar(router, { date: updated.primarySlot, flash: updated.id });
-        return;
-      }
-
-      // A redistributed series (#59): same shape as the create path, the
-      // per-sitting divergence is on `sessions[]` and nothing at the top level.
-      const series = divergentSittings(updated.sessions);
-      if (series.length > 0) {
-        setPendingSlotPick({
-          kind: "series",
-          title: updated.title,
-          sittings: series,
-          tz,
-        });
-        await warmLandingDay(series[0].primarySlot, tz);
-        goToCalendar(router, {
-          date: series[0].primarySlot,
-          flash: series[0].session.id,
-        });
-        return;
-      }
+      // The block keeps the applied slot and offers "Other time" when the
+      // placement proposed one.
+      rememberPlacement(updated);
 
       showDisplacedToast(toast, updated.displacedSessions);
       toast({
@@ -269,6 +233,48 @@ function EditSessionForm() {
         safeBack(router);
       }
     };
+    // A moved recurring occurrence moves just this one and the toast offers
+    // apply to all: the send waits out the undo window, so Undo can cancel it.
+    const movedOccurrence =
+      values.type !== "TASK" &&
+      getSeriesKind(task) === "recurring" &&
+      (patch.scheduledStartTime !== task.scheduledStartTime ||
+        patch.durationMinutes !== task.durationMinutes) &&
+      (patch.rrule ?? null) === (task.rrule ?? null);
+    if (movedOccurrence && patch.scheduledStartTime) {
+      const landed = patch.scheduledStartTime;
+      // Metadata is series-wide for a recurring session; only the time is
+      // scoped, so the occurrence it detaches keeps the new title and notes.
+      const metadata: UpdateSessionInput = {
+        title: patch.title,
+        note: patch.note,
+        location: patch.location,
+        tags: patch.tags,
+        reminders: patch.reminders,
+      };
+      const send = async (scope: "occurrence" | "series") => {
+        try {
+          await updateSession(task.id, metadata);
+          await updateSession(task.id, {
+            scheduledStartTime: landed,
+            durationMinutes: patch.durationMinutes,
+            scope,
+          });
+        } catch (error) {
+          showErrorToast(
+            rootToast,
+            error,
+            t("Couldn't update session"),
+            "calendar-x",
+          );
+        }
+      };
+      offerApplyToAll(rootToast, send);
+      await warmLandingDay(landed, tz);
+      goToCalendar(router, { date: landed });
+      return;
+    }
+
     await withInfeasibleRetry(
       toast,
       (infeasiblePolicy) =>

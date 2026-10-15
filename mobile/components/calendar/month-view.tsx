@@ -21,6 +21,7 @@ import {
   UpdateRecurringSheet,
   type UpdateRecurringSheetHandle,
 } from "@/components/calendar/update-recurring-sheet";
+import { resolveMoveScope } from "@/lib/recurring-scope";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { showSkippedToast } from "@/lib/task-toasts";
@@ -68,7 +69,6 @@ export function MonthView({
 
   const taskListSheetRef = useRef<SessionListSheetHandle>(null);
   const rescheduleSheetRef = useRef<RescheduleSheetHandle>(null);
-  const updateScopeSheetRef = useRef<UpdateRecurringSheetHandle>(null);
 
   // A date from the parent (view switch, Today) re-seeds the month on screen.
   const lastDateRef = useRef(date);
@@ -144,6 +144,9 @@ export function MonthView({
     [toast],
   );
 
+  // Same scope rule as the calendar screen: a recurring session asks nothing,
+  // a multi-sitting task asks which sittings.
+  const updateScopeSheetRef = useRef<UpdateRecurringSheetHandle>(null);
   const handleRequestScopedUpdate = useCallback(
     (
       session: Session,
@@ -155,9 +158,11 @@ export function MonthView({
         } | null,
       ) => void,
     ) => {
-      updateScopeSheetRef.current?.open(session, pending, onResolve);
+      resolveMoveScope(toast, session, pending, onResolve, (s, p, r) =>
+        updateScopeSheetRef.current?.open(s, p, r),
+      );
     },
-    [],
+    [toast],
   );
 
   return (
@@ -220,13 +225,13 @@ export function MonthView({
         onReschedule={openReschedule}
       />
 
+      <UpdateRecurringSheet ref={updateScopeSheetRef} />
       <RescheduleSheet
         ref={rescheduleSheetRef}
         tz={tz}
         onConfirm={handleRescheduleConfirm}
         onRequestScopedUpdate={handleRequestScopedUpdate}
       />
-      <UpdateRecurringSheet ref={updateScopeSheetRef} />
     </View>
   );
 }

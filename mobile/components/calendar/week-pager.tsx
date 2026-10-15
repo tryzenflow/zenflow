@@ -56,7 +56,7 @@ import { DayTimeline, type TimelineState } from "./day-timeline";
 import type {
   PendingSessionUpdate,
   UpdateRecurringScope,
-} from "./update-recurring-sheet";
+} from "@/lib/recurring-scope";
 import { type DragEdge, PagerPage, type PagerWindow } from "./week-pager-page";
 
 /** `withTiming` config for every settle snap (and snap-back) after a swipe
@@ -137,14 +137,6 @@ interface WeekPagerProps {
       } | null,
     ) => void,
   ) => void;
-  /** Divergent slot pick callback — forwarded to the active `DayTimeline`. */
-  onRequestSlotPick?: (
-    session: Session,
-    primarySlot: string,
-    alternativeSlot: string,
-    slotProposalId: string,
-    onPick: (chose: "primary" | "alternative") => Promise<void>,
-  ) => void;
   /** Session id to pulse on the focused day — a teleport target. Forwarded to
    * the active `DayTimeline` only. */
   flashSessionId?: string | null;
@@ -207,7 +199,6 @@ function WeekPagerImpl(
     onRequestReschedule,
     onRequestBlockMenu,
     onRequestScopedUpdate,
-    onRequestSlotPick,
     flashSessionId = null,
   }: WeekPagerProps,
   ref: ForwardedRef<WeekPagerHandle>,
@@ -1105,7 +1096,6 @@ function WeekPagerImpl(
                   onRequestReschedule={onRequestReschedule}
                   onRequestBlockMenu={onRequestBlockMenu}
                   onRequestScopedUpdate={onRequestScopedUpdate}
-                  onRequestSlotPick={onRequestSlotPick}
                   onStateChange={active ? onActiveStateChange : undefined}
                   onStatusChange={active ? onStatusChange : undefined}
                   flashSessionId={active ? flashSessionId : null}

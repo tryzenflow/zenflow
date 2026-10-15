@@ -247,3 +247,52 @@ describe("EditSessionScreen — deleting", () => {
     expect(requests[0].url.pathname).toBe("/sessions/series/ser2/from/t1");
   });
 });
+
+describe("EditSessionScreen — moving a recurring session", () => {
+  const occurrenceId = "ser1::2026-10-15T03:00:00.000Z";
+  const weekly = () =>
+    makeSession({
+      id: occurrenceId,
+      title: "Weekly lab",
+      type: "LECTURE",
+      seriesId: "ser1",
+      rrule: "FREQ=WEEKLY",
+      scheduledStartTime: "2026-10-15T03:00:00.000Z",
+    });
+
+  /** Steps the start time one notch later, then saves. */
+  function moveLater() {
+    fireEvent.click(screen.getByTestId("task.when.start.later"));
+    fireEvent.click(screen.getByTestId("task.save"));
+  }
+
+  it("asks nothing and moves just this occurrence once the undo window closes", async () => {
+    await open(weekly());
+    moveLater();
+    expect(screen.queryByText("Update recurring session")).toBeNull();
+    await toastShown("Moved this occurrence");
+    expect(requests).toEqual([]);
+    // Metadata first (series-wide, unscoped), then the time, scoped.
+    await waitFor(() => expect(requests).toHaveLength(2));
+    expect(requests[0].body).not.toHaveProperty("scope");
+    expect(requests[1].body).toMatchObject({ scope: "occurrence", durationMinutes: 60 });
+    expect(requests[1].body).not.toHaveProperty("rrule");
+    expect(decodeURIComponent(requests[1].url.pathname)).toBe(`/sessions/${occurrenceId}`);
+  });
+
+  it("Apply to all moves the whole series at once", async () => {
+    await open(weekly());
+    moveLater();
+    fireEvent.click(await screen.findByText("Apply to all"));
+    await waitFor(() => expect(requests).toHaveLength(2));
+    expect(requests[1].body).toMatchObject({ scope: "series" });
+  });
+
+  it("Undo cancels the move", async () => {
+    await open(weekly());
+    moveLater();
+    fireEvent.click(await screen.findByText("Undo"));
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(requests).toEqual([]);
+  });
+});

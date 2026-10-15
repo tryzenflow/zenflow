@@ -110,7 +110,9 @@ import { TIME_GUTTER_WIDTH, TimeGutter } from "./time-gutter";
 import type {
   PendingSessionUpdate,
   UpdateRecurringScope,
-} from "./update-recurring-sheet";
+} from "@/lib/recurring-scope";
+import { moveUndoable } from "@/lib/recurring-scope";
+import { rememberPlacement } from "@/lib/slot-alternatives";
 
 /** The empty-day "add a task" zone spans 8:00–10:00. */
 const EMPTY_ZONE_START_MIN = 8 * 60;
@@ -235,17 +237,6 @@ interface DayTimelineProps {
       } | null,
     ) => void,
   ) => void;
-  /** When a drag-drop results in a divergent placement (heuristic vs LinUCB),
-   * shows the slot picker for the user to choose between primary and alternative.
-   * The callback receives the session, primary slot, alternative slot, proposal ID,
-   * and a resolve function to call with the user's choice. */
-  onRequestSlotPick?: (
-    session: Session,
-    primarySlot: string,
-    alternativeSlot: string,
-    slotProposalId: string,
-    onPick: (chose: "primary" | "alternative") => Promise<void>,
-  ) => void;
   /** True when this is the page the pager is focused on. Only the active page
    * is the source of truth for the shared scroll position (`syncScroll`) and
    * only it should drive a parent's header/slice callbacks. Default `true` for
@@ -277,7 +268,6 @@ export function DayTimeline({
   onRequestReschedule,
   onRequestBlockMenu,
   onRequestScopedUpdate,
-  onRequestSlotPick,
   isActive = true,
   syncScroll = false,
   flashSessionId = null,
@@ -911,34 +901,8 @@ export function DayTimeline({
           });
           showSkippedToast(toast, updated.skippedSessionIds);
 
-          // Handle divergent response — show picker for primary vs alternative slot
-          if (
-            updated.divergent &&
-            updated.slotProposalId &&
-            updated.primarySlot &&
-            updated.alternativeSlot &&
-            onRequestSlotPick
-          ) {
-            const session = tasks.find((t) => t.id === taskId);
-            if (session) {
-              onRequestSlotPick(
-                session,
-                updated.primarySlot,
-                updated.alternativeSlot,
-                updated.slotProposalId,
-                async () => {
-                  // The POST belongs to `app/(app)/index.tsx`, which wraps this
-                  // callback in its own `slotPick` call and then invokes it.
-                  // Doing it here as well fired every drag-reschedule pick
-                  // twice; harmless (slot-pick is idempotent) but wasteful and
-                  // confusing to debug. All that is left here is a refetch for
-                  // the authoritative state.
-                  await refetch();
-                },
-              );
-              return;
-            }
-          }
+          // The block keeps the applied primary and offers "Other time".
+          rememberPlacement(updated);
 
           // Patch the dragged task from the authoritative response so its new
           // time shows immediately; the refetch below re-derives every card's
@@ -949,8 +913,9 @@ export function DayTimeline({
           showMovedToast(toast, {
             to: zonedDate(updated.scheduledStartTime ?? startISO, tz),
             withTime: true,
-            onUndo: before
-              ? () =>
+            onUndo:
+              before && moveUndoable(before, scope)
+                ? () =>
                   void restoreSessionTime(before, scope, skipConflicting)
                     .then(() => refetch())
                     .catch((error) =>
@@ -1036,7 +1001,6 @@ export function DayTimeline({
       refetch,
       tasks,
       onRequestScopedUpdate,
-      onRequestSlotPick,
       tz,
     ],
   );

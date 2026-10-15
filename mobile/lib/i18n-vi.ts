@@ -656,4 +656,7 @@ export default {
   "Weekly": "Hằng tuần",
   "When": "Khi nào",
   "e.g. OOP essay due fri 3h": "ví dụ: OOP essay hạn thứ 6 3h",
+  "Other time": "Giờ khác",
+  "Moved this occurrence": "Đã dời buổi này",
+  "Apply to all": "Áp dụng cho tất cả",
 } as Record<string, string>;
