@@ -94,9 +94,9 @@ import type { WebViewMessageEvent } from "react-native-webview";
 import { NoteSkeleton } from "../note-skeleton";
 import { AudioBridge, VideoBridge } from "./media-bridges";
 
-// A light tint of the butter accent (`--brand-butter`); note text on it stays
+// A light tint of the sun accent (`--brand-sun`); note text on it stays
 // dark in both schemes (see `noteTypographyCss`).
-const HIGHLIGHT_COLOR = "#ffe7a8";
+const HIGHLIGHT_COLOR = "#F3E1B5";
 
 // `ImageBridge` is the library's own (wraps `@tiptap/extension-image`,
 // pre-configured `allowBase64: true`, which also keeps notes written
@@ -274,7 +274,7 @@ export function DescriptionFieldEditor({
   // through `unknown` rather than asking TS to prove it structurally.
   const editorTheme = {
     webview: {
-      backgroundColor: isDarkColorScheme ? "rgb(30 32 48)" : "rgb(255 255 255)",
+      backgroundColor: isDarkColorScheme ? "rgb(31 48 58)" : "rgb(255 255 255)",
     },
   } as unknown as RecursivePartial<EditorTheme>;
 
@@ -364,7 +364,7 @@ export function DescriptionFieldEditor({
     // selection itself survives the blur, so `setLink` still targets it.
     if (onText) {
       editor.injectCSS(
-        "::highlight(zf-link-sel) { background-color: rgba(108, 123, 247, 0.35); }",
+        "::highlight(zf-link-sel) { background-color: rgba(47, 72, 88, 0.35); }",
         "zf-link-sel",
       );
       editor.injectJS(
@@ -894,19 +894,19 @@ function ToolbarButton({
       accessibilityState={{ selected: !!active, disabled: !!disabled }}
       className={cn(
         "h-12 w-12 items-center justify-center rounded-full active:bg-muted/30",
-        // Light blueberry active-state fill (this bar's own accent, distinct
+        // Light slate active-state fill (this bar's own accent, distinct
         // from the app's `bg-primary`) reads clearly against a white bar —
         // the old `bg-white/25`-on-dark-pill treatment would be invisible
         // here since the bar itself is now white. The fill is the same in
         // both schemes, so the icon below stays dark rather than following
         // the theme (near-white `text-foreground` in dark mode vanishes on it).
-        active && "bg-[#E3E6FE]",
+        active && "bg-[#E4ECEF]",
         disabled && "opacity-40",
       )}
     >
       <Icon
         size={21}
-        className={active ? "text-[#1C1D2B]" : "text-foreground/70"}
+        className={active ? "text-[#22333D]" : "text-foreground/70"}
       />
     </Pressable>
   );

@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /*
- * Blueberry milk tokens. Keep in step with frontend/src/index.css and the hex
+ * Sand and slate tokens. Keep in step with frontend/src/index.css and the hex
  * values in packages/core/src/palette.ts (lib/__tests__/palette.test.ts checks).
  *
  * Stored as space-separated "R G B" channels (not hex) and consumed via rgb(var(--x) / <alpha-value>)
@@ -13,90 +13,90 @@
  */
 @layer base {
   :root {
-    --background: 251 250 247;
-    --foreground: 28 29 43;
-    --card: 255 255 255;
-    --card-foreground: 28 29 43;
-    --popover: 255 255 255;
-    --popover-foreground: 28 29 43;
-    --primary: 108 123 247;
-    --primary-foreground: 21 22 31;
-    --secondary: 241 241 246;
-    --secondary-foreground: 28 29 43;
-    --muted: 241 241 246;
-    --muted-foreground: 104 106 126;
-    --accent: 241 241 246;
-    --accent-foreground: 28 29 43;
-    --destructive: 58 59 82;
-    --destructive-foreground: 255 255 255;
-    --border: 230 229 238;
-    --input: 230 229 238;
-    --ring: 108 123 247;
-    --brand-blueberry: 108 123 247;
-    --brand-butter: 255 214 107;
-    --success: 79 209 165;
-    --glass: 255 255 255;
-    --glass-edge: 108 123 247;
+    --background: 251 245 236;
+    --foreground: 34 51 61;
+    --card: 255 252 247;
+    --card-foreground: 34 51 61;
+    --popover: 255 252 247;
+    --popover-foreground: 34 51 61;
+    --primary: 47 72 88;
+    --primary-foreground: 251 245 236;
+    --secondary: 242 234 220;
+    --secondary-foreground: 34 51 61;
+    --muted: 242 234 220;
+    --muted-foreground: 92 107 114;
+    --accent: 242 234 220;
+    --accent-foreground: 34 51 61;
+    --destructive: 58 74 85;
+    --destructive-foreground: 255 252 247;
+    --border: 230 220 203;
+    --input: 230 220 203;
+    --ring: 47 72 88;
+    --brand-slate: 47 72 88;
+    --brand-sun: 232 137 94;
+    --success: 125 168 134;
+    --glass: 255 252 247;
+    --glass-edge: 47 72 88;
 
-    --session-lecture: 90 178 255;
-    --session-lecture-ink: 0 102 194;
-    --session-exam: 255 111 145;
-    --session-exam-ink: 184 40 95;
-    --session-assignment: 255 181 71;
-    --session-assignment-ink: 146 86 0;
-    --session-task: 108 123 247;
-    --session-task-ink: 61 79 230;
-    --session-dnd: 185 182 201;
-    --session-dnd-ink: 99 94 128;
-    --session-done: 79 209 165;
-    --session-done-ink: 28 116 87;
-    --session-late: 240 71 92;
-    --session-late-ink: 194 26 48;
-    --session-conflict: 255 214 107;
-    --session-conflict-ink: 126 95 0;
+    --session-lecture: 91 136 166;
+    --session-lecture-ink: 71 107 131;
+    --session-exam: 46 125 122;
+    --session-exam-ink: 42 111 110;
+    --session-assignment: 217 162 62;
+    --session-assignment-ink: 126 103 53;
+    --session-task: 71 104 124;
+    --session-task-ink: 71 104 124;
+    --session-dnd: 176 184 186;
+    --session-dnd-ink: 98 108 114;
+    --session-done: 125 168 134;
+    --session-done-ink: 81 111 95;
+    --session-late: 214 51 74;
+    --session-late-ink: 184 48 69;
+    --session-conflict: 232 137 94;
+    --session-conflict-ink: 142 93 72;
   }
 
   .dark:root {
-    --background: 21 22 31;
-    --foreground: 236 236 244;
-    --card: 30 32 48;
-    --card-foreground: 236 236 244;
-    --popover: 30 32 48;
-    --popover-foreground: 236 236 244;
-    --primary: 108 123 247;
-    --primary-foreground: 21 22 31;
-    --secondary: 38 40 56;
-    --secondary-foreground: 236 236 244;
-    --muted: 38 40 56;
-    --muted-foreground: 163 165 184;
-    --accent: 38 40 56;
-    --accent-foreground: 236 236 244;
-    --destructive: 228 228 240;
-    --destructive-foreground: 21 22 31;
-    --border: 46 48 67;
-    --input: 46 48 67;
-    --ring: 108 123 247;
-    --brand-blueberry: 108 123 247;
-    --brand-butter: 255 214 107;
-    --success: 79 209 165;
-    --glass: 228 230 255;
-    --glass-edge: 154 164 250;
+    --background: 22 35 43;
+    --foreground: 243 236 223;
+    --card: 31 48 58;
+    --card-foreground: 243 236 223;
+    --popover: 31 48 58;
+    --popover-foreground: 243 236 223;
+    --primary: 201 214 219;
+    --primary-foreground: 22 35 43;
+    --secondary: 38 58 69;
+    --secondary-foreground: 243 236 223;
+    --muted: 38 58 69;
+    --muted-foreground: 168 180 184;
+    --accent: 38 58 69;
+    --accent-foreground: 243 236 223;
+    --destructive: 230 222 208;
+    --destructive-foreground: 22 35 43;
+    --border: 45 64 72;
+    --input: 45 64 72;
+    --ring: 201 214 219;
+    --brand-slate: 201 214 219;
+    --brand-sun: 232 137 94;
+    --success: 125 168 134;
+    --glass: 243 236 223;
+    --glass-edge: 159 180 190;
 
-    --session-lecture: 90 178 255;
-    --session-lecture-ink: 108 185 255;
-    --session-exam: 255 111 145;
-    --session-exam-ink: 255 138 166;
-    --session-assignment: 255 181 71;
-    --session-assignment-ink: 255 181 71;
-    --session-task: 108 123 247;
-    --session-task-ink: 154 164 250;
-    --session-dnd: 185 182 201;
-    --session-dnd-ink: 185 182 201;
-    --session-done: 79 209 165;
-    --session-done-ink: 79 209 165;
-    --session-late: 240 71 92;
-    --session-late-ink: 244 125 140;
-    --session-conflict: 255 214 107;
-    --session-conflict-ink: 255 214 107;
+    --session-lecture: 91 136 166;
+    --session-lecture-ink: 153 177 189;
+    --session-exam: 46 125 122;
+    --session-exam-ink: 137 176 168;
+    --session-assignment: 217 162 62;
+    --session-assignment-ink: 222 177 94;
+    --session-task: 71 104 124;
+    --session-task-ink: 154 167 172;
+    --session-dnd: 176 184 186;
+    --session-dnd-ink: 184 191 191;
+    --session-done: 125 168 134;
+    --session-done-ink: 161 189 161;
+    --session-late: 214 51 74;
+    --session-late-ink: 227 136 143;
+    --session-conflict: 232 137 94;
+    --session-conflict-ink: 235 164 129;
   }
 }

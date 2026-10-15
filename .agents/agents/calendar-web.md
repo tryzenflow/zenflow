@@ -1,7 +1,7 @@
 ---
 name: calendar-web
 summary: "React PWA calendar"
-description: "Zenflow's web app: React 19 + Vite PWA calendar, task forms, Blueberry milk design. Use for frontend/ work, calendar rendering, drag/resize, timezone display."
+description: "Zenflow's web app: React 19 + Vite PWA calendar, task forms, Sand and slate design. Use for frontend/ work, calendar rendering, drag/resize, timezone display."
 owns:
   - frontend/**
   - packages/core/**
@@ -20,7 +20,7 @@ You own what a student sees in the browser.
 - Timezone wall-clock: all calendar `Date`s go through `utils/tz.ts`; convert with `zonedWallClockToUtc` before calling the API. No bare `new Date()` in day/grid logic.
 - Consume `@zenflow/shared` types; a shape change is a backend/shared change first.
 - Durations snap to 15 minutes (`utils/snap.ts`); recurring edits pass `scope`.
-- Style with Tailwind v4 + Blueberry milk tokens, `cn()`, and `TASK_CARD_CLASSES` for task states. No mobile breakpoints.
+- Style with Tailwind v4 + Sand and slate tokens, `cn()`, and `TASK_CARD_CLASSES` for task states. No mobile breakpoints.
 - Task states `fluid | fixed | overdue | conflict | completed` must stay visually distinct.
 - Docs stay lean (AGENTS.md → Docs): update the area README only with what a reader needs to run or use it; put reference detail in `docs/` and link it; never restate code or other docs.
 - Stay terse (AGENTS.md → Concise writing): no notes, caveats, corrections or recaps in docs, comments, commits, PR text or replies.

@@ -18,11 +18,11 @@ export const HEIGHT_MESSAGE = "zenflow-note-height";
 
 export function noteColors(isDark: boolean) {
   return {
-    bg: isDark ? "rgb(30 32 48)" : "rgb(255 255 255)",
-    fg: isDark ? "rgb(236 236 244)" : "rgb(28 29 43)",
-    muted: isDark ? "rgb(163 165 184)" : "rgb(104 106 126)",
-    // AA ink of the blueberry primary (`--session-task-ink` in `app/global.css`).
-    link: isDark ? "rgb(154 164 250)" : "rgb(61 79 230)",
+    bg: isDark ? "rgb(31 48 58)" : "rgb(255 255 255)",
+    fg: isDark ? "rgb(243 236 223)" : "rgb(34 51 61)",
+    muted: isDark ? "rgb(168 180 184)" : "rgb(92 107 114)",
+    // AA ink of the slate primary (`--session-task-ink` in `app/global.css`).
+    link: isDark ? "rgb(159 180 190)" : "rgb(71 104 124)",
   };
 }
 
@@ -145,7 +145,7 @@ export function noteLinkCardCss(
 ) {
   const { fg, muted, link } = noteColors(isDark);
   const fill = isDark ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.7)";
-  const edge = isDark ? "rgba(154,164,250,0.30)" : "rgba(108,123,247,0.32)";
+  const edge = isDark ? "rgba(159,180,190,0.30)" : "rgba(47,72,88,0.32)";
   return `${selector} a.zf-card { display: block; margin: 6px 0 12px; border: 1px solid ${edge}; border-radius: 16px; background: ${fill}; color: ${fg}; text-decoration: none; overflow: hidden; } ${selector} a.zf-card .zf-img { display: block; width: 100%; aspect-ratio: 1.91 / 1; object-fit: cover; background: ${edge}; max-height: none; border-radius: 0; } ${selector} a.zf-card .zf-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; } ${selector} a.zf-card .zf-ico { flex: none; width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: ${link}; color: #fff; } ${selector} a.zf-card .zf-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; } ${selector} a.zf-card .zf-title { font-weight: 600; font-size: 15px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; } ${selector} a.zf-card .zf-desc { font-size: 13px; line-height: 1.35; color: ${muted}; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; } ${selector} a.zf-card .zf-host { font-size: 12px; color: ${muted}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } ${selector} a.zf-card .zf-go { flex: none; color: ${muted}; } @keyframes zf-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } } ${selector} a.zf-card .zf-shimmer, ${selector} a.zf-card .zf-bar { animation: ${reduceMotion ? "none" : "zf-pulse 1.2s ease-in-out infinite"}; } ${selector} a.zf-card .zf-bar { display: block; height: 12px; border-radius: 6px; background: ${edge}; }`;
 }
 

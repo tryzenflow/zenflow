@@ -35,24 +35,24 @@ export function Glass({
 
   const tint = frosted
     ? isDarkColorScheme
-      ? "rgba(30, 32, 48, 0.26)"
-      : "rgba(251, 250, 247, 0.18)"
+      ? "rgba(31, 48, 58, 0.26)"
+      : "rgba(251, 245, 236, 0.18)"
     : isDarkColorScheme
     ? blurred
       ? clear
-        ? "rgba(30, 32, 48, 0.5)"
-        : "rgba(30, 32, 48, 0.55)"
+        ? "rgba(31, 48, 58, 0.5)"
+        : "rgba(31, 48, 58, 0.55)"
       : "rgba(26, 28, 40, 0.88)"
     : blurred
       ? clear
-        ? "rgba(251, 250, 247, 0.38)"
+        ? "rgba(251, 245, 236, 0.38)"
         : "rgba(255, 255, 255, 0.68)"
-      : "rgba(251, 250, 247, 0.92)";
+      : "rgba(251, 245, 236, 0.92)";
   const edge = isDarkColorScheme
-    ? "rgba(154, 164, 250, 0.18)"
-    : "rgba(108, 123, 247, 0.28)";
+    ? "rgba(159, 180, 190, 0.18)"
+    : "rgba(47, 72, 88, 0.28)";
   const sheen: [string, string] = isDarkColorScheme
-    ? ["rgba(154, 164, 250, 0.10)", "rgba(154, 164, 250, 0)"]
+    ? ["rgba(159, 180, 190, 0.10)", "rgba(159, 180, 190, 0)"]
     : [
         frosted ? "rgba(255, 255, 255, 0.22)" : "rgba(255, 255, 255, 0.85)",
         "rgba(255, 255, 255, 0)",

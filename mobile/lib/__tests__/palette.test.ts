@@ -5,8 +5,10 @@ import {
   SESSION_TINT_ALPHA,
   SESSION_TONES,
   SURFACES,
+  UI,
   type Scheme,
   type SessionTone,
+  type UiTokens,
   contrastRatio,
   hexToRgb,
   mixOver,
@@ -14,17 +16,36 @@ import {
 import { describe, expect, it } from "vitest";
 
 const MOBILE_CSS = readFileSync(join(__dirname, "../../app/global.css"), "utf8");
-const WEB_CSS = readFileSync(
-  join(__dirname, "../../../frontend/src/index.css"),
+const LANDING_CSS = readFileSync(
+  join(__dirname, "../../../landing/src/styles/global.css"),
   "utf8",
 );
 
 const tones = Object.keys(SESSION_TONES) as SessionTone[];
 const schemes: Scheme[] = ["light", "dark"];
 
+/** `UiTokens` key to the CSS variable that carries it. */
+const UI_VARS: Record<keyof UiTokens, string> = {
+  background: "background",
+  foreground: "foreground",
+  card: "card",
+  muted: "muted",
+  mutedForeground: "muted-foreground",
+  border: "border",
+  primary: "primary",
+  primaryForeground: "primary-foreground",
+  ring: "ring",
+  destructive: "destructive",
+  destructiveForeground: "destructive-foreground",
+  glass: "glass",
+  glassEdge: "glass-edge",
+  success: "success",
+};
+
 /** The `--name: value;` declarations inside the first block that `start` opens. */
 function block(css: string, start: string): Record<string, string> {
   const from = css.indexOf(start);
+  if (from < 0) throw new Error(`block not found: ${start}`);
   const body = css.slice(from, css.indexOf("}", from));
   return Object.fromEntries(
     [...body.matchAll(/--([\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]),
@@ -35,18 +56,24 @@ const mobile = {
   light: block(MOBILE_CSS, ":root {"),
   dark: block(MOBILE_CSS, ".dark:root {"),
 };
-const web = {
-  light: block(WEB_CSS, ":root {\n  --radius"),
-  dark: block(WEB_CSS, ".dark {\n  --background"),
+const landing = {
+  light: block(LANDING_CSS, ":root {\n  color-scheme"),
+  dark: block(LANDING_CSS, "@media (prefers-color-scheme: dark) {\n  :root {"),
 };
+const landingTheme = block(LANDING_CSS, "@theme {");
 
 const channels = (hex: string) => hexToRgb(hex).join(" ");
 
 describe("palette tokens", () => {
   it.each(schemes)("mobile %s matches the core hex values", (scheme) => {
     const vars = mobile[scheme];
-    expect(vars.primary).toBe(channels(BRAND.blueberry));
-    expect(vars["brand-butter"]).toBe(channels(BRAND.butter));
+    for (const [key, name] of Object.entries(UI_VARS)) {
+      expect(vars[name], name).toBe(
+        channels(UI[scheme][key as keyof UiTokens]),
+      );
+    }
+    expect(vars["brand-slate"]).toBe(channels(UI[scheme].primary));
+    expect(vars["brand-sun"]).toBe(channels(BRAND.sun));
     expect(vars.background).toBe(channels(SURFACES[scheme].background));
     expect(vars.card).toBe(channels(SURFACES[scheme].card));
     for (const tone of tones) {
@@ -57,27 +84,26 @@ describe("palette tokens", () => {
     }
   });
 
-  it.each(schemes)("web %s matches the core hex values", (scheme) => {
-    const vars = web[scheme];
-    expect(vars.background).toBe(SURFACES[scheme].background.toLowerCase());
-    expect(vars.card).toBe(SURFACES[scheme].card.toLowerCase());
-    for (const tone of tones) {
-      expect(vars[`session-${tone}-ink`]).toBe(
-        SESSION_TONES[tone].ink[scheme].toLowerCase(),
+  it.each(schemes)("landing %s matches the core hex values", (scheme) => {
+    const vars = landing[scheme];
+    expect(vars.bg).toBe(UI[scheme].background.toLowerCase());
+    expect(vars.fg).toBe(UI[scheme].foreground.toLowerCase());
+    expect(vars.muted).toBe(UI[scheme].mutedForeground.toLowerCase());
+    expect(vars.card).toBe(UI[scheme].card.toLowerCase());
+  });
+
+  it("landing theme matches the brand and session tones", () => {
+    expect(landingTheme["color-primary"]).toBe(BRAND.slate.toLowerCase());
+    expect(landingTheme["color-accent"]).toBe(BRAND.sun.toLowerCase());
+    for (const tone of ["lecture", "exam", "assignment", "task", "done"] as const) {
+      expect(landingTheme[`color-${tone}`], tone).toBe(
+        SESSION_TONES[tone].base.toLowerCase(),
       );
-    }
-    if (scheme === "light") {
-      expect(vars["brand-blueberry"]).toBe(BRAND.blueberry.toLowerCase());
-      for (const tone of tones) {
-        expect(vars[`session-${tone}`]).toBe(
-          SESSION_TONES[tone].base.toLowerCase(),
-        );
-      }
     }
   });
 });
 
-describe("session tone contrast", () => {
+describe("contrast", () => {
   const cases = tones.flatMap((tone) =>
     schemes.flatMap((scheme) =>
       (["background", "card"] as const).map((surface) => ({
@@ -101,9 +127,19 @@ describe("session tone contrast", () => {
     },
   );
 
-  it("primary foreground passes AA on the primary fill", () => {
-    expect(contrastRatio(BRAND.night, BRAND.blueberry)).toBeGreaterThanOrEqual(
-      4.5,
-    );
+  it.each(schemes)("%s text tokens pass AA", (scheme) => {
+    const u = UI[scheme];
+    const pairs: [string, string][] = [
+      [u.foreground, u.background],
+      [u.foreground, u.card],
+      [u.mutedForeground, u.background],
+      [u.mutedForeground, u.card],
+      [u.mutedForeground, u.muted],
+      [u.primaryForeground, u.primary],
+      [u.destructiveForeground, u.destructive],
+    ];
+    for (const [fg, bg] of pairs) {
+      expect(contrastRatio(fg, bg)).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });

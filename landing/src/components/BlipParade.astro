@@ -10,20 +10,20 @@ const { lang } = Astro.props;
 const c = COPY[lang];
 
 const BLIPS: Parameters<typeof Blip>[0][] = [
-  { body: "#6C7BF7", belly: "#fff", shape: 0, extra: "ears" },
-  { body: "#FFD66B", belly: "#fff", shape: 1, extra: "sprout" },
-  { body: "#5AB2FF", belly: "#fff", shape: 2, extra: "none" },
-  { body: "#FF6F91", belly: "#ffd6e0", shape: 0, extra: "horns" },
-  { body: "#4FD1A5", belly: "#fff", shape: 1, extra: "ears" },
-  { body: "#FFB547", belly: "#fff3dd", shape: 2, extra: "sprout" },
-  { body: "#B9B6C9", belly: "#fff", shape: 0, extra: "none" },
-  { body: "#8E9BFF", belly: "#fff", shape: 1, extra: "horns" },
+  { body: "#2F4858", belly: "#fff", shape: 0, extra: "ears" },
+  { body: "#E8895E", belly: "#fff", shape: 1, extra: "sprout" },
+  { body: "#5B88A6", belly: "#fff", shape: 2, extra: "none" },
+  { body: "#2E7D7A", belly: "#fbe3d6", shape: 0, extra: "horns" },
+  { body: "#7DA886", belly: "#fff", shape: 1, extra: "ears" },
+  { body: "#D9A23E", belly: "#fff3dd", shape: 2, extra: "sprout" },
+  { body: "#B0B8BA", belly: "#fff", shape: 0, extra: "none" },
+  { body: "#E3A98A", belly: "#fff", shape: 1, extra: "horns" },
 ];
 ---
 
 <section class="overflow-hidden py-24">
   <div class="mx-auto max-w-6xl px-4 text-center sm:px-6">
-    <p class="inline-flex rounded-full bg-accent px-3 py-1 text-sm font-semibold text-[#3a2a00]">{c.blipsLabel}</p>
+    <p class="inline-flex rounded-full bg-accent px-3 py-1 text-sm font-semibold text-[#16232B]">{c.blipsLabel}</p>
     <h2 class="mt-3 text-[clamp(2rem,5vw,3.25rem)] leading-tight font-extrabold tracking-tight">{c.blipsTitle}</h2>
     <p class="mt-2 text-lg text-muted">{c.blipsBody}</p>
   </div>

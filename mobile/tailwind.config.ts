@@ -61,8 +61,8 @@ export default {
           foreground: "rgb(var(--card-foreground) / <alpha-value>)",
         },
         brand: {
-          blueberry: "rgb(var(--brand-blueberry) / <alpha-value>)",
-          butter: "rgb(var(--brand-butter) / <alpha-value>)",
+          slate: "rgb(var(--brand-slate) / <alpha-value>)",
+          sun: "rgb(var(--brand-sun) / <alpha-value>)",
         },
         session: {
           lecture: {

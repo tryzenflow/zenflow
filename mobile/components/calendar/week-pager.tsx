@@ -77,7 +77,7 @@ const SETTLE = {
  * sheet — long-press a block). */
 const NAV_EDGE_ZONE = 56;
 const NAV_HOLD_MS = 340;
-const BLUEBERRY_RGB = "108, 123, 247";
+const SLATE_RGB = "47, 72, 88";
 
 /** Stable empty peek list — a fresh `[]` each render would re-run the strip's
  * memo for nothing. */
@@ -1178,7 +1178,7 @@ function WeekPagerImpl(
           ]}
         >
           <LinearGradient
-            colors={[`rgba(${BLUEBERRY_RGB}, 0.34)`, `rgba(${BLUEBERRY_RGB}, 0)`]}
+            colors={[`rgba(${SLATE_RGB}, 0.34)`, `rgba(${SLATE_RGB}, 0)`]}
             start={{ x: 0, y: 0.5 }}
             end={{ x: 1, y: 0.5 }}
             style={StyleSheet.absoluteFill}
@@ -1191,7 +1191,7 @@ function WeekPagerImpl(
           ]}
         >
           <LinearGradient
-            colors={[`rgba(${BLUEBERRY_RGB}, 0)`, `rgba(${BLUEBERRY_RGB}, 0.34)`]}
+            colors={[`rgba(${SLATE_RGB}, 0)`, `rgba(${SLATE_RGB}, 0.34)`]}
             start={{ x: 0, y: 0.5 }}
             end={{ x: 1, y: 0.5 }}
             style={StyleSheet.absoluteFill}
