@@ -63,7 +63,7 @@ jobs:
           echo "::warning::DEPLOY_ENABLED is not 'true' for environment '$ENVIRONMENT'; deploy skipped. See docs/ops/ci-cd.md to configure a target."
       # Config (compose files, proxy) comes from the SHA being deployed, so a
       # rollback restores the config that shipped with that release too.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: env.DEPLOY_ENABLED == 'true'
         with:
           ref: ${{ inputs.mode == 'flip' && github.sha || inputs.image_tag }}

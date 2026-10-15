@@ -27,7 +27,7 @@ jobs:
       bandit: ${{ steps.d.outputs.bandit }}
       deploy: ${{ steps.d.outputs.deploy }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - id: d
@@ -59,7 +59,7 @@ jobs:
     outputs:
       tag: ${{ steps.meta.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: meta
         run: |
           echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"

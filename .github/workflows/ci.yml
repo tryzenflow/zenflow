@@ -30,7 +30,7 @@ jobs:
       deploy: ${{ steps.diff.outputs.deploy }}
       agents: ${{ steps.diff.outputs.agents }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - id: diff
@@ -64,7 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
@@ -95,7 +95,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - run: pnpm -r typecheck
 
@@ -105,7 +105,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - if: needs.changes.outputs.backend == 'true'
         run: pnpm --filter backend test
@@ -122,7 +122,7 @@ jobs:
       run:
         working-directory: services/bandit
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
@@ -153,7 +153,7 @@ jobs:
       # happens against the shadow database below.
       DATABASE_URL: postgresql://ci:ci@localhost:5434/shadow?schema=public
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       # Replays prisma/migrations on the shadow DB and diffs the result with
       # schema.prisma. Exit code 2 = the schema has changes with no migration
@@ -181,7 +181,7 @@ jobs:
         image: redis:8.8.0-alpine
         ports: ["6380:6379"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - name: Generate throwaway .env.test
         run: .github/scripts/write-test-env.sh backend/.env.test
@@ -238,7 +238,7 @@ jobs:
         image: mailhog/mailhog:v1.0.1
         ports: ["1025:1025", "8025:8025"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # frontend/e2e/ does not exist yet (the Playwright config points at it).
       # Skip rather than fail so this job becomes real the day specs land.
       - name: Detect Playwright specs
@@ -296,7 +296,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v7
         with:
@@ -326,7 +326,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v7
         with:
@@ -358,7 +358,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # scan the PR's commits, not just the tip
       - name: Run gitleaks
@@ -382,7 +382,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # compose reads env_file paths at `config` time; empty files are enough to
       # validate structure (real ones are gitignored and written at deploy time).
       - name: docker compose config (dev, staging, prod, test)
@@ -584,7 +584,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 20
