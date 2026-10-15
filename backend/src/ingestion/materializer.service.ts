@@ -256,8 +256,10 @@ export class MaterializerService {
     seenExternalKeys: ReadonlySet<string>,
     now: Date = new Date(),
     digest?: SyncDigest,
+    /** Narrower window than the run's forward one, e.g. a single timetable week. */
+    windowOverride?: { from: Date; to: Date },
   ): Promise<ReconcileOutcome> {
-    const window = this.reconcileWindow(source, now);
+    const window = windowOverride ?? this.reconcileWindow(source, now);
 
     const candidates = await this.prisma.session.findMany({
       where: {
@@ -567,10 +569,15 @@ export class MaterializerService {
     userId: string,
     digest: SyncDigest,
     now: Date = new Date(),
+    /** Drain and run the clash checks without raising the per-type digest. */
+    opts: { silent?: boolean } = {},
   ): Promise<void> {
     const checks = digest.conflictChecks();
-    for (const dto of digestNotifications(digest.drain(), now)) {
-      await this.raise(userId, dto);
+    const items = digest.drain();
+    if (!opts.silent) {
+      for (const dto of digestNotifications(items, now)) {
+        await this.raise(userId, dto);
+      }
     }
     if (!this.syncConflicts) return;
     for (const { source, type } of checks) {

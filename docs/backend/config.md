@@ -50,8 +50,8 @@ For: developers and operators setting up the API. Source of truth: the Joi schem
 | `QUEUE_JOB_ATTEMPTS` / `QUEUE_BACKOFF_MS` | 5 / 5000 | Attempts and backoff base. Final failure goes to `<queue>.dlq`. |
 | `QUEUE_ENQUEUE_TIMEOUT_MS` | 2000 | Producer calls reject after this when the queue Redis is down. |
 | `QUEUE_SHUTDOWN_TIMEOUT_MS` | 25000 | In-flight job time on shutdown, then force-closed. Keep below the stop grace period. |
-| `QUEUE_<Q>_CONCURRENCY` | queue default | `Q` = `PORTAL_FETCH`, `LMS_FETCH`, `NOTIFY`; per replica. |
-| `QUEUE_<Q>_RATE_MAX` / `_RATE_DURATION_MS` | notify 50 per 1000; `portal-fetch` / `lms-fetch` 1 per `INGESTION_REQUEST_DELAY_MS` (none if 0) | At most MAX jobs per DURATION across replicas. |
+| `QUEUE_<Q>_CONCURRENCY` | queue default | `Q` = `PORTAL_FETCH`, `PORTAL_PROFILE`, `PORTAL_MARKS`, `PORTAL_DISCOVERY`, `PORTAL_WEEK`, `LMS_FETCH`, `LMS_DISCOVERY`, `LMS_MONTH`, `NOTIFY`; per replica. |
+| `QUEUE_<Q>_RATE_MAX` / `_RATE_DURATION_MS` | notify 50 per 1000; every `portal-*` and `lms-*` queue 1 per `INGESTION_REQUEST_DELAY_MS` (none if 0) | At most MAX jobs per DURATION across replicas. |
 | `REDIS_PUBSUB_HOST` / `_PORT` / `_PASSWORD` | none / 6379 / unset | SSE fan-out ([ADR-0018](../adr/0018-redis-pubsub-instance.md)). Unset: events stay in-process. |
 | `REDIS_PUBSUB_TIMEOUT_MS` | 250 | Publish gives up and emits locally. |
 
@@ -89,9 +89,9 @@ Behaviour: [ingestion.md](ingestion.md).
 | `INGESTION_TIMETABLE_PERIOD_MS` | 86400000 | |
 | `INGESTION_EXAM_PERIOD_MS` | 86400000 | |
 | `INGESTION_LMS_CALENDAR_PERIOD_MS` | 3600000 | |
-| `INGESTION_TICK_MAX_BATCH` | 5 in schema; 20 in `ingestion-ticker.service.ts` | Max students one tick claims per kind. |
-| `INGESTION_TICK_BUDGET_MS` | 48000 | Stop starting further kinds once a tick has run this long. |
-| `INGESTION_QUEUE_MAX_BACKLOG` | 500 | Ticker stops claiming for a queue at this `waiting+delayed`. |
+| `INGESTION_TICK_MAX_BATCH` | 5 in schema; 20 in `ingestion-ticker.service.ts` | Max students one 5 s tick claims per kind. |
+| `INGESTION_TICK_BUDGET_MS` | 4000 | Stop starting further kinds once a tick has run this long. |
+| `INGESTION_QUEUE_MAX_BACKLOG` | 500 | Watcher stops claiming for a queue at this `waiting+delayed`. |
 | `INGESTION_BREAKER_FAILURES` / `_OPEN_MS` / `_MAX_OPEN_MS` | 5 / 60000 / 600000 | Breakers for all upstreams. |
 | `INGESTION_OCCURRENCE_CACHE_ENABLED` | `false` | Enables cache-served walks and fan-out. Discovery is always on. |
 | `INGESTION_CACHE_TTL_MS` | 604800000 (7 d) | Past it, a live walk refreshes the cache. |

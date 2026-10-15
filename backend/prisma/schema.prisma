@@ -9,7 +9,7 @@ generator client {
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
-  extensions = [pg_trgm]
+  extensions = [pg_trgm, unaccent]
 }
 
 /// Onboarding answer: when the user focuses best (`@zenflow/shared` FOCUS_BANDS).
@@ -26,11 +26,15 @@ enum Language {
 }
 
 model User {
-  id       String   @id @default(uuid())
-  name     String   @db.VarChar(60)
-  email    String   @unique @db.VarChar(255)
-  timezone String   @default("Asia/Saigon") @db.VarChar(50)
-  lang     Language @default(VI_VN)
+  id                 String              @id @default(uuid())
+  studentProfile     StudentProfile?
+  studyPrograms      StudyProgram[]
+  studentMarks       StudentMark[]
+  studentTermResults StudentTermResult[]
+  name               String              @db.VarChar(60)
+  email              String              @unique @db.VarChar(255)
+  timezone           String              @default("Asia/Saigon") @db.VarChar(50)
+  lang               Language            @default(VI_VN)
 
   /// Reminder lead time (minutes) applied to new sessions that omit `reminders`; 0 = none.
   defaultReminderMinutes Int @default(10)
@@ -662,6 +666,7 @@ model Integration {
   schedules         IngestionSchedule[]
   portalEnrollments PortalSectionEnrollment[]
   lmsEnrollments    LmsCourseEnrollment[]
+  syncRuns          SyncRun[]
 
   @@unique([userId, provider])
   @@index([provider, userId])
@@ -1113,4 +1118,197 @@ model LmsCourseOccurrence {
   updatedAt DateTime @updatedAt
 
   @@index([lmsCourseId, startsAt])
+}
+
+// ---------------------------------------------------------------------------
+// Split ingestion queues: student profile, marks, and fan-out run tracking.
+// ---------------------------------------------------------------------------
+
+// A student's DLU profile (GET /api/student/info plus marks aggregates).
+// Normalised fields only: no phone, birthday, birthplace or raw payload.
+model StudentProfile {
+  userId        String @id
+  integrationId String
+
+  studentId String?
+  fullName  String
+  gender    String?
+  cohort    String? // "Khóa 47"
+  className String? // "CTK47A"
+  faculty   String? // marks OlogyName
+  major     String? // marks ChuyenNganh
+
+  studyProgramId   String?
+  studyProgramName String?
+
+  // Cumulative figures from the latest marks row.
+  gpa4          Float?
+  gpa10         Float?
+  creditsEarned Int?
+  ranking       String? // TenXepLoai
+
+  profileFetchedAt DateTime
+  marksFetchedAt   DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model StudyProgram {
+  id             String @id @default(uuid())
+  userId         String
+  studyProgramId String
+  name           String
+  type           Int
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, studyProgramId])
+}
+
+// One graded course. Keyed by the portal's ScheduleStudyUnitID so it lines up
+// with PortalSectionEnrollment / PortalSection for the current term; past
+// terms have no enrolment row and stand on their own.
+model StudentMark {
+  id                  String   @id @default(uuid())
+  userId              String
+  scheduleStudyUnitId String
+  yearStudy           String
+  termId              String
+  curriculumId        String?
+  curriculumName      String
+  credits             Int
+  score10             Float?
+  score4              Float?
+  letter              String?
+  passed              Boolean?
+  note                String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, scheduleStudyUnitId])
+  @@index([userId, yearStudy, termId])
+}
+
+model StudentTermResult {
+  id        String @id @default(uuid())
+  userId    String
+  yearStudy String
+  termId    String
+
+  gpa4              Float?
+  gpa10             Float?
+  creditsEarned     Int?
+  cumulativeGpa4    Float?
+  cumulativeGpa10   Float?
+  cumulativeCredits Int?
+  conductScore      Int?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, yearStudy, termId])
+}
+
+// Week-level cache coverage. PortalSection.timetableThroughDate is a single
+// watermark, which cannot say "week N is cached" when weeks are fetched by
+// separate jobs, so each fetched week stamps its own row.
+model PortalWeekCoverage {
+  scheduleStudyUnitId String
+  weekStart           DateTime @db.Date
+  refreshedAt         DateTime
+
+  @@id([scheduleStudyUnitId, weekStart])
+}
+
+enum SyncUnitStatus {
+  PENDING
+  DONE
+  FAILED
+}
+
+// One fan-out pass for one integration: a timetable term split into week jobs,
+// or an LMS calendar split into month jobs. Units finish in any order; the job
+// that completes the last one wins the notifiedAt compare-and-set and does the
+// closing work (deletion pass, single digest, schedule outcome).
+model SyncRun {
+  id            String            @id @default(uuid())
+  integrationId String
+  kind          IngestionSyncKind
+  // "<year>/<term>" for a timetable, "calendar" for LMS.
+  scope         String
+  totalUnits    Int
+
+  // The claimed IngestionSchedule row this run settles.
+  scheduleId     String?
+  claimedAt      DateTime?
+  dueAt          DateTime?
+  cacheHitStreak Int       @default(0)
+
+  servedFromCache Boolean   @default(true)
+  notifiedAt      DateTime?
+  finishedAt      DateTime?
+
+  integration Integration   @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  units       SyncRunUnit[]
+
+  createdAt DateTime @default(now())
+
+  @@index([integrationId, kind, createdAt])
+  @@index([finishedAt, createdAt])
+}
+
+model SyncRunUnit {
+  runId   String
+  // Week start "YYYY-MM-DD" or month "YYYY-MM".
+  unit    String
+  status  SyncUnitStatus @default(PENDING)
+  // True when a live request was made for this unit.
+  fetched Boolean        @default(false)
+
+  run SyncRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@id([runId, unit])
+}
+
+// Per-window LMS cache state. A course used to keep one fingerprint for the
+// last window any student walked, which thrashes once the calendar is fetched
+// one month per job. Each (course, scope) now carries its own coverage and
+// corroboration state, and each student's last view is kept per scope too.
+// The old LmsCourse.occurrences* and LmsCourseEnrollment.seenFingerprint
+// columns are no longer read.
+model LmsCourseWindow {
+  lmsCourseId      Int
+  // Names the months the view covers, e.g. "2026-10".
+  scope            String
+  refreshedAt      DateTime
+  throughDate      DateTime
+  fingerprint      String?
+  fingerprintBy    String?
+  priorFingerprint String?
+
+  @@id([lmsCourseId, scope])
+}
+
+model LmsCourseSeen {
+  userId      String
+  lmsCourseId Int
+  scope       String
+  // This student's own last live view of the course in the scope; null when it
+  // could not be cached (an item with no course block).
+  fingerprint String?
+
+  @@id([userId, lmsCourseId, scope])
+  // Fan-out direction: who last saw this exact view.
+  @@index([lmsCourseId, scope, fingerprint])
 }

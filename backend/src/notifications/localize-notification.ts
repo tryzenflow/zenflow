@@ -82,6 +82,25 @@ export function localizeNotification<
         "Các buổi học này đã được xóa khỏi thời khóa biểu DLU của bạn.",
     };
     content = copy[content] ?? content;
+  } else if (row.eventName === "timetable.ready") {
+    title = title.replace(
+      /^Timetable for semester (\d) (\S+) is available$/,
+      (_, term: string, year: string) =>
+        `Thời khóa biểu học kỳ ${term} ${year} đã sẵn sàng`,
+    );
+    content = content.replace(
+      /^You may not see every week yet\. We're still syncing\.$/,
+      "Bạn có thể chưa thấy đủ các tuần. Chúng tôi vẫn đang đồng bộ.",
+    );
+  } else if (row.eventName === "marks.ready") {
+    title = title.replace(/^Your marks are available$/, "Điểm của bạn đã có");
+    content = content.replace(/^Open your profile\.$/, "Mở hồ sơ của bạn.");
+  } else if (row.eventName === "timetable.changed") {
+    title = title.replace(
+      /^Your timetable changed$/,
+      "Thời khóa biểu của bạn đã thay đổi",
+    );
+    content = content.replace(/^See what changed\.$/, "Xem có gì thay đổi.");
   } else if (row.eventName === "reminder.fired") {
     const match = title.match(
       /^(Exam|Due|Class|Task starts|Event starts) in (.+?): ([\s\S]+)$/,

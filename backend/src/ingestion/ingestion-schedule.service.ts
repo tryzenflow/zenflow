@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import type {
   IngestionSyncKind,
   IntegrationProvider,
+  Prisma,
 } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
 import {
@@ -264,15 +265,21 @@ export class IngestionScheduleService {
     kind: SyncKindName,
     now: Date,
     batchSize: number,
+    /** Extra filter, e.g. "enrolment already discovered" for a walk kind. */
+    gate: Prisma.IngestionScheduleWhereInput = {},
   ): Promise<ClaimedTarget[]> {
     if (batchSize <= 0) return [];
     const plan = this.planFor(kind);
 
     const due = await this.prisma.ingestionSchedule.findMany({
-      where: { kind: kind, nextDueAt: { lte: now } },
-      // `id` breaks ties so a population seeded at one instant drains in a
-      // stable order instead of an arbitrary one each tick.
-      orderBy: [{ nextDueAt: "asc" }, { id: "asc" }],
+      where: { kind: kind, nextDueAt: { lte: now }, ...gate },
+      // Never-synced first, then least recently synced; `id` breaks ties so a
+      // population seeded at one instant drains in a stable order.
+      orderBy: [
+        { lastSuccessAt: { sort: "asc", nulls: "first" } },
+        { nextDueAt: "asc" },
+        { id: "asc" },
+      ],
       take: batchSize,
       select: {
         id: true,
@@ -311,6 +318,45 @@ export class IngestionScheduleService {
       });
     }
     return claimed;
+  }
+
+  /**
+   * Claim one integration's row for `kind` right now, whatever its due time.
+   * Used when a student connects, so the first discovery runs at once and the
+   * watcher does not enqueue a second one. `null` if another claim got there.
+   */
+  async claimOne(
+    integrationId: string,
+    kind: SyncKindName,
+    now: Date,
+  ): Promise<ClaimedTarget | null> {
+    const plan = this.planFor(kind);
+    const row = await this.prisma.ingestionSchedule.findUnique({
+      where: { integrationId_kind: { integrationId, kind } },
+      select: {
+        id: true,
+        nextDueAt: true,
+        cacheHitStreak: true,
+        integration: { select: { userId: true } },
+      },
+    });
+    if (!row) return null;
+    const { count } = await this.prisma.ingestionSchedule.updateMany({
+      where: { id: row.id, nextDueAt: row.nextDueAt },
+      data: {
+        nextDueAt: nextDueAfterRun(now, plan.targetPeriodMs),
+        lastClaimedAt: now,
+      },
+    });
+    if (count !== 1) return null;
+    return {
+      scheduleId: row.id,
+      integrationId,
+      userId: row.integration.userId,
+      cacheHitStreak: row.cacheHitStreak,
+      dueAt: row.nextDueAt,
+      claimedAt: now,
+    };
   }
 
   /**

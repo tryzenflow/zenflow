@@ -39,8 +39,8 @@ Diagram-first companion to [README.md](README.md), for contributors placing a ch
 
 ![Zenflow ingestion and notifications component diagram](docs/architecture/ingestion-components.svg)
 
-- One rolling ticker (watcher) claims due `IngestionSchedule` rows and enqueues one fetch job each; the claim is the at-most-once guard.
-- `worker-portal` / `worker-lms` run a pass: discovery first, then the timetable, exam or LMS watcher. Clients sit behind per-upstream circuit breakers; responses go to pure parsers.
+- Connect queues the profile fetch and enrolment discovery. A 5 second watcher then claims due `IngestionSchedule` rows (never-synced first) and splits each into jobs: one per timetable week, one per LMS month; the claim is the at-most-once guard.
+- `worker-portal` / `worker-lms` consume one queue per step (profile, marks, discovery, week, month, exam). A week or month is read from the cross-student cache or fetched alone. Clients sit behind per-upstream circuit breakers; responses go to pure parsers.
 - `MaterializerService` is the single writer of ingested `Session` rows. A student's own move or delete wins over upstream; a removal soft-deletes.
 - The cross-student occurrence cache and fan-out are off by default.
 - A materializer write creates one `Notification` row, then `announce()` fans it out twice: Redis pub/sub for live SSE, and one `notify` push job per provider.
@@ -50,7 +50,7 @@ Diagram-first companion to [README.md](README.md), for contributors placing a ch
 
 ![Zenflow queue design](docs/architecture/queue-design.svg)
 
-- Three queues (`portal-fetch`, `lms-fetch`, `notify`), each with a `.dlq`, on a `noeviction` + AOF Redis.
+- Nine queues (`portal-fetch`, `portal-profile`, `portal-marks`, `portal-discovery`, `portal-week`, `lms-fetch`, `lms-discovery`, `lms-month`, `notify`), each with a `.dlq`, on a `noeviction` + AOF Redis.
 - The job id is the idempotency key; every producer call is time-bounded.
 - Retries use exponential backoff; an open upstream breaker parks a job without using an attempt.
 

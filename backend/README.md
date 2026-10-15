@@ -74,7 +74,7 @@ backend/
 │   ├── scheduler/         # core/ (pure), io/ (Prisma + bandit HTTP), types/
 │   ├── bandit/            # HTTP client for services/bandit + per-user (A,b) repo
 │   ├── experiments/       # 50/50 policy assignment + SlotProposal
-│   ├── ingestion/         # ticker, discovery, watchers, materializer, cache; core/ is pure
+│   ├── ingestion/         # watcher, discovery, week and month jobs, profile and marks, materializer, cache; core/ is pure
 │   ├── lms/  portal/      # Moodle and portal/DKHP clients
 │   ├── integrations/      # encrypted DLU credentials + login probe + manual sync
 │   ├── notifications/     # ingestion inbox, SSE stream, push
@@ -95,7 +95,7 @@ Layering rule: `scheduler/core/*` and `ingestion/core/*` are pure and determinis
 | --- | --- |
 | [docs/backend/api.md](../docs/backend/api.md) | Endpoints, response envelope, error codes, rate limits, fail-open store |
 | [docs/backend/data-model.md](../docs/backend/data-model.md) | Tables, Session invariants, indexes |
-| [docs/backend/ingestion.md](../docs/backend/ingestion.md) | Ticker, confirm/miss gate, cache, circuit breakers, manual sync |
+| [docs/backend/ingestion.md](../docs/backend/ingestion.md) | Queue flow, confirm/miss gate, cache, circuit breakers, manual sync |
 | [docs/backend/scheduler.md](../docs/backend/scheduler.md) | Python-authoritative placement, degraded mode, reminders, file map |
 | [docs/backend/config.md](../docs/backend/config.md) | Every env var with defaults |
 | [observability/README.md](observability/README.md) | Traces, metrics, logs, Grafana |

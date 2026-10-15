@@ -87,6 +87,8 @@ const EMPTY_OUTCOME: RecordOutcome = {
  */
 export interface UnitTransition<T> {
   unitId: T;
+  /** The window the transition was observed in. */
+  scope: string;
   before: string;
 }
 
@@ -158,6 +160,12 @@ export class OccurrenceCacheService {
        * week's last meeting can ever be seen to be cancelled.
        */
       sectionIds?: readonly string[];
+      /**
+       * Monday of the single week this response covers. Set by week jobs: the
+       * coverage is then stamped on `PortalWeekCoverage` instead of moving the
+       * section's term-wide watermark (a lone week must not claim the term).
+       */
+      weekStart?: Date;
     },
   ): Promise<RecordOutcome> {
     const outcome: RecordOutcome = {
@@ -249,14 +257,37 @@ export class OccurrenceCacheService {
       // A section whose only change is a cancellation is still touched, so
       // fan-out can find its classmates.
       for (const id of canceled.sectionIds) touched.add(id);
-      await this.stampSectionCoverage(covered, {
-        timetableRefreshedAt: opts.now,
-        timetableThroughDate: opts.throughDate,
-      });
+      if (opts.weekStart) {
+        await this.stampWeekCoverage(covered, opts.weekStart, opts.now);
+      } else {
+        await this.stampSectionCoverage(covered, {
+          timetableRefreshedAt: opts.now,
+          timetableThroughDate: opts.throughDate,
+        });
+      }
     }
 
     outcome.touchedIds = [...touched];
     return outcome;
+  }
+
+  private async stampWeekCoverage(
+    sectionIds: readonly string[],
+    weekStart: Date,
+    now: Date,
+  ): Promise<void> {
+    for (const id of new Set(sectionIds)) {
+      await this.prisma.portalWeekCoverage.upsert({
+        where: {
+          scheduleStudyUnitId_weekStart: {
+            scheduleStudyUnitId: id,
+            weekStart,
+          },
+        },
+        create: { scheduleStudyUnitId: id, weekStart, refreshedAt: now },
+        update: { refreshedAt: now },
+      });
+    }
   }
 
   /**
@@ -411,20 +442,21 @@ export class OccurrenceCacheService {
       ]);
       const existing = await this.prisma.lmsCourse.findMany({
         where: { lmsCourseId: { in: [...units] } },
-        select: {
-          lmsCourseId: true,
-          occurrencesFingerprint: true,
-          occurrencesFingerprintBy: true,
-          occurrencesPriorFingerprint: true,
+        select: { lmsCourseId: true },
+      });
+      const states = await this.prisma.lmsCourseWindow.findMany({
+        where: { lmsCourseId: { in: [...units] }, scope: window.scope },
+      });
+      const stateOf = new Map(states.map((w) => [w.lmsCourseId, w]));
+      const seen = await this.prisma.lmsCourseSeen.findMany({
+        where: {
+          userId: opts.userId,
+          lmsCourseId: { in: [...units] },
+          scope: window.scope,
         },
+        select: { lmsCourseId: true, fingerprint: true },
       });
-      const seen = await this.prisma.lmsCourseEnrollment.findMany({
-        where: { userId: opts.userId, lmsCourseId: { in: [...units] } },
-        select: { lmsCourseId: true, seenFingerprint: true },
-      });
-      const seenBy = new Map(
-        seen.map((s) => [s.lmsCourseId, s.seenFingerprint]),
-      );
+      const seenBy = new Map(seen.map((s) => [s.lmsCourseId, s.fingerprint]));
 
       for (const course of existing) {
         const id = course.lmsCourseId;
@@ -435,30 +467,52 @@ export class OccurrenceCacheService {
 
         const after = lmsFingerprint(window.scope, view);
         const before = seenBy.get(id) ?? null;
+        const state = stateOf.get(id);
         const { next, corroborated } = observeUnit(
           {
-            fingerprint: course.occurrencesFingerprint,
-            by: course.occurrencesFingerprintBy,
-            prior: course.occurrencesPriorFingerprint,
+            fingerprint: state?.fingerprint ?? null,
+            by: state?.fingerprintBy ?? null,
+            prior: state?.priorFingerprint ?? null,
           },
           { userId: opts.userId, before, after },
         );
-        await this.prisma.lmsCourse.update({
-          where: { lmsCourseId: id },
-          data: {
-            occurrencesRefreshedAt: opts.now,
-            occurrencesThroughDate: window.to,
-            occurrencesFingerprint: next.fingerprint,
-            occurrencesFingerprintBy: next.by,
-            occurrencesPriorFingerprint: next.prior,
+        const data = {
+          refreshedAt: opts.now,
+          throughDate: window.to,
+          fingerprint: next.fingerprint,
+          fingerprintBy: next.by,
+          priorFingerprint: next.prior,
+        };
+        await this.prisma.lmsCourseWindow.upsert({
+          where: {
+            lmsCourseId_scope: { lmsCourseId: id, scope: window.scope },
           },
+          create: { lmsCourseId: id, scope: window.scope, ...data },
+          update: data,
         });
         if (corroborated && before !== null) {
-          outcome.transitions.push({ unitId: id, before });
+          outcome.transitions.push({
+            unitId: id,
+            scope: window.scope,
+            before,
+          });
         }
-        await this.prisma.lmsCourseEnrollment.updateMany({
-          where: { userId: opts.userId, lmsCourseId: id },
-          data: { seenFingerprint: opts.cacheable ? after : null },
+        const fingerprint = opts.cacheable ? after : null;
+        await this.prisma.lmsCourseSeen.upsert({
+          where: {
+            userId_lmsCourseId_scope: {
+              userId: opts.userId,
+              lmsCourseId: id,
+              scope: window.scope,
+            },
+          },
+          create: {
+            userId: opts.userId,
+            lmsCourseId: id,
+            scope: window.scope,
+            fingerprint,
+          },
+          update: { fingerprint },
         });
       }
     }
@@ -552,6 +606,41 @@ export class OccurrenceCacheService {
     return { fresh, stale };
   }
 
+  /**
+   * Like {@link timetableFreshness} for one week: a section is fresh when its
+   * week row, or a term-wide walk watermark reaching `weekEnd`, is within TTL.
+   */
+  async weekFreshness(
+    sectionIds: readonly string[],
+    opts: { now: Date; weekStart: Date; weekEnd: Date },
+  ): Promise<Freshness<string>> {
+    if (sectionIds.length === 0) return { fresh: [], stale: [] };
+    const [coverage, term] = await Promise.all([
+      this.prisma.portalWeekCoverage.findMany({
+        where: {
+          scheduleStudyUnitId: { in: [...sectionIds] },
+          weekStart: opts.weekStart,
+        },
+      }),
+      this.timetableFreshness(sectionIds, {
+        now: opts.now,
+        throughDate: opts.weekEnd,
+      }),
+    ]);
+    const termFresh = new Set(term.fresh);
+    const weekFresh = new Set(
+      coverage
+        .filter((c) => isCoverageFresh(c, opts.now, this.ttlMs))
+        .map((c) => c.scheduleStudyUnitId),
+    );
+    const fresh: string[] = [];
+    const stale: string[] = [];
+    for (const id of sectionIds) {
+      (termFresh.has(id) || weekFresh.has(id) ? fresh : stale).push(id);
+    }
+    return { fresh, stale };
+  }
+
   /** Which of `userId`'s Moodle courses may be served from cache over `window`. */
   async lmsFreshness(
     userId: string,
@@ -561,18 +650,14 @@ export class OccurrenceCacheService {
     if (courseIds.length === 0) return { fresh: [], stale: [] };
     const ids = [...courseIds];
     const { window } = opts;
-    const [courses, seen, rows] = await Promise.all([
-      this.prisma.lmsCourse.findMany({
-        where: { lmsCourseId: { in: ids } },
-        select: {
-          lmsCourseId: true,
-          occurrencesRefreshedAt: true,
-          occurrencesThroughDate: true,
-        },
+    const [windows, seen, rows] = await Promise.all([
+      this.prisma.lmsCourseWindow.findMany({
+        where: { lmsCourseId: { in: ids }, scope: window.scope },
+        select: { lmsCourseId: true, refreshedAt: true, throughDate: true },
       }),
-      this.prisma.lmsCourseEnrollment.findMany({
-        where: { userId, lmsCourseId: { in: ids } },
-        select: { lmsCourseId: true, seenFingerprint: true },
+      this.prisma.lmsCourseSeen.findMany({
+        where: { userId, lmsCourseId: { in: ids }, scope: window.scope },
+        select: { lmsCourseId: true, fingerprint: true },
       }),
       this.prisma.lmsCourseOccurrence.findMany({
         where: {
@@ -582,21 +667,18 @@ export class OccurrenceCacheService {
         },
       }),
     ]);
-    const byId = new Map(courses.map((c) => [c.lmsCourseId, c]));
-    const seenBy = new Map(seen.map((s) => [s.lmsCourseId, s.seenFingerprint]));
+    const byId = new Map(windows.map((w) => [w.lmsCourseId, w]));
+    const seenBy = new Map(seen.map((s) => [s.lmsCourseId, s.fingerprint]));
 
     const fresh: number[] = [];
     const stale: number[] = [];
     for (const id of courseIds) {
-      const course = byId.get(id);
+      const state = byId.get(id);
       const mine = seenBy.get(id) ?? null;
       const ok =
-        !!course &&
+        !!state &&
         isCoverageFresh(
-          {
-            refreshedAt: course.occurrencesRefreshedAt,
-            throughDate: course.occurrencesThroughDate,
-          },
+          { refreshedAt: state.refreshedAt, throughDate: state.throughDate },
           opts.now,
           this.ttlMs,
           window.to,

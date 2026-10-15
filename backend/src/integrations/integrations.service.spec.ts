@@ -24,6 +24,7 @@ import {
   IngestionSyncService,
   ManualSyncUnavailableError,
 } from "../ingestion/ingestion-sync.service";
+import { IngestionDispatchService } from "../ingestion/ingestion-dispatch.service";
 import { IngestionScheduleService } from "../ingestion/ingestion-schedule.service";
 
 // ── in-memory Prisma double ────────────────────────────────────────────────
@@ -251,6 +252,10 @@ describe("IntegrationsService", () => {
             ensureRows,
             lastRunAt,
           },
+        },
+        {
+          provide: IngestionDispatchService,
+          useValue: { onConnect: jest.fn().mockResolvedValue(undefined) },
         },
         {
           provide: SyncInflightGuard,

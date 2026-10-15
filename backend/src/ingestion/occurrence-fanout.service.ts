@@ -95,6 +95,10 @@ export class OccurrenceFanoutService {
       excludeUserId: string;
       window: { from: Date; to: Date };
       now: Date;
+      /** Skip the per-type digest notifications (week jobs notify once instead). */
+      silent?: boolean;
+      /** Called per classmate whose calendar gained lectures. */
+      onCreated?: (userId: string) => Promise<void>;
     },
   ): Promise<FanoutSummary> {
     if (sectionIds.length === 0 && canceledKeys.length === 0) return EMPTY;
@@ -125,6 +129,7 @@ export class OccurrenceFanoutService {
         summary.updated += outcome.updated;
         summary.skippedMoved += outcome.skippedMoved;
         summary.skippedDeleted += outcome.skippedDeleted;
+        if (outcome.created > 0) await opts.onCreated?.(userId);
       }
 
       if (canceledKeys.length > 0) {
@@ -138,7 +143,9 @@ export class OccurrenceFanoutService {
         summary.removed += recon.deleted;
       }
 
-      await this.materializer.flushDigest(userId, digest, opts.now);
+      await this.materializer.flushDigest(userId, digest, opts.now, {
+        silent: opts.silent,
+      });
     }
 
     if (summary.created + summary.updated + summary.removed > 0) {
@@ -184,18 +191,29 @@ export class OccurrenceFanoutService {
     if (transitions.length === 0) return EMPTY;
 
     const recipients = new Map<string, number[]>();
-    for (const { unitId, before } of transitions) {
-      const rows = await this.prisma.lmsCourseEnrollment.findMany({
+    for (const { unitId, scope, before } of transitions) {
+      // Students whose own last view of this course, in this month, was exactly
+      // the state the change moved away from.
+      const seen = await this.prisma.lmsCourseSeen.findMany({
         where: {
           lmsCourseId: unitId,
-          droppedAt: null,
-          seenFingerprint: before,
+          scope,
+          fingerprint: before,
           userId: { not: opts.excludeUserId },
         },
         select: { userId: true },
         take: this.maxStudents,
       });
-      for (const { userId } of rows) {
+      if (seen.length === 0) continue;
+      const enrolled = await this.prisma.lmsCourseEnrollment.findMany({
+        where: {
+          lmsCourseId: unitId,
+          droppedAt: null,
+          userId: { in: seen.map((s) => s.userId) },
+        },
+        select: { userId: true },
+      });
+      for (const { userId } of enrolled) {
         recipients.set(userId, [...(recipients.get(userId) ?? []), unitId]);
       }
     }

@@ -8,12 +8,15 @@ For: developers changing the schema or reading Session data. Source of truth: [`
 | `Session` | Every calendar item | See below. |
 | `SessionSeries` | Recurring or `TASK` series | A recurring fixed session is one series plus one representative row, fanned to occurrences at read time. |
 | `SessionOccurrenceState` | Done or skipped state of one recurring occurrence | Unique `[seriesId, occurrenceStart]`; a row exists only while the occurrence is done or skipped. |
-| `UserStreak` | Daily completion streak per user | Recomputed from completion days on each check-off and `GET /users/me/streak`. |
+| `UserStreak` | Daily completion streak per user | Recomputed from task completion days on each check-off and `GET /users/me/streak`. |
 | `SessionReminder` | Up to 2 per session | Fired by in-memory `SchedulerRegistry` timers; see [scheduler.md](scheduler.md#session-reminders). |
 | `SessionEvent` | Append-only audit trail (ML input) | `eventType`: `CREATE`, `MOVE`, `RESIZE`, `SYSTEM_MOVE` (scheduler-initiated, reward 0), `COMPLETE` and `SKIP` (one row while the session or occurrence is done or skipped, deleted on undo; occurrence start in `newSnapshot.scheduledStartTime`; reward set when settled, [ADR-0023](../adr/0023-completion-reward.md)), `MISSED` (unmoved, no check-off by the cutoff, reward `-1`), and `RETAINED` (legacy, no longer written). `rewardScore` feeds LinUCB. Monthly range partitions on `occurredAt`, 12 months kept ([ADR-0016](../adr/0016-telemetry-retention-and-partitioning.md)); PK is `(id, occurredAt)`. |
 | `Tag` | Per-user label | Wire format is `Session.tags: string[]`; unknown names are upserted per user. |
 | `File`, `UserDevice` | Uploads, push registrations | `UserDevice.pushToken` is unique (upsert key). |
 | `Integration`, `UserEncryptionKey` | Encrypted DLU credentials | Master keys are env-only, never in the DB. |
+| `StudentProfile`, `StudyProgram`, `StudentMark`, `StudentTermResult` | DLU profile, programs, graded courses and per-term GPA | Normalised fields only (no phone, birthday or raw payload). `StudentMark` is unique `[userId, scheduleStudyUnitId]`, the portal section id. |
+| `SyncRun`, `SyncRunUnit` | One fan-out pass and its week or month jobs | Settles the schedule row when the last unit reports. `notifiedAt` is the once-per-run notice. |
+| `PortalWeekCoverage`, `LmsCourseWindow`, `LmsCourseSeen` | Per-week and per-month cache state | Replace single watermarks and fingerprints, so jobs for different weeks or months do not overwrite each other. `LmsCourse.occurrences*` and `LmsCourseEnrollment.seenFingerprint` are no longer read. |
 | DLU tables: `LmsCourse`, `PortalSection`, `*SyncJob(Item)`, `Notification`, `IngestionSchedule`, `*Enrollment`, `*Occurrence` | Ingestion catalog, job tracking, cross-student cache | See [ingestion.md](ingestion.md). |
 
 ## Session

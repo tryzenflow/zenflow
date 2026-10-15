@@ -35,7 +35,7 @@ Two spec styles:
 | `placement-anchors` | anchors through the bandit service: a chosen drag never moves without confirmation, confirm and stale plans, pinned never moves, undo restores moved sessions. Needs the bandit service |
 | `integrations` | connect, reconnect, update, status and disconnect of LMS and portal accounts; encryption at rest; the upstream being down |
 | `ingestion-materialize` | what a sync does to the calendar and inbox: first sync, re-sync, student deletion, withdrawn items, sync conflicts and "reschedule them all" |
-| `queue/queue-flow` | ticker, workers, retries, breaker, manual sync, SSE and push job fan-out, graceful shutdown |
+| `queue/queue-flow` | connect jobs, 5 s watcher, week and month jobs, profile and marks, retries, breaker, manual sync, SSE and push job fan-out, graceful shutdown |
 | `reminders` | arming by the watcher, firing once, restart safety, the inbox |
 | `push-delivery` | which devices get a push, language, dead-token pruning, when a job must retry |
 | `notifications`, `devices`, `tags-onboarding`, `rate-limit`, `backup/` | the matching endpoints and the backup service |

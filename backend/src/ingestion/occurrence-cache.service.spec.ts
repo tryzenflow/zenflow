@@ -92,6 +92,17 @@ function makeDb() {
   return {
     lmsCourse: table([], (w) => (r) => r.lmsCourseId === w.lmsCourseId),
     lmsCourseEnrollment: table([], byId),
+    lmsCourseWindow: table([], (w) => {
+      const k = w.lmsCourseId_scope as Row;
+      return (r) => r.lmsCourseId === k.lmsCourseId && r.scope === k.scope;
+    }),
+    lmsCourseSeen: table([], (w) => {
+      const k = w.userId_lmsCourseId_scope as Row;
+      return (r) =>
+        r.userId === k.userId &&
+        r.lmsCourseId === k.lmsCourseId &&
+        r.scope === k.scope;
+    }),
     portalSection: table(
       [],
       (w) => (r) => r.scheduleStudyUnitId === w.scheduleStudyUnitId,
@@ -213,6 +224,42 @@ describe("OccurrenceCacheService — the Moodle divergence guard", () => {
     expect(outcome.transitions).toEqual([]);
     // …and "a" is not served the rows "b" just wrote: they walk.
     expect(await servableLms(cache, "a")).toBe(false);
+  });
+
+  it("keeps each month's view separate, so month jobs do not invalidate each other", async () => {
+    const { db, cache } = await makeCache();
+    enrolInCourse(db, ["u1"]);
+    const OCT: LmsWindow = {
+      from: new Date("2026-09-30T17:00:00.000Z"),
+      to: new Date("2026-10-31T16:59:59.999Z"),
+      scope: "lms:2026-10",
+    };
+    const NOV: LmsWindow = {
+      from: new Date("2026-10-31T17:00:00.000Z"),
+      to: new Date("2026-11-30T16:59:59.999Z"),
+      scope: "lms:2026-11",
+    };
+    const inMonth = (window: LmsWindow, view: LmsOccurrenceInput[]) =>
+      cache.recordLmsItems(view, {
+        now: NOW,
+        complete: true,
+        userId: "u1",
+        window,
+        courseIds: [COURSE],
+        cacheable: true,
+      });
+
+    await inMonth(OCT, [assign()]);
+    await inMonth(NOV, [
+      assign({
+        externalKey: "lms:assign:520002",
+        startsAt: new Date("2026-11-10T16:45:00.000Z"),
+      }),
+    ]);
+
+    // Recording November did not overwrite what October remembers.
+    expect(await servableLms(cache, "u1", OCT)).toBe(true);
+    expect(await servableLms(cache, "u1", NOV)).toBe(true);
   });
 
   it("serves a course a student has seen, window and all", async () => {

@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1700 1130" font-family="Helvetica, Arial, sans-serif" role="img" aria-label="Zenflow queue design: producers, three BullMQ queues on a noeviction Redis, consumers, and the lifecycle of a job including retry, breaker parking and the dead-letter queue">
-  <title>Zenflow queue design: producers, three BullMQ queues on a noeviction Redis, consumers, and the lifecycle of a job including retry, breaker parking and the dead-letter queue</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1700 1130" font-family="Helvetica, Arial, sans-serif" role="img" aria-label="Zenflow queue design: producers, nine BullMQ queues on a noeviction Redis, consumers, and the lifecycle of a job including retry, breaker parking and the dead-letter queue">
+  <title>Zenflow queue design: producers, nine BullMQ queues on a noeviction Redis, consumers, and the lifecycle of a job including retry, breaker parking and the dead-letter queue</title>
   <defs><marker id="aO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#FF6900"/></marker><marker id="aA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#F0B100"/></marker><marker id="aB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3B7EA1"/></marker><marker id="aN" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2B2724" fill-opacity="0.55"/></marker><marker id="aR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#C2410C"/></marker></defs>
   <rect width="1700" height="1130" fill="#FCFBFA"/>
   <text x="30" y="34" text-anchor="start" font-size="21" font-weight="700" fill="#2B2724">Zenflow — queue design</text>
@@ -7,8 +7,8 @@
   <text x="30" y="92" text-anchor="start" font-size="12" font-weight="700" fill="#2B2724" opacity="0.6">PRODUCERS</text>
   <rect x="30" y="105" width="420" height="92" rx="8" fill="#FFF8E6" stroke="#F0B100" stroke-width="2"/>
   <text x="240" y="140.5" text-anchor="middle" font-size="12" font-weight="700" fill="#2B2724">IngestionTickerService</text>
-  <text x="240" y="156.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">watcher</text>
-  <text x="240" y="170.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">scheduleId_dueAt</text>
+  <text x="240" y="156.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">watcher, every 5 s, plus connect</text>
+  <text x="240" y="170.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">runId_unit, disc_scheduleId_dueAt</text>
   <rect x="30" y="211" width="420" height="92" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
   <text x="240" y="246.5" text-anchor="middle" font-size="12" font-weight="700" fill="#2B2724">Manual sync</text>
   <text x="240" y="262.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">API</text>
@@ -29,7 +29,7 @@
   <rect x="510" y="87" width="234" height="18" fill="#FCFBFA"/>
   <text x="516" y="100" text-anchor="start" font-size="13" font-weight="700" fill="#3B7EA1">redis-queue · noeviction + AOF</text>
   <rect x="520" y="125" width="660" height="128" rx="8" fill="#EEF5F9" stroke="#3B7EA1" stroke-width="2"/>
-  <text x="850" y="178.5" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">portal-fetch</text>
+  <text x="850" y="178.5" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">portal-* (5 queues)</text>
   <text x="850" y="194.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">concurrency 1</text>
   <text x="850" y="208.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">1 start / 750 ms</text>
   <rect x="538" y="219" width="60.699999999999996" height="20" rx="10" fill="#fff" stroke="#3B7EA1" stroke-width="1.4"/>
@@ -43,9 +43,9 @@
   <rect x="898.2" y="219" width="133.89999999999998" height="20" rx="10" fill="#fff" stroke="#C2410C" stroke-width="1.4"/>
   <text x="965.1500000000001" y="233" text-anchor="middle" font-size="10" font-weight="700" fill="#C2410C">failed · 7 d / 5000</text>
   <rect x="1046.1" y="219" width="112" height="20" rx="10" fill="#C2410C"/>
-  <text x="1102.1" y="233" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">portal-fetch.dlq</text>
+  <text x="1102.1" y="233" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">portal-*.dlq</text>
   <rect x="520" y="270" width="660" height="128" rx="8" fill="#EEF5F9" stroke="#3B7EA1" stroke-width="2"/>
-  <text x="850" y="323.5" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">lms-fetch</text>
+  <text x="850" y="323.5" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">lms-* (3 queues)</text>
   <text x="850" y="339.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">concurrency 1</text>
   <text x="850" y="353.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">1 start / 750 ms</text>
   <rect x="538" y="364" width="60.699999999999996" height="20" rx="10" fill="#fff" stroke="#3B7EA1" stroke-width="1.4"/>
@@ -59,7 +59,7 @@
   <rect x="898.2" y="364" width="133.89999999999998" height="20" rx="10" fill="#fff" stroke="#C2410C" stroke-width="1.4"/>
   <text x="965.1500000000001" y="378" text-anchor="middle" font-size="10" font-weight="700" fill="#C2410C">failed · 7 d / 5000</text>
   <rect x="1046.1" y="364" width="112" height="20" rx="10" fill="#C2410C"/>
-  <text x="1102.1" y="378" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">lms-fetch.dlq</text>
+  <text x="1102.1" y="378" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">lms-*.dlq</text>
   <rect x="520" y="415" width="660" height="128" rx="8" fill="#EEF5F9" stroke="#3B7EA1" stroke-width="2"/>
   <text x="850" y="468.5" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">notify</text>
   <text x="850" y="484.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">concurrency 10</text>
@@ -89,11 +89,11 @@
   <text x="1250" y="92" text-anchor="start" font-size="12" font-weight="700" fill="#2B2724" opacity="0.6">CONSUMERS</text>
   <rect x="1240" y="125" width="440" height="128" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
   <text x="1460" y="178.5" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">worker-portal</text>
-  <text x="1460" y="194.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">fetch pass</text>
+  <text x="1460" y="194.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">profile, marks, week, exam</text>
   <text x="1460" y="208.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">breaker dlu-portal</text>
   <rect x="1240" y="270" width="440" height="128" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
   <text x="1460" y="323.5" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">worker-lms</text>
-  <text x="1460" y="339.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">fetch pass</text>
+  <text x="1460" y="339.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">discovery, month</text>
   <text x="1460" y="353.5" text-anchor="middle" font-size="10.5" font-weight="400" fill="#2B2724" opacity="0.75">breaker dlu-lms</text>
   <rect x="1240" y="415" width="440" height="128" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
   <text x="1460" y="468.5" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">worker-notify</text>

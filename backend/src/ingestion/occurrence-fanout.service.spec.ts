@@ -88,12 +88,33 @@ function makePrismaDouble(
         );
       },
     },
+    lmsCourseSeen: {
+      findMany: (args: {
+        where: {
+          lmsCourseId: number;
+          scope: string;
+          fingerprint: string;
+          userId?: { not: string };
+        };
+        take?: number;
+      }) => {
+        let rows = courseEnrollments.filter(
+          (e) =>
+            e.lmsCourseId === args.where.lmsCourseId &&
+            (e.seenFingerprint ?? null) === args.where.fingerprint,
+        );
+        const who = args.where.userId;
+        if (who) rows = rows.filter((e) => e.userId !== who.not);
+        if (args.take !== undefined) rows = rows.slice(0, args.take);
+        return Promise.resolve(rows.map((e) => ({ userId: e.userId })));
+      },
+    },
     lmsCourseEnrollment: {
       findMany: (args: {
         where: {
           lmsCourseId: number | { in: number[] };
           droppedAt: null;
-          userId?: string | { not: string };
+          userId?: string | { not: string } | { in: string[] };
           seenFingerprint?: string;
         };
         distinct?: string[];
@@ -110,6 +131,8 @@ function makePrismaDouble(
           rows = rows.filter((e) => e.userId === who);
         } else if (who && "not" in who) {
           rows = rows.filter((e) => e.userId !== who.not);
+        } else if (who && "in" in who) {
+          rows = rows.filter((e) => who.in.includes(e.userId));
         }
         if (args.distinct?.includes("userId")) {
           const seen = new Set<string>();
@@ -460,7 +483,7 @@ describe("OccurrenceFanoutService — fanOutLms", () => {
     });
 
     const summary = await service.fanOutLms(
-      [{ unitId: 20001, before: OLD_VIEW }],
+      [{ unitId: 20001, scope: "scope", before: OLD_VIEW }],
       { excludeUserId: "walker", window: WINDOW, now: NOW },
     );
 
@@ -497,11 +520,14 @@ describe("OccurrenceFanoutService — fanOutLms", () => {
         ]),
     });
 
-    await service.fanOutLms([{ unitId: 20001, before: OLD_VIEW }], {
-      excludeUserId: "walker",
-      window: WINDOW,
-      now: NOW,
-    });
+    await service.fanOutLms(
+      [{ unitId: 20001, scope: "scope", before: OLD_VIEW }],
+      {
+        excludeUserId: "walker",
+        window: WINDOW,
+        now: NOW,
+      },
+    );
 
     expect(materialize).toHaveBeenCalledWith(
       "u2",
@@ -524,11 +550,14 @@ describe("OccurrenceFanoutService — fanOutLms", () => {
       ],
     });
 
-    await service.fanOutLms([{ unitId: 20001, before: OLD_VIEW }], {
-      excludeUserId: "walker",
-      window: WINDOW,
-      now: NOW,
-    });
+    await service.fanOutLms(
+      [{ unitId: 20001, scope: "scope", before: OLD_VIEW }],
+      {
+        excludeUserId: "walker",
+        window: WINDOW,
+        now: NOW,
+      },
+    );
 
     expect(retireExternalKeys).not.toHaveBeenCalled();
   });
@@ -544,11 +573,14 @@ describe("OccurrenceFanoutService — fanOutLms", () => {
         },
       ],
     });
-    await service.fanOutLms([{ unitId: 20001, before: OLD_VIEW }], {
-      excludeUserId: "walker",
-      window: WINDOW,
-      now: NOW,
-    });
+    await service.fanOutLms(
+      [{ unitId: 20001, scope: "scope", before: OLD_VIEW }],
+      {
+        excludeUserId: "walker",
+        window: WINDOW,
+        now: NOW,
+      },
+    );
     expect(materialize).not.toHaveBeenCalled();
   });
 
