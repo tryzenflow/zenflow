@@ -1,5 +1,12 @@
 import { t } from "./i18n";
-import { BULK_TAGS_MAX, TAG_NAME_MAX } from "@zenflow/shared";
+import { combineToUtc, zonedDate } from "@zenflow/core";
+import {
+  BULK_TAGS_MAX,
+  type CreateDndInput,
+  type Session,
+  TAG_NAME_MAX,
+} from "@zenflow/shared";
+import { format } from "date-fns";
 
 /**
  * Pure routing + step-state logic for first-run onboarding (issue #88).
@@ -77,6 +84,11 @@ export const SUGGESTED_TAGS = [
   "Errands",
 ] as const;
 
+export const DEFAULT_TICKED_TAGS: readonly string[] = SUGGESTED_TAGS.slice(
+  0,
+  4,
+);
+
 /** Trim + collapse whitespace; null if empty or too long. */
 export function normalizeTagName(raw: string): string | null {
   const name = raw.trim().replace(/\s+/g, " ");
@@ -85,6 +97,23 @@ export function normalizeTagName(raw: string): string | null {
 }
 
 const sameTag = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+/**
+ * Initial ticked set. Resuming (existing tags include a suggestion the user
+ * already saved) keeps exactly those; otherwise the defaults, plus any other
+ * existing tags (e.g. created by an LMS/portal sync during onboarding).
+ */
+export function initialTagSelection(existing: readonly string[]): string[] {
+  const resumed = existing.some((e) =>
+    SUGGESTED_TAGS.some((name) => sameTag(t(name), e)),
+  );
+  if (resumed) return [...existing];
+  const defaults = DEFAULT_TICKED_TAGS.map((name) => t(name));
+  return [
+    ...defaults,
+    ...existing.filter((e) => !defaults.some((d) => sameTag(d, e))),
+  ];
+}
 
 /** Suggestions followed by any other (existing/custom) selected tags. */
 export function tagOptions(selected: readonly string[]): string[] {
@@ -150,6 +179,66 @@ export function tagsForBulk(selected: readonly string[]): string[] {
     if (name && !out.some((o) => sameTag(o, name))) out.push(name);
   }
   return out.slice(0, BULK_TAGS_MAX);
+}
+
+/** Daily do-not-disturb routines created at finish (start in user tz, minutes). */
+export const DEFAULT_ROUTINES = [
+  { title: "Sleep", start: "23:00", durationMinutes: 420 },
+  { title: "Lunch break", start: "11:30", durationMinutes: 60 },
+  { title: "Dinner", start: "17:00", durationMinutes: 60 },
+] as const;
+
+export const DAILY_RRULE = "FREQ=DAILY";
+
+/** `yyyy-MM-dd` shifted by whole calendar days. */
+function addDays(date: string, days: number): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+/**
+ * First occurrence of a daily routine as a UTC instant: today in `tz` when its
+ * start is still ahead of `now`, otherwise tomorrow.
+ */
+export function firstRoutineStart(
+  startHhmm: string,
+  tz: string,
+  now: Date,
+): string {
+  const today = format(zonedDate(now.toISOString(), tz), "yyyy-MM-dd");
+  const todayStart = combineToUtc(today, startHhmm, tz);
+  return Date.parse(todayStart) > now.getTime()
+    ? todayStart
+    : combineToUtc(addDays(today, 1), startHhmm, tz);
+}
+
+/** POST /sessions bodies for the default routines, in the user's timezone. */
+export function dndRoutinePayloads(tz: string, now: Date): CreateDndInput[] {
+  return DEFAULT_ROUTINES.map(
+    (r): CreateDndInput => ({
+      type: "DND",
+      title: t(r.title),
+      durationMinutes: r.durationMinutes,
+      scheduledStartTime: firstRoutineStart(r.start, tz, now),
+      rrule: DAILY_RRULE,
+    }),
+  );
+}
+
+/**
+ * Payloads whose title is not already a recurring DND series in `existing`,
+ * so a retry or re-run doesn't duplicate them.
+ */
+export function missingRoutines(
+  payloads: readonly CreateDndInput[],
+  existing: readonly Pick<Session, "type" | "title" | "rrule">[],
+): CreateDndInput[] {
+  return payloads.filter(
+    (p) =>
+      !existing.some(
+        (s) => s.type === "DND" && s.rrule != null && sameTag(s.title, p.title),
+      ),
+  );
 }
 
 export type SetupItem = "notifications" | "dlu";

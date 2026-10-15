@@ -1,3 +1,5 @@
+import { zonedDate } from "@zenflow/core";
+import { format } from "date-fns";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -38,12 +40,24 @@ vi.mock("@/components/settings/dlu-accounts-section", () => ({
 
 const BASIC_INFO = `${API}/users/update/basic-info`;
 
+// Created for a fresh account when onboarding finishes (lib/onboarding.ts initialTagSelection).
+const DEFAULT_TAGS = ["Study", "Exam", "Assignment", "Project"];
+
 let patches: Record<string, unknown>[];
 let bulkBodies: { names: string[] }[];
+type SessionBody = {
+  type: string;
+  title: string;
+  durationMinutes: number;
+  scheduledStartTime: string;
+  rrule: string;
+};
+let sessionBodies: SessionBody[];
 
 beforeEach(() => {
   patches = [];
   bulkBodies = [];
+  sessionBodies = [];
   notif.active = false;
   notif.permissionGranted = false;
   notif.update.mockResolvedValue(true);
@@ -61,6 +75,12 @@ beforeEach(() => {
       const body = (await request.json()) as { names: string[] };
       bulkBodies.push(body);
       return HttpResponse.json({ data: { tags: body.names.map((name) => ({ id: name, name })) } });
+    }),
+    http.get(`${API}/sessions/search`, () => HttpResponse.json({ data: { sessions: [], nextCursor: null } })),
+    http.post(`${API}/sessions`, async ({ request }) => {
+      const body = (await request.json()) as SessionBody;
+      sessionBodies.push(body);
+      return HttpResponse.json({ data: { session: { id: body.title, ...body } } });
     }),
   );
 });
@@ -275,11 +295,71 @@ describe("OnboardingScreen", () => {
       await next("You’re all set");
     });
 
-    it("completes onboarding without creating any tags", async () => {
+    it("creates the default tags in one bulk call and completes onboarding", async () => {
       await openSummary();
       fireEvent.click(screen.getByText("Open my calendar"));
       await waitFor(() => expect(patches).toContainEqual({ onboarded: true }));
+      expect(bulkBodies).toHaveLength(1);
+      expect(bulkBodies[0].names).toEqual(DEFAULT_TAGS);
+    });
+
+    it("keeps tags the user already has and adds no duplicates", async () => {
+      server.use(
+        http.get(`${API}/tags`, () => HttpResponse.json({ data: { tags: [{ id: "1", name: "Study" }] } })),
+      );
+      await openSummary();
+      fireEvent.click(screen.getByText("Open my calendar"));
+      await waitFor(() => expect(patches).toContainEqual({ onboarded: true }));
+      // Resuming with a saved suggestion keeps exactly those: nothing new to create.
       expect(bulkBodies).toEqual([]);
+    });
+
+    it("still completes when the tag setup fails", async () => {
+      server.use(http.get(`${API}/tags`, () => HttpResponse.json({ message: "no" }, { status: 500 })));
+      await openSummary();
+      fireEvent.click(screen.getByText("Open my calendar"));
+      await waitFor(() => expect(patches).toContainEqual({ onboarded: true }));
+    });
+
+    it("creates the Sleep, Lunch break and Dinner DND series in the user's timezone", async () => {
+      await openSummary();
+      fireEvent.click(screen.getByText("Open my calendar"));
+      await waitFor(() => expect(patches).toContainEqual({ onboarded: true }));
+      expect(sessionBodies.map((b) => b.title)).toEqual(["Sleep", "Lunch break", "Dinner"]);
+      const [sleep, lunch, dinner] = sessionBodies;
+      expect(sessionBodies.every((b) => b.type === "DND" && b.rrule === "FREQ=DAILY")).toBe(true);
+      expect([sleep.durationMinutes, lunch.durationMinutes, dinner.durationMinutes]).toEqual([420, 60, 60]);
+      const wall = (iso: string) => format(zonedDate(iso, "Asia/Ho_Chi_Minh"), "HH:mm");
+      expect([sleep, lunch, dinner].map((b) => wall(b.scheduledStartTime))).toEqual(["23:00", "11:30", "17:00"]);
+    });
+
+    it("skips a routine that already exists as a DND series", async () => {
+      server.use(
+        http.get(`${API}/sessions/search`, () =>
+          HttpResponse.json({
+            data: { sessions: [{ type: "DND", title: "Dinner", rrule: "FREQ=DAILY" }], nextCursor: null },
+          }),
+        ),
+      );
+      await openSummary();
+      fireEvent.click(screen.getByText("Open my calendar"));
+      await waitFor(() => expect(patches).toContainEqual({ onboarded: true }));
+      expect(sessionBodies.map((b) => b.title)).toEqual(["Sleep", "Lunch break"]);
+    });
+
+    it("still completes when a routine fails to save", async () => {
+      server.use(http.post(`${API}/sessions`, () => HttpResponse.json({ message: "no" }, { status: 500 })));
+      await openSummary();
+      fireEvent.click(screen.getByText("Open my calendar"));
+      await waitFor(() => expect(patches).toContainEqual({ onboarded: true }));
+    });
+
+    it("creates no routines when the lookup fails, so a retry cannot duplicate them", async () => {
+      server.use(http.get(`${API}/sessions/search`, () => HttpResponse.json({ message: "no" }, { status: 500 })));
+      await openSummary();
+      fireEvent.click(screen.getByText("Open my calendar"));
+      await waitFor(() => expect(patches).toContainEqual({ onboarded: true }));
+      expect(sessionBodies).toEqual([]);
     });
 
     it("toasts and stays on the summary when completing fails", async () => {
