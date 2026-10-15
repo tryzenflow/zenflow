@@ -11,6 +11,7 @@ import {
   BottomSheetFlatList as GBottomSheetFlatList,
   BottomSheetFooter as GBottomSheetFooter,
   BottomSheetModal,
+  BottomSheetModalProvider,
   // Re-exported as-is below (not wrapped) — on native, `BottomSheetContent`
   // here always renders a real `@gorhom/bottom-sheet` `<BottomSheetModal>`,
   // so `BottomSheetScrollView`'s own `useBottomSheetInternal()` context read
@@ -110,6 +111,21 @@ const IosSheetContainer = ({ children }: React.PropsWithChildren) => (
   </FullWindowOverlay>
 );
 
+const InScreenSheets = React.createContext(false);
+
+/**
+ * Hosts sheets inside a modal screen's own view instead of the overlay window,
+ * so they stack above the screen and system pickers (photos, files) still
+ * present above them.
+ */
+function ScreenSheetProvider({ children }: React.PropsWithChildren) {
+  return (
+    <InScreenSheets.Provider value>
+      <BottomSheetModalProvider>{children}</BottomSheetModalProvider>
+    </InScreenSheets.Provider>
+  );
+}
+
 type BottomSheetContentRef = BottomSheetModalMethods;
 
 type BottomSheetContentProps = Omit<
@@ -149,6 +165,7 @@ const BottomSheetContent = React.forwardRef<
   ) => {
     const insets = useSafeAreaInsets();
     const { isDarkColorScheme } = useColorScheme();
+    const inScreen = React.useContext(InScreenSheets);
     const { colors } = useTheme();
     useLanguage();
     const { sheetRef } = useBottomSheetContext();
@@ -208,7 +225,7 @@ const BottomSheetContent = React.forwardRef<
       <BottomSheetModal
         ref={setRefs}
         containerComponent={
-          Platform.OS === "ios" ? IosSheetContainer : undefined
+          Platform.OS === "ios" && !inScreen ? IosSheetContainer : undefined
         }
         index={0}
         enablePanDownToClose={enablePanDownToClose}
@@ -483,5 +500,6 @@ export {
   BottomSheetScrollView,
   BottomSheetTextInput,
   BottomSheetView,
+  ScreenSheetProvider,
   useBottomSheet,
 };

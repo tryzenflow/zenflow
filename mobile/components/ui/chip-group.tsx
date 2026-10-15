@@ -39,7 +39,7 @@ export function ChipGroup<T extends string>({
 }) {
   useLanguage();
   return (
-    <View className="flex-row flex-wrap gap-2" testID={testID}>
+    <View className="flex-row flex-wrap gap-1.5" testID={testID}>
       {options.map((o) => (
         <Chip
           key={o.value}
@@ -86,15 +86,16 @@ export function Chip({
       aria-disabled={!!disabled}
       disabled={disabled}
       onPress={onPress}
+      hitSlop={6}
       className={cn(
-        "h-10 min-w-[44px] items-center justify-center rounded-full border border-border bg-muted px-5",
+        "h-8 min-w-[40px] items-center justify-center rounded-full border border-border bg-muted px-3.5",
         active && "border-primary/50 bg-primary/15",
         disabled && "opacity-50",
       )}
     >
       <Text
         className={cn(
-          "text-[15px] font-semibold leading-5 text-muted-foreground",
+          "text-[13px] font-medium leading-5 text-muted-foreground",
           active && "text-primary",
         )}
       >

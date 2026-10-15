@@ -1,4 +1,5 @@
 import { ComposerSkeleton } from "@/components/tasks/composer/composer-skeleton";
+import { GradientFill } from "@/components/ui/gradient-fill";
 import { useAfterPaint } from "@/hooks/use-after-paint";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import { useLanguage } from "@/hooks/use-language";
@@ -86,7 +87,7 @@ function ParsedChips({ parsed }: { parsed: ParseResult }) {
     <View className="-mt-2 flex-row flex-wrap gap-1.5" testID="task.parsed">
       {pills.map((label) => (
         <View key={label} className="rounded-full bg-primary/15 px-3 py-1">
-          <Text className="text-[13px] font-semibold text-primary">{label}</Text>
+          <Text className="text-[12px] font-semibold text-primary">{label}</Text>
         </View>
       ))}
     </View>
@@ -246,11 +247,11 @@ export function TaskComposer({
         <View className="flex-1">
           <View className="flex-row items-center justify-between gap-3 px-5 pb-3 pt-1">
             <View className="min-w-0 flex-1">
-              <Text testID="task.composer.title" className="text-[19px] font-bold tracking-tight">
+              <Text testID="task.composer.title" className="text-[17px] font-bold tracking-tight">
                 {title}
               </Text>
               {!!subtitle && (
-                <Text className="mt-[3px] text-[13px] text-muted-foreground">{subtitle}</Text>
+                <Text className="mt-[2px] text-[12px] text-muted-foreground">{subtitle}</Text>
               )}
             </View>
             <View className="flex-row items-center gap-2.5">
@@ -274,8 +275,11 @@ export function TaskComposer({
           </View>
 
           <BottomSheetScrollView
+            // Remount when the skeleton gives way to the form, or the native
+            // scroll view keeps the skeleton's shorter content height.
+            key={showSkeleton ? "skeleton" : "form"}
             className="flex-1 px-5"
-            contentContainerStyle={{ paddingBottom: 24, gap: 16 }}
+            contentContainerStyle={{ paddingBottom: 24, gap: 12 }}
             keyboardShouldPersistTaps="handled"
           >
             {showSkeleton ? (
@@ -314,12 +318,12 @@ export function TaskComposer({
               accessibilityLabel={t("What needs doing?")}
               returnKeyType="done"
               className={cn(
-                "h-14 rounded-2xl border border-primary/30 bg-glass/70 dark:bg-glass/[0.07] px-5 text-[18px] text-foreground dark:border-primary/25",
+                "h-12 rounded-2xl border border-primary/30 bg-glass/70 dark:bg-glass/[0.07] px-4 text-[16px] text-foreground dark:border-primary/25",
               )}
             />
             {create && parsed ? <ParsedChips parsed={parsed} /> : null}
             {form.formState.errors.title?.message && (
-              <Text className="-mt-3 text-[12.5px] font-medium text-destructive">
+              <Text className="-mt-2 text-[12px] font-medium text-destructive">
                 {t(form.formState.errors.title.message)}
               </Text>
             )}
@@ -353,14 +357,15 @@ export function TaskComposer({
           >
             <Button
               testID="task.save"
-              className="h-[52px] w-full"
+              className="h-12 w-full overflow-hidden rounded-full bg-transparent"
               disabled={busy || showSkeleton}
               onPress={() => void submit()}
             >
+              <GradientFill />
               {busy && (
                 <View className="mr-2"><Spinner size={18} tone="onPrimary" /></View>
               )}
-              <Text className="text-base font-semibold text-primary-foreground">
+              <Text className="text-[15px] font-semibold text-black">
                 {submitLabel}
               </Text>
             </Button>

@@ -72,7 +72,6 @@ export function MoreOptions({
           {type !== "DND" && (
             <FieldCard
               label="Reminder"
-              hint="New tasks use your default reminder from Settings."
               testID="task.reminder"
             >
               <Controller

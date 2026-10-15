@@ -20,6 +20,7 @@ import { useToast } from "@/components/ui/toast";
 import { useColorScheme } from "@/lib/useColorScheme";
 import type { User } from "@zenflow/shared";
 import { showErrorToast } from "@/lib/task-toasts";
+import { BRAND_GRADIENT } from "@/lib/brand-gradient";
 import { LinearGradient } from "expo-linear-gradient";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
@@ -41,10 +42,6 @@ function maskEmail(email: string) {
   return `${local[0]}${"•".repeat(Math.max(local.length - 1, 3))}@${domain}`;
 }
 
-const AVATAR_GRADIENT = {
-  light: ["#FF8E3E", "#F0B101", "#D8F998"],
-  dark: ["#FF7A24", "#F6B915", "#CBED86"],
-};
 
 /**
  * Profile card: avatar + name + masked email, tapping through to an "Edit
@@ -109,8 +106,8 @@ export function ProfileRow({
           <LinearGradient
             colors={
               (isDarkColorScheme
-                ? AVATAR_GRADIENT.dark
-                : AVATAR_GRADIENT.light) as [string, string, string]
+                ? BRAND_GRADIENT.dark
+                : BRAND_GRADIENT.light) as [string, string, string]
             }
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}

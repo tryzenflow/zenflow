@@ -1,3 +1,4 @@
+import { ScreenSheetProvider } from "@/components/ui/bottom-sheet";
 import {
   type ToastFn,
   ToastProvider,
@@ -19,7 +20,8 @@ const RootToastContext = createContext<ToastApi | null>(null);
  * failed save looked like it "silently failed".
  *
  * This scope mounts a second `ToastProvider` inside the modal's own view
- * hierarchy; use {@link useModalToast} below it.
+ * hierarchy; use {@link useModalToast} below it. Sheets opened in the form are
+ * hosted here too, so the photo and file pickers present above them.
  */
 export function ModalToastScope({ children }: { children: ReactNode }) {
   const root = useToast();
@@ -27,7 +29,7 @@ export function ModalToastScope({ children }: { children: ReactNode }) {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ToastProvider>
         <RootToastContext.Provider value={root}>
-          {children}
+          <ScreenSheetProvider>{children}</ScreenSheetProvider>
         </RootToastContext.Provider>
       </ToastProvider>
     </GestureHandlerRootView>

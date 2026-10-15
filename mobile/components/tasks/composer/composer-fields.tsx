@@ -1,3 +1,4 @@
+import { Calendar, Clock, Layers, Tag } from "@/components/Icons";
 import { StepperButton } from "@/components/ui/stepper-button";
 import { getDeadlineOptions } from "@/api/tasks";
 import { useLanguage } from "@/hooks/use-language";
@@ -139,7 +140,7 @@ export function DeadlineField({
   const customMinutes = due ? due.getHours() * 60 + due.getMinutes() : END_OF_DAY;
 
   return (
-    <FieldCard label="Deadline" error={error} testID="task.deadline">
+    <FieldCard label="Deadline" icon={Calendar} error={error} testID="task.deadline">
       <ChipGroup<DeadlineChipId>
         testID="task.deadline.chip"
         value={customActive ? null : chip}
@@ -150,7 +151,7 @@ export function DeadlineField({
         options={DEADLINE_CHIPS}
       />
       {due ? (
-        <Text testID="task.deadline.readout" className="text-[15px] font-medium text-foreground">
+        <Text testID="task.deadline.readout" className="text-[13px] text-muted-foreground">
           {t("Due {when}", { when: localFormat(due, "EEE MMM d, HH:mm") })}
         </Text>
       ) : null}
@@ -232,11 +233,12 @@ export function DurationField({
   return (
     <FieldCard
       label={spread ? "Each day" : "Duration"}
+      icon={Clock}
       error={error}
       testID="task.duration"
       trailing={
         <View className="flex-row items-center gap-2">
-          <Text className="text-[13px] text-muted-foreground">
+          <Text className="text-[12px] text-muted-foreground">
             {t("Spread it out")}
           </Text>
           <Switch
@@ -272,11 +274,10 @@ export function DurationField({
         />
       )}
       {spread && (
-        <Text testID="task.duration.spread.summary" className="text-[15px] font-medium text-foreground">
-          {t("{duration} a day for {count} days, {total} in all", {
-            duration: durationLabel(value),
+        <Text testID="task.duration.spread.summary" className="text-[13px] text-muted-foreground">
+          {t("{count} days, {duration} each", {
             count: days,
-            total: durationLabel(value * days),
+            duration: durationLabel(value),
           })}
         </Text>
       )}
@@ -338,8 +339,8 @@ export function SplitField({
 
   return (
     <FieldCard
-      label="Split into sittings"
-      hint={splitTotal ? "Splits the task into shorter sessions." : undefined}
+      label="Sittings"
+      icon={Layers}
       testID="task.split"
       trailing={
         <View className="flex-row items-center gap-3">
@@ -366,18 +367,19 @@ export function SplitField({
         </View>
       }
     >
-      <Text testID="task.split.summary" className="text-[15px] font-medium text-foreground">
-        {count === 1
-          ? durationLabel(duration)
-          : last !== each
-            ? t("{count} sittings of {duration} and {rest} of {last}", {
+      {count > 1 ? (
+        <Text testID="task.split.summary" className="text-[13px] text-muted-foreground">
+          {last !== each
+            ? t("{count} of {duration}, {rest} of {last}", {
                 count: longer,
                 duration: durationLabel(each),
                 rest: count - longer,
                 last: durationLabel(last),
               })
-            : t("{count} sittings of {duration}", { count, duration: durationLabel(each) })}
-      </Text>
+            : t("{count} of {duration}", { count, duration: durationLabel(each) })}
+        </Text>
+      ) : null}
+      {count > 1 ? (
       <View
         testID="task.split.strip"
         className={cn("flex-row", parts.length > 12 ? "gap-0.5" : "gap-1.5")}
@@ -386,13 +388,14 @@ export function SplitField({
           <View
             key={i}
             className={cn(
-              "h-9 border border-primary/35 bg-primary/15",
+              "h-6 border border-primary/35 bg-primary/15",
               parts.length > 12 ? "rounded-sm" : "rounded-lg",
             )}
             style={{ flexGrow: minutes, flexShrink: 1, flexBasis: 0 }}
           />
         ))}
       </View>
+      ) : null}
     </FieldCard>
   );
 }
@@ -429,7 +432,7 @@ export function EventWhenField({
   }
 
   return (
-    <FieldCard label="When" error={error} testID="task.when">
+    <FieldCard label="When" icon={Calendar} error={error} testID="task.when">
       <WeekStripDatePicker
         testID="task.when.date"
         value={date}
@@ -489,7 +492,7 @@ export function CourseField({
   }
 
   return (
-    <FieldCard label="Course" hint="Other tags go under More options." testID="task.course">
+    <FieldCard label="Course" icon={Tag} testID="task.course">
       <ChipGroup<string>
         testID="task.course.chip"
         value={otherOpen ? null : current}
@@ -513,7 +516,7 @@ export function CourseField({
           returnKeyType="done"
           placeholder={t("Course name")}
           accessibilityLabel={t("Course name")}
-          className="h-12 rounded-xl border border-glass-edge/35 bg-glass/70 dark:bg-glass/[0.07] px-5 text-[17px] text-foreground dark:border-glass-edge/25"
+          className="h-11 rounded-xl border border-glass-edge/35 bg-glass/70 dark:bg-glass/[0.07] px-4 text-[15px] text-foreground dark:border-glass-edge/25"
         />
       )}
     </FieldCard>

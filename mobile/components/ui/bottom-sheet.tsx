@@ -391,6 +391,11 @@ function useBottomSheet() {
   return { ref, open, close };
 }
 
+/** Native hosts sheets in the modal screen; web has no overlay window to avoid. */
+function ScreenSheetProvider({ children }: React.PropsWithChildren) {
+  return <>{children}</>;
+}
+
 export {
   BottomSheet,
   BottomSheetCloseTrigger,
@@ -403,5 +408,6 @@ export {
   BottomSheetScrollView,
   BottomSheetTextInput,
   BottomSheetView,
+  ScreenSheetProvider,
   useBottomSheet,
 };

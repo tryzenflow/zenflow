@@ -1,6 +1,6 @@
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { View } from "react-native";
 import { Text } from "./text";
 
@@ -11,6 +11,7 @@ import { Text } from "./text";
  */
 export function FieldCard({
   label,
+  icon: Icon,
   hint,
   error,
   trailing,
@@ -19,6 +20,8 @@ export function FieldCard({
 }: {
   /** English source string, translated here. */
   label: string;
+  /** Small leading icon (the app's Icons). */
+  icon?: ComponentType<{ size?: number; className?: string }>;
   hint?: string;
   /** English source string of a validation message, translated here. */
   error?: string;
@@ -30,17 +33,20 @@ export function FieldCard({
   return (
     <View
       testID={testID}
-      className="gap-3 rounded-2xl border border-glass-edge/30 bg-glass/60 p-4 dark:border-glass-edge/20 dark:bg-glass/[0.06]"
+      className="gap-2.5 rounded-2xl border border-glass-edge/30 bg-glass/60 p-3.5 dark:border-glass-edge/20 dark:bg-glass/[0.06]"
     >
       <View className="flex-row items-center justify-between gap-3">
-        <Text className="text-[13.5px] font-semibold text-foreground">
-          {t(label)}
-        </Text>
+        <View className="flex-row items-center gap-2">
+          {Icon ? <Icon size={15} className="text-primary" /> : null}
+          <Text className="text-[13px] font-semibold text-foreground">
+            {t(label)}
+          </Text>
+        </View>
         {trailing}
       </View>
       {children}
       {!!hint && !error && (
-        <Text className="text-[12.5px] leading-snug text-muted-foreground">
+        <Text className="text-[12px] leading-snug text-muted-foreground">
           {t(hint)}
         </Text>
       )}

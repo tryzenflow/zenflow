@@ -59,16 +59,15 @@ export function StudentCard({ profile }: { profile: StudentProfileDto }) {
     }
   }
 
-  const chips = [
-    profile.className,
-    profile.cohort,
-    profile.studyProgramName,
-  ].filter((x): x is string => Boolean(x));
+  const chips = [profile.faculty, profile.className].filter((x): x is string =>
+    Boolean(x),
+  );
 
   return (
     <BottomSheet>
       <BottomSheetOpenTrigger asChild>
         <Pressable
+          testID="settings.student-card"
           onPress={loadMarks}
           className="gap-3 border-t border-border px-4 py-3.5"
         >
@@ -125,6 +124,10 @@ export function StudentCard({ profile }: { profile: StudentProfileDto }) {
                 ) : null}
               </View>
             </View>
+          ) : profile.marksFetchedAt === null ? (
+            <Text className="text-[13px] text-muted-foreground">
+              {t("Marks loading")}
+            </Text>
           ) : null}
         </Pressable>
       </BottomSheetOpenTrigger>
@@ -136,7 +139,9 @@ export function StudentCard({ profile }: { profile: StudentProfileDto }) {
             </Text>
           </View>
           {terms ? (
-            <MarksSheet profile={profile} terms={terms} />
+            <View testID="marks.sheet">
+              <MarksSheet profile={profile} terms={terms} />
+            </View>
           ) : failed ? (
             <Pressable onPress={loadMarks} className="px-5 py-2">
               <Text className="text-[14px] text-muted-foreground">

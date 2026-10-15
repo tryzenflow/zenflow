@@ -90,10 +90,11 @@ export function ReminderField({
               accessibilityLabel={t("Edit reminder: {reminder}", {
                 reminder: localizedReminderLabel(m),
               })}
-              className="h-11 flex-row items-center gap-2 pl-4 pr-2"
+              hitSlop={{ top: 6, bottom: 6 }}
+              className="h-8 flex-row items-center gap-1.5 pl-3 pr-1.5"
             >
-              <Bell size={18} className="text-primary" />
-              <Text className="text-[15px] font-semibold text-primary">
+              <Bell size={14} className="text-primary" />
+              <Text className="text-[13px] font-medium text-primary">
                 {localizedReminderLabel(m)}
               </Text>
             </Pressable>
@@ -104,9 +105,9 @@ export function ReminderField({
                 reminder: localizedReminderLabel(m),
               })}
               hitSlop={8}
-              className="mr-2 size-7 items-center justify-center rounded-full bg-primary/20"
+              className="mr-1.5 size-5 items-center justify-center rounded-full bg-primary/20"
             >
-              <X size={13} className="text-primary" />
+              <X size={11} className="text-primary" />
             </Pressable>
           </View>
         ))}
@@ -116,12 +117,12 @@ export function ReminderField({
             disabled={disabled}
             onPress={() => openFor("add")}
             className={cn(
-              "h-11 flex-row items-center gap-2 rounded-full border border-dashed border-border px-4",
+              "h-8 flex-row items-center gap-1.5 rounded-full border border-dashed border-border px-3",
               disabled && "opacity-50",
             )}
           >
-            <Plus size={18} className="text-muted-foreground" />
-            <Text className="text-[15px] font-medium text-muted-foreground">
+            <Plus size={14} className="text-muted-foreground" />
+            <Text className="text-[13px] font-medium text-muted-foreground">
               {t("Add reminder")}
             </Text>
           </Pressable>
