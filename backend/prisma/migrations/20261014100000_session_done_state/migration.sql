@@ -39,9 +39,6 @@ CREATE INDEX "SessionOccurrenceState_userId_completedAt_idx" ON "SessionOccurren
 -- CreateIndex
 CREATE UNIQUE INDEX "SessionOccurrenceState_seriesId_occurrenceStart_key" ON "SessionOccurrenceState"("seriesId", "occurrenceStart");
 
--- CreateIndex
-CREATE INDEX "Session_userId_completedAt_idx" ON "Session"("userId", "completedAt");
-
 -- AddForeignKey
 ALTER TABLE "SessionOccurrenceState" ADD CONSTRAINT "SessionOccurrenceState_seriesId_fkey" FOREIGN KEY ("seriesId") REFERENCES "SessionSeries"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
