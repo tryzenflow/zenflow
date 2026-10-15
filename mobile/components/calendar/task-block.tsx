@@ -1,23 +1,13 @@
 import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
-import { locale, localizedDeadlineShort } from "@/lib/i18n";
-import {
-  AlertCircle,
-  AlertTriangle,
-  Clock,
-  Globe,
-  MapPin,
-} from "@/components/Icons";
+import { locale } from "@/lib/i18n";
 import { Text } from "@/components/ui/text";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
-import { differenceInCalendarDays } from "date-fns";
 import {
   DAILY_HORIZON,
-  SESSION_TYPE_META,
   TIME_GRANULARITY,
-  formatDeadlineShort,
   isOnlineLocation,
   zonedDate,
   zonedWallClockToUtc,
@@ -52,10 +42,11 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 import {
-  OverdueBadge,
-  SessionTypeBadge,
-  sessionTypeIcon,
-} from "./session-type-badge";
+  type DayGrid,
+  blockTier,
+  dragTargetMin,
+  minToY,
+} from "@/lib/day-grid";
 
 /** Gap (px) between the DND hatch's diagonal lines. */
 const HATCH_SPACING = 7;
@@ -69,10 +60,8 @@ function hatchPath(width: number, height: number, spacing: number): string {
   return parts.join("");
 }
 
-const TAGS_MIN_DURATION = 45;
-
 /** Android pads text for ascenders/descenders on top of `lineHeight`, which
- * pushes a one-line compact row off-centre in a 15-min block. */
+ * pushes a one-line row off-centre in a short block. */
 const COMPACT_TEXT_STYLE = {
   includeFontPadding: false,
   textAlignVertical: "center",
@@ -87,18 +76,6 @@ const LIFT_HOLD_MS = 350;
 const AUTOSCROLL_BAND_TOP = 140;
 const AUTOSCROLL_BAND_BOTTOM = 90;
 
-const TAG_TINTS = [
-  "border-brand-blueberry/40 bg-brand-blueberry/[0.12] dark:bg-brand-blueberry/[0.22]",
-  "border-brand-butter/60 bg-brand-butter/20 dark:bg-brand-butter/[0.22]",
-  "border-session-done/45 bg-session-done/[0.14] dark:bg-session-done/[0.22]",
-];
-
-function tagTint(tag: string) {
-  let h = 0;
-  for (let i = 0; i < tag.length; i++) h = (h * 31 + tag.charCodeAt(i)) >>> 0;
-  return TAG_TINTS[h % TAG_TINTS.length];
-}
-
 function minutesOfDayLocal(iso: string, tz: string) {
   const d = toZonedTime(new Date(iso), tz);
   return d.getHours() * 60 + d.getMinutes();
@@ -111,15 +88,8 @@ function fmt(iso: string, tz: string) {
   });
 }
 
-function fmtMin(min: number, tz: string, refISO: string) {
-  const d = toZonedTime(new Date(refISO), tz);
-  d.setHours(Math.floor(min / 60), min % 60, 0, 0);
-  return d.toLocaleTimeString(locale(), { hour: "numeric", minute: "2-digit" });
-}
-
-/** "9:00 AM" + "10:30 AM" → "9:00–10:30 AM" — drop the repeated meridiem so the
- * range reads tighter. A mixed AM/PM span, or a 24h locale (no meridiem token),
- * falls back to the spaced full form. */
+/** "9:00 AM" + "10:30 AM" → "9:00–10:30 AM". A mixed AM/PM span, or a 24h
+ * locale (no meridiem token), falls back to the spaced full form. */
 function joinRange(start: string, end: string) {
   const sm = start.match(/\s([AP]M)$/i);
   const em = end.match(/\s([AP]M)$/i);
@@ -127,63 +97,6 @@ function joinRange(start: string, end: string) {
     return `${start.slice(0, sm.index ?? start.length).trimEnd()}–${end}`;
   }
   return `${start} – ${end}`;
-}
-
-/** The compact deadline marker sitting after the time range on a scheduled
- * block. Two states: a muted upcoming pill (`Clock` + relative label) and an
- * cherry "late" pill (`AlertTriangle`) once the block starts past its deadline —
- * the latter is also the annotation for a confirmed past-deadline drag. */
-function DueChip({ late, label }: { late: boolean; label: string }) {
-  useLanguage();
-  return (
-    <View
-      className={cn(
-        "flex-row items-center gap-1 rounded px-1 py-0.5",
-        late ? "bg-session-late/[0.14] dark:bg-session-late/[0.22]" : "bg-muted",
-      )}
-    >
-      {late ? (
-        <AlertTriangle
-          size={9}
-          className="text-session-late-ink"
-        />
-      ) : (
-        <Clock size={12} className="text-muted-foreground" />
-      )}
-      <Text
-        className={cn(
-          "text-xs font-medium leading-none",
-          late ? "text-session-late-ink" : "text-muted-foreground",
-        )}
-      >
-        {t("Due")}{' '}
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-/** Compact room / building marker on the block's meta line. `MapPin` + the
- * session's `location` string, truncated to one line — shown after the time
- * range (and any due chip) whenever the session carries a location. A meeting
- * link reads "Online" with a globe instead of the raw URL. */
-function LocationChip({ location }: { location: string }) {
-  useLanguage();
-  const online = isOnlineLocation(location);
-  const Icon = online ? Globe : MapPin;
-  return (
-    <View className="min-w-0 flex-row items-center gap-1 self-start rounded-full border border-foreground/10 bg-white/50 px-2 py-[3px] dark:bg-white/10">
-      <Icon size={13} className="shrink-0 text-muted-foreground" />
-      <Text
-        className="shrink text-[11px] font-medium leading-[14px] text-muted-foreground"
-        style={COMPACT_TEXT_STYLE}
-        numberOfLines={1}
-        ellipsizeMode="tail"
-      >
-        {online ? t("Online") : location}
-      </Text>
-    </View>
-  );
 }
 
 interface DragSnap {
@@ -194,7 +107,8 @@ interface SessionBlockProps {
   segment: DaySegment;
   layout: BlockLayout;
   tz: string;
-  totalHeight: number;
+  /** The day's grid: the only y <-> minute mapping the block uses. */
+  grid: DayGrid;
   /** Left edge (px) within the day column — `DayTimeline` cascades
    * overlapping blocks by shifting later columns right. */
   leftOffset: number;
@@ -254,7 +168,7 @@ function SessionBlockImpl({
   segment,
   layout,
   tz,
-  totalHeight,
+  grid,
   leftOffset,
   topShift = 0,
   blockWidth,
@@ -294,17 +208,11 @@ function SessionBlockImpl({
     : segment.continues || rawEndMin === 0
       ? DAILY_HORIZON
       : rawEndMin;
-  const duration = endMin - startMin;
-  // Under ~40px tall: one row with the time inline after the title; shorter
-  // than that is too short for the stacked title + time + chips layout. Judged
-  // by pixels, not minutes, so a taller hour grid lets a 30-min block stack.
-  const isCompact = (duration / DAILY_HORIZON) * totalHeight < 40;
-  // Bare Lucide icon for the one-line compact layout (the bordered
-  // `SessionTypeBadge` chip is itself taller than a 15-min block).
-  const CompactTypeIcon = sessionTypeIcon(segment.type);
-  const showTags = duration > TAGS_MIN_DURATION && segment.tags.length > 0;
-  // Every full (non-compact) block, 30 min included, names its type in the badge.
-  const typeBadgeIconOnly = false;
+  // Block edges come from the grid, so a block crossing a folded night still
+  // has its true pixel extent.
+  const topPx = minToY(grid, startMin);
+  const height = Math.max(minToY(grid, endMin) - topPx, 16);
+  const tier = blockTier(height);
 
   // Overlapping blocks render in their normal type colour — no conflict state,
   // no annotation. `layout` still cascades them (see `DayTimeline`).
@@ -322,32 +230,14 @@ function SessionBlockImpl({
   // tappable, so it can open its edit screen — the surface for "delete just
   // this occurrence".
   const isTappable = !isSplit && !!onPress;
-  // Inline "due" chip: only surfaced when the deadline actually matters right
-  // now — the block already starts after it ("late"), or it falls within a day
-  // of the block. A comfortably-future deadline shows nothing, keeping the
-  // meta line to just the time range.
-  const dueChip = ((): { late: boolean; label: string } | null => {
-    if (!deadline) return null;
-    const startMs = new Date(segment.taskStart).getTime();
-    if (startMs > new Date(deadline).getTime())
-      return { late: true, label: t("late") };
-    const daysOut = differenceInCalendarDays(
-      zonedDate(deadline, tz),
-      zonedDate(segment.taskStart, tz),
-    );
-    if (daysOut > 1) return null;
-    return {
-      late: false,
-      label: localizedDeadlineShort(deadline, tz, new Date(segment.taskStart)),
-    };
-  })();
   // Overdue = the server flagged it late (placed past its deadline) or it now
-  // starts after its deadline (e.g. dragged there). Drives the red card, the
-  // thick red left border and the Overdue badge — as on web.
-  const overdue = (late || dueChip?.late === true) && state !== "dnd";
-
-  const height = Math.max((duration / DAILY_HORIZON) * totalHeight, 16);
-  const pxPerMin = totalHeight / DAILY_HORIZON;
+  // starts after its deadline (e.g. dragged there). Drives the tone only; the
+  // block carries no badge (the detail view shows the deadline).
+  const overdue =
+    (late ||
+      (!!deadline &&
+        new Date(segment.taskStart).getTime() > new Date(deadline).getTime())) &&
+    state !== "dnd";
 
   const translateY = useSharedValue(0);
   const translateX = useSharedValue(0);
@@ -503,7 +393,7 @@ function SessionBlockImpl({
     const effectiveStart =
       pinnedStartMin.value != null ? pinnedStartMin.value : startMin;
     return {
-      top: (effectiveStart / DAILY_HORIZON) * totalHeight + topOffset,
+      top: minToY(grid, effectiveStart) + topOffset,
       zIndex: isDragging.value ? 40 : isNested ? 30 : 10 + cascadeLayer,
     };
   });
@@ -565,14 +455,16 @@ function SessionBlockImpl({
     (as, prev) => {
       if (prev == null || as === prev || isDragging.value !== 1) return;
       const snapped =
-        Math.round((fingerTYSV.value + as) / pxPerMin / TIME_GRANULARITY) *
-        TIME_GRANULARITY;
+        Math.round(
+          (dragTargetMin(grid, startMin, fingerTYSV.value + as) - startMin) /
+            TIME_GRANULARITY,
+        ) * TIME_GRANULARITY;
       const nsm = clamp(
         startMin + snapped,
         0,
         DAILY_HORIZON - TIME_GRANULARITY,
       );
-      snapOffsetY.value = (nsm - startMin) * pxPerMin;
+      snapOffsetY.value = minToY(grid, nsm) - minToY(grid, startMin);
       dragPreviewMin.value = nsm;
       if (lastSnap.value !== nsm) {
         lastSnap.value = nsm;
@@ -619,7 +511,7 @@ function SessionBlockImpl({
       if (absY > absX) {
         isDragging.value = 1;
 
-        const deltaMinutes = effTY / pxPerMin;
+        const deltaMinutes = dragTargetMin(grid, startMin, effTY) - startMin;
         const snappedMinutes =
           Math.round(deltaMinutes / TIME_GRANULARITY) * TIME_GRANULARITY;
         const newStartMin = clamp(
@@ -630,7 +522,7 @@ function SessionBlockImpl({
 
         // Move the card itself to the snapped slot (content-space px) — it
         // now shows exactly where it will land.
-        snapOffsetY.value = (newStartMin - startMin) * pxPerMin;
+        snapOffsetY.value = minToY(grid, newStartMin) - minToY(grid, startMin);
         dragPreviewMin.value = newStartMin;
 
         if (lastSnap.value !== newStartMin) {
@@ -670,7 +562,11 @@ function SessionBlockImpl({
         // reported (a drag that never crossed a grid line).
         const fallback = clamp(
           startMin +
-            Math.round(effTY / pxPerMin / TIME_GRANULARITY) * TIME_GRANULARITY,
+            Math.round(
+              (dragTargetMin(grid, startMin, effTY) - startMin) /
+                TIME_GRANULARITY,
+            ) *
+              TIME_GRANULARITY,
           0,
           DAILY_HORIZON - TIME_GRANULARITY,
         );
@@ -803,7 +699,7 @@ function SessionBlockImpl({
           style={[moveStyle, { height }]}
           className={cn(
             "flex overflow-hidden rounded-[14px]",
-            isCompact
+            tier !== "full"
               ? "flex-row items-center gap-1 pl-3.5 pr-2"
               : "flex-col gap-0.5 pl-4 pr-2.5 py-1.5",
             segment.continues && !drawsThrough && "rounded-b-none",
@@ -882,36 +778,12 @@ function SessionBlockImpl({
               </Svg>
             </View>
           )}
-          {isCompact ? (
-            // A 15-min block is only ~16px tall — one tight row: type icon,
-            // title (truncated), start time. No second line, no chips; there
-            // simply isn't the height, and stacking them clipped the title to
-            // nothing.
-            <View className="w-full min-w-0 flex-row items-center gap-1">
-              {segment.continued ? (
-                <Text className="shrink-0 text-[10px] leading-none text-muted-foreground">
-                  ↳
-                </Text>
-              ) : (
-                <CompactTypeIcon
-                  size={16}
-                  className={cn(
-                    "shrink-0",
-                    SESSION_TYPE_META[segment.type].textClass,
-                  )}
-                />
-              )}
-              {/* Overdue marker: a bare icon beside the type icon (no chip —
-                  the card is already cherry). */}
-              {overdue && (
-                <AlertCircle
-                  size={15}
-                  color={SESSION_TONES.late.ink[isDarkColorScheme ? "dark" : "light"]}
-                  style={{ flexShrink: 0 }}
-                />
-              )}
-              {/* Explicit px line heights: `leading-none` (lineHeight = font
-                  size) clipped the tops of the glyphs on Android. */}
+          {tier !== "full" ? (
+            // Short blocks: one row. Under 24px the title alone; under 44px the
+            // title and start time. No badges or chips at any tier.
+            <View className="w-full min-w-0 flex-row items-center gap-1.5">
+              {/* Explicit px line heights: `leading-none` clipped the tops of
+                  the glyphs on Android. */}
               <Text
                 className="min-w-0 flex-1 text-[11px] font-semibold leading-[14px]"
                 style={COMPACT_TEXT_STYLE}
@@ -920,85 +792,51 @@ function SessionBlockImpl({
               >
                 {segment.title}
               </Text>
-              {/* Location sits right after the title; the title gives way first. */}
-              {!!segment.location && !segment.continued && (
-                <View style={{ flexShrink: 1, maxWidth: "38%" }}>
-                  <LocationChip location={segment.location} />
-                </View>
+              {tier === "time" && (
+                <Text
+                  className={cn("shrink-0 text-[11px] font-medium leading-[14px]", timeClass)}
+                  style={COMPACT_TEXT_STYLE}
+                >
+                  {segment.continued
+                    ? t("ends {time}", { time: fmt(segment.taskEnd, tz) })
+                    : fmt(segment.taskStart, tz)}
+                </Text>
               )}
-              <Text
-                className={cn("shrink-0 text-[11.5px] font-medium leading-[14px]", timeClass)}
-                style={COMPACT_TEXT_STYLE}
-              >
-                {segment.continued
-                  ? t("ends {time}", { time: fmt(segment.taskEnd, tz) })
-                  : fmt(segment.taskStart, tz)}
-              </Text>
             </View>
           ) : (
             <>
-              <View className="min-w-0 flex-row items-center gap-1.5">
-                {segment.continued ? (
-                  <Text className="shrink-0 text-[10px] text-muted-foreground">
-                    ↳
-                  </Text>
-                ) : (
-                  <SessionTypeBadge
-                    type={segment.type}
-                    size="md"
-                    iconOnly={typeBadgeIconOnly}
-                  />
-                )}
+              <Text
+                className="text-[12px] font-semibold leading-4"
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {segment.title}
+              </Text>
+              <Text
+                className={cn("text-[12px] font-medium leading-[15px]", timeClass)}
+                numberOfLines={1}
+              >
+                {segment.continued
+                  ? t("ends {time}", { time: fmt(segment.taskEnd, tz) })
+                  : segment.continues && !drawsThrough
+                    ? t("{time} → next day", {
+                        time: fmt(segment.taskStart, tz),
+                      })
+                    : joinRange(
+                        fmt(segment.taskStart, tz),
+                        fmt(segment.taskEnd, tz),
+                      )}
+              </Text>
+              {!!segment.location && !segment.continued && (
                 <Text
-                  className="min-w-0 flex-1 text-[12px] font-semibold leading-5"
+                  className="text-[11px] font-medium leading-[14px] text-muted-foreground"
                   numberOfLines={1}
                   ellipsizeMode="tail"
                 >
-                  {segment.title}
+                  {isOnlineLocation(segment.location)
+                    ? t("Online")
+                    : segment.location}
                 </Text>
-              </View>
-              <View className="flex-row flex-wrap items-center gap-1">
-                <Text
-                  className={cn("text-[12px] font-medium leading-[15px]", timeClass)}
-                >
-                  {segment.continued
-                    ? t("cont. → {time}", { time: fmt(segment.taskEnd, tz) })
-                    : segment.continues && !drawsThrough
-                      ? t("{time} → next day", {
-                          time: fmt(segment.taskStart, tz),
-                        })
-                      : joinRange(
-                          fmt(segment.taskStart, tz),
-                          fmt(segment.taskEnd, tz),
-                        )}
-                </Text>
-                {overdue ? (
-                  <OverdueBadge />
-                ) : (
-                  dueChip && <DueChip {...dueChip} />
-                )}
-                {!!segment.location && (
-                  <LocationChip location={segment.location} />
-                )}
-              </View>
-              {showTags && (
-                <View className="flex-row flex-wrap gap-1 overflow-hidden">
-                  {segment.tags.slice(0, 3).map((t) => (
-                    <View
-                      key={t}
-                      className={cn("rounded border px-1.5 py-0.5", tagTint(t))}
-                    >
-                      <Text className="text-[9px] font-medium">{t}</Text>
-                    </View>
-                  ))}
-                  {segment.tags.length > 3 && (
-                    <View className="rounded border border-border bg-muted px-1.5 py-0.5">
-                      <Text className="text-[9px] font-medium text-muted-foreground">
-                        +{segment.tags.length - 3}
-                      </Text>
-                    </View>
-                  )}
-                </View>
               )}
             </>
           )}

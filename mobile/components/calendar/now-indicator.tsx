@@ -1,20 +1,13 @@
 import { useLanguage } from "@/hooks/use-language";
-import { DAILY_HORIZON } from "@zenflow/core";
-import { toZonedTime } from "date-fns-tz";
 import { View } from "react-native";
 
 interface NowIndicatorProps {
-  now: Date;
-  tz: string;
-  totalHeight: number;
+  /** Y (px) of the current time on the day grid (`minToY` of the wall clock). */
+  top: number;
 }
 
-export function NowIndicator({ now, tz, totalHeight }: NowIndicatorProps) {
+export function NowIndicator({ top }: NowIndicatorProps) {
   useLanguage();
-  const zoned = toZonedTime(now, tz);
-  const mins = zoned.getHours() * 60 + zoned.getMinutes();
-  const top = (mins / DAILY_HORIZON) * totalHeight;
-
   return (
     <View
       className="pointer-events-none absolute inset-x-0 z-20"
