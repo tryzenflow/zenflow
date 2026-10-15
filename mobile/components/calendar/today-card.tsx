@@ -104,7 +104,7 @@ export function TodayCard({
   return (
     <View
       testID="today-card"
-      className="mx-4 mt-2 flex-row items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3"
+      className="mx-4 mt-2 flex-row items-center gap-3 rounded-2xl bg-primary/10 px-3.5 py-2.5 dark:bg-primary/[0.14]"
     >
       <ProgressRing done={summary.done} total={summary.total} />
       <View className="min-w-0 flex-1 gap-0.5">
@@ -138,13 +138,24 @@ export function TodayCard({
         )}
       </View>
       <View className="items-end gap-1">
-        <Text className="text-[13px] font-bold" testID="today-streak">
-          {streakDays > 0
-            ? t("{count} day streak", { count: streakDays })
-            : t("No streak yet")}
-        </Text>
+        <View
+          className={streakDays > 0 ? "rounded-full bg-brand-yellow/30 px-2.5 py-1" : undefined}
+        >
+          <Text
+            className={
+              streakDays > 0
+                ? "text-[12px] font-bold text-foreground"
+                : "text-[12px] font-medium text-muted-foreground"
+            }
+            testID="today-streak"
+          >
+            {streakDays > 0
+              ? t("{count} day streak", { count: streakDays })
+              : t("No streak yet")}
+          </Text>
+        </View>
         {freezes > 0 ? (
-          <View className="flex-row items-center gap-1 rounded-full bg-secondary px-2 py-0.5">
+          <View className="flex-row items-center gap-1 rounded-full bg-card px-2 py-0.5">
             <Shield size={11} className="text-primary" />
             <Text className="text-[11px] font-semibold text-primary">
               {t("{count} freeze ready", { count: freezes })}
