@@ -23,7 +23,7 @@ function copy(title: string, hint: string) {
 export const STEP_COPY: Record<ChecklistStep, { title: string; hint: string }> =
   {
     "switch-day": copy("Switch day", "Swipe the calendar, or tap a day at the top."),
-    "create-task": copy("Create a task", "Tap +, or tap the blue area on an empty day."),
+    "create-task": copy("Create a task", "Tap +, or tap an empty day."),
     "move-task": copy("Move a task", "Hold one of your tasks and drag it to reschedule in 15-minute steps."),
     "block-actions": copy("Hold a task for more actions", "Hold it without moving. Move to… changes the day."),
     "open-month": copy("Open the Month view", "Tap Month in the tab bar."),
