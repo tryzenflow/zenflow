@@ -106,7 +106,7 @@ frontend `dev | build | typecheck | lint | test:e2e`.
   `src/prisma/error-codes.ts`. Global prefix `/api/v1`; Swagger at `/api`.
 - **Frontend:** kebab-case files, PascalCase components; axios only in `src/api/`; Zustand
   for the user store; build UI from `components/ui/` primitives; Tailwind v4 tokens
-  ("Sand and slate", `packages/core/src/palette.ts`); **no mobile-responsive target**.
+  ("Warm Sunrise", `packages/core/src/palette.ts`); **no mobile-responsive target**.
 
 ## Tests, lint, typecheck
 

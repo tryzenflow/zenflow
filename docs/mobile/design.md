@@ -1,17 +1,17 @@
 # Mobile design: Sunrise Flow
 
 Zenflow is time that flows like a sunrise: calm, warm, always moving forward. Native craft rules are
-the floor (below); the principles on top are what make the app recognisably ours. Tokens (Sand and slate
+the floor (below); the principles on top are what make the app recognisably ours. Tokens (Warm Sunrise
 colours, Geist) live in `mobile/app/global.css`, hex values and session tones in
 `packages/core/src/palette.ts`; this doc covers behaviour and feel, not tokens.
 
 ## Principles
-1. **Light, not chrome.** Glass reads as light through frosted air: slate-tinted blur, soft inner
+1. **Light, not chrome.** Glass reads as light through frosted air: orange-tinted blur, soft inner
    glow, hairline edge. Never the default grey material. Dark mode is dusk, not black.
 2. **Flow, not snap.** A change of time (day, week, tab, reschedule) travels in the direction of time.
    Nothing teleports. Use the shared presets in `lib/motion.ts`, never ad-hoc durations.
 3. **One sun per screen.** One warm focal element (today, next-up, the primary action). Everything
-   else recedes. Slate is rationed; cherry marks only late and overdue work.
+   else recedes. Orange is rationed; red marks only late and overdue work.
 4. **Calm by default.** No bounce for show. Haptics and sound are quiet, warm and reserved for commits.
 5. **Ownable marks.** Brand and hero surfaces use custom SVG from `components/brand/` (logo arc,
    horizon, swoosh), not a stock icon set. Utility icons are being migrated (checklist below).
