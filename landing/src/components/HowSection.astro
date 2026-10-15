@@ -1,0 +1,25 @@
+---
+import type { Lang } from "../config";
+import { COPY } from "../content/copy";
+import StickyScroll from "../islands/StickyScroll";
+
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const c = COPY[lang];
+const essay = c.demo.tasks[c.demo.tasks.length - 1];
+---
+
+<section id="how" class="mx-auto max-w-6xl scroll-mt-8 px-4 py-24 sm:px-6">
+  <h2 class="max-w-2xl text-[clamp(2rem,5vw,3.25rem)] leading-tight font-extrabold tracking-tight text-balance">{c.howLabel}</h2>
+  <div class="mt-12">
+    <StickyScroll
+      client:visible
+      beats={c.how}
+      sources={c.sources}
+      task={{ title: essay.title, minutes: `${essay.minutes} ${c.demo.minutes}`, time: c.demo.due }}
+      placed={c.demo.placed}
+    />
+  </div>
+</section>

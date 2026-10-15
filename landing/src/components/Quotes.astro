@@ -1,0 +1,53 @@
+---
+import type { Lang } from "../config";
+import { COPY } from "../content/copy";
+import Counter from "../islands/Counter";
+
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const c = COPY[lang];
+---
+
+<section class="overflow-hidden py-24">
+  <div class="mx-auto max-w-6xl px-4 sm:px-6">
+    <h2 class="text-[clamp(2rem,5vw,3.25rem)] leading-tight font-extrabold tracking-tight">{c.quotesLabel}</h2>
+  </div>
+  <div
+    class="group mt-10 flex [mask-image:linear-gradient(90deg,transparent,#000_8%,#000_92%,transparent)] [--marquee-duration:60s] motion-reduce:overflow-x-auto"
+  >
+    {
+      [0, 1].map((copyIndex) => (
+        <ul
+          class:list={[
+            "flex shrink-0 animate-marquee gap-4 pr-4 group-hover:[animation-play-state:paused] motion-reduce:animate-none",
+            copyIndex === 1 && "motion-reduce:hidden",
+          ]}
+          aria-hidden={copyIndex === 1 ? "true" : undefined}
+        >
+          {c.quotes.map((q) => (
+            <li class="w-[min(80vw,22rem)] shrink-0 rounded-3xl border border-rule bg-card p-6">
+              <figure>
+                <blockquote class="text-lg font-semibold text-pretty">{q.quote}</blockquote>
+                <figcaption class="mt-4 text-sm text-muted">{q.name}</figcaption>
+              </figure>
+            </li>
+          ))}
+        </ul>
+      ))
+    }
+  </div>
+  <dl class="mx-auto mt-16 grid max-w-6xl gap-4 px-4 sm:grid-cols-2 sm:px-6">
+    {
+      c.counters.map((n) => (
+        <div class="rounded-3xl border border-rule bg-card p-8">
+          <dt class="text-muted">{n.label}</dt>
+          <dd class="mt-1 bg-linear-90 from-primary-ink to-lecture bg-clip-text text-6xl font-extrabold tracking-tight text-transparent dark:from-primary">
+            <Counter client:visible={{ rootMargin: "300px" }} value={n.value} />
+          </dd>
+        </div>
+      ))
+    }
+  </dl>
+</section>
