@@ -9,6 +9,10 @@ cd "$(dirname "$0")"
 out="$PWD/results"
 mkdir -p "$out"
 
+# The CI emulator is slow enough that the launcher trips an ANR ("Pixel Launcher
+# isn't responding"), and that dialog covers the app and fails every flow.
+adb shell settings put global hide_error_dialogs 1
+
 adb install -r ../../dist/zenflow-android.apk
 
 # Background recorder: one mp4 per segment until the flows finish.
