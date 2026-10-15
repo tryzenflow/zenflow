@@ -1,3 +1,4 @@
+import { NoteSkeleton } from "@/components/tasks/note-skeleton";
 import { useToast } from "@/components/ui/toast";
 import { getBaseURL } from "@/lib/api-client";
 import { resolveNoteFileUrls } from "@/lib/file-link";
@@ -35,6 +36,9 @@ export function SessionNote({ html }: { html: string }) {
   const { toast } = useToast();
   const { height } = useWindowDimensions();
   const [fontDataUri, setFontDataUri] = useState<string | null>(null);
+  // The WebView mounts once the font settles, so its document loads once
+  // instead of reloading when the font arrives.
+  const [fontSettled, setFontSettled] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,6 +48,9 @@ export function SessionNote({ html }: { html: string }) {
       })
       .catch(() => {
         // Best effort: the document falls back to the system sans-serif.
+      })
+      .finally(() => {
+        if (!cancelled) setFontSettled(true);
       });
     return () => {
       cancelled = true;
@@ -56,6 +63,8 @@ export function SessionNote({ html }: { html: string }) {
     }),
     [html, isDarkColorScheme, fontDataUri],
   );
+
+  if (!fontSettled) return <NoteSkeleton />;
 
   return (
     <WebView

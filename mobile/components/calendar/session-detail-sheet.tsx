@@ -149,6 +149,10 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
     const handleSnapChange = (index: number) => {
       if (isFullSnap(index)) setNoteMounted(true);
     };
+    // Starts loading as soon as the sheet heads for full, not once it settles.
+    const handleAnimate = (_from: number, to: number) => {
+      if (isFullSnap(to)) setNoteMounted(true);
+    };
 
     const onToggle = async (next: "done" | "open"): Promise<boolean> => {
       if (!session) return false;
@@ -199,6 +203,7 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
           snapPoints={SESSION_DETAIL_SNAP_POINTS}
           enableDynamicSizing={false}
           onChange={handleSnapChange}
+          onAnimate={handleAnimate}
         >
           {session && (
             <>
@@ -341,7 +346,7 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
                     <View className="gap-2">
                       <Text className="text-[13px] font-semibold text-muted-foreground">{t("Notes")}</Text>
                       {noteMounted && session.note ? (
-                        <SessionNote html={session.note} />
+                        <SessionNote key={session.id} html={session.note} />
                       ) : (
                         <Text className="text-[14px] text-muted-foreground">
                           {t("Swipe up to read the note")}
