@@ -2,7 +2,7 @@ import { GlassButton } from "@/components/ui/glass-button";
 import { CheckOffButton } from "@/components/calendar/check-off-button";
 import { SessionTypeBadge } from "@/components/calendar/session-type-badge";
 import { localizedReminderLabel } from "@/components/tasks/composer/reminder-field";
-import { NoteSkeleton } from "@/components/tasks/note-skeleton";
+import { SessionNote } from "@/components/tasks/note/session-note";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import {
@@ -53,22 +53,12 @@ import type { Session } from "@zenflow/shared";
 import { type Href, useRouter } from "expo-router";
 import {
   type ReactNode,
-  Suspense,
   forwardRef,
-  lazy,
   startTransition,
   useImperativeHandle,
   useState,
 } from "react";
 import { View } from "react-native";
-
-// The note WebView (and its font loader) is only needed at full snap, so it is
-// split out the same way the description editor is.
-const SessionNote = lazy(() =>
-  import("@/components/tasks/note/session-note").then((m) => ({
-    default: m.SessionNote,
-  })),
-);
 
 export interface SessionDetailSheetHandle {
   open: (session: Session) => void;
@@ -351,9 +341,7 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
                     <View className="gap-2">
                       <Text className="text-[13px] font-semibold text-muted-foreground">{t("Notes")}</Text>
                       {noteMounted && session.note ? (
-                        <Suspense fallback={<NoteSkeleton />}>
-                          <SessionNote html={session.note} />
-                        </Suspense>
+                        <SessionNote html={session.note} />
                       ) : (
                         <Text className="text-[14px] text-muted-foreground">
                           {t("Swipe up to read the note")}
