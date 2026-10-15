@@ -68,6 +68,8 @@ export function toSessionDto(row: SessionRow): SharedSession {
     late: isLate(row),
     completedAt: row.completedAt ? row.completedAt.toISOString() : null,
     skipped: row.skipped,
+    anchor: row.anchor,
+    anchoredAt: row.anchoredAt ? row.anchoredAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -98,6 +100,7 @@ export function slotProposalFieldsOf(
       to: d.to.toISOString(),
     })),
     ...(placement.degraded ? { schedulingDegraded: true } : {}),
+    ...(placement.undoGroupId ? { undoGroupId: placement.undoGroupId } : {}),
   };
 }
 

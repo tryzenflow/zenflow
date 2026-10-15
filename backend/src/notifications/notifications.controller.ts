@@ -143,6 +143,7 @@ export class NotificationsController {
           to: r.to.toISOString(),
         })),
         failedSessionIds: result.failedSessionIds,
+        ...(result.undoGroupId ? { undoGroupId: result.undoGroupId } : {}),
       },
     };
   }

@@ -63,6 +63,8 @@ function session(overrides: Partial<SessionRow> & { id: string }): SessionRow {
     syncMissedAt: null,
     completedAt: null,
     skipped: false,
+    anchor: "AUTO",
+    anchoredAt: null,
     deleted: false,
     userId: user.id,
     seriesId: null,
@@ -246,10 +248,15 @@ describe("SessionsService.create", () => {
         deadline: new Date("2026-06-10T17:00:00.000Z"),
       },
       now: expect.any(Date),
+      createInput: expect.objectContaining({ title: "Write report" }),
+      undoGroupId: expect.any(String),
     });
 
     expect(result).toEqual({
       id: "session-1",
+      anchor: "AUTO",
+      anchoredAt: null,
+      undoGroupId: expect.any(String),
       title: "Write report",
       note: null,
       location: null,

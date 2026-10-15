@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { randomUUID } from "crypto";
 import type {
   CreateSessionResponse,
   RemoveSessionResponse,
@@ -28,7 +29,8 @@ import { DAY_MS } from "../scheduler/core/slot";
 import { CreateSessionDto } from "./dto/create-session.dto";
 import { ListSessionSuggestionsDto } from "./dto/list-session-suggestions.dto";
 import { ListSessionsDto } from "./dto/list-sessions.dto";
-import { WITH_TAGS_AND_SERIES } from "./types/session-row";
+import { SessionRow, WITH_TAGS_AND_SERIES } from "./types/session-row";
+import { PlacementNeedsConfirmationException } from "./placement-plan.exception";
 import {
   slotProposalFieldsOf,
   toCreateSessionResponse,
@@ -132,6 +134,44 @@ export class SessionCrudService {
     return this.createFixedOneOff(dto, user, cleanTags);
   }
 
+  /**
+   * Inserts one unplaced `TASK` row and its CREATE event. Shared by the
+   * create path and a confirmed create plan, which runs it in its own
+   * transaction.
+   */
+  async insertSingleTask(
+    tx: Prisma.TransactionClient,
+    user: User,
+    dto: CreateSessionDto,
+    cleanTags: string[],
+    deadline: Date,
+    undoGroupId?: string,
+  ): Promise<SessionRow> {
+    const tagIds = await this.tagsService.resolveTagIds(tx, user.id, cleanTags);
+    const s = await tx.session.create({
+      data: {
+        type: "TASK",
+        source: "USER",
+        title: dto.title,
+        note: dto.note ?? null,
+        location: dto.location ?? null,
+        durationMinutes: dto.durationMinutes,
+        deadline,
+        tags: { connect: tagIds.map((id) => ({ id })) },
+        userId: user.id,
+      },
+      include: WITH_TAGS_AND_SERIES,
+    });
+    await tx.sessionEvent.create({
+      data: {
+        ...createEventData(s, user.id),
+        ...(undoGroupId ? { groupId: undoGroupId } : {}),
+      },
+    });
+    recordCreateEvent();
+    return s;
+  }
+
   /** A flexible, deadline-driven `TASK` — inserted, then engine-placed. */
   private async createSingleTask(
     dto: CreateSessionDto,
@@ -140,38 +180,21 @@ export class SessionCrudService {
     deadline: Date,
     now: Date,
   ): Promise<CreateSessionResponse> {
-    const created = await this.prisma.$transaction(async (tx) => {
-      const tagIds = await this.tagsService.resolveTagIds(
-        tx,
-        user.id,
-        cleanTags,
-      );
-      const s = await tx.session.create({
-        data: {
-          type: "TASK",
-          source: "USER",
-          title: dto.title,
-          note: dto.note ?? null,
-          location: dto.location ?? null,
-          durationMinutes: dto.durationMinutes,
-          deadline,
-          tags: { connect: tagIds.map((id) => ({ id })) },
-          userId: user.id,
-        },
-        include: WITH_TAGS_AND_SERIES,
-      });
-      await tx.sessionEvent.create({ data: createEventData(s, user.id) });
-      recordCreateEvent();
-      return s;
-    });
+    // One undo entry covers the create and whatever its placement displaced.
+    const undoGroupId = randomUUID();
+    const created = await this.prisma.$transaction((tx) =>
+      this.insertSingleTask(tx, user, dto, cleanTags, deadline, undoGroupId),
+    );
 
     // heuristic → 50/50 A/B → optional LinUCB override + SlotProposal. Never
     // leaves the row unplaced: a miss gets the last resort, a throw discards it.
+    // A plan that needs the user's confirmation discards it the same way and
+    // answers 409 with the plan; the dto is kept so a confirm can insert it.
     const placement = await placeOrDiscard(
       this.prisma,
       { userId: user.id, sessionIds: [created.id] },
-      () =>
-        this.taskPlacement.placeOnCreate({
+      async () => {
+        const res = await this.taskPlacement.placeOnCreate({
           user,
           task: {
             id: created.id,
@@ -180,11 +203,18 @@ export class SessionCrudService {
           },
           now,
           infeasiblePolicy: dto.infeasiblePolicy,
-        }),
+          createInput: dto as unknown as Prisma.InputJsonValue,
+          undoGroupId,
+        });
+        if (res.pendingPlan) {
+          throw new PlacementNeedsConfirmationException(res.pendingPlan);
+        }
+        return res;
+      },
     );
     return toCreateSessionResponse(
       { ...created, scheduledStartTime: placement.scheduledStartTime },
-      slotProposalFieldsOf(placement),
+      { ...slotProposalFieldsOf(placement), undoGroupId },
     );
   }
 

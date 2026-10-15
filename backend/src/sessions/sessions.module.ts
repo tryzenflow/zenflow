@@ -13,6 +13,8 @@ import { FilesModule } from "../files/files.module";
 import { SchedulerModule } from "../scheduler/scheduler.module";
 import { StreaksModule } from "../streaks/streaks.module";
 import { SessionCheckOffService } from "./session-check-off.service";
+import { PlacementPlanService } from "./placement-plan.service";
+import { SessionAnchorService } from "./session-anchor.service";
 
 @Module({
   imports: [
@@ -32,6 +34,8 @@ import { SessionCheckOffService } from "./session-check-off.service";
     SlotPickService,
     SessionSearchService,
     SessionCheckOffService,
+    PlacementPlanService,
+    SessionAnchorService,
   ],
   exports: [SessionsService],
 })

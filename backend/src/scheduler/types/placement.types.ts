@@ -1,4 +1,8 @@
-import type { SchedulingArm } from "@zenflow/shared";
+import type {
+  PlacementPlan,
+  PlacementMove,
+  SchedulingArm,
+} from "@zenflow/shared";
 import type { Interval } from "../core/slot";
 
 /**
@@ -48,6 +52,22 @@ export interface PlacementResult {
   degraded?: boolean;
   /** `true` when no real slot existed and the "never unplaced" last resort was applied. */
   lastResort?: boolean;
+  /** Undo handle for the moves this placement applied (`SYSTEM_MOVE` group). Absent when none moved. */
+  undoGroupId?: string;
+  /**
+   * The plan Python wants but nothing was applied for: it moves a `CHOSEN`
+   * session and the request allowed only confirmed moves (raw, from
+   * `PythonPlacer`). `TaskPlacementService` stores it as `pendingPlan`.
+   */
+  needsConfirmation?: PendingPlacement;
+  /** The stored plan the client confirms with `POST /sessions/placement/confirm` (ADR-0022). */
+  pendingPlan?: PlacementPlan;
+}
+
+/** A plan Python returned as `NEEDS_CONFIRMATION` (raw, before it is stored). */
+export interface PendingPlacement {
+  startMs: number;
+  moves: PlacementMove[];
 }
 
 /** One member of a `TASK` series to place. */

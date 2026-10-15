@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { randomUUID } from "crypto";
 import type {
   SlotPickResponse,
   Session as SharedSession,
@@ -12,6 +13,12 @@ import { toSessionDto } from "./session-mapper";
 import { moveEventData, recordUserMove } from "./session-events";
 import { SlotPickDto } from "./dto/slot-pick.dto";
 import { SlotTakenException } from "./slot-taken.exception";
+
+/** The session after an alternative was applied, with its undo group (absent when it was already there). */
+interface AppliedAlternative {
+  session: SharedSession;
+  undoGroupId?: string;
+}
 
 type LoadedProposal = {
   id: string;
@@ -64,7 +71,11 @@ export class SlotPickService {
       const applied = await this.tryApplyAlternative(sessionId, proposal, user);
       if (applied) {
         await this.recordChosenPolicy(proposal.id, this.otherPolicy(proposal));
-        return { session: applied, chosenByUser: "alternative" };
+        return {
+          session: applied.session,
+          chosenByUser: "alternative",
+          undoGroupId: applied.undoGroupId,
+        };
       }
     }
 
@@ -124,7 +135,7 @@ export class SlotPickService {
     sessionId: string,
     proposal: LoadedProposal,
     user: User,
-  ): Promise<SharedSession | null> {
+  ): Promise<AppliedAlternative | null> {
     const altStart = this.alternativeStart(proposal);
     if (!altStart) return null;
     await this.assertNoSiblingClash(sessionId, altStart, user);
@@ -178,14 +189,14 @@ export class SlotPickService {
     sessionId: string,
     newStart: Date,
     user: User,
-  ): Promise<SharedSession | null> {
+  ): Promise<AppliedAlternative | null> {
     const existing = await this.prisma.session.findFirst({
       where: { id: sessionId, userId: user.id, deleted: false },
       include: WITH_TAGS_AND_SERIES,
     });
     if (!existing?.scheduledStartTime) return null;
     if (existing.scheduledStartTime.getTime() === newStart.getTime()) {
-      return toSessionDto(existing);
+      return { session: toSessionDto(existing) };
     }
 
     const dragDistanceMinutes = Math.round(
@@ -193,23 +204,34 @@ export class SlotPickService {
     );
     const isFirstMove = existing.lastMovedAt == null;
 
+    const undoGroupId = randomUUID();
     const [row, moveEvent] = await this.prisma.$transaction(async (tx) => {
       const event = await tx.sessionEvent.create({
-        data: moveEventData({
-          sessionId,
-          userId: user.id,
-          oldStart: existing.scheduledStartTime as Date,
-          oldDurationMinutes: existing.durationMinutes,
-          newStart,
-          newDurationMinutes: existing.durationMinutes,
-          dragDistanceMinutes,
-        }),
+        data: {
+          ...moveEventData({
+            sessionId,
+            userId: user.id,
+            oldStart: existing.scheduledStartTime as Date,
+            oldDurationMinutes: existing.durationMinutes,
+            newStart,
+            newDurationMinutes: existing.durationMinutes,
+            dragDistanceMinutes,
+          }),
+          groupId: undoGroupId,
+        },
         select: { id: true },
       });
       recordUserMove(dragDistanceMinutes);
       const updated = await tx.session.update({
         where: { id: sessionId },
-        data: { scheduledStartTime: newStart, lastMovedAt: new Date() },
+        data: {
+          scheduledStartTime: newStart,
+          lastMovedAt: new Date(),
+          // A picked time is the user's choice: fix it (ADR-0022).
+          ...(existing.type === "TASK"
+            ? { anchor: "CHOSEN", anchoredAt: new Date() }
+            : {}),
+        },
         include: WITH_TAGS_AND_SERIES,
       });
       return [updated, event] as const;
@@ -230,7 +252,7 @@ export class SlotPickService {
         dragDistanceMinutes,
       );
     }
-    return toSessionDto(row);
+    return { session: toSessionDto(row), undoGroupId };
   }
 
   private recordChosenPolicy(

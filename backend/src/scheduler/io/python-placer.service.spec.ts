@@ -135,6 +135,31 @@ describe("PythonPlacer.placeSingle (python answers)", () => {
     );
   });
 
+  it("returns a NEEDS_CONFIRMATION plan without writing or moving anything", async () => {
+    const move = {
+      id: "chosen",
+      fromMs: 1,
+      toMs: 2,
+      anchor: "CHOSEN" as const,
+      cost: 11,
+    };
+    const asked = member({
+      outcome: "NEEDS_CONFIRMATION",
+      startMs: START,
+      moves: [move],
+      heuristic: null,
+    });
+    const { placer, prisma, displacement, experiment } = await make({
+      place: ok([asked]),
+    });
+    const res = await placer.placeSingle(user, task, "deadline-change", now);
+    expect(res.scheduledStartTime).toBeNull();
+    expect(res.needsConfirmation).toEqual({ startMs: START, moves: [move] });
+    expect(prisma.session.update).not.toHaveBeenCalled();
+    expect(displacement.applyMoves).not.toHaveBeenCalled();
+    expect(experiment.recordProposal).not.toHaveBeenCalled();
+  });
+
   it("applies displacement moves and reports them", async () => {
     const move = {
       id: "x",
@@ -150,6 +175,7 @@ describe("PythonPlacer.placeSingle (python answers)", () => {
       "u1",
       [move],
       expect.any(Function),
+      expect.any(String),
     );
     expect(res.displaced).toHaveLength(1);
   });

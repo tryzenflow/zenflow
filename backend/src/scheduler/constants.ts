@@ -158,3 +158,6 @@ export const SESSION_SYSTEM_MOVE_REWARD = 0;
 /** Latest local start a scan considers (cap on days scanned, ~30d); does NOT
  * replace `MAX_SCAN_DAYS`, which still normalizes the context vector. */
 export const SCAN_CAP_DAYS = 30;
+
+/** How long a placement plan waiting for confirmation stays valid (ADR-0022). */
+export const PLACEMENT_PLAN_TTL_MS = 30 * 60_000;
