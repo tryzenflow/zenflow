@@ -48,6 +48,7 @@ The scheduler places one `TASK` (or one series) into an empty slot and never mov
 | Concept | File |
 | --- | --- |
 | Preference matrix, decay, reinforcement | `scheduler/core/preference.ts`, `matrix-decay.ts` |
+| Onboarding focus-band prior | `scheduler/core/focus-band.ts` (written by `users/users.service.ts`) |
 | Fallback slot score, series spread | `scheduler/core/slot-score.ts`, `series-spread.ts` |
 | rrule expansion, occurrence ids | `scheduler/core/recurrence.ts` |
 | Delayed-reward math, conflict detection | `scheduler/core/reward.ts`, `sync-conflicts.ts` |

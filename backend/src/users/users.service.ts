@@ -12,9 +12,12 @@ import { nameFromEmail } from "./name-from-email";
 import { langToDb } from "./user-response";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { remapExdatesForTimezone } from "../scheduler/core/recurrence";
+import { seedFocusBandMatrix } from "../scheduler/core/focus-band";
+import { withLockedPreferenceMatrix } from "../scheduler/io/preference-matrix-lock";
 import {
   PREFERENCE_MATRIX_LENGTH,
   PREFERENCE_SLOTS_PER_DAY,
+  type FocusBand,
   type PreferenceMatrixResponse,
 } from "@zenflow/shared";
 
@@ -45,7 +48,7 @@ export class UsersService {
   }
 
   async update(id: string, updateUserDto: UpdateUserDto) {
-    const { onboarded, seenTip, ...rest } = updateUserDto;
+    const { onboarded, seenTip, focusBand, ...rest } = updateUserDto;
     try {
       if (onboarded) {
         // Idempotent: only the first completion stamps the time.
@@ -61,6 +64,7 @@ export class UsersService {
           data: { seenTips: { push: seenTip } },
         });
       }
+      if (focusBand) await this.setFocusBand(id, focusBand);
       const userUpdate = this.prisma.user.update({
         where: { id },
         data: {
@@ -83,6 +87,21 @@ export class UsersService {
         throw new NotFoundException("Cannot find user with the given id");
       throw new InternalServerErrorException();
     }
+  }
+
+  /**
+   * Stores the onboarding focus band and seeds the preference matrix from it,
+   * in one row-locked transaction. A matrix that already holds learned or seeded
+   * data is kept as it is.
+   */
+  private async setFocusBand(userId: string, focusBand: FocusBand) {
+    await withLockedPreferenceMatrix(this.prisma, userId, (row, tx) => {
+      const seeded = seedFocusBandMatrix(row.preferenceMatrix, focusBand);
+      return tx.user.update({
+        where: { id: userId },
+        data: seeded ? { focusBand, preferenceMatrix: seeded } : { focusBand },
+      });
+    });
   }
 
   /**

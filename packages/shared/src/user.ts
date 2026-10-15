@@ -14,6 +14,20 @@ export const DEFAULT_REMINDER_CHOICES = [0, 5, 10, 15, 30, 60] as const;
 export type DefaultReminderChoice = (typeof DEFAULT_REMINDER_CHOICES)[number];
 
 /**
+ * The time of day a user says they focus best, from onboarding. Seeds the
+ * preference matrix (`scheduler/core/focus-band.ts`). Bands are local hours:
+ * MORNING 08:00 to 12:00, AFTERNOON 12:00 to 17:00, EVENING 17:00 to 21:00,
+ * LATE_NIGHT 21:00 to 02:00.
+ */
+export const FOCUS_BANDS = [
+  "MORNING",
+  "AFTERNOON",
+  "EVENING",
+  "LATE_NIGHT",
+] as const;
+export type FocusBand = (typeof FOCUS_BANDS)[number];
+
+/**
  * A user's scheduling preferences. Used to carry just `timezone` — the
  * working-window fields (workStart/workEnd/workDays) were dropped from
  * `User` with no replacement in the education-pivot migration
@@ -68,6 +82,8 @@ export interface User extends UserPreferences {
   allowNotifications: boolean;
   /** Getting-started checklist steps done (and `checklist-hidden`); on any device. */
   seenTips: TipId[];
+  /** Onboarding answer: when the user focuses best; null = not asked yet. */
+  focusBand: FocusBand | null;
 }
 
 /** Partial update to a user's name and preferences. */
@@ -86,4 +102,9 @@ export interface UpdateUserInput {
   allowNotifications?: boolean;
   /** Marks one checklist step done / the checklist hidden (appended once; idempotent, can't be unset). */
   seenTip?: TipId;
+  /**
+   * Onboarding answer. Seeds the preference matrix when it is still the default;
+   * a learned matrix is left as it is.
+   */
+  focusBand?: FocusBand;
 }

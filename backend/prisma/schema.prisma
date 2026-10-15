@@ -12,6 +12,14 @@ datasource db {
   extensions = [pg_trgm]
 }
 
+/// Onboarding answer: when the user focuses best (`@zenflow/shared` FOCUS_BANDS).
+enum FocusBand {
+  MORNING
+  AFTERNOON
+  EVENING
+  LATE_NIGHT
+}
+
 enum Language {
   VI_VN @map("vi-VN")
   EN_US @map("en-US")
@@ -43,6 +51,9 @@ model User {
 
   preferenceMatrix          Float[]   @default([])
   preferenceMatrixDecayedAt DateTime?
+
+  /// Onboarding focus band; null = not asked yet. Seeds `preferenceMatrix` only while it is still the default.
+  focusBand FocusBand?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
