@@ -40,7 +40,7 @@ const STYLE = `
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;scroll-padding-top:16px}
 body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.7 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased}
-.sun{height:4px;background:linear-gradient(90deg,#ff6900,#f0b100 55%,#d8f999)}
+.sun{height:4px;background:linear-gradient(90deg,#E8895E,#47687C 55%,#B0B8BA)}
 .wrap{max-width:700px;margin:0 auto;padding:0 22px}
 .top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:22px}
 .brand{display:flex;align-items:center;gap:10px;color:var(--fg);text-decoration:none;font-weight:650;font-size:19px;letter-spacing:-.01em}
