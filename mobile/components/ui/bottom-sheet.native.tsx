@@ -38,6 +38,7 @@ import { FullWindowOverlay } from "react-native-screens";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { X } from "../../components/Icons";
 import type { NativeViewStyle } from "../../lib/native-style";
+import { NAV_THEME } from "../../lib/constants";
 import { useColorScheme } from "../../lib/useColorScheme";
 import { cn } from "../../lib/utils";
 import * as Slot from "../primitives/slot";
@@ -329,6 +330,8 @@ const BottomSheetTextInput = React.forwardRef<
   BottomSheetTextInputRef,
   BottomSheetTextInputProps
 >(({ className, placeholderClassName, ...props }, ref) => {
+  const { isDarkColorScheme } = useColorScheme();
+  const caret = (isDarkColorScheme ? NAV_THEME.dark : NAV_THEME.light).primary;
   return (
     <GBottomSheetTextInput
       ref={ref}
@@ -338,6 +341,8 @@ const BottomSheetTextInput = React.forwardRef<
       )}
       placeholderClassName={cn("text-muted-foreground", placeholderClassName)}
       style={{ fontFamily: "Geist" }}
+      selectionColor={caret}
+      cursorColor={caret}
       {...props}
     />
   );

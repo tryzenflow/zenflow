@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/spinner";
 import { CircleUserRound, Mail } from "@/components/Icons";
 import { BackIcon, WaitIcon } from "@/components/brand/icons";
 import { SunriseBackdrop } from "@/components/brand/sunrise-backdrop";
@@ -17,7 +18,6 @@ import {
   useForm,
 } from "react-hook-form";
 import {
-  ActivityIndicator,
   Pressable,
   TextInput,
   type TextInputInstance,
@@ -505,11 +505,7 @@ export default function LoginScreen() {
               />
               {submitting ? (
                 <View className="flex-row items-center justify-center gap-[9px]">
-                  <ActivityIndicator
-                    className="mr-2"
-                    size="small"
-                    color="black"
-                  />
+                  <View className="mr-2"><Spinner size={18} tone="onPrimary" /></View>
                   <Text className="text-[14px] text-muted-foreground">
                     {t("Verifying code…")}
                   </Text>
@@ -569,11 +565,7 @@ export default function LoginScreen() {
                 onPress={handleSubmit(onSubmit)}
               >
                 {submitting && (
-                  <ActivityIndicator
-                    className="mr-2"
-                    size="small"
-                    color="black"
-                  />
+                  <View className="mr-2"><Spinner size={18} tone="onPrimary" /></View>
                 )}
                 <Text
                   className={cn(

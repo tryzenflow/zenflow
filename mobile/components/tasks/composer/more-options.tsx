@@ -137,7 +137,7 @@ export function MoreOptions({
                   accessibilityLabel={t("Location")}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  className="h-[50px] rounded-xl border border-glass-edge/35 bg-glass/70 px-4 text-base text-foreground dark:border-glass-edge/25"
+                  className="h-[50px] rounded-xl border border-glass-edge/35 bg-glass/70 dark:bg-glass/[0.07] px-4 text-base text-foreground dark:border-glass-edge/25"
                 />
               )}
             />

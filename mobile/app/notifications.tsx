@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/spinner";
 import { t } from "@/lib/i18n";
 import { safeBack } from "@/lib/nav";
 import { useLanguage } from "@/hooks/use-language";
@@ -28,7 +29,6 @@ import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   Modal,
   Pressable,
@@ -297,7 +297,7 @@ export default function NotificationsScreen() {
       {/* Body */}
       {loading ? (
         <View className="flex-1 items-center justify-center py-20">
-          <ActivityIndicator />
+          <Spinner />
         </View>
       ) : (
         <FlatList
@@ -550,7 +550,7 @@ function NotificationRowItem({
                 className="mt-2 flex-row items-center gap-1.5 self-start rounded-full bg-primary px-3 py-1 active:opacity-80"
               >
                 {rescheduling ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
+                  <Spinner size={14} color="#ffffff" />
                 ) : (
                   <RefreshCw size={12} color="#ffffff" />
                 )}

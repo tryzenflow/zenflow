@@ -266,7 +266,7 @@ export function TaskComposer({
               accessibilityLabel={t("What needs doing?")}
               returnKeyType="done"
               className={cn(
-                "h-[56px] rounded-2xl border border-primary/30 bg-glass/70 px-4 text-[17px] text-foreground dark:border-primary/25",
+                "h-[56px] rounded-2xl border border-primary/30 bg-glass/70 dark:bg-glass/[0.07] px-4 text-[17px] text-foreground dark:border-primary/25",
               )}
             />
             {form.formState.errors.title?.message && (

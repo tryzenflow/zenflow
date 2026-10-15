@@ -1,7 +1,9 @@
 import * as React from "react";
 import { TextInput, View } from "react-native";
 
+import { NAV_THEME } from "@/lib/constants";
 import { scaleType } from "@/lib/type-scale";
+import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
 
 type InputProps = {
@@ -47,6 +49,8 @@ const Input = React.forwardRef<React.ElementRef<typeof TextInput>, InputProps>(
     ref,
   ) => {
     const Component: React.ComponentType<any> = as ?? TextInput;
+    const { isDarkColorScheme } = useColorScheme();
+    const caret = (isDarkColorScheme ? NAV_THEME.dark : NAV_THEME.light).primary;
     const inputClassName = cn(
           "web:flex h-10 native:h-12 web:w-full rounded-xl border border-glass-edge/35 bg-glass/70 dark:border-glass-edge/25 dark:bg-glass/[0.07] px-3 web:py-2 text-base lg:text-sm native:text-lg native:leading-[1.25] text-foreground placeholder:text-muted-foreground web:ring-offset-background file:border-0 file:bg-transparent file:font-medium web:focus-visible:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring web:focus-visible:ring-offset-2",
           props.editable === false && "opacity-50 web:cursor-not-allowed",
@@ -62,6 +66,8 @@ const Input = React.forwardRef<React.ElementRef<typeof TextInput>, InputProps>(
         className={inputClassName}
         placeholderClassName={cn("text-muted-foreground", placeholderClassName)}
         style={{ fontFamily: "Geist", fontSize }}
+        selectionColor={caret}
+        cursorColor={caret}
         {...props}
       />
     );
@@ -69,7 +75,14 @@ const Input = React.forwardRef<React.ElementRef<typeof TextInput>, InputProps>(
     if (!rightElement) return input;
 
     return (
-      <View className="relative">
+      // The wrapper, not the input, takes the width: `flex-1` on the input alone
+      // left the wrapper content-sized, so the pill clipped or shrank as you typed.
+      <View
+        className={cn(
+          "relative min-w-0",
+          className?.includes("flex-1") ? "flex-1" : "w-full",
+        )}
+      >
         {input}
         <View className="absolute right-3 top-1/2 -translate-y-1/2">
           {rightElement}

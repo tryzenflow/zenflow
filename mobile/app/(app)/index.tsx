@@ -57,6 +57,7 @@ import {
   useLocalSearchParams,
   useRouter,
 } from "expo-router";
+import { useTodayRequest } from "@/lib/today-request";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { View, useWindowDimensions } from "react-native";
 import { useSharedValue } from "react-native-reanimated";
@@ -224,6 +225,16 @@ export default function CalendarScreen() {
       commitFocusedDate(zonedDate(dateParam, tz));
     }
   }, [dateParam, tz, commitFocusedDate]);
+
+  // The Today tab: show today in Day view, from any view.
+  const todayNonce = useTodayRequest((s) => s.nonce);
+  const lastTodayNonce = useRef(todayNonce);
+  useEffect(() => {
+    if (todayNonce === lastTodayNonce.current) return;
+    lastTodayNonce.current = todayNonce;
+    commitFocusedDate(zonedNow(tz));
+    setView("day");
+  }, [todayNonce, tz, commitFocusedDate]);
 
   // A deep-link to a view (`view` param, e.g. the Today tab) switches to it.
   const lastViewParamRef = useRef(viewParam);

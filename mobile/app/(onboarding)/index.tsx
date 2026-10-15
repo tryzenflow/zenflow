@@ -41,8 +41,8 @@ import {
 import { LANGUAGES } from "@/lib/preferences";
 import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
+import { Spinner } from "@/components/ui/spinner";
 import {
-  ActivityIndicator,
   AppState,
   KeyboardAvoidingView,
   Linking,
@@ -399,7 +399,7 @@ export default function OnboardingScreen() {
       onPress={onPress}
     >
       {busy ? (
-        <ActivityIndicator testID="onboarding.busy" />
+        <Spinner testID="onboarding.busy" tone="onPrimary" />
       ) : (
         <Text className="font-semibold text-primary-foreground">{label}</Text>
       )}
