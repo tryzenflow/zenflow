@@ -45,6 +45,7 @@ Covered now, by file in `mobile/test/screens/`:
 | `settings`, `settings-sections`, `preferences-section`, `dlu-accounts` | sign-out; profile edit; finish-setup card; tags; language, timezone, reminder and notification toggle; connect, sync, update and disconnect LMS and portal accounts |
 | `notifications` | empty, list, open row, dismiss, select and clear all, sync-conflict "Reschedule them all" |
 | `tab-bar` | labels, tab press events, no navigation on the focused tab |
+| `components/session-search-view` | day headers, type-coloured row borders, title highlight, empty and no-match states, load on open, Back |
 
 Not covered by component tests, on purpose: pan, long-press and swipe gestures (the gesture-handler and swipeable stubs only simulate taps), and `className` styling.
 
