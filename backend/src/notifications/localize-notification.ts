@@ -88,19 +88,30 @@ export function localizeNotification<
       (_, term: string, year: string) =>
         `Thời khóa biểu học kỳ ${term} ${year} đã sẵn sàng`,
     );
-    content = content.replace(
-      /^You may not see every week yet\. We're still syncing\.$/,
-      "Bạn có thể chưa thấy đủ các tuần. Chúng tôi vẫn đang đồng bộ.",
+    title = title.replace(
+      /^Sem (\d) timetable is live$/,
+      (_, term: string) => `Thời khóa biểu HK${term} đã lên sóng`,
     );
+    content = content
+      .replace(
+        /^You may not see every week yet\. We're still syncing\.$/,
+        "Bạn có thể chưa thấy đủ các tuần. Chúng tôi vẫn đang đồng bộ.",
+      )
+      .replace(
+        /^Still syncing, check back soon\.$/,
+        "Đang đồng bộ, lát ghé lại nha.",
+      );
   } else if (row.eventName === "marks.ready") {
     title = title.replace(/^Your marks are available$/, "Điểm của bạn đã có");
     content = content.replace(/^Open your profile\.$/, "Mở hồ sơ của bạn.");
   } else if (row.eventName === "timetable.changed") {
-    title = title.replace(
-      /^Your timetable changed$/,
-      "Thời khóa biểu của bạn đã thay đổi",
-    );
-    content = content.replace(/^See what changed\.$/, "Xem có gì thay đổi.");
+    title = title
+      .replace(/^Your timetable changed$/, "Thời khóa biểu của bạn đã thay đổi")
+      .replace(/^A new lecture$/, "Có buổi học mới")
+      .replace(/^(\d+) new lectures$/, "$1 buổi học mới");
+    content = content
+      .replace(/^See what changed\.$/, "Xem có gì thay đổi.")
+      .replace(/^Check your timetable\.$/, "Xem lại thời khóa biểu của bạn.");
   } else if (row.eventName === "reminder.fired") {
     const match = title.match(
       /^(Exam|Due|Class|Task starts|Event starts) in (.+?): ([\s\S]+)$/,

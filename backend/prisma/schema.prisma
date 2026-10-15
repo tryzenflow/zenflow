@@ -1271,6 +1271,10 @@ model SyncRunUnit {
   status  SyncUnitStatus @default(PENDING)
   // True when a live request was made for this unit.
   fetched Boolean        @default(false)
+  // Lectures this unit created and other rows it updated or removed; summed
+  // when the run settles to word its notice.
+  created Int            @default(0)
+  changed Int            @default(0)
 
   run SyncRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 

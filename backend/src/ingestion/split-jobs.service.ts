@@ -17,7 +17,7 @@ import { EnrollmentDiscoveryService } from "./enrollment-discovery.service";
 import { IngestionScheduleService } from "./ingestion-schedule.service";
 import { LmsMonthService } from "./lms-month.service";
 import { StudentSyncService } from "./student-sync.service";
-import { SyncRunService } from "./sync-run.service";
+import { SyncRunService, type UnitReport } from "./sync-run.service";
 import { TimetableWeekService } from "./timetable-week.service";
 import { errorMessage, isIngestionEnabled } from "./watcher-support";
 
@@ -107,7 +107,7 @@ export class SplitJobsService {
     job: Job<UnitJobData>,
     token: string | undefined,
     provider: Provider,
-    fn: () => Promise<{ ok: boolean; fetched: boolean }>,
+    fn: () => Promise<UnitReport>,
   ) {
     const result = await this.guarded(job, token, provider, fn);
     await this.runs.report(job.data.runId, job.data.unit, result);

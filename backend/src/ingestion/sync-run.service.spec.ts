@@ -11,10 +11,14 @@ function makeDb(units: string[]) {
   const self: { current: unknown } = { current: null };
   const lock = { held: false };
   const unitRows = new Map(
-    units.map((u) => [u, { status: "PENDING", fetched: false }]),
+    units.map((u) => [
+      u,
+      { status: "PENDING", fetched: false, created: 0, changed: 0 },
+    ]),
   );
   const run = {
     id: "run1",
+    kind: "PORTAL_TIMETABLE",
     integrationId: "int1",
     scheduleId: "sch1",
     claimedAt: NOW,
@@ -31,7 +35,12 @@ function makeDb(units: string[]) {
           data,
         }: {
           where: { unit?: string; status: string };
-          data: { status: string; fetched?: boolean };
+          data: {
+            status: string;
+            fetched?: boolean;
+            created?: number;
+            changed?: number;
+          };
         }) => {
           let count = 0;
           for (const [name, row] of unitRows) {
@@ -39,10 +48,20 @@ function makeDb(units: string[]) {
             if (row.status !== where.status) continue;
             row.status = data.status;
             if (data.fetched !== undefined) row.fetched = data.fetched;
+            row.created = data.created ?? 0;
+            row.changed = data.changed ?? 0;
             count += 1;
           }
           return Promise.resolve({ count });
         },
+      ),
+      aggregate: jest.fn(() =>
+        Promise.resolve({
+          _sum: {
+            created: [...unitRows.values()].reduce((n, r) => n + r.created, 0),
+            changed: [...unitRows.values()].reduce((n, r) => n + r.changed, 0),
+          },
+        }),
       ),
       count: jest.fn(
         ({ where }: { where: { status?: string; fetched?: boolean } }) =>
@@ -76,6 +95,9 @@ function makeDb(units: string[]) {
       update: jest.fn(() => Promise.resolve(run)),
     },
     notification: { findFirst: jest.fn().mockResolvedValue(null) },
+    integration: {
+      findUnique: jest.fn().mockResolvedValue({ userId: "u1" }),
+    },
     // Advisory try-lock: `lock.held` simulates another job holding it.
     $queryRaw: jest.fn(() => Promise.resolve([{ locked: !lock.held }])),
     $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn(self.current)),
@@ -154,7 +176,8 @@ describe("SyncRunService", () => {
     const { service, notifications } = await make(["w1", "w2"]);
     const note = {
       event: "timetable.ready" as const,
-      title: "Timetable for semester 1 2026-2027 is available",
+      title: "Sem 1 timetable is live",
+      since: NOW,
     };
 
     expect(await service.notifyOnce("run1", "u1", note, NOW)).toBe(true);
@@ -164,7 +187,7 @@ describe("SyncRunService", () => {
       "u1",
       expect.objectContaining({
         title: note.title,
-        content: "You may not see every week yet. We're still syncing.",
+        content: "Still syncing, check back soon.",
         eventName: "timetable.ready",
       }),
       expect.anything(),
@@ -179,11 +202,107 @@ describe("SyncRunService", () => {
       "u1",
       {
         event: "timetable.ready",
-        title: "Timetable for semester 1 2026-2027 is available",
+        title: "Sem 1 timetable is live",
+        since: NOW,
       },
       NOW,
     );
     expect(sent).toBe(false);
+    expect(notifications.create).not.toHaveBeenCalled();
+  });
+
+  it("raises one 'N new lectures' notice with the run's total when it settles", async () => {
+    const { service, notifications } = await make(["w1", "w2", "w3"]);
+    await service.report(
+      "run1",
+      "w1",
+      { ok: true, fetched: true, created: 2 },
+      NOW,
+    );
+    await service.report(
+      "run1",
+      "w2",
+      { ok: true, fetched: true, changed: 4 },
+      NOW,
+    );
+    expect(notifications.create).not.toHaveBeenCalled();
+
+    await service.report(
+      "run1",
+      "w3",
+      { ok: true, fetched: true, created: 1 },
+      NOW,
+    );
+    expect(notifications.create).toHaveBeenCalledTimes(1);
+    expect(notifications.create).toHaveBeenCalledWith(
+      "u1",
+      expect.objectContaining({
+        title: "3 new lectures",
+        content: "Check your timetable.",
+        eventName: "timetable.changed",
+      }),
+      expect.anything(),
+    );
+  });
+
+  it("words a single new lecture in the singular", async () => {
+    const { service, notifications } = await make(["w1"]);
+    await service.report(
+      "run1",
+      "w1",
+      { ok: true, fetched: true, created: 1 },
+      NOW,
+    );
+    expect(notifications.create).toHaveBeenCalledWith(
+      "u1",
+      expect.objectContaining({ title: "A new lecture" }),
+      expect.anything(),
+    );
+  });
+
+  it("falls back to 'changed' when nothing was added", async () => {
+    const { service, notifications } = await make(["w1"]);
+    await service.report(
+      "run1",
+      "w1",
+      { ok: true, fetched: true, changed: 2 },
+      NOW,
+    );
+    expect(notifications.create).toHaveBeenCalledWith(
+      "u1",
+      expect.objectContaining({
+        title: "Your timetable changed",
+        content: "See what changed.",
+      }),
+      expect.anything(),
+    );
+  });
+
+  it("stays silent at settle when the run already raised its notice", async () => {
+    const { service, notifications } = await make(["w1", "w2"]);
+    await service.notifyOnce(
+      "run1",
+      "u1",
+      {
+        event: "timetable.ready",
+        title: "Sem 1 timetable is live",
+        since: NOW,
+      },
+      NOW,
+    );
+    notifications.create.mockClear();
+    await service.report(
+      "run1",
+      "w1",
+      { ok: true, fetched: true, created: 2 },
+      NOW,
+    );
+    await service.report(
+      "run1",
+      "w2",
+      { ok: true, fetched: true, created: 1 },
+      NOW,
+    );
     expect(notifications.create).not.toHaveBeenCalled();
   });
 
@@ -195,7 +314,8 @@ describe("SyncRunService", () => {
       "u1",
       {
         event: "timetable.ready",
-        title: "Timetable for semester 1 2026-2027 is available",
+        title: "Sem 1 timetable is live",
+        since: NOW,
       },
       NOW,
     );

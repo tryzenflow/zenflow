@@ -19,7 +19,7 @@ import { MaterializerService } from "./materializer.service";
 import { OccurrenceCacheService } from "./occurrence-cache.service";
 import { OccurrenceFanoutService } from "./occurrence-fanout.service";
 import { PortalSessionService } from "./portal-session.service";
-import { SyncRunService } from "./sync-run.service";
+import { SyncRunService, type RunNote } from "./sync-run.service";
 import {
   errorMessage,
   isOccurrenceCacheEnabled,
@@ -45,10 +45,22 @@ function termNumber(termId: string): string {
   return termId.replace(/^HK0?/, "");
 }
 
+/** "Sem 1 timetable is live", sent once per student after the term's start. */
+function readyNote(semester: string, since: Date): RunNote {
+  return {
+    event: "timetable.ready",
+    title: `Sem ${termNumber(semester)} timetable is live`,
+    since,
+  };
+}
+
 export interface WeekResult {
   ok: boolean;
   /** True when a live portal request was made. */
   fetched: boolean;
+  /** Lectures created, and other rows updated or removed. */
+  created?: number;
+  changed?: number;
 }
 
 /**
@@ -106,20 +118,44 @@ export class TimetableWeekService {
       ? await this.fromCache(data, sectionIds, weekStart, weekEnd, now)
       : await this.fromPortal(data, term, sectionIds, weekStart, weekEnd, now);
 
-    if (outcome.ok && outcome.changes.created + outcome.changes.other > 0) {
+    const { created, other } = outcome.changes;
+    // The first lectures of a term announce it right away; anything later is
+    // worded once the whole run is summed (SyncRunService.settleIfComplete).
+    if (outcome.ok && created > 0 && (await this.termWasEmpty(data, term))) {
       await this.runs.notifyOnce(
         data.runId,
         data.userId,
-        outcome.changes.created > 0
-          ? {
-              event: "timetable.ready",
-              title: `Timetable for semester ${termNumber(term.semester)} ${term.academicYear} is available`,
-            }
-          : { event: "timetable.changed", title: "Your timetable changed" },
+        readyNote(term.semester, term.startDate),
         now,
       );
     }
-    return { ok: outcome.ok, fetched: outcome.fetched };
+    return {
+      ok: outcome.ok,
+      fetched: outcome.fetched,
+      created,
+      changed: other,
+    };
+  }
+
+  /** True when the student had no portal lectures in the term before this run began. */
+  private async termWasEmpty(
+    data: UnitJobData,
+    term: { startDate: Date; endDate: Date },
+  ): Promise<boolean> {
+    const run = await this.prisma.syncRun.findUnique({
+      where: { id: data.runId },
+      select: { createdAt: true },
+    });
+    const before = await this.prisma.session.count({
+      where: {
+        userId: data.userId,
+        source: "PORTAL",
+        type: "LECTURE",
+        scheduledStartTime: { gte: term.startDate, lte: term.endDate },
+        createdAt: { lt: run?.createdAt ?? new Date() },
+      },
+    });
+    return before === 0;
   }
 
   /** Everything the cache must satisfy before a week is read from it. */
@@ -225,7 +261,7 @@ export class TimetableWeekService {
 
   private async fromPortal(
     data: UnitJobData,
-    term: { academicYear: string; semester: string },
+    term: { academicYear: string; semester: string; startDate: Date },
     sectionIds: readonly string[],
     weekStart: Date,
     weekEnd: Date,
@@ -360,7 +396,12 @@ export class TimetableWeekService {
   private async recordAndFanOut(
     data: UnitJobData,
     items: ReturnType<typeof parseTimetable>["items"],
-    coords: { academicYear: string; semester: string; week: number },
+    coords: {
+      academicYear: string;
+      semester: string;
+      week: number;
+      startDate: Date;
+    },
     sectionIds: readonly string[],
     weekStart: Date,
     weekEnd: Date,
@@ -394,10 +435,11 @@ export class TimetableWeekService {
           now,
           silent: true,
           onCreated: async (classmateId) => {
-            await this.runs.notifyOnce(null, classmateId, {
-              event: "timetable.ready",
-              title: `Timetable for semester ${termNumber(coords.semester)} ${coords.academicYear} is available`,
-            });
+            await this.runs.notifyOnce(
+              null,
+              classmateId,
+              readyNote(coords.semester, coords.startDate),
+            );
           },
         },
       );

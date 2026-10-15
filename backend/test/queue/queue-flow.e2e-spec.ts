@@ -286,7 +286,7 @@ describe("1. connect and the 5 second watcher enqueue, worker roles consume", ()
     );
     expect(notes.length).toBeLessThanOrEqual(1);
     for (const note of notes) {
-      expect(note.title).toMatch(/^Timetable for semester \d .+ is available$/);
+      expect(note.title).toMatch(/^Sem \d timetable is live$/);
     }
   });
 

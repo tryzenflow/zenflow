@@ -1,6 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { IngestionSyncKind, SyncRun } from "../../generated/prisma";
-import { localizeNotification } from "../notifications/localize-notification";
 import { NotificationsService } from "../notifications/notifications.service";
 import { NotificationEvent } from "../notifications/types";
 import { PrismaService } from "../prisma/prisma.service";
@@ -26,6 +25,34 @@ export interface UnitReport {
   ok: boolean;
   /** True when a live request was made for this unit. */
   fetched: boolean;
+  /** Lectures the unit created. */
+  created?: number;
+  /** Other rows the unit updated or removed. */
+  changed?: number;
+}
+
+/** What a run raises: one notice, worded from the run's summed counts. */
+export interface RunNote {
+  event: "timetable.ready" | "timetable.changed";
+  title: string;
+  content?: string;
+  /** `ready` is sent once per student after this instant (the term's start). */
+  since?: Date;
+}
+
+/** "3 new lectures" when lectures were added, else "Your timetable changed". */
+export function changeNote(created: number, changed: number): RunNote | null {
+  if (created > 0) {
+    return {
+      event: "timetable.changed",
+      title: created === 1 ? "A new lecture" : `${created} new lectures`,
+      content: "Check your timetable.",
+    };
+  }
+  if (changed > 0) {
+    return { event: "timetable.changed", title: "Your timetable changed" };
+  }
+  return null;
 }
 
 /**
@@ -76,7 +103,12 @@ export class SyncRunService {
   ): Promise<void> {
     await this.prisma.syncRunUnit.updateMany({
       where: { runId, unit, status: "PENDING" },
-      data: { status: result.ok ? "DONE" : "FAILED", fetched: result.fetched },
+      data: {
+        status: result.ok ? "DONE" : "FAILED",
+        fetched: result.fetched,
+        created: result.created ?? 0,
+        changed: result.changed ?? 0,
+      },
     });
     await this.settleIfComplete(runId, now);
   }
@@ -88,7 +120,7 @@ export class SyncRunService {
   async notifyOnce(
     runId: string | null,
     userId: string,
-    note: { event: "timetable.ready" | "timetable.changed"; title: string },
+    note: RunNote,
     now = new Date(),
   ): Promise<boolean> {
     if (runId) {
@@ -105,7 +137,7 @@ export class SyncRunService {
       // a transaction-scoped advisory try-lock lets exactly one through and the
       // loser skips instead of waiting (the winner is already writing the row).
       const row = await this.prisma.$transaction(async (tx) => {
-        const key = `notice:${userId}:${note.event}:${note.title}`;
+        const key = `notice:${userId}:${note.event}:${note.since?.toISOString() ?? note.title}`;
         const [{ locked }] = await tx.$queryRaw<{ locked: boolean }[]>`
           SELECT pg_try_advisory_xact_lock(hashtext(${key})) AS locked`;
         if (!locked) return null;
@@ -114,16 +146,7 @@ export class SyncRunService {
             where: {
               userId,
               eventName: note.event,
-              // Stored localised, so match the Vietnamese form as well.
-              title: {
-                in: [
-                  note.title,
-                  localizeNotification(
-                    { eventName: note.event, title: note.title, content: "" },
-                    "VI_VN",
-                  ).title,
-                ],
-              },
+              ...(note.since ? { sentAt: { gte: note.since } } : {}),
             },
             select: { id: true },
           });
@@ -135,9 +158,10 @@ export class SyncRunService {
             sessionId: null,
             title: note.title,
             content:
-              note.event === "timetable.ready"
-                ? "You may not see every week yet. We're still syncing."
-                : "See what changed.",
+              note.content ??
+              (note.event === "timetable.ready"
+                ? "Still syncing, check back soon."
+                : "See what changed."),
             eventEndsAt: null,
             materializeSession: false,
             eventName: note.event,
@@ -201,7 +225,9 @@ export class SyncRunService {
       this.prisma.syncRunUnit.count({ where: { runId, status: "FAILED" } }),
       this.prisma.syncRunUnit.count({ where: { runId, fetched: true } }),
     ]);
-    if (!run?.scheduleId) return;
+    if (!run) return;
+    await this.raiseChangeNote(run, now);
+    if (!run.scheduleId) return;
     const ok = failed === 0;
     try {
       await this.prisma.syncRun.update({
@@ -226,6 +252,32 @@ export class SyncRunService {
       }
     } catch (error) {
       this.logger.warn(`Could not settle run ${runId}: ${errorMessage(error)}`);
+    }
+  }
+
+  /**
+   * The run's closing notice for lectures added after the term was announced.
+   * A run that already raised "ready" stays silent.
+   */
+  private async raiseChangeNote(run: SyncRun, now: Date): Promise<void> {
+    if (run.kind !== "PORTAL_TIMETABLE" || run.notifiedAt) return;
+    try {
+      const { _sum } = await this.prisma.syncRunUnit.aggregate({
+        where: { runId: run.id },
+        _sum: { created: true, changed: true },
+      });
+      const note = changeNote(_sum.created ?? 0, _sum.changed ?? 0);
+      if (!note) return;
+      const integration = await this.prisma.integration.findUnique({
+        where: { id: run.integrationId },
+        select: { userId: true },
+      });
+      if (!integration) return;
+      await this.notifyOnce(run.id, integration.userId, note, now);
+    } catch (error) {
+      this.logger.warn(
+        `Could not raise the notice for run ${run.id}: ${errorMessage(error)}`,
+      );
     }
   }
 }
