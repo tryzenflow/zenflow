@@ -505,15 +505,17 @@ export class IngestionScheduleService {
   }
 
   /**
-   * When this provider's integration was last run by anyone — the ticker or a
-   * manual sync — or `null` if never. The manual-sync cooldown measures from it.
+   * When this provider's calendar data was last synced by anyone — the ticker or
+   * a manual sync — or `null` if never. Discovery runs on connect and does not
+   * count, or a student could not sync right after connecting. The manual-sync
+   * cooldown measures from it.
    */
   async lastRunAt(
     integrationId: string,
     provider: IntegrationProvider,
   ): Promise<Date | null> {
     const { _max } = await this.prisma.ingestionSchedule.aggregate({
-      where: { integrationId, kind: { in: KINDS_BY_PROVIDER[provider] } },
+      where: { integrationId, kind: { in: DATA_KINDS_BY_PROVIDER[provider] } },
       _max: { lastRunAt: true },
     });
     return _max.lastRunAt;
