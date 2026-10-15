@@ -106,6 +106,10 @@ const noteRows = (student: Student) =>
     orderBy: { sentAt: "asc" },
   });
 
+/** Rows raised by the sync passes: the marks note comes from its own job on connect. */
+const syncNoteRows = async (student: Student) =>
+  (await noteRows(student)).filter((n) => n.eventName !== "marks.ready");
+
 async function integrationOf(student: Student, provider: "PORTAL" | "LMS") {
   return prisma.integration.findFirstOrThrow({
     where: { userId: student.id, provider },
@@ -647,6 +651,10 @@ describe("4. notification fan-out from a worker", () => {
     await connect(s, "PORTAL");
     await connect(s, "LMS");
     await parkSchedule(prisma, s);
+    // The marks job raises its note on connect; let it land before the stream opens.
+    await until("marks note", async () =>
+      (await noteRows(s)).some((n) => n.eventName === "marks.ready"),
+    );
 
     const sse = openSse(s);
     const otherSse = openSse(bystander);
@@ -655,7 +663,7 @@ describe("4. notification fan-out from a worker", () => {
     await s.agent.post("/api/v1/integrations/PORTAL/sync").expect(201);
     await s.agent.post("/api/v1/integrations/LMS/sync").expect(201);
 
-    const rows = await noteRows(s);
+    const rows = await syncNoteRows(s);
     expect(rows.length).toBeGreaterThanOrEqual(2);
     expect(new Set(rows.map((r) => r.title)).size).toBe(rows.length);
 
@@ -703,7 +711,7 @@ describe("4. notification fan-out from a worker", () => {
     await s.agent.post("/api/v1/integrations/PORTAL/sync").expect(201);
     await s.agent.post("/api/v1/integrations/LMS/sync").expect(201);
     await sleep(1_000);
-    expect(await noteRows(s)).toHaveLength(rows.length);
+    expect(await syncNoteRows(s)).toHaveLength(rows.length);
     expect(await pushCount()).toBe(allPush);
     expect(sse.events).toHaveLength(rows.length);
 
