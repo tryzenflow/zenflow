@@ -69,6 +69,7 @@ Drag, resize and reschedule are all `PATCH /sessions/:id` (a `MOVE` signal).
 - **Confirmation:** a create or deadline change whose only plan moves a `CHOSEN` session is not applied.
   - `POST /sessions` answers `409` with `code: "NEEDS_CONFIRMATION"` and `data.plan` (`{ id, sessionId, start, moves[], expiresAt }`). Confirm with `POST /sessions/placement/confirm`.
   - A deadline `PATCH` answers `200` with `placementPlan` set. The session keeps its start; the deadline is saved.
+- **Occurrence move:** `PATCH /sessions/<seriesId>::<startISO>` with `scope: "occurrence"` and a `scheduledStartTime` or `durationMinutes` change excludes that occurrence from the series and returns it as a one-off `Session`. The series keeps its time. Metadata stays series-wide, and a PATCH that also sends `rrule` is a series change.
 - **Undo:** each request that moves sessions returns `undoGroupId`. `POST /sessions/undo/:groupId` reverts that group only. A create in the group is removed (soft delete).
 - **Sync conflicts:** `POST /notifications/:id/reschedule-conflicts` never moves a `PINNED` task (it stays in `failedSessionIds`) and does not displace a `CHOSEN` one. Its `undoGroupId` covers the call.
 - **Infeasible deadline:** displacement repacks flexible tasks on the deadline day (EDF, `SYSTEM_MOVE` events, `displacedSessions[]`).
