@@ -1,4 +1,5 @@
-import { Check } from "@/components/Icons";
+import { GradientFill } from "@/components/ui/gradient-fill";
+import { Check, SkipForward } from "@/components/Icons";
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
 import { DURATION, EASE_OUT, useReducedMotion } from "@/lib/motion";
@@ -13,9 +14,11 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
-/** Touch target: 44pt, drawn as a 22pt disc. */
+/** Touch target: 44pt, drawn as a 28pt disc. */
 const TARGET = 44;
-const DISC = 22;
+const DISC = 28;
+/** The open ring is drawn a little smaller, so it matches the filled disc's visual weight. */
+const DISC_OPEN = 25;
 
 /**
  * Tap to mark a session done. Filling the disc fires a light haptic and one
@@ -41,6 +44,8 @@ export function CheckOffButton({
 
   const shown: CheckState = pending ?? state;
   const done = shown === "done";
+  const skipped = shown === "skipped";
+  const size = done ? DISC : DISC_OPEN;
 
   const burst = useSharedValue(1);
   const wasDone = useRef(done);
@@ -100,16 +105,21 @@ export function CheckOffButton({
       />
       <View
         pointerEvents="none"
-        style={{ width: DISC, height: DISC, borderRadius: DISC / 2 }}
+        style={{ width: size, height: size, borderRadius: size / 2 }}
         className={cn(
-          "items-center justify-center border-2",
+          "items-center justify-center overflow-hidden border-2",
           done
-            ? "border-brand-orange bg-brand-orange"
-            : "border-muted-foreground bg-card",
+            ? "border-transparent"
+            : skipped
+              ? "border-muted-foreground/60 bg-muted"
+              : "border-primary bg-card",
         )}
       >
+        {done ? <GradientFill /> : null}
         {done ? (
-          <Check size={13} strokeWidth={3} className="text-primary-foreground" />
+          <Check size={17} strokeWidth={3} className="text-black" />
+        ) : skipped ? (
+          <SkipForward size={14} className="text-muted-foreground" />
         ) : null}
       </View>
     </Pressable>

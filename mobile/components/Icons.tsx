@@ -38,6 +38,7 @@ import {
   CircleUserRound,
   ClipboardList,
   Clock,
+  Layers,
   Cloud,
   Code,
   Copy,
@@ -212,6 +213,7 @@ interopIcon(Moon);
 interopIcon(Palette);
 interopIcon(Smartphone);
 interopIcon(Clock);
+interopIcon(Layers);
 interopIcon(MessageCircleQuestion);
 interopIcon(MinusCircle);
 interopIcon(MousePointer2);
@@ -291,6 +293,7 @@ export {
   CircleUserRound,
   ClipboardList,
   Clock,
+  Layers,
   Cloud,
   Code,
   Copy,

@@ -3,6 +3,9 @@ import {
   DayHeaderSkeleton,
   SessionRowSkeleton,
 } from "@/components/calendar/session-row-skeleton";
+import { LocationChip } from "@/components/calendar/location-chip";
+import { useSessionCheck } from "@/components/calendar/session-check";
+import { cn } from "@/lib/utils";
 import { Text } from "@/components/ui/text";
 import { useAfterPaint } from "@/hooks/use-after-paint";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading";
@@ -44,6 +47,61 @@ function AgendaSkeleton() {
           <SessionRowSkeleton wide={i % 2 === 0} />
         </View>
       ))}
+    </View>
+  );
+}
+
+function AgendaRow({
+  session,
+  tz,
+  term,
+  testIDPrefix,
+  onOpen,
+}: {
+  session: Session;
+  tz: string;
+  term: string;
+  testIDPrefix: string;
+  onOpen: (session: Session) => void;
+}) {
+  const { done, check } = useSessionCheck(session);
+  const tone = done ? "done" : sessionTone(deriveState(session), session.late);
+  const location = session.location?.trim();
+  return (
+    <View className={cn("mx-4 my-1 flex-row items-center", done && "opacity-60")}>
+      <Pressable
+        testID={`${testIDPrefix}.row.${session.id}`}
+        onPress={() => onOpen(session)}
+        accessibilityRole="button"
+        accessibilityLabel={session.title}
+        className="min-w-0 flex-1 rounded-r-xl active:opacity-70"
+        style={{ borderLeftWidth: 3, borderLeftColor: SESSION_TONES[tone].base }}
+      >
+        <View className="gap-0.5 py-2 pl-3">
+          <Text testID={`${testIDPrefix}.time.${session.id}`} className="text-[12px] text-muted-foreground">
+            {sessionTimeRange(session, tz)}
+          </Text>
+          <Text numberOfLines={1} className={cn("text-[15px] font-medium", done && "line-through")}>
+            {highlightParts(session.title, term).map((part, i) =>
+              part.match ? (
+                <Text
+                  key={i}
+                  testID={`${testIDPrefix}.match`}
+                  className="rounded-[4px] bg-brand-orange/40 font-bold"
+                >
+                  {part.text}
+                </Text>
+              ) : (
+                <Text key={i} className="font-medium">
+                  {part.text}
+                </Text>
+              ),
+            )}
+          </Text>
+          {location ? <LocationChip location={location} /> : null}
+        </View>
+      </Pressable>
+      {check}
     </View>
   );
 }
@@ -165,44 +223,14 @@ export function SessionAgenda({
         </Text>
       );
     }
-    const { session } = item;
-    const tone = sessionTone(deriveState(session), session.late);
-    const location = session.location?.trim();
     return (
-      <Pressable
-        testID={`${testIDPrefix}.row.${session.id}`}
-        onPress={() => openSession(session)}
-        accessibilityRole="button"
-        accessibilityLabel={session.title}
-        className="mx-4 my-1 rounded-r-xl active:opacity-70"
-        style={{ borderLeftWidth: 3, borderLeftColor: SESSION_TONES[tone].base }}
-      >
-        <View className="gap-0.5 py-2 pl-3">
-          <Text testID={`${testIDPrefix}.time.${session.id}`} className="text-[12px] text-muted-foreground">
-            {sessionTimeRange(session, tz)}
-          </Text>
-          <Text numberOfLines={1} className="text-[15px] font-semibold">
-            {highlightParts(session.title, term).map((part, i) =>
-              part.match ? (
-                <Text
-                  key={i}
-                  testID={`${testIDPrefix}.match`}
-                  className="rounded-[4px] bg-brand-orange/40 font-bold"
-                >
-                  {part.text}
-                </Text>
-              ) : (
-                <Text key={i}>{part.text}</Text>
-              ),
-            )}
-          </Text>
-          {location ? (
-            <Text numberOfLines={1} className="text-[13px] text-muted-foreground">
-              {location}
-            </Text>
-          ) : null}
-        </View>
-      </Pressable>
+      <AgendaRow
+        session={item.session}
+        tz={tz}
+        term={term}
+        testIDPrefix={testIDPrefix}
+        onOpen={openSession}
+      />
     );
   };
 
