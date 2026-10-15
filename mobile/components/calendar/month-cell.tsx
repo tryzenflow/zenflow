@@ -30,7 +30,6 @@ import { cn } from "@/lib/utils";
 import type { Session } from "@zenflow/shared";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
-import Animated, { FadeIn } from "react-native-reanimated";
 import { sessionTypeIcon } from "./session-type-badge";
 
 /** A week row's *preferred* height. Rows shrink below it (equally) when the
@@ -177,10 +176,6 @@ export const MonthCell = memo(function MonthCell({
       ? MONTH_PILL_CAP
       : monthPillCap(cellHeight, bySeverity.length),
   );
-  // Pills that replace placeholders fade in; pills present from the start
-  // (a cached month) just render.
-  const hadSkeletonRef = useRef(loading);
-  if (loading) hadSkeletonRef.current = true;
   const seed = day.getDate() + day.getDay();
 
   return (
@@ -196,8 +191,12 @@ export const MonthCell = memo(function MonthCell({
         (isDropTarget || isJustDropped) && "bg-primary/[0.14]",
       )}
     >
-      {openDayTip ? <SpotlightAnchor step="open-day" /> : null}
-      {moveTargetTip ? <DragTargetProbe /> : null}
+      {/* Fixed slot: tips toggling must not shift sibling indexes (Fabric
+          crashes unmounting a child whose index moved). */}
+      <View pointerEvents="box-none" className="absolute inset-0">
+        {openDayTip ? <SpotlightAnchor step="open-day" /> : null}
+        {moveTargetTip ? <DragTargetProbe /> : null}
+      </View>
       <Text
         className={cn(
           "h-[23px] w-[23px] rounded-full text-center text-[12.5px] font-semibold leading-[23px]",
@@ -211,49 +210,54 @@ export const MonthCell = memo(function MonthCell({
         {day.getDate()}
       </Text>
 
-      {loading ? (
-        <View className={cn("mt-1 gap-[3px]", outside && "opacity-60")}>
-          <Skeleton
-            className={cn(
-              "h-[15px] rounded-[5px]",
-              SKELETON_PILL_WIDTHS[seed % SKELETON_PILL_WIDTHS.length],
-            )}
-          />
-          {seed % 3 === 0 && (
+      {/* One container for skeleton and pills: swapping element types here
+          crashed Fabric on the month switch. */}
+      <View
+        style={!loading && cellHeight == null ? { opacity: 0 } : undefined}
+        className={cn("mt-1 gap-[3px]", outside && "opacity-60")}
+      >
+        {loading ? (
+          <>
             <Skeleton
               className={cn(
                 "h-[15px] rounded-[5px]",
-                SKELETON_PILL_WIDTHS[(seed + 4) % SKELETON_PILL_WIDTHS.length],
+                SKELETON_PILL_WIDTHS[seed % SKELETON_PILL_WIDTHS.length],
               )}
             />
-          )}
-        </View>
-      ) : (
-        <Animated.View
-          entering={hadSkeletonRef.current ? FadeIn.duration(200) : undefined}
-          style={cellHeight == null ? { opacity: 0 } : undefined}
-          className={cn("mt-1 gap-[3px]", outside && "opacity-60")}
-        >
-          {visible.map((task) => (
-            <MonthPill
-              key={task.id}
-              session={task}
-              hidden={draggingSessionId === task.id}
-            />
-          ))}
-          {overflowCount > 0 && (
-            <Pressable
-              onPress={() => onPressOverflow(day, sessions)}
-              hitSlop={6}
-              className="rounded-[5px] px-1 py-0.5"
-            >
-              <Text className="text-[9.5px] font-bold leading-tight text-muted-foreground">
-                +{overflowCount}
-              </Text>
-            </Pressable>
-          )}
-        </Animated.View>
-      )}
+            {seed % 3 === 0 && (
+              <Skeleton
+                className={cn(
+                  "h-[15px] rounded-[5px]",
+                  SKELETON_PILL_WIDTHS[
+                    (seed + 4) % SKELETON_PILL_WIDTHS.length
+                  ],
+                )}
+              />
+            )}
+          </>
+        ) : (
+          <>
+            {visible.map((task) => (
+              <MonthPill
+                key={task.id}
+                session={task}
+                hidden={draggingSessionId === task.id}
+              />
+            ))}
+            {overflowCount > 0 && (
+              <Pressable
+                onPress={() => onPressOverflow(day, sessions)}
+                hitSlop={6}
+                className="rounded-[5px] px-1 py-0.5"
+              >
+                <Text className="text-[9.5px] font-bold leading-tight text-muted-foreground">
+                  +{overflowCount}
+                </Text>
+              </Pressable>
+            )}
+          </>
+        )}
+      </View>
     </Pressable>
   );
 });
