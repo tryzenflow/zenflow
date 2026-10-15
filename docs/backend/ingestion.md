@@ -71,3 +71,7 @@ On in staging and prod (`INGESTION_OCCURRENCE_CACHE_ENABLED`); off by default el
 - Redis errors fail open ([api.md](api.md#rate-limits)).
 
 Client endpoints, parser rules, semester resolution and job tracking: see the `ingestion/` source.
+
+## One-off repairs
+
+- **LMS course link.** Sessions ingested before `Session.lmsCourseId` existed have it null, so their course colour and occurrence fan-out miss them. Link them from `LmsCourseOccurrence`: `pnpm --filter backend backfill:lms-course [--dry-run]`. Idempotent. Rows with no occurrence row stay null.
