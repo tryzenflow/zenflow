@@ -5,6 +5,7 @@ import {
   GraduationCap,
   type LucideIcon,
   Notebook,
+  Star,
 } from "@/components/Icons";
 import type { ToastAccent } from "@/components/ui/toast";
 import {
@@ -27,6 +28,9 @@ export const CATEGORY_LABEL: Record<NotificationCategory, string> = {
   },
   get REMINDER() {
     return t("Reminder");
+  },
+  get MARKS() {
+    return t("Marks");
   },
 };
 
@@ -83,6 +87,16 @@ export function notificationVisual(eventName: string): {
         Icon: GraduationCap,
         label: CATEGORY_LABEL.LECTURE,
         tint: "border-sky-500/50 bg-sky-500/20",
+        ink,
+        accent: ink,
+      };
+    }
+    case "MARKS": {
+      const ink = { light: "#6d28d9", dark: "#a78bfa" };
+      return {
+        Icon: Star,
+        label: CATEGORY_LABEL.MARKS,
+        tint: "border-violet-500/50 bg-violet-500/20",
         ink,
         accent: ink,
       };

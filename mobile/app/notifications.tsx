@@ -119,6 +119,8 @@ export default function NotificationsScreen() {
       // Opens the session on the calendar; removed-item rows just mark read.
       if (n.sessionId) {
         void viewSessionOnCalendar(n.sessionId, router, toast, n.id);
+      } else if (notificationCategory(n.eventName) === "MARKS") {
+        router.push("/(app)/settings");
       }
     },
     [isSelecting, markRead, toggleSelect, router, toast],

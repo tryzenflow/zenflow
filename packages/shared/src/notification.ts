@@ -26,21 +26,25 @@ export type NotificationEventKind =
   | "UPDATED"
   | "REMOVED"
   | "CONFLICT"
-  | "REMINDER";
+  | "REMINDER"
+  | "READY";
 
 /**
  * Classify a notification's {@link NotificationDto.eventName} without
  * pattern-matching the free-text `title`/`content`. Every event name is
  * `"sync_conflict.<thing>"` (a conflict), `"reminder.<…>"` (a reminder
- * nudge), or `"<thing>.<created|updated|removed>"` /
+ * nudge), `"<thing>.ready"` (a first sync finished), or
+ * `"<thing>.<created|updated|changed|removed>"` /
  * `"<thing>.group_<created|updated|removed>"`.
  */
 export function notificationEventKind(eventName: string): NotificationEventKind {
   if (eventName.startsWith("sync_conflict.")) return "CONFLICT";
   // A reminder nudge ("reminder.fired") reports no change to any session.
   if (eventName.startsWith("reminder.")) return "REMINDER";
+  if (eventName.endsWith(".ready")) return "READY";
   if (eventName.endsWith("created")) return "CREATED";
-  if (eventName.endsWith("updated")) return "UPDATED";
+  if (eventName.endsWith("updated") || eventName.endsWith("changed"))
+    return "UPDATED";
   if (eventName.endsWith("removed")) return "REMOVED";
   throw new Error(`Unrecognized notification eventName: "${eventName}"`);
 }
@@ -48,12 +52,18 @@ export function notificationEventKind(eventName: string): NotificationEventKind 
 /**
  * What a notification is about — which inbox section/icon it takes, and
  * (for `ASSIGNMENT`/`EXAM`/`LECTURE`) which calendar session type it tracks.
- * `REMINDER` is the non-ingestion, user-facing nudge; it has no session type
- * of its own. Derived from {@link NotificationDto.eventName}'s `<thing>`
+ * `REMINDER` is the non-ingestion, user-facing nudge and `MARKS` reports
+ * synced marks; neither has a session type of its own. `timetable.*` rows
+ * count as `LECTURE`. Derived from {@link NotificationDto.eventName}'s `<thing>`
  * segment by {@link notificationCategory}, same reasoning as
  * {@link notificationEventKind}.
  */
-export type NotificationCategory = "ASSIGNMENT" | "EXAM" | "LECTURE" | "REMINDER";
+export type NotificationCategory =
+  | "ASSIGNMENT"
+  | "EXAM"
+  | "LECTURE"
+  | "REMINDER"
+  | "MARKS";
 
 /**
  * The `<thing>` a notification's {@link NotificationDto.eventName} is about —
@@ -70,7 +80,10 @@ export function notificationCategory(eventName: string): NotificationCategory {
     case "exam":
       return "EXAM";
     case "lecture":
+    case "timetable":
       return "LECTURE";
+    case "marks":
+      return "MARKS";
     case "reminder":
       return "REMINDER";
     default:
