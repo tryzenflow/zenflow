@@ -126,6 +126,7 @@ export function TaskComposer({
   const type = form.watch("type");
   const kind: ComposerKind = type === "TASK" ? "TASK" : "EVENT";
   const isTask = kind === "TASK";
+  const spread = !(form.watch("splitTotal") ?? true);
   const saveDraft = useComposerStore((s) => s.saveDraft);
   const remember = useComposerStore((s) => s.rememberDuration);
   const [line, setLine] = useState(() => form.getValues("title") ?? "");
@@ -327,7 +328,7 @@ export function TaskComposer({
               <>
                 <DeadlineField form={form} tz={tz} editing={!create} disabled={busy} />
                 {create && <DurationField form={form} disabled={busy} />}
-                <SplitField form={form} disabled={busy} />
+                {!(create && spread) && <SplitField form={form} disabled={busy} />}
               </>
             ) : (
               <EventWhenField form={form} tz={tz} disabled={busy} />

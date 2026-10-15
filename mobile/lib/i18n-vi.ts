@@ -672,9 +672,10 @@ export default {
   "Splits the task into shorter sessions.": "Chia công việc thành các buổi làm việc nhỏ hơn.",
   "{count} sittings of {duration} and {rest} of {last}":
     "{count} buổi {duration} và {rest} buổi {last}",
-  "{days} days ({hours})": "{days} ngày ({hours})",
-  Hours: "Giờ",
-  Days: "Ngày",
+  "Spread it out": "Chia đều mỗi ngày",
+  "Each day": "Mỗi ngày",
+  "{duration} a day for {count} days, {total} in all":
+    "{duration} mỗi ngày trong {count} ngày, tổng {total}",
   "Moved this occurrence": "Đã dời buổi này",
   "Apply to all": "Áp dụng cho tất cả",
   "Due {date}": "Hạn {date}",

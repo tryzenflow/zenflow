@@ -5,7 +5,6 @@ const taskTranslations: Record<string, string> = {
   "Session duration must be at least 15 minutes":
     "Thời lượng tối thiểu là 15 phút",
   "Session duration must be at most 24 hours": "Thời lượng tối đa là 24 giờ",
-  "Task duration must be at most 120 hours": "Thời lượng tối đa là 120 giờ",
   "At least 1 session": "Cần ít nhất 1 buổi",
   "Pick a duration": "Chọn thời lượng",
   "Pick a deadline": "Chọn hạn chót",

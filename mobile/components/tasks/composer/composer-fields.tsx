@@ -4,7 +4,6 @@ import { useLanguage } from "@/hooks/use-language";
 import { useComposerStore } from "@/lib/composer-store";
 import { t } from "@/lib/i18n";
 import {
-  defaultSittingCount,
   sittingMinutes,
   snapCount,
   splitCounts,
@@ -14,14 +13,15 @@ import { BottomSheetTextInput } from "@/components/ui/bottom-sheet";
 import { ChipGroup } from "@/components/ui/chip-group";
 import { DurationSlider, durationLabel } from "@/components/ui/duration-slider";
 import { FieldCard } from "@/components/ui/field-card";
+import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
 import { TimelineTimePicker } from "@/components/ui/timeline-time-picker";
 import { WeekStripDatePicker } from "@/components/ui/week-strip-date-picker";
 import { cn } from "@/lib/utils";
 import {
   MAX_TASK_SESSION_COUNT,
-  MAX_TASK_TOTAL_MINUTES,
   type SessionFormValues,
+  daysUntilDeadline,
   hhmmToMinutes,
   maxFeasibleSessionCount,
   zonedDate,
@@ -39,6 +39,9 @@ import type { UseFormReturn } from "react-hook-form";
 /** Deadline time of day when a date is chosen without one: 23:59:59. */
 export const END_OF_DAY = 23 * 60 + 59;
 export const END_OF_DAY_SECONDS = 59;
+
+/** Most sittings the split stepper offers. The server allows more; this keeps the strip readable. */
+const MAX_SPLIT_CHOICES = 8;
 
 
 /**
@@ -174,32 +177,20 @@ export function DeadlineField({
 }
 
 const DURATION_CHOICES = [30, 60, 120, 180] as const;
+const DAILY_CHOICES = [30, 60, 120] as const;
+/** Longest daily amount the Spread it out slider offers. */
+const DAILY_MAX = 4 * 60;
 
-/** One day of work in the Days unit. */
-const WORK_DAY_MINUTES = 8 * 60;
-/** Longest total the Hours unit offers; Days covers the rest. */
-const HOURS_MAX = 12 * 60;
-
-type DurationUnit = "hours" | "days";
-
-const DURATION_UNITS: { value: DurationUnit; label: string }[] = [
-  { value: "hours", label: "Hours" },
-  { value: "days", label: "Days" },
-];
-
-/** "2 days (16 h)": half days on the 15-minute grid. */
-function workDaysLabel(minutes: number): string {
-  const days = minutes / WORK_DAY_MINUTES;
-  return t("{days} days ({hours})", {
-    days: Number.isInteger(days) ? String(days) : days.toFixed(1),
-    hours: durationLabel(minutes),
-  });
+/** One sitting a day from today through the deadline's day. */
+function spreadDays(deadline: string | undefined): number {
+  return Math.min(MAX_TASK_SESSION_COUNT, daysUntilDeadline(deadline));
 }
 
 /**
- * Length of the whole task as chips (30 min, 1 h, 2 h, 3 h) and Custom, which
- * reveals Hours (15 minute steps up to 12 h) or Days (half days of 8 h work,
- * up to 120 h). The split below follows the total.
+ * Length of the task. By default the whole task, as chips (30 min, 1 h, 2 h,
+ * 3 h) and Custom, which reveals a slider in 15 minute steps. Spread it out
+ * asks for a daily amount instead and books one sitting a day until the
+ * deadline.
  */
 export function DurationField({
   form,
@@ -210,29 +201,54 @@ export function DurationField({
 }) {
   useLanguage();
   const value = form.watch("duration") ?? 60;
+  const spread = !(form.watch("splitTotal") ?? true);
+  const deadline = form.watch("deadline") || undefined;
   const [customOpen, setCustomOpen] = useState(false);
-  const [unit, setUnit] = useState<DurationUnit>(
-    value > HOURS_MAX ? "days" : "hours",
-  );
-  const isChoice = (DURATION_CHOICES as readonly number[]).includes(value);
+  const choices: readonly number[] = spread ? DAILY_CHOICES : DURATION_CHOICES;
+  const isChoice = choices.includes(value);
   const customActive = customOpen || !isChoice;
   const error = form.formState.errors.duration?.message;
+  const days = spreadDays(deadline);
+
+  // Spread it out keeps one sitting per day as the deadline moves.
+  useEffect(() => {
+    if (spread) form.setValue("sessionCount", days, { shouldValidate: true });
+  }, [spread, days, form]);
 
   function setDuration(minutes: number) {
     form.setValue("duration", minutes, { shouldValidate: true });
-    form.setValue("sessionCount", defaultSittingCount(minutes), {
-      shouldValidate: true,
-    });
   }
 
-  function pickUnit(next: DurationUnit) {
-    setUnit(next);
-    if (next === "days" && value < WORK_DAY_MINUTES) setDuration(WORK_DAY_MINUTES);
-    if (next === "hours" && value > HOURS_MAX) setDuration(HOURS_MAX);
+  function toggleSpread(on: boolean) {
+    setCustomOpen(false);
+    form.setValue("splitTotal", !on);
+    if (on) {
+      setDuration(Math.min(value, 60));
+    } else {
+      form.setValue("sessionCount", 1, { shouldValidate: true });
+    }
   }
 
   return (
-    <FieldCard label="Duration" error={error} testID="task.duration">
+    <FieldCard
+      label={spread ? "Each day" : "Duration"}
+      error={error}
+      testID="task.duration"
+      trailing={
+        <View className="flex-row items-center gap-2">
+          <Text className="text-[13px] text-muted-foreground">
+            {t("Spread it out")}
+          </Text>
+          <Switch
+            testID="task.duration.spread"
+            checked={spread}
+            onCheckedChange={toggleSpread}
+            disabled={disabled}
+            accessibilityLabel={t("Spread it out")}
+          />
+        </View>
+      }
+    >
       <ChipGroup<string>
         testID="task.duration.chip"
         value={customActive ? null : String(value)}
@@ -243,40 +259,26 @@ export function DurationField({
         }}
         onCustom={() => setCustomOpen(true)}
         customActive={customActive}
-        options={DURATION_CHOICES.map((m) => ({ value: String(m), label: durationLabel(m) }))}
+        options={choices.map((m) => ({ value: String(m), label: durationLabel(m) }))}
       />
       {customActive && (
-        <View className="gap-3">
-          <ChipGroup<DurationUnit>
-            testID="task.duration.unit"
-            value={unit}
-            disabled={disabled}
-            onChange={pickUnit}
-            options={DURATION_UNITS}
-          />
-          {unit === "hours" ? (
-            <DurationSlider
-              testID="task.duration.slider"
-              label="Duration"
-              value={Math.min(value, HOURS_MAX)}
-              max={HOURS_MAX}
-              disabled={disabled}
-              onChange={setDuration}
-            />
-          ) : (
-            <DurationSlider
-              testID="task.duration.days"
-              label="Duration"
-              value={Math.max(value, WORK_DAY_MINUTES)}
-              min={WORK_DAY_MINUTES}
-              max={MAX_TASK_TOTAL_MINUTES}
-              step={WORK_DAY_MINUTES / 2}
-              valueLabel={workDaysLabel}
-              disabled={disabled}
-              onChange={setDuration}
-            />
-          )}
-        </View>
+        <DurationSlider
+          testID="task.duration.slider"
+          label="Duration"
+          value={Math.min(value, spread ? DAILY_MAX : 480)}
+          max={spread ? DAILY_MAX : 480}
+          disabled={disabled}
+          onChange={setDuration}
+        />
+      )}
+      {spread && (
+        <Text testID="task.duration.spread.summary" className="text-[15px] font-medium text-foreground">
+          {t("{duration} a day for {count} days, {total} in all", {
+            duration: durationLabel(value),
+            count: days,
+            total: durationLabel(value * days),
+          })}
+        </Text>
       )}
     </FieldCard>
   );
@@ -306,9 +308,9 @@ export function SplitField({
 
   // Creating: the divisors of the total. Editing: every count that fits.
   const counts = useMemo(() => {
-    if (splitTotal) return splitCounts(duration);
+    if (splitTotal) return splitCounts(duration, MAX_SPLIT_CHOICES);
     const feasible = Math.min(
-      MAX_TASK_SESSION_COUNT,
+      MAX_SPLIT_CHOICES,
       Math.max(1, maxFeasibleSessionCount(deadline, duration, from)),
     );
     return Array.from({ length: feasible }, (_, i) => i + 1);

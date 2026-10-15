@@ -30,12 +30,6 @@ export const MAX_TITLE_LENGTH = 60;
  */
 export const MAX_TASK_SESSION_COUNT = 60;
 
-/**
- * Ceiling on a split task's total minutes: 120 hours, two hours a day over the
- * 60-day horizon. One unsplit sitting stays within a day.
- */
-export const MAX_TASK_TOTAL_MINUTES = 120 * 60;
-
 export const SESSION_FORM_TYPES = [
   "TASK",
   "ASSIGNMENT",
@@ -74,9 +68,7 @@ export const sessionSchema = z
       .min(SLOT_MINUTES, {
         error: `Session duration must be at least ${SLOT_MINUTES} minutes`,
       })
-      .max(MAX_TASK_TOTAL_MINUTES, {
-        error: "Task duration must be at most 120 hours",
-      })
+      .max(DAILY_HORIZON, { error: "Session duration must be at most 24 hours" })
       .optional(),
     deadline: z.string().optional(),
     /**
@@ -119,12 +111,6 @@ export const sessionSchema = z
         ctx.addIssue({
           code: "custom",
           message: "Pick a duration",
-          path: ["duration"],
-        });
-      } else if (!v.splitTotal && (v.duration as number) > DAILY_HORIZON) {
-        ctx.addIssue({
-          code: "custom",
-          message: "Session duration must be at most 24 hours",
           path: ["duration"],
         });
       }

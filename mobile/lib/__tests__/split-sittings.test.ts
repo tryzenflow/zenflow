@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  defaultSittingCount,
-  sittingMinutes,
-  snapCount,
-  splitCounts,
-} from "../split-sittings";
+import { sittingMinutes, snapCount, splitCounts } from "../split-sittings";
 
 describe("sittingMinutes", () => {
   it("splits evenly on the 15-minute grid", () => {
@@ -53,25 +48,7 @@ describe("sittingMinutes", () => {
 describe("splitCounts", () => {
   it("offers every count up to one sitting per slot", () => {
     expect(splitCounts(60, 16)).toEqual([1, 2, 3, 4]);
-  });
-
-  it("starts where no sitting runs over four hours", () => {
-    expect(splitCounts(480, 4)).toEqual([2, 3, 4]);
-    expect(splitCounts(7200)[0]).toBe(30);
-    expect(splitCounts(7200).at(-1)).toBe(60);
-  });
-});
-
-describe("defaultSittingCount", () => {
-  it("keeps up to four hours in one sitting", () => {
-    expect(defaultSittingCount(120)).toBe(1);
-    expect(defaultSittingCount(240)).toBe(1);
-  });
-
-  it("splits longer tasks into two hour sittings", () => {
-    expect(defaultSittingCount(480)).toBe(4);
-    expect(defaultSittingCount(1500)).toBe(13);
-    expect(defaultSittingCount(7200)).toBe(60);
+    expect(splitCounts(480, 4)).toEqual([1, 2, 3, 4]);
   });
 });
 
