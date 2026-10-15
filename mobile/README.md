@@ -82,7 +82,7 @@ is mounted under the splash so the launch URL `/` resolves, then the guards narr
 | Route               | Screen                                                                            |
 | ------------------- | --------------------------------------------------------------------------------- |
 | `/(auth)/login`     | student ID or email then OTP; timezone captured on verify                         |
-| `/(onboarding)`     | first-run setup (tag picker)                                                      |
+| `/(onboarding)`     | first-run setup (focus band, LMS, notifications)                                                      |
 | `/(app)` (Calendar) | home: Day, Week or Month view behind one header; Day is the timeline + 7-day chip strip |
 | `/(app)/today`      | Today tab: redirects to the calendar's Day view on today                          |
 | `/(app)/settings`   | Me tab: profile, appearance, preferences (language, default reminder), integrations; Advanced holds timezone and storage |

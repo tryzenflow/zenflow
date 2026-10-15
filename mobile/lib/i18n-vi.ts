@@ -179,6 +179,16 @@ export default {
   "Skip ones that would conflict": "Bỏ qua các buổi bị trùng lịch",
   "Skipped steps are waiting for you in Settings.":
     "Bạn có thể hoàn tất các bước đã bỏ qua trong Cài đặt.",
+  "When do you focus best?": "Bạn tập trung tốt nhất vào lúc nào?",
+  "We'll try this part of the day first when we place your sessions.":
+    "Khi xếp lịch, Zenflow sẽ ưu tiên khung giờ này trước.",
+  Morning: "Buổi sáng",
+  Afternoon: "Buổi chiều",
+  Evening: "Buổi tối",
+  "Late night": "Khuya",
+  "{from} to {to}": "{from} đến {to}",
+  "Your timetable": "Thời khóa biểu của bạn",
+  "No classes this week yet.": "Chưa có lớp nào trong tuần này.",
   "Start time": "Giờ bắt đầu",
   "Stay ahead of deadlines": "Chủ động trước hạn chót",
   "Student ID": "Mã sinh viên",

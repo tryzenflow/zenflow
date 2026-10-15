@@ -1,7 +1,6 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { listIntegrations } from "@/api/integrations";
-import { createTagsBulk, listTags } from "@/api/tags";
 import { updateBasicInfo } from "@/api/users";
 import {
   AlertCircle,
@@ -10,8 +9,10 @@ import {
   ChevronLeft,
   GraduationCap,
   Sliders,
+  Sun,
   User,
 } from "@/components/Icons";
+import { ImportedTimetable } from "@/components/onboarding/imported-timetable";
 import { DluAccountsSection } from "@/components/settings/dlu-accounts-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,13 +22,12 @@ import { useIntegrationStore } from "@/hooks/use-integration-store";
 import { useNotificationToggle } from "@/hooks/use-notification-toggle";
 import { usePushStatusStore } from "@/hooks/use-push-status-store";
 import { useUserStore } from "@/hooks/use-user-store";
-import { DEFAULT_USER_NAME } from "@zenflow/shared";
+import { DEFAULT_USER_NAME, type FocusBand } from "@zenflow/shared";
+import { focusBandOptions } from "@/lib/focus-band";
 import {
   FIRST_STEP,
   type OnboardingStep,
   canGoBack,
-  initialTagSelection,
-  newTagsForBulk,
   nextStep,
   prevStep,
   stepProgress,
@@ -75,6 +75,14 @@ const COPY = {
     },
     get label() {
       return t("Display name");
+    },
+  },
+  focus: {
+    get title() {
+      return t("When do you focus best?");
+    },
+    get body() {
+      return t("We'll try this part of the day first when we place your sessions.");
     },
   },
   dlu: {
@@ -158,6 +166,7 @@ const COPY = {
 
 const STEP_ICON: Partial<Record<OnboardingStep, typeof User>> = {
   name: User,
+  focus: Sun,
   dlu: GraduationCap,
   notifications: Bell,
 };
@@ -202,6 +211,9 @@ export default function OnboardingScreen() {
     user?.name && user.name !== DEFAULT_USER_NAME ? user.name : "",
   );
   const [blocked, setBlocked] = useState(false);
+  const [focusBand, setFocusBand] = useState<FocusBand | null>(
+    user?.focusBand ?? null,
+  );
 
   useEffect(() => {
     listIntegrations()
@@ -258,6 +270,12 @@ export default function OnboardingScreen() {
       const trimmed = name.trim();
       if (!trimmed || trimmed === user?.name) return;
       updateUser(await updateBasicInfo({ name: trimmed }));
+    });
+
+  const saveFocus = () =>
+    run(async () => {
+      if (!focusBand || focusBand === user?.focusBand) return;
+      updateUser(await updateBasicInfo({ focusBand }));
     });
 
   /**
@@ -318,21 +336,9 @@ export default function OnboardingScreen() {
     go();
   }
 
-  /** The tag picker step is gone: everyone starts with the suggested defaults (best effort, tags are editable in Settings). */
-  async function seedDefaultTags() {
-    try {
-      const existing = (await listTags()).map((tag) => tag.name);
-      const names = newTagsForBulk(initialTagSelection(existing), existing);
-      if (names.length > 0) await createTagsBulk(names);
-    } catch {
-      // Not worth blocking the first run on.
-    }
-  }
-
   async function finish() {
     setBusy(true);
     try {
-      await seedDefaultTags();
       // Idempotent; the root AuthGate then routes to the app.
       updateUser(await updateBasicInfo({ onboarded: true }));
     } catch {
@@ -398,11 +404,54 @@ export default function OnboardingScreen() {
         </>
       );
       break;
+    case "focus":
+      ({ title, body } = COPY.focus);
+      content = (
+        <Group>
+          {focusBandOptions().map((option) => {
+            const on = focusBand === option.band;
+            return (
+              <Pressable
+                key={option.band}
+                testID={`onboarding.focus.${option.band}`}
+                onPress={() => setFocusBand(option.band)}
+                disabled={busy}
+                role="radio"
+                aria-checked={on}
+                className="flex-row items-center gap-3 px-4 py-3.5"
+              >
+                <View className="min-w-0 flex-1">
+                  <Text
+                    className={cn(
+                      "text-[15px]",
+                      on ? "font-semibold" : "font-medium",
+                    )}
+                  >
+                    {option.label}
+                  </Text>
+                  <Text className="mt-0.5 text-[13px] text-muted-foreground">
+                    {option.hours}
+                  </Text>
+                </View>
+                {on && <Check size={18} className="text-primary" />}
+              </Pressable>
+            );
+          })}
+        </Group>
+      );
+      footer = (
+        <>
+          {primary(COPY.continue, saveFocus, !focusBand)}
+          {ghost(COPY.skipForNow, advance)}
+        </>
+      );
+      break;
     case "dlu":
       ({ title, body } = COPY.dlu);
       content = (
         <View>
           <DluAccountsSection hideLabel />
+          {dluConnected && <ImportedTimetable />}
           <Text className="mt-3.5 px-1 text-[12px] leading-snug text-muted-foreground">
             {COPY.dlu.trust}
           </Text>
