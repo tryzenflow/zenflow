@@ -6,7 +6,7 @@ export {
 } from "@zenflow/core";
 
 // React Navigation's native header/tab-bar chrome takes plain color strings, not `className` —
-// this is the one hand-maintained hex mirror of the Blueberry milk tokens for that purpose only.
+// this is the one hand-maintained hex mirror of the Sand and slate tokens for that purpose only.
 // Keep in sync with app/global.css.
 export const NAV_THEME = {
   light: {

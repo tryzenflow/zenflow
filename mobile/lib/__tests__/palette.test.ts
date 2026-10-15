@@ -45,8 +45,8 @@ const channels = (hex: string) => hexToRgb(hex).join(" ");
 describe("palette tokens", () => {
   it.each(schemes)("mobile %s matches the core hex values", (scheme) => {
     const vars = mobile[scheme];
-    expect(vars.primary).toBe(channels(BRAND.blueberry));
-    expect(vars["brand-butter"]).toBe(channels(BRAND.butter));
+    expect(vars.primary).toBe(channels(BRAND.slate));
+    expect(vars["brand-sun"]).toBe(channels(BRAND.sun));
     expect(vars.background).toBe(channels(SURFACES[scheme].background));
     expect(vars.card).toBe(channels(SURFACES[scheme].card));
     for (const tone of tones) {
@@ -67,7 +67,7 @@ describe("palette tokens", () => {
       );
     }
     if (scheme === "light") {
-      expect(vars["brand-blueberry"]).toBe(BRAND.blueberry.toLowerCase());
+      expect(vars["brand-slate"]).toBe(BRAND.slate.toLowerCase());
       for (const tone of tones) {
         expect(vars[`session-${tone}`]).toBe(
           SESSION_TONES[tone].base.toLowerCase(),
@@ -102,7 +102,7 @@ describe("session tone contrast", () => {
   );
 
   it("primary foreground passes AA on the primary fill", () => {
-    expect(contrastRatio(BRAND.night, BRAND.blueberry)).toBeGreaterThanOrEqual(
+    expect(contrastRatio(BRAND.deepSlate, BRAND.slate)).toBeGreaterThanOrEqual(
       4.5,
     );
   });

@@ -76,7 +76,7 @@ function getRetryAfterSeconds(error: unknown): number {
   return DEFAULT_RETRY_AFTER_SECONDS;
 }
 
-/** Butter clock icon + message, matching mockups/login.html's "Locked" frames. */
+/** Sun clock icon + message, matching mockups/login.html's "Locked" frames. */
 function LockoutNotice({ children }: { children: ReactNode }) {
   useLanguage();
   const { isDarkColorScheme } = useColorScheme();

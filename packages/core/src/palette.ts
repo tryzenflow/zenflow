@@ -1,29 +1,29 @@
 import type { SessionCardState, SessionType } from "@zenflow/shared";
 
 /**
- * Blueberry milk palette. Hex source of truth for code that paints with raw
+ * Sand and slate palette. Hex source of truth for code that paints with raw
  * colours (RN style props, SVG, WebView CSS). The Tailwind tokens in
  * `mobile/app/global.css` and `frontend/src/index.css` carry the same values;
  * `mobile/lib/__tests__/palette.test.ts` keeps them in sync and checks AA.
  */
 export const BRAND = {
-  blueberry: "#6C7BF7",
-  butter: "#FFD66B",
-  milk: "#FBFAF7",
-  night: "#15161F",
+  slate: "#6C7BF7",
+  sun: "#FFD66B",
+  sand: "#FBFAF7",
+  deepSlate: "#15161F",
 } as const;
 
 export type Scheme = "light" | "dark";
 
 /** Page and card surfaces a session block can sit on. */
 export const SURFACES: Record<Scheme, { background: string; card: string }> = {
-  light: { background: BRAND.milk, card: "#FFFFFF" },
-  dark: { background: BRAND.night, card: "#1E2030" },
+  light: { background: BRAND.sand, card: "#FFFFFF" },
+  dark: { background: BRAND.deepSlate, card: "#1E2030" },
 };
 
 /**
  * Colour roles for session blocks. `late` (cherry) is the only red and marks
- * late and overdue work only. `conflict` reuses the butter accent.
+ * late and overdue work only. `conflict` reuses the sun accent.
  */
 export type SessionTone =
   | "lecture"
@@ -46,11 +46,11 @@ export const SESSION_TONES: Record<SessionTone, SessionToneColors> = {
   lecture: { base: "#5AB2FF", ink: { light: "#0066C2", dark: "#6CB9FF" } },
   exam: { base: "#FF6F91", ink: { light: "#B8285F", dark: "#FF8AA6" } },
   assignment: { base: "#FFB547", ink: { light: "#925600", dark: "#FFB547" } },
-  task: { base: BRAND.blueberry, ink: { light: "#3D4FE6", dark: "#9AA4FA" } },
+  task: { base: BRAND.slate, ink: { light: "#3D4FE6", dark: "#9AA4FA" } },
   dnd: { base: "#B9B6C9", ink: { light: "#635E80", dark: "#B9B6C9" } },
   done: { base: "#4FD1A5", ink: { light: "#1C7457", dark: "#4FD1A5" } },
   late: { base: "#F0475C", ink: { light: "#C21A30", dark: "#F47D8C" } },
-  conflict: { base: BRAND.butter, ink: { light: "#7E5F00", dark: BRAND.butter } },
+  conflict: { base: BRAND.sun, ink: { light: "#7E5F00", dark: BRAND.sun } },
 };
 
 /** Block fill alpha over the surface: 12% light, 22% dark. */

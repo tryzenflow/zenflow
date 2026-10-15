@@ -91,7 +91,7 @@ function repeatLabel(rrule: string | null): string | null {
 const TAG_MAX_CHARS = 20;
 const TAGS_SHOWN = 3;
 
-/** Blueberry chip like the form's tag pills; long names are trimmed. */
+/** Slate chip like the form's tag pills; long names are trimmed. */
 function TagChip({ name }: { name: string }) {
   const short =
     name.length > TAG_MAX_CHARS ? `${name.slice(0, TAG_MAX_CHARS - 1)}…` : name;

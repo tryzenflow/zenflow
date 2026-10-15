@@ -94,7 +94,7 @@ import type { WebViewMessageEvent } from "react-native-webview";
 import { NoteSkeleton } from "../note-skeleton";
 import { AudioBridge, VideoBridge } from "./media-bridges";
 
-// A light tint of the butter accent (`--brand-butter`); note text on it stays
+// A light tint of the sun accent (`--brand-sun`); note text on it stays
 // dark in both schemes (see `noteTypographyCss`).
 const HIGHLIGHT_COLOR = "#ffe7a8";
 
@@ -894,7 +894,7 @@ function ToolbarButton({
       accessibilityState={{ selected: !!active, disabled: !!disabled }}
       className={cn(
         "h-12 w-12 items-center justify-center rounded-full active:bg-muted/30",
-        // Light blueberry active-state fill (this bar's own accent, distinct
+        // Light slate active-state fill (this bar's own accent, distinct
         // from the app's `bg-primary`) reads clearly against a white bar —
         // the old `bg-white/25`-on-dark-pill treatment would be invisible
         // here since the bar itself is now white. The fill is the same in

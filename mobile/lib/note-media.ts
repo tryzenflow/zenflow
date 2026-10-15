@@ -37,7 +37,7 @@ export function parseOpenMediaMessage(raw: string): OpenMedia | null {
 
 /**
  * Read-only view: audio and video get a Zenflow player instead of the browser's
- * default controls: a blueberry play disc, a waveform you can scrub, a
+ * default controls: a slate play disc, a waveform you can scrub, a
  * speed chip, and a per-type placeholder when the file can't load (offline): a grey
  * image box, a disabled player with its waveform, a dark video box with a disabled play button.
  */

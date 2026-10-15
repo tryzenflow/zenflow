@@ -21,7 +21,7 @@ export function noteColors(isDark: boolean) {
     bg: isDark ? "rgb(30 32 48)" : "rgb(255 255 255)",
     fg: isDark ? "rgb(236 236 244)" : "rgb(28 29 43)",
     muted: isDark ? "rgb(163 165 184)" : "rgb(104 106 126)",
-    // AA ink of the blueberry primary (`--session-task-ink` in `app/global.css`).
+    // AA ink of the slate primary (`--session-task-ink` in `app/global.css`).
     link: isDark ? "rgb(154 164 250)" : "rgb(61 79 230)",
   };
 }

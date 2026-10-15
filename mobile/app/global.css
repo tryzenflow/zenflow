@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /*
- * Blueberry milk tokens. Keep in step with frontend/src/index.css and the hex
+ * Sand and slate tokens. Keep in step with frontend/src/index.css and the hex
  * values in packages/core/src/palette.ts (lib/__tests__/palette.test.ts checks).
  *
  * Stored as space-separated "R G B" channels (not hex) and consumed via rgb(var(--x) / <alpha-value>)
@@ -32,8 +32,8 @@
     --border: 230 229 238;
     --input: 230 229 238;
     --ring: 108 123 247;
-    --brand-blueberry: 108 123 247;
-    --brand-butter: 255 214 107;
+    --brand-slate: 108 123 247;
+    --brand-sun: 255 214 107;
     --success: 79 209 165;
     --glass: 255 255 255;
     --glass-edge: 108 123 247;
@@ -76,8 +76,8 @@
     --border: 46 48 67;
     --input: 46 48 67;
     --ring: 108 123 247;
-    --brand-blueberry: 108 123 247;
-    --brand-butter: 255 214 107;
+    --brand-slate: 108 123 247;
+    --brand-sun: 255 214 107;
     --success: 79 209 165;
     --glass: 228 230 255;
     --glass-edge: 154 164 250;

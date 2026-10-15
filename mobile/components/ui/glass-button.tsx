@@ -14,7 +14,7 @@ export const GLASS_HIT_SIZE = 44;
 export type GlassIcon = ComponentType<{ size?: number; color: string }>;
 
 const CIRCLE_RADIUS = GLASS_SIZE / 2;
-/** Dark ink on blueberry, as the solid primary button (palette #234). */
+/** Dark ink on slate, as the solid primary button (palette #234). */
 const PRIMARY_INK = "#15161F";
 
 /** Inner 1px highlight that sits just inside the glass edge. */

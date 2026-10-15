@@ -1,7 +1,7 @@
 import type { NativeViewStyle } from "@/lib/native-style";
 
 /**
- * Blueberry cast for the floating "new task" action (`CreateSessionFab`).
+ * Slate cast for the floating "new task" action (`CreateSessionFab`).
  * Hard-coded rather than read from `NAV_THEME` because the primary fill is
  * the same in light and dark mode, so the glow shouldn't flip either.
  */
@@ -22,7 +22,7 @@ export const FAB_GLOW_OUTER: NativeViewStyle = {
   shadowRadius: 20,
   // Android ignores `shadowRadius`/`shadowOpacity` and derives the shadow
   // from `elevation`; it does honour `shadowColor` from API 28 up, so the
-  // cast is blueberry there too (just a single, less controllable falloff).
+  // cast is slate there too (just a single, less controllable falloff).
   elevation: 14,
 };
 

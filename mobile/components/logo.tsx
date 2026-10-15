@@ -38,7 +38,7 @@ export function Logo({
   breathe = false,
 }: {
   className?: string;
-  /** Blueberry drop shadow under the mark. */
+  /** Slate drop shadow under the mark. */
   glow?: boolean;
   /** Slowly swell the glow (needs `glow`). Static under Reduce Motion. */
   breathe?: boolean;

@@ -3,7 +3,7 @@
 @import "@fontsource/geist/600.css";
 @import "@fontsource/geist/800.css";
 
-/* Blueberry milk tokens (#234). Raw colours stay fixed; surfaces swap in dark mode. */
+/* Sand and slate tokens (#234). Raw colours stay fixed; surfaces swap in dark mode. */
 @theme {
   --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
