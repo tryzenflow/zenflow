@@ -33,8 +33,8 @@ import Svg, {
 const MIN_VISIBLE_MS = 1200;
 const SLOW_AFTER_MS = 3000;
 const HINT_EVERY_MS = 3200;
-/** Logo is the splash image's mark: 560 of its 1024px, at `imageWidth` 160 (560/1024 of 160 is 88). */
-const LOGO_SIZE = 88;
+/** Logo is the splash image: the whole 1024px tile, at `imageWidth` 120. */
+const LOGO_SIZE = 120;
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const AnimatedPath = Animated.createAnimatedComponent(Path);
@@ -243,7 +243,7 @@ export function BootScreen({
         className="flex-1 items-center justify-center"
       >
         {/* Fixed size: the mark must match the native image (LOGO_SIZE). */}
-        <Logo glow breathe className="h-[88px] w-[88px] rounded-full" />
+        <Logo glow breathe className="h-[120px] w-[120px]" />
       </View>
       <Animated.View
         pointerEvents="none"
