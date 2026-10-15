@@ -12,8 +12,8 @@ import { useEffect } from "react";
 
 // The toast renders its icon through the lucide contract (`size`); ours are
 // plain SVG with a fixed colour, so adapt them.
-// Deep slate on light toasts, pale slate on dark ones so it stays legible.
-const OFFLINE_INK = { light: "#46728F", dark: "#8DB3CE" };
+// Dark navy on light toasts, a lighter blue on dark ones so it stays legible.
+const OFFLINE_INK = { light: "#1E3A8A", dark: "#93C5FD" };
 const OfflineToastIcon = (({ size }: { size?: number }) => {
   const { isDarkColorScheme } = useColorScheme();
   return (

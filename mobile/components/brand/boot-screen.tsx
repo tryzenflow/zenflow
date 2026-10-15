@@ -33,8 +33,8 @@ import Svg, {
 const MIN_VISIBLE_MS = 1200;
 const SLOW_AFTER_MS = 3000;
 const HINT_EVERY_MS = 3200;
-/** Logo is the splash image: the whole 1024px tile, at `imageWidth` 120. */
-const LOGO_SIZE = 120;
+/** Logo is the splash image's mark: 560 of its 1024px, at `imageWidth` 160 (560/1024 of 160 is 88). */
+const LOGO_SIZE = 88;
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const AnimatedPath = Animated.createAnimatedComponent(Path);
@@ -73,7 +73,7 @@ function SunArc({ animate }: { animate: boolean }) {
       fill: interpolateColor(
         p.value,
         [0, 0.5, 1],
-        ["#5B88A6", "#5B88A6", "#E8895E"],
+        ["#FF6900", "#F0B100", "#D8F999"],
       ),
     };
   });
@@ -82,14 +82,14 @@ function SunArc({ animate }: { animate: boolean }) {
     <Svg width={ARC_W} height={ARC_H} viewBox={`0 0 ${ARC_W} ${ARC_H}`}>
       <Defs>
         <LinearGradient id="zf-arc" x1="0" y1="0" x2="1" y2="0">
-          <Stop offset="0" stopColor="#5B88A6" />
-          <Stop offset="0.5" stopColor="#5B88A6" />
-          <Stop offset="1" stopColor="#E8895E" />
+          <Stop offset="0" stopColor="#FF6900" />
+          <Stop offset="0.5" stopColor="#F0B100" />
+          <Stop offset="1" stopColor="#D8F999" />
         </LinearGradient>
       </Defs>
       <Path
         d={ARC_PATH}
-        stroke="#5B88A6"
+        stroke="#F0B100"
         strokeOpacity={0.18}
         strokeWidth={3}
         strokeLinecap="round"
@@ -243,7 +243,7 @@ export function BootScreen({
         className="flex-1 items-center justify-center"
       >
         {/* Fixed size: the mark must match the native image (LOGO_SIZE). */}
-        <Logo glow breathe className="h-[120px] w-[120px]" />
+        <Logo glow breathe className="h-[88px] w-[88px] rounded-full" />
       </View>
       <Animated.View
         pointerEvents="none"

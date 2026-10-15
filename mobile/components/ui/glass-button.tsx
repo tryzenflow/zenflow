@@ -14,8 +14,8 @@ export const GLASS_HIT_SIZE = 44;
 export type GlassIcon = ComponentType<{ size?: number; color: string }>;
 
 const CIRCLE_RADIUS = GLASS_SIZE / 2;
-/** Deep slate ink on the solid sky primary. */
-const PRIMARY_INK = "#16232B";
+/** Dark brown ink on the solid orange primary. */
+const PRIMARY_INK = "#2B1406";
 
 /** Inner 1px highlight that sits just inside the glass edge. */
 function InnerHighlight({ dark, radius }: { dark: boolean; radius: number }) {
@@ -28,7 +28,7 @@ function InnerHighlight({ dark, radius }: { dark: boolean; radius: number }) {
           borderRadius: radius,
           borderWidth: StyleSheet.hairlineWidth * 2,
           borderColor: dark
-            ? "rgba(159, 180, 190, 0.16)"
+            ? "rgba(255, 190, 130, 0.16)"
             : "rgba(255, 255, 255, 0.7)",
         },
       ]}

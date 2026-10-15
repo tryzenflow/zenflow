@@ -1,7 +1,7 @@
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { useReducedMotion } from "@/lib/motion";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, {
   Easing,
@@ -10,14 +10,18 @@ import Animated, {
   withRepeat,
   withTiming,
 } from "react-native-reanimated";
-import Svg, { Path, Rect } from "react-native-svg";
-
-/** App icon tile: corner radius is 58 of 256. */
-const TILE_RADIUS = 58 / 256;
+import Svg, {
+  Circle,
+  Defs,
+  LinearGradient,
+  Path,
+  Stop,
+} from "react-native-svg";
 
 const GLOW = {
-  backgroundColor: "#FBF5EC",
-  shadowColor: "#5B88A6",
+  borderRadius: 999,
+  backgroundColor: "#F0B100",
+  shadowColor: "#FF6900",
   shadowOpacity: 0.4,
   shadowRadius: 16,
   shadowOffset: { width: 0, height: 8 },
@@ -25,8 +29,8 @@ const GLOW = {
 } as const;
 
 /**
- * Zenflow sunrise mark on the app icon tile, same drawing as landing/public/favicon.svg
- * (react-native-svg instead of inline <svg>).
+ * Zenflow sunrise mark — ported from frontend/src/components/logo.tsx (react-native-svg
+ * instead of inline <svg>; no CSS hover/breathe animation on native, static mark).
  */
 export function Logo({
   className,
@@ -34,7 +38,7 @@ export function Logo({
   breathe = false,
 }: {
   className?: string;
-  /** Slate drop shadow under the mark. */
+  /** Orange drop shadow, as in mockups/login.html (`shadow-lg shadow-brand-orange/30`). */
   glow?: boolean;
   /** Slowly swell the glow (needs `glow`). Static under Reduce Motion. */
   breathe?: boolean;
@@ -52,8 +56,6 @@ export function Logo({
     }
   }, [glow, breathe, reduceMotion, swell]);
   const glowStyle = useAnimatedStyle(() => ({ opacity: swell.value }));
-  const [side, setSide] = useState(0);
-  const radius = { borderRadius: side * TILE_RADIUS };
 
   return (
     <View
@@ -61,26 +63,36 @@ export function Logo({
       // A shadow needs an opaque layer to be cast from: the mark's own circle
       // is vector content, so back it with a matching disc. It sits behind the
       // mark in its own layer so `breathe` can fade just the glow.
-      style={glow && !breathe ? [GLOW, radius] : undefined}
-      onLayout={(e) => setSide(e.nativeEvent.layout.width)}
+      style={glow && !breathe ? GLOW : undefined}
     >
       {glow && breathe && (
         <Animated.View
           pointerEvents="none"
-          style={[StyleSheet.absoluteFill, GLOW, radius, glowStyle]}
+          style={[StyleSheet.absoluteFill, GLOW, glowStyle]}
         />
       )}
-      <Svg viewBox="0 0 256 256" width="100%" height="100%" fill="none">
-        <Rect width={256} height={256} rx={58} fill="#FBF5EC" />
+      <Svg viewBox="0 0 260 260" width="100%" height="100%" fill="none">
+        <Circle cx={130} cy={130} r={130} fill="url(#zenflow-sunrise)" />
         <Path
-          d="M52 166 A76 76 0 0 1 204 166"
-          stroke="#E8895E"
-          strokeWidth={20}
+          d="M220.5 51.5C220.5 51.5 172.668 65.7587 147.635 89.6235C122.602 113.488 136.249 158.201 104.912 183.517C80.2542 203.436 32.9999 199.5 32.9999 199.5"
+          stroke="#FFF085"
+          strokeWidth={24}
           strokeLinecap="round"
         />
-        <Path d="M100 166 A28 28 0 0 1 156 166 Z" fill="#E8895E" />
-        <Rect x={40} y={180} width={176} height={14} rx={7} fill="#5B88A6" />
-        <Rect x={64} y={204} width={128} height={8} rx={4} fill="#5B88A6" opacity={0.35} />
+        <Defs>
+          <LinearGradient
+            id="zenflow-sunrise"
+            x1={48.5}
+            y1={31.5}
+            x2={222.5}
+            y2={220.5}
+            gradientUnits="userSpaceOnUse"
+          >
+            <Stop stopColor="#FF6900" offset={0} />
+            <Stop stopColor="#F0B100" offset={0.323567} />
+            <Stop stopColor="#D8F999" offset={1} />
+          </LinearGradient>
+        </Defs>
       </Svg>
     </View>
   );

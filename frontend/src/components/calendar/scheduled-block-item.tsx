@@ -47,12 +47,13 @@ function fmtDuration(minutes: number) {
 /** Below this duration (minutes) a block is too short to carry tag pills. */
 const TAGS_MIN_DURATION = 45;
 
-// Tag pills rotate through three palette hues so a wall of tags reads with
-// some variety; text stays neutral for legibility.
+// Tag pills rotate through the logo's three brand hues so a wall of tags reads
+// with some variety instead of a single accent. Lime is the palest stop, so it
+// gets a touch more fill to stay visible; text stays neutral for legibility.
 const TAG_TINTS = [
-  "border-brand-blueberry/40 bg-brand-blueberry/[0.12]",
-  "border-brand-butter/60 bg-brand-butter/20",
-  "border-session-done/45 bg-session-done/[0.14]",
+  "border-brand-orange/40 bg-brand-orange/15",
+  "border-brand-yellow/45 bg-brand-yellow/15",
+  "border-brand-lime/55 bg-brand-lime/25",
 ];
 
 /** Stable hue pick for a tag — same tag always lands on the same color. */
@@ -417,8 +418,8 @@ export function ScheduledBlockItem({
               </div>
             </>
           )}
-          {/* Phase-2 duration-delta indicator. A grow band (primary, +N) hugs the
-          edge being dragged; a shrink reads as a neutral outline + −N. Only
+          {/* Phase-2 duration-delta indicator. A grow band (amber, +N) hugs the
+          edge being dragged; a shrink reads as a dashed rose outline + −N. Only
           shown mid-resize, so it never interferes with the persisted block. */}
           {preview && deltaMinutes !== 0 && (
             <>
@@ -439,7 +440,7 @@ export function ScheduledBlockItem({
                   "pointer-events-none absolute right-1 z-30 rounded px-1 py-0.5 font-mono text-[9px] font-bold leading-none shadow-sm",
                   deltaMinutes > 0
                     ? "bg-primary text-primary-foreground"
-                    : "bg-foreground text-background",
+                    : "bg-rose-500 text-white",
                   growingEdge === "top" ? "top-1" : "bottom-1",
                 )}
               >
@@ -451,9 +452,9 @@ export function ScheduledBlockItem({
           <div
             className={cn(
               "flex h-full overflow-hidden rounded border border-l-4 px-2 shadow-sm transition-shadow hover:shadow-md backdrop-blur-lg",
-              // While shrinking, outline the block so the removed extent
+              // While shrinking, outline the block in rose so the removed extent
               // reads distinctly from a normal resize.
-              preview && deltaMinutes < 0 && "ring-1 ring-foreground/40",
+              preview && deltaMinutes < 0 && "ring-1 ring-rose-400/60",
               // A nested (stacked) block gets a firmer outline + shadow so it
               // reads as a card peeking out from behind its container.
               isNested && "shadow-md ring-1 ring-background",

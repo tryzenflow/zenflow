@@ -1,65 +1,62 @@
 import type { SessionCardState, SessionType } from "@zenflow/shared";
 
 /**
- * Sand and slate palette. Hex source of truth for code that paints with raw
- * colours (RN style props, SVG, WebView CSS). The Tailwind tokens in
- * `mobile/app/global.css`, `frontend/src/index.css` and
- * `landing/src/styles/global.css` carry the same values;
- * `mobile/lib/__tests__/palette.test.ts` keeps them in sync and checks AA.
- *
- * Brand: sand background, clay sun accent, sky blue primary on mobile, slate
- * mark ink, soft grey. Warm
- * neutrals, steel and teal blues, honey and sage come from the same family.
- * Cherry is the only red: errors, destructive actions, late and overdue work.
+ * Warm Sunrise palette: orange, yellow and lime on warm paper and ink. Hex
+ * source of truth for code that paints with raw colours (RN style props, SVG,
+ * WebView CSS). The Tailwind tokens in `mobile/app/global.css`,
+ * `frontend/src/index.css` and `landing/src/styles/global.css` carry the same
+ * values; `mobile/lib/__tests__/palette.test.ts` keeps them in sync.
  */
 export const BRAND = {
-  /** Light background. Never text on it below AA. */
-  sand: "#FBF5EC",
-  /** Sun accent, clay. Highlights and the conflict tone. */
-  sun: "#E8895E",
-  /** Brand mark ink, slate. Logo and landing primary. */
-  slate: "#2F4858",
-  /** Sky blue. Brand mark and the mobile primary (a deeper step in light). */
-  sky: "#5B88A6",
+  /** Primary, light scheme. */
+  orange: "#FF8E3E",
+  /** Primary, dark scheme. */
+  orangeDark: "#FF7A24",
+  /** Highlights and assignments. */
+  yellow: "#F0B101",
+  /** Light accent and done. Fill only. */
+  lime: "#D8F998",
+  /** Light background. */
+  paper: "#FEFCFA",
+  /** Dark background and ink. */
+  ink: "#0F0D0A",
   /** Soft grey. Dnd and quiet strokes. */
-  grey: "#B0B8BA",
-  /** Dark background. */
-  deepSlate: "#16232B",
+  grey: "#B8B0A4",
 } as const;
 
 export type Scheme = "light" | "dark";
 
-/** Sage: success and done. Fill only, not text on sand. */
-export const SUCCESS = "#7DA886";
+/** Success fill. */
+export const SUCCESS = "#10B981";
 
 /**
  * UI neutrals and roles per scheme. Each key is a CSS variable: `background`,
  * `foreground`, `card`, `muted`, `muted-foreground`, `border`, `primary`,
  * `primary-foreground`, `ring`, `destructive`, `destructive-foreground`,
- * `glass`, `glass-edge` and `success`. `brand-slate` mirrors `primary`.
+ * `glass`, `glass-edge` and `success`.
  */
 export interface UiTokens {
   /** Page. */
   background: string;
-  /** Body text, AA or better on `background` and `card`. */
+  /** Body text. */
   foreground: string;
   /** Elevated surface: cards, popovers, sheets. */
   card: string;
   /** Secondary, accent and muted fills. */
   muted: string;
-  /** Secondary text, AA on `background`, `card` and `muted`. */
+  /** Secondary text. */
   mutedForeground: string;
   /** Hairlines, inputs and scrollbars. */
   border: string;
   /** Primary fill: solid buttons and selection. */
   primary: string;
-  /** Text on `primary`, AA. */
+  /** Text on `primary`. */
   primaryForeground: string;
   /** Focus ring, same as `primary`. */
   ring: string;
-  /** Destructive and error: cherry. Fill, and text AA on sand and card. */
+  /** Destructive and error. */
   destructive: string;
-  /** Text on `destructive`, AA. */
+  /** Text on `destructive`. */
   destructiveForeground: string;
   /** Frosted glass fill. */
   glass: string;
@@ -71,38 +68,36 @@ export interface UiTokens {
 
 export const UI: Record<Scheme, UiTokens> = {
   light: {
-    background: BRAND.sand,
-    foreground: "#22333D",
-    card: "#FFFCF7",
-    muted: "#F2EADC",
-    mutedForeground: "#5C6B72",
-    border: "#E6DCCB",
-    /** Sky, one step deeper than `BRAND.sky` so sand text passes AA. */
-    primary: "#46728F",
-    primaryForeground: BRAND.sand,
-    ring: "#46728F",
-    destructive: "#B83045",
-    destructiveForeground: "#FFFCF7",
-    glass: "#FFFCF7",
-    glassEdge: "#46728F",
+    background: BRAND.paper,
+    foreground: BRAND.ink,
+    card: "#FFFFFF",
+    muted: "#F6F3EF",
+    mutedForeground: "#6F665B",
+    border: "#E8E5DF",
+    primary: BRAND.orange,
+    primaryForeground: "#2B1406",
+    ring: BRAND.orange,
+    destructive: "#E7000B",
+    destructiveForeground: "#FFFFFF",
+    glass: "#FFFFFF",
+    glassEdge: BRAND.orange,
     success: SUCCESS,
   },
   dark: {
-    background: BRAND.deepSlate,
-    foreground: "#F3ECDF",
-    card: "#1F303A",
-    muted: "#263A45",
-    mutedForeground: "#A8B4B8",
-    border: "#2D4048",
-    /** Light sky, so solid buttons read on the dark page. */
-    primary: "#8DB3CE",
-    primaryForeground: BRAND.deepSlate,
-    ring: "#8DB3CE",
-    destructive: "#E3888F",
-    destructiveForeground: BRAND.deepSlate,
-    glass: "#F3ECDF",
-    glassEdge: "#9FB4BE",
-    success: SUCCESS,
+    background: BRAND.ink,
+    foreground: "#FBFAF8",
+    card: "#1D1A17",
+    muted: "#2C2822",
+    mutedForeground: "#ACA397",
+    border: "#36322D",
+    primary: BRAND.orangeDark,
+    primaryForeground: "#2B1406",
+    ring: BRAND.orangeDark,
+    destructive: "#FF6467",
+    destructiveForeground: BRAND.ink,
+    glass: "#FFECDC",
+    glassEdge: "#FFAA64",
+    success: "#34D399",
   },
 };
 
@@ -115,8 +110,7 @@ export const SURFACES: Record<Scheme, { background: string; card: string }> = {
 /**
  * Colour roles for session blocks. `base` is the stripe, dot and tint source.
  * `ink` is the text on the 12% (light) or 22% (dark) tint, AA on both page and
- * card. `late` (cherry) is the only red and marks late and overdue work only.
- * `conflict` reuses the sun accent.
+ * card. `late` is the only red and marks late and overdue work only.
  */
 export type SessionTone =
   | "lecture"
@@ -136,22 +130,22 @@ export interface SessionToneColors {
 }
 
 export const SESSION_TONES: Record<SessionTone, SessionToneColors> = {
-  /** Steel blue. */
-  lecture: { base: "#5B88A6", ink: { light: "#476B83", dark: "#99B1BD" } },
+  /** Blue: timetable lectures. */
+  lecture: { base: "#3B82C4", ink: { light: "#245C94", dark: "#8FBDE8" } },
   /** Teal. */
-  exam: { base: "#2E7D7A", ink: { light: "#2A6F6E", dark: "#89B0A8" } },
-  /** Honey. */
-  assignment: { base: "#D9A23E", ink: { light: "#7E6735", dark: "#DEB15E" } },
-  /** Slate, lifted from primary so the stripe shows on deep slate. */
-  task: { base: "#47687C", ink: { light: "#47687C", dark: "#9AA7AC" } },
-  /** Soft grey. */
-  dnd: { base: BRAND.grey, ink: { light: "#626C72", dark: "#B8BFBF" } },
-  /** Sage, the success colour. */
-  done: { base: SUCCESS, ink: { light: "#516F5F", dark: "#A1BDA1" } },
-  /** Cherry, the only red. */
-  late: { base: "#D6334A", ink: { light: "#B83045", dark: "#E3888F" } },
-  /** Sun clay. */
-  conflict: { base: BRAND.sun, ink: { light: "#8E5D48", dark: "#EBA481" } },
+  exam: { base: "#14A09B", ink: { light: "#0E6F6B", dark: "#6FD3CD" } },
+  /** Yellow. */
+  assignment: { base: BRAND.yellow, ink: { light: "#7A5A00", dark: "#F6C93C" } },
+  /** Orange: tasks. */
+  task: { base: BRAND.orange, ink: { light: "#9A4A0C", dark: "#FFA866" } },
+  /** Soft grey: free time and do not disturb. */
+  dnd: { base: BRAND.grey, ink: { light: "#5F574D", dark: "#B8B0A4" } },
+  /** Green. */
+  done: { base: SUCCESS, ink: { light: "#0B6B4B", dark: "#5FD9A9" } },
+  /** Red: late and overdue work. */
+  late: { base: "#E7000B", ink: { light: "#B80009", dark: "#FF8083" } },
+  /** Lime: conflict. */
+  conflict: { base: "#9BC53D", ink: { light: "#4F6B14", dark: "#C7E27B" } },
 };
 
 /** Block fill alpha over the surface: 12% light, 22% dark. */

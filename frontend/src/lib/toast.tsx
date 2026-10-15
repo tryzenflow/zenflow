@@ -52,13 +52,13 @@ const POLICY_COPY: Record<
     title: "Keep the deadline, allow a conflict",
     description: "It'll overlap another session — nothing fixed gets moved.",
     icon: LayersIcon,
-    tint: "bg-session-conflict/20 text-session-conflict-ink",
+    tint: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
   },
   ACCEPT_LATE_DEADLINE: {
     title: "Push the deadline, stay conflict-free",
     description: "It'll be scheduled a bit later, but won't overlap anything.",
     icon: CalendarClockIcon,
-    tint: "bg-session-lecture/[0.14] text-session-lecture-ink",
+    tint: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
   },
 };
 
@@ -131,7 +131,7 @@ function InfeasiblePolicyToast({
   return (
     <div className="glass-notice flex w-md flex-col gap-3 rounded-2xl px-4 py-3.5">
       <div className="flex items-start gap-3">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-session-conflict/20 text-session-conflict-ink">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400">
           <TriangleAlertIcon className="size-4" />
         </span>
         <span className="min-w-0 flex-1 pt-0.5">

@@ -94,7 +94,7 @@ import type { WebViewMessageEvent } from "react-native-webview";
 import { NoteSkeleton } from "../note-skeleton";
 import { AudioBridge, VideoBridge } from "./media-bridges";
 
-// A light tint of the sun accent (`--brand-sun`); note text on it stays
+// A light tint of the sun accent (`--brand-orange`); note text on it stays
 // dark in both schemes (see `noteTypographyCss`).
 const HIGHLIGHT_COLOR = "#F3E1B5";
 
@@ -364,7 +364,7 @@ export function DescriptionFieldEditor({
     // selection itself survives the blur, so `setLink` still targets it.
     if (onText) {
       editor.injectCSS(
-        "::highlight(zf-link-sel) { background-color: rgba(70, 114, 143, 0.35); }",
+        "::highlight(zf-link-sel) { background-color: rgba(255, 142, 62, 0.35); }",
         "zf-link-sel",
       );
       editor.injectJS(
@@ -894,7 +894,7 @@ function ToolbarButton({
       accessibilityState={{ selected: !!active, disabled: !!disabled }}
       className={cn(
         "h-12 w-12 items-center justify-center rounded-full active:bg-muted/30",
-        // Light slate active-state fill (this bar's own accent, distinct
+        // Light orange active-state fill (this bar's own accent, distinct
         // from the app's `bg-primary`) reads clearly against a white bar —
         // the old `bg-white/25`-on-dark-pill treatment would be invisible
         // here since the bar itself is now white. The fill is the same in

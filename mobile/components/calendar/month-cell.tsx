@@ -277,7 +277,7 @@ const MonthPill = memo(function MonthPill({ session, hidden }: MonthPillProps) {
   const continuation = isContinuationEntry(session);
   const { isDarkColorScheme } = useColorScheme();
   const overrides = useCourseColourStore((s) => s.overrides);
-  // Course colour wins over the type tone; late stays cherry.
+  // Course colour wins over the type tone; late stays red.
   const course =
     late || !session.courseKey
       ? null

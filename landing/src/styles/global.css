@@ -3,18 +3,18 @@
 @import "@fontsource/geist/600.css";
 @import "@fontsource/geist/800.css";
 
-/* Sand and slate tokens (#234). Raw colours stay fixed; surfaces swap in dark mode. */
+/* Warm Sunrise tokens: orange, yellow and lime. Raw colours stay fixed; surfaces swap in dark mode. */
 @theme {
   --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
-  --color-primary: #2f4858;
-  --color-primary-ink: #47687c;
-  --color-accent: #e8895e;
-  --color-lecture: #5b88a6;
-  --color-exam: #2e7d7a;
-  --color-assignment: #d9a23e;
-  --color-task: #47687c;
-  --color-done: #7da886;
+  --color-primary: #ff8e3e;
+  --color-primary-ink: #9a4a0c;
+  --color-accent: #f0b101;
+  --color-lecture: #3b82c4;
+  --color-exam: #14a09b;
+  --color-assignment: #f0b101;
+  --color-task: #ff8e3e;
+  --color-done: #10b981;
 
   --color-bg: var(--bg);
   --color-fg: var(--fg);
@@ -46,21 +46,21 @@
 
 :root {
   color-scheme: light dark;
-  --bg: #fbf5ec;
-  --fg: #22333d;
-  --muted: #5c6b72;
-  --card: #fffcf7;
-  --rule: #ebe2d3;
+  --bg: #fefcfa;
+  --fg: #0f0d0a;
+  --muted: #6f665b;
+  --card: #ffffff;
+  --rule: #e8e5df;
   --tint: 12%;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #16232b;
-    --fg: #f3ecdf;
-    --muted: #a8b4b8;
-    --card: #1f303a;
-    --rule: #2a3d47;
+    --bg: #0f0d0a;
+    --fg: #fbfaf8;
+    --muted: #aca397;
+    --card: #1d1a17;
+    --rule: #36322d;
     --tint: 22%;
   }
 }

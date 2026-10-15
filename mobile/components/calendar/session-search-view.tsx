@@ -171,7 +171,7 @@ export function SessionSearchView({ onClose }: { onClose: () => void }) {
                 <Text
                   key={i}
                   testID="session-search.match"
-                  className="rounded-[4px] bg-brand-sun/40 font-bold"
+                  className="rounded-[4px] bg-brand-orange/40 font-bold"
                 >
                   {part.text}
                 </Text>

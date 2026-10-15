@@ -1,11 +1,12 @@
 import type { NativeViewStyle } from "@/lib/native-style";
 
 /**
- * Slate cast for the floating "new task" action (`CreateSessionFab`).
- * Hard-coded rather than read from `NAV_THEME` because the primary fill is
- * the same in light and dark mode, so the glow shouldn't flip either.
+ * Warm amber cast for the floating "new task" action (`CreateSessionFab`).
+ * Hard-coded rather than read from `NAV_THEME` because the button is amber
+ * in light *and* dark mode (the primary fill doesn't flip), so the glow
+ * shouldn't flip either.
  */
-export const FAB_GLOW_COLOR = "rgb(47,72,88)";
+export const FAB_GLOW_COLOR = "rgb(255,142,62)";
 
 /**
  * Wide, soft half of the glow — goes on a wrapper `View` around the button.
@@ -22,7 +23,7 @@ export const FAB_GLOW_OUTER: NativeViewStyle = {
   shadowRadius: 20,
   // Android ignores `shadowRadius`/`shadowOpacity` and derives the shadow
   // from `elevation`; it does honour `shadowColor` from API 28 up, so the
-  // cast is slate there too (just a single, less controllable falloff).
+  // cast is amber there too (just a single, less controllable falloff).
   elevation: 14,
 };
 

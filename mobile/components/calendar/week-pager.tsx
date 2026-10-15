@@ -75,7 +75,7 @@ const SETTLE = {
  * sheet — long-press a block). */
 const NAV_EDGE_ZONE = 56;
 const NAV_HOLD_MS = 340;
-const SLATE_RGB = "47, 72, 88";
+const SLATE_RGB = "15, 13, 10";
 
 
 /** A window of days as the UI thread's `windowSV` holds it. */

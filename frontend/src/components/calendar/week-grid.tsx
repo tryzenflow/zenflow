@@ -68,9 +68,9 @@ export const WeekGrid = ({
               }}
             >
               <div className="relative flex items-center">
-                <div className="absolute -left-1 h-2 w-2 rounded-full bg-primary shadow-sm" />
-                <div className="absolute animate-ping -left-1 h-2 w-2 rounded-full bg-primary shadow-sm" />
-                <div className="h-[2px] w-full bg-gradient-to-r from-primary via-primary/50 to-transparent" />
+                <div className="absolute -left-1 h-2 w-2 rounded-full bg-rose-500 shadow-sm" />
+                <div className="absolute animate-ping -left-1 h-2 w-2 rounded-full bg-rose-500 shadow-sm" />
+                <div className="h-[2px] w-full bg-gradient-to-r from-rose-500 via-rose-400/50 to-transparent" />
               </div>
             </div>
           )}

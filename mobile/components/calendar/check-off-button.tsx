@@ -96,7 +96,7 @@ export function CheckOffButton({
           },
           burstStyle,
         ]}
-        className="bg-brand-sun"
+        className="bg-brand-orange"
       />
       <View
         pointerEvents="none"
@@ -104,7 +104,7 @@ export function CheckOffButton({
         className={cn(
           "items-center justify-center border-2",
           done
-            ? "border-brand-sun bg-brand-sun"
+            ? "border-brand-orange bg-brand-orange"
             : "border-muted-foreground bg-card",
         )}
       >

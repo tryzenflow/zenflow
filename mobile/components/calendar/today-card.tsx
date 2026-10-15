@@ -50,7 +50,7 @@ function ProgressRing({ done, total }: { done: number; total: number }) {
           cx={RING_SIZE / 2}
           cy={RING_SIZE / 2}
           r={radius}
-          stroke={BRAND.sun}
+          stroke={BRAND.orange}
           strokeWidth={RING_STROKE}
           strokeLinecap="round"
           fill="none"

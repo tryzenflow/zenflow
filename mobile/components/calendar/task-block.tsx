@@ -705,7 +705,7 @@ function SessionBlockImpl({
   // One even 1px rim per tone; the 3px stripe is a separate rounded bar inset
   // inside the block, like Apple Calendar.
   const tone = sessionTone(state, overdue);
-  // A session with a course paints with its course colour; overdue stays cherry.
+  // A session with a course paints with its course colour; overdue stays red.
   const courseColour = overdue
     ? null
     : courseStyleFor(

@@ -40,7 +40,7 @@ const STYLE = `
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;scroll-padding-top:16px}
 body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.7 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased}
-.sun{height:4px;background:linear-gradient(90deg,#E8895E,#47687C 55%,#B0B8BA)}
+.sun{height:4px;background:linear-gradient(90deg,#ff6900,#f0b100 55%,#d8f999)}
 .wrap{max-width:700px;margin:0 auto;padding:0 22px}
 .top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:22px}
 .brand{display:flex;align-items:center;gap:10px;color:var(--fg);text-decoration:none;font-weight:650;font-size:19px;letter-spacing:-.01em}
@@ -80,11 +80,11 @@ footer a[aria-current]{color:var(--fg);text-decoration:none;font-weight:600}
 @media (max-width:480px){body{font-size:16.5px}.lead{font-size:17px}h2{font-size:19.5px}}
 `;
 
-export const LOGO = `<svg width="39" height="30" viewBox="38 76 180 140" fill="none" aria-hidden="true"><path d="M52 166 A76 76 0 0 1 204 166" fill="none" stroke="#E8895E" stroke-width="20" stroke-linecap="round"/><path d="M100 166 A28 28 0 0 1 156 166 Z" fill="#E8895E"/><rect x="40" y="180" width="176" height="14" rx="7" fill="#2F4858"/><rect x="64" y="204" width="128" height="8" rx="4" fill="#B0B8BA"/></svg>`;
+export const LOGO = `<svg width="30" height="30" viewBox="0 0 260 260" fill="none" aria-hidden="true"><circle cx="130" cy="130" r="130" fill="url(#g)"/><path d="M220.5 51.5C220.5 51.5 172.668 65.7587 147.635 89.6235C122.602 113.488 136.249 158.201 104.912 183.517C80.2542 203.436 33 199.5 33 199.5" stroke="#FFF085" stroke-width="24" stroke-linecap="round"/><defs><linearGradient id="g" x1="48.5" y1="31.5" x2="222.5" y2="220.5" gradientUnits="userSpaceOnUse"><stop stop-color="#FF6900"/><stop offset=".3236" stop-color="#F0B100"/><stop offset="1" stop-color="#D8F999"/></linearGradient></defs></svg>`;
 
 /** The brand mark as a data URI, so the favicon needs no extra request or file. */
 export const FAVICON = `data:image/svg+xml,${encodeURIComponent(
-  LOGO.replace(' width="39" height="30"', "").replace(
+  LOGO.replace(' width="30" height="30"', "").replace(
     ' aria-hidden="true"',
     ' xmlns="http://www.w3.org/2000/svg"',
   ),

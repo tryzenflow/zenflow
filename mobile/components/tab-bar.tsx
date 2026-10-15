@@ -172,11 +172,11 @@ export function AppTabBar({
   });
 
   const pillFill = isDarkColorScheme
-    ? "rgba(70, 114, 143, 0.22)"
-    : "rgba(70, 114, 143, 0.15)";
+    ? "rgba(255, 122, 36, 0.20)"
+    : "rgba(255, 142, 62, 0.15)";
   const pillEdge = isDarkColorScheme
-    ? "rgba(159, 180, 190, 0.34)"
-    : "rgba(70, 114, 143, 0.3)";
+    ? "rgba(255, 150, 80, 0.32)"
+    : "rgba(255, 142, 62, 0.28)";
 
   function renderTab(route: (typeof state.routes)[number], index: number) {
     const { options } = descriptors[route.key];

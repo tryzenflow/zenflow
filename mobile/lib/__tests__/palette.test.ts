@@ -72,8 +72,9 @@ describe("palette tokens", () => {
         channels(UI[scheme][key as keyof UiTokens]),
       );
     }
-    expect(vars["brand-slate"]).toBe(channels(UI[scheme].primary));
-    expect(vars["brand-sun"]).toBe(channels(BRAND.sun));
+    expect(vars["brand-orange"]).toBe(channels(UI[scheme].primary));
+    expect(vars["brand-yellow"]).toBe(channels(BRAND.yellow));
+    expect(vars["brand-lime"]).toBe(channels(BRAND.lime));
     expect(vars.background).toBe(channels(SURFACES[scheme].background));
     expect(vars.card).toBe(channels(SURFACES[scheme].card));
     for (const tone of tones) {
@@ -93,8 +94,8 @@ describe("palette tokens", () => {
   });
 
   it("landing theme matches the brand and session tones", () => {
-    expect(landingTheme["color-primary"]).toBe(BRAND.slate.toLowerCase());
-    expect(landingTheme["color-accent"]).toBe(BRAND.sun.toLowerCase());
+    expect(landingTheme["color-primary"]).toBe(BRAND.orange.toLowerCase());
+    expect(landingTheme["color-accent"]).toBe(BRAND.yellow.toLowerCase());
     for (const tone of ["lecture", "exam", "assignment", "task", "done"] as const) {
       expect(landingTheme[`color-${tone}`], tone).toBe(
         SESSION_TONES[tone].base.toLowerCase(),

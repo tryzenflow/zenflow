@@ -26,7 +26,7 @@ function hourLabel(h: number) {
 }
 
 /**
- * Discrete diverging scale: positive (preferred) scores climb a lime ramp,
+ * Discrete diverging scale: positive (preferred) scores climb an orange ramp,
  * negative (avoided) scores climb a blue ramp, both deepening with magnitude
  * relative to the matrix's peak. A zero / cold cell reads as neutral. Full
  * literal class names so Tailwind's scanner emits them.

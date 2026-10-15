@@ -13,7 +13,7 @@ import Svg, { Circle, Defs, RadialGradient, Stop } from "react-native-svg";
 
 /**
  * Login / boot backdrop: an aurora of the logo's own gradient. Four soft blobs
- * (slate, sun, sky, pink) overlap and drift out of phase, so the colours
+ * (orange, amber, lime, peach) overlap and drift out of phase, so the colours
  * keep blending into each other. No shapes, no lines; just light.
  *
  * `energy="lively"` (login, boot screen) gives every blob independent X / Y
@@ -41,10 +41,10 @@ interface Blob {
 }
 
 const BLOBS: Blob[] = [
-  { id: "slate", color: "#5B88A6", x: 0.12, y: 0.86, size: 0.95, alpha: [0.18, 0.2], dx: 150, dy: -110, ms: 7000 },
-  { id: "sun", color: "#E8895E", x: 0.88, y: 0.62, size: 0.8, alpha: [0.2, 0.12], dx: -130, dy: 100, ms: 9000 },
-  { id: "sky", color: "#5B88A6", x: 0.9, y: 0.06, size: 0.85, alpha: [0.18, 0.14], dx: -120, dy: 130, ms: 11000 },
-  { id: "peach", color: "#E3A98A", x: 0.05, y: 0.14, size: 0.7, alpha: [0.12, 0.1], dx: 130, dy: 90, ms: 8000 },
+  { id: "orange", color: "#FF6900", x: 0.12, y: 0.86, size: 0.95, alpha: [0.18, 0.16], dx: 150, dy: -110, ms: 7000 },
+  { id: "amber", color: "#F0B100", x: 0.88, y: 0.62, size: 0.8, alpha: [0.15, 0.14], dx: -130, dy: 100, ms: 9000 },
+  { id: "lime", color: "#D8F999", x: 0.9, y: 0.06, size: 0.85, alpha: [0.3, 0.12], dx: -120, dy: 130, ms: 11000 },
+  { id: "peach", color: "#FFA66B", x: 0.05, y: 0.14, size: 0.7, alpha: [0.16, 0.12], dx: 130, dy: 90, ms: 8000 },
 ];
 
 // Lively multipliers: wider travel, brighter core, Y cycle out of step with X.
@@ -136,12 +136,12 @@ function BlobLayer({
 /** Two sunrise washes; the second cross-fades over the first and back. */
 const SWEEP = {
   light: {
-    a: ["#5B88A633", "#5B88A600", "#E8895E40"],
-    b: ["#E8895E40", "#E8895E00", "#5B88A628"],
+    a: ["#FFA66B33", "#FFA66B00", "#D8F99940"],
+    b: ["#F0B10040", "#F0B10000", "#FF690028"],
   },
   dark: {
-    a: ["#C9D6DB24", "#C9D6DB00", "#E8895E14"],
-    b: ["#5B88A624", "#5B88A600", "#E3A98A1C"],
+    a: ["#FF690024", "#FF690000", "#D8F99914"],
+    b: ["#F0B10024", "#F0B10000", "#FFA66B1C"],
   },
 } as const;
 

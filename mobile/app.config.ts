@@ -78,7 +78,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     adaptiveIcon: {
       foregroundImage: "./assets/images/adaptive-icon.png",
-      backgroundColor: "#FBF5EC",
+      backgroundColor: "#ffffff",
     },
     package: "com.zenflow.app",
     versionCode: androidVersionCode,
@@ -143,8 +143,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         // `BootScreen` draws it at: the native → JS handover doesn't jump.
         imageWidth: 120,
         // Match the app's own backgrounds (`--background`), light and dark.
-        backgroundColor: "#FBF5EC",
-        dark: { backgroundColor: "#16232B" },
+        backgroundColor: "#FEFCFA",
+        dark: { backgroundColor: "#0F0D0A" },
       },
     ],
     "expo-status-bar",

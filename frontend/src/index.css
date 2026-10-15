@@ -29,23 +29,23 @@ body {
 @keyframes block-highlight {
   0% {
     box-shadow:
-      0 0 0 0 rgb(108 123 247 / 0.7),
-      0 0 12px rgb(108 123 247 / 0.4);
+      0 0 0 0 oklch(0.74 0.195 46 / 0.7),
+      0 0 12px oklch(0.74 0.195 46 / 0.4);
   }
   40% {
     box-shadow:
-      0 0 0 5px rgb(108 123 247 / 0.35),
-      0 0 20px rgb(108 123 247 / 0.25);
+      0 0 0 5px oklch(0.74 0.195 46 / 0.35),
+      0 0 20px oklch(0.74 0.195 46 / 0.25);
   }
   70% {
     box-shadow:
-      0 0 0 8px rgb(108 123 247 / 0.1),
-      0 0 8px rgb(108 123 247 / 0.1);
+      0 0 0 8px oklch(0.74 0.195 46 / 0.1),
+      0 0 8px oklch(0.74 0.195 46 / 0.1);
   }
   100% {
     box-shadow:
-      0 0 0 0 rgb(108 123 247 / 0),
-      0 0 0 rgb(108 123 247 / 0);
+      0 0 0 0 oklch(0.74 0.195 46 / 0),
+      0 0 0 oklch(0.74 0.195 46 / 0);
   }
 }
 
@@ -93,26 +93,10 @@ body {
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  /* Brand and session tone colours: bg-brand-blueberry, bg-session-exam/[0.12], text-session-exam-ink. */
-  --color-brand-blueberry: var(--brand-blueberry);
-  --color-brand-butter: var(--brand-butter);
-  --color-success: var(--success);
-  --color-session-lecture: var(--session-lecture);
-  --color-session-lecture-ink: var(--session-lecture-ink);
-  --color-session-exam: var(--session-exam);
-  --color-session-exam-ink: var(--session-exam-ink);
-  --color-session-assignment: var(--session-assignment);
-  --color-session-assignment-ink: var(--session-assignment-ink);
-  --color-session-task: var(--session-task);
-  --color-session-task-ink: var(--session-task-ink);
-  --color-session-dnd: var(--session-dnd);
-  --color-session-dnd-ink: var(--session-dnd-ink);
-  --color-session-done: var(--session-done);
-  --color-session-done-ink: var(--session-done-ink);
-  --color-session-late: var(--session-late);
-  --color-session-late-ink: var(--session-late-ink);
-  --color-session-conflict: var(--session-conflict);
-  --color-session-conflict-ink: var(--session-conflict-ink);
+  /* Logo brand colors — usable as bg-brand-orange / text-brand-lime etc. */
+  --color-brand-orange: var(--brand-orange);
+  --color-brand-yellow: var(--brand-yellow);
+  --color-brand-lime: var(--brand-lime);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -123,109 +107,92 @@ body {
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-/* Blueberry milk tokens. Keep in step with mobile/app/global.css and
-   packages/core/src/palette.ts. */
+/* Zenflow design tokens — Taupe base, logo brand (orange→yellow→lime),
+   New York style, small radius. Brand hues taken from public/logo.svg:
+   orange #FF6900, yellow #F0B100, lime #D8F999. */
 :root {
   --radius: 0.375rem;
 
-  --brand-blueberry: #6c7bf7;
-  --brand-butter: #ffd66b;
-  --success: #4fd1a5;
+  /* Logo brand palette — the gradient stops, used as the accent identity and
+     rotated through charts/series for variety. */
+  --brand-orange: oklab(75.64% 0.1002 0.12979);
+  --brand-yellow: oklch(0.798 0.164 83);
+  --brand-lime: oklch(0.937 0.127 124);
 
-  --background: #fbfaf7;
-  --foreground: #1c1d2b;
-  --card: #ffffff;
-  --card-foreground: #1c1d2b;
-  --popover: #ffffff;
-  --popover-foreground: #1c1d2b;
-  --primary: var(--brand-blueberry);
-  --primary-foreground: #15161f;
-  --secondary: #f1f1f6;
-  --secondary-foreground: #1c1d2b;
-  --muted: #f1f1f6;
-  --muted-foreground: #686a7e;
-  --accent: #f1f1f6;
-  --accent-foreground: #1c1d2b;
-  --destructive: #3a3b52;
-  --border: #e6e5ee;
-  --input: #e6e5ee;
-  --ring: var(--brand-blueberry);
-  --chart-1: var(--brand-blueberry);
-  --chart-2: var(--brand-butter);
-  --chart-3: #5ab2ff;
-  --chart-4: #4fd1a5;
-  --chart-5: #ff6f91;
-  --sidebar: #fbfaf7;
-  --sidebar-foreground: #1c1d2b;
-  --sidebar-primary: var(--brand-blueberry);
-  --sidebar-primary-foreground: #15161f;
-  --sidebar-accent: #f1f1f6;
-  --sidebar-accent-foreground: #1c1d2b;
-  --sidebar-border: #e6e5ee;
-  --sidebar-ring: var(--brand-blueberry);
-
-  --session-lecture: #5ab2ff;
-  --session-lecture-ink: #0066c2;
-  --session-exam: #ff6f91;
-  --session-exam-ink: #b8285f;
-  --session-assignment: #ffb547;
-  --session-assignment-ink: #925600;
-  --session-task: #6c7bf7;
-  --session-task-ink: #3d4fe6;
-  --session-dnd: #b9b6c9;
-  --session-dnd-ink: #635e80;
-  --session-done: #4fd1a5;
-  --session-done-ink: #1c7457;
-  --session-late: #f0475c;
-  --session-late-ink: #c21a30;
-  --session-conflict: #ffd66b;
-  --session-conflict-ink: #7e5f00;
+  --background: oklch(0.992 0.003 75);
+  --foreground: oklch(0.16 0.006 75);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.16 0.006 75);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.16 0.006 75);
+  /* Primary = logo orange, the boldest brand hue. Dark warm text reads on it. */
+  --primary: var(--brand-orange);
+  --primary-foreground: oklch(0.22 0.045 50);
+  --secondary: oklch(0.965 0.006 75);
+  --secondary-foreground: oklch(0.22 0.006 75);
+  --muted: oklch(0.965 0.006 75);
+  --muted-foreground: oklch(0.55 0.02 70);
+  --accent: oklch(0.965 0.006 75);
+  --accent-foreground: oklch(0.22 0.006 75);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0.008 75);
+  --input: oklch(0.922 0.008 75);
+  --ring: var(--brand-orange);
+  /* Series colors rotate orange → yellow → lime (lime deepened for legibility
+     on light fills), then deeper orange/lime variants round out the set. */
+  --chart-1: var(--brand-orange);
+  --chart-2: var(--brand-yellow);
+  --chart-3: oklch(0.8 0.16 124);
+  --chart-4: oklch(0.62 0.2 42);
+  --chart-5: oklch(0.7 0.15 128);
+  --sidebar: oklch(0.99 0.003 75);
+  --sidebar-foreground: oklch(0.16 0.006 75);
+  --sidebar-primary: var(--brand-orange);
+  --sidebar-primary-foreground: oklch(0.22 0.045 50);
+  --sidebar-accent: oklch(0.965 0.006 75);
+  --sidebar-accent-foreground: oklch(0.22 0.006 75);
+  --sidebar-border: oklch(0.922 0.008 75);
+  --sidebar-ring: var(--brand-orange);
 }
 
 .dark {
-  --background: #15161f;
-  --foreground: #ececf4;
-  --card: #1e2030;
-  --card-foreground: #ececf4;
-  --popover: #1e2030;
-  --popover-foreground: #ececf4;
-  --primary: var(--brand-blueberry);
-  --primary-foreground: #15161f;
-  --secondary: #262838;
-  --secondary-foreground: #ececf4;
-  --muted: #262838;
-  --muted-foreground: #a3a5b8;
-  --accent: #262838;
-  --accent-foreground: #ececf4;
-  --destructive: #e4e4f0;
-  --border: #2e3043;
-  --input: #2e3043;
-  --ring: var(--brand-blueberry);
-  --sidebar: #1e2030;
-  --sidebar-foreground: #ececf4;
-  --sidebar-primary: var(--brand-blueberry);
-  --sidebar-primary-foreground: #15161f;
-  --sidebar-accent: #262838;
-  --sidebar-accent-foreground: #ececf4;
-  --sidebar-border: #2e3043;
-  --sidebar-ring: var(--brand-blueberry);
+  /* Logo brand palette — orange brightened a touch so it carries on dark
+     surfaces; lime is already light enough to stay as-is. */
+  --brand-orange: oklch(0.74 0.195 46);
+  --brand-yellow: oklch(0.82 0.165 84);
+  --brand-lime: oklch(0.9 0.135 124);
 
-  --session-lecture: #5ab2ff;
-  --session-lecture-ink: #6cb9ff;
-  --session-exam: #ff6f91;
-  --session-exam-ink: #ff8aa6;
-  --session-assignment: #ffb547;
-  --session-assignment-ink: #ffb547;
-  --session-task: #6c7bf7;
-  --session-task-ink: #9aa4fa;
-  --session-dnd: #b9b6c9;
-  --session-dnd-ink: #b9b6c9;
-  --session-done: #4fd1a5;
-  --session-done-ink: #4fd1a5;
-  --session-late: #f0475c;
-  --session-late-ink: #f47d8c;
-  --session-conflict: #ffd66b;
-  --session-conflict-ink: #ffd66b;
+  --background: oklch(0.16 0.006 75);
+  --foreground: oklch(0.985 0.003 75);
+  --card: oklch(0.22 0.008 75);
+  --card-foreground: oklch(0.985 0.003 75);
+  --popover: oklch(0.22 0.008 75);
+  --popover-foreground: oklch(0.985 0.003 75);
+  --primary: var(--brand-orange);
+  --primary-foreground: oklch(0.22 0.045 50);
+  --secondary: oklch(0.28 0.01 75);
+  --secondary-foreground: oklch(0.985 0.003 75);
+  --muted: oklch(0.28 0.012 75);
+  --muted-foreground: oklch(0.72 0.02 75);
+  --accent: oklch(0.28 0.01 75);
+  --accent-foreground: oklch(0.985 0.003 75);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(0.32 0.01 75);
+  --input: oklch(0.32 0.01 75);
+  --ring: var(--brand-orange);
+  --chart-1: var(--brand-orange);
+  --chart-2: var(--brand-yellow);
+  --chart-3: oklch(0.86 0.15 124);
+  --chart-4: oklch(0.66 0.19 42);
+  --chart-5: oklch(0.75 0.15 128);
+  --sidebar: oklch(0.22 0.008 75);
+  --sidebar-foreground: oklch(0.985 0.003 75);
+  --sidebar-primary: var(--brand-orange);
+  --sidebar-primary-foreground: oklch(0.22 0.045 50);
+  --sidebar-accent: oklch(0.28 0.012 75);
+  --sidebar-accent-foreground: oklch(0.985 0.003 75);
+  --sidebar-border: oklch(0.32 0.01 75);
+  --sidebar-ring: var(--brand-orange);
 }
 
 /* Calendar grid surfaces — work/non-work zones, subtle hour lines, glass cards.
@@ -242,10 +209,10 @@ body {
   /* Hour gridlines — subtler than structural (--border) lines. Pair with
      a Tailwind border-width utility, e.g. `border-b border-grid`. */
   .border-grid {
-    border-color: #e9e8f0;
+    border-color: oklch(0.88 0.006 75);
   }
   .dark .border-grid {
-    border-color: #2a2c3e;
+    border-color: oklch(0.3 0.008 75);
   }
 
   /* Month view: today's cell — a faint muted wash over the card base. */
@@ -279,8 +246,8 @@ body {
   border: 1px solid color-mix(in oklch, var(--foreground) 10%, transparent);
   box-shadow:
     inset 0 1px 0 0 oklch(1 0 0 / 0.55),
-    0 10px 30px -12px oklch(0.2 0.03 275 / 0.35),
-    0 2px 6px -2px oklch(0.2 0.03 275 / 0.12);
+    0 10px 30px -12px oklch(0.2 0.02 60 / 0.35),
+    0 2px 6px -2px oklch(0.2 0.02 60 / 0.12);
   -webkit-backdrop-filter: blur(24px) saturate(1.6);
   backdrop-filter: blur(24px) saturate(1.6);
 }
@@ -333,6 +300,22 @@ body {
   *:focus-visible {
     outline: 1px solid var(--ring);
     outline-offset: 0;
+  }
+
+  :root {
+    --chart-1: var(--brand-orange);
+    --chart-2: var(--brand-yellow);
+    --chart-3: oklch(0.8 0.16 124);
+    --chart-4: oklch(0.62 0.2 42);
+    --chart-5: oklch(0.7 0.15 128);
+  }
+
+  .dark {
+    --chart-1: var(--brand-orange);
+    --chart-2: var(--brand-yellow);
+    --chart-3: oklch(0.86 0.15 124);
+    --chart-4: oklch(0.66 0.19 42);
+    --chart-5: oklch(0.75 0.15 128);
   }
 
   .markdown {
