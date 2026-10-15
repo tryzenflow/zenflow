@@ -390,10 +390,8 @@ export default function LoginScreen() {
                     onBlur={field.onBlur}
                     onChange={(text) => {
                       const next = parseLoginInput(text, loginMode);
-                      if (next.mode !== loginMode) {
-                        clearErrors("email");
-                        setLoginMode(next.mode);
-                      }
+                      clearErrors("email");
+                      if (next.mode !== loginMode) setLoginMode(next.mode);
                       field.onChange(next.value);
                     }}
                     rightElement={
