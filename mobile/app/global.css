@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /*
- * Sand and slate tokens. Keep in step with frontend/src/index.css and the hex
+ * Sand, sky and sun tokens. Keep in step with frontend/src/index.css and the hex
  * values in packages/core/src/palette.ts (lib/__tests__/palette.test.ts checks).
  *
  * Stored as space-separated "R G B" channels (not hex) and consumed via rgb(var(--x) / <alpha-value>)
@@ -19,7 +19,7 @@
     --card-foreground: 34 51 61;
     --popover: 255 252 247;
     --popover-foreground: 34 51 61;
-    --primary: 47 72 88;
+    --primary: 70 114 143;
     --primary-foreground: 251 245 236;
     --secondary: 242 234 220;
     --secondary-foreground: 34 51 61;
@@ -27,16 +27,16 @@
     --muted-foreground: 92 107 114;
     --accent: 242 234 220;
     --accent-foreground: 34 51 61;
-    --destructive: 58 74 85;
+    --destructive: 184 48 69;
     --destructive-foreground: 255 252 247;
     --border: 230 220 203;
     --input: 230 220 203;
-    --ring: 47 72 88;
-    --brand-slate: 47 72 88;
+    --ring: 70 114 143;
+    --brand-slate: 70 114 143;
     --brand-sun: 232 137 94;
     --success: 125 168 134;
     --glass: 255 252 247;
-    --glass-edge: 47 72 88;
+    --glass-edge: 70 114 143;
 
     --session-lecture: 91 136 166;
     --session-lecture-ink: 71 107 131;
@@ -63,7 +63,7 @@
     --card-foreground: 243 236 223;
     --popover: 31 48 58;
     --popover-foreground: 243 236 223;
-    --primary: 201 214 219;
+    --primary: 141 179 206;
     --primary-foreground: 22 35 43;
     --secondary: 38 58 69;
     --secondary-foreground: 243 236 223;
@@ -71,12 +71,12 @@
     --muted-foreground: 168 180 184;
     --accent: 38 58 69;
     --accent-foreground: 243 236 223;
-    --destructive: 230 222 208;
+    --destructive: 227 136 143;
     --destructive-foreground: 22 35 43;
     --border: 45 64 72;
     --input: 45 64 72;
-    --ring: 201 214 219;
-    --brand-slate: 201 214 219;
+    --ring: 141 179 206;
+    --brand-slate: 141 179 206;
     --brand-sun: 232 137 94;
     --success: 125 168 134;
     --glass: 243 236 223;

@@ -14,7 +14,7 @@ export const GLASS_HIT_SIZE = 44;
 export type GlassIcon = ComponentType<{ size?: number; color: string }>;
 
 const CIRCLE_RADIUS = GLASS_SIZE / 2;
-/** Dark ink on slate, as the solid primary button (palette #234). */
+/** Deep slate ink on the solid sky primary. */
 const PRIMARY_INK = "#16232B";
 
 /** Inner 1px highlight that sits just inside the glass edge. */
@@ -198,7 +198,7 @@ export function GlassSegmented<T extends string>({
                 borderRadius: (GLASS_SIZE - 6) / 2,
                 alignItems: "center",
                 justifyContent: "center",
-                backgroundColor: active ? NAV_THEME.light.primary : "transparent",
+                backgroundColor: active ? (isDarkColorScheme ? NAV_THEME.dark.primary : NAV_THEME.light.primary) : "transparent",
               }}
             >
               <Icon

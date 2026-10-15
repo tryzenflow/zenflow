@@ -146,7 +146,7 @@ type ToastVariant = keyof typeof TOAST_VARIANTS;
 const VARIANT_ACCENT: Record<ToastVariant, ToastAccent> = {
   // Plain notices read as info — blue, not the foreground ink.
   default: SESSION_TONES.lecture.ink,
-  destructive: { light: "#3A3B52", dark: "#E4E4F0" },
+  destructive: SESSION_TONES.late.ink,
   warning: SESSION_TONES.conflict.ink,
   success: SESSION_TONES.done.ink,
   info: SESSION_TONES.lecture.ink,

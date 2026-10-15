@@ -7,17 +7,20 @@ import type { SessionCardState, SessionType } from "@zenflow/shared";
  * `landing/src/styles/global.css` carry the same values;
  * `mobile/lib/__tests__/palette.test.ts` keeps them in sync and checks AA.
  *
- * Brand: sand background, clay sun accent, slate primary, soft grey. Warm
+ * Brand: sand background, clay sun accent, sky blue primary on mobile, slate
+ * mark ink, soft grey. Warm
  * neutrals, steel and teal blues, honey and sage come from the same family.
- * Cherry is the only red and marks late and overdue work only.
+ * Cherry is the only red: errors, destructive actions, late and overdue work.
  */
 export const BRAND = {
   /** Light background. Never text on it below AA. */
   sand: "#FBF5EC",
   /** Sun accent, clay. Highlights and the conflict tone. */
   sun: "#E8895E",
-  /** Primary, slate. Primary fills and brand marks. */
+  /** Brand mark ink, slate. Logo and landing primary. */
   slate: "#2F4858",
+  /** Sky blue. Brand mark and the mobile primary (a deeper step in light). */
+  sky: "#5B88A6",
   /** Soft grey. Dnd and quiet strokes. */
   grey: "#B0B8BA",
   /** Dark background. */
@@ -54,7 +57,7 @@ export interface UiTokens {
   primaryForeground: string;
   /** Focus ring, same as `primary`. */
   ring: string;
-  /** Destructive fill. Slate, never red, so cherry stays reserved. */
+  /** Destructive and error: cherry. Fill, and text AA on sand and card. */
   destructive: string;
   /** Text on `destructive`, AA. */
   destructiveForeground: string;
@@ -74,13 +77,14 @@ export const UI: Record<Scheme, UiTokens> = {
     muted: "#F2EADC",
     mutedForeground: "#5C6B72",
     border: "#E6DCCB",
-    primary: BRAND.slate,
+    /** Sky, one step deeper than `BRAND.sky` so sand text passes AA. */
+    primary: "#46728F",
     primaryForeground: BRAND.sand,
-    ring: BRAND.slate,
-    destructive: "#3A4A55",
+    ring: "#46728F",
+    destructive: "#B83045",
     destructiveForeground: "#FFFCF7",
     glass: "#FFFCF7",
-    glassEdge: BRAND.slate,
+    glassEdge: "#46728F",
     success: SUCCESS,
   },
   dark: {
@@ -90,11 +94,11 @@ export const UI: Record<Scheme, UiTokens> = {
     muted: "#263A45",
     mutedForeground: "#A8B4B8",
     border: "#2D4048",
-    /** Pale slate, so solid buttons read on the dark page. */
-    primary: "#C9D6DB",
+    /** Light sky, so solid buttons read on the dark page. */
+    primary: "#8DB3CE",
     primaryForeground: BRAND.deepSlate,
-    ring: "#C9D6DB",
-    destructive: "#E6DED0",
+    ring: "#8DB3CE",
+    destructive: "#E3888F",
     destructiveForeground: BRAND.deepSlate,
     glass: "#F3ECDF",
     glassEdge: "#9FB4BE",

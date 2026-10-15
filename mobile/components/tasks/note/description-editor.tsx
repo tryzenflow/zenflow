@@ -364,7 +364,7 @@ export function DescriptionFieldEditor({
     // selection itself survives the blur, so `setLink` still targets it.
     if (onText) {
       editor.injectCSS(
-        "::highlight(zf-link-sel) { background-color: rgba(47, 72, 88, 0.35); }",
+        "::highlight(zf-link-sel) { background-color: rgba(70, 114, 143, 0.35); }",
         "zf-link-sel",
       );
       editor.injectJS(

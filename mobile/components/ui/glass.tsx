@@ -49,8 +49,8 @@ export function Glass({
         : "rgba(255, 255, 255, 0.68)"
       : "rgba(251, 245, 236, 0.92)";
   const edge = isDarkColorScheme
-    ? "rgba(159, 180, 190, 0.18)"
-    : "rgba(47, 72, 88, 0.28)";
+    ? "rgba(141, 179, 206, 0.2)"
+    : "rgba(70, 114, 143, 0.28)";
   const sheen: [string, string] = isDarkColorScheme
     ? ["rgba(159, 180, 190, 0.10)", "rgba(159, 180, 190, 0)"]
     : [

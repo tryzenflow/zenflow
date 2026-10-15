@@ -73,7 +73,7 @@ function SunArc({ animate }: { animate: boolean }) {
       fill: interpolateColor(
         p.value,
         [0, 0.5, 1],
-        ["#2F4858", "#5B88A6", "#E8895E"],
+        ["#5B88A6", "#5B88A6", "#E8895E"],
       ),
     };
   });
@@ -82,14 +82,14 @@ function SunArc({ animate }: { animate: boolean }) {
     <Svg width={ARC_W} height={ARC_H} viewBox={`0 0 ${ARC_W} ${ARC_H}`}>
       <Defs>
         <LinearGradient id="zf-arc" x1="0" y1="0" x2="1" y2="0">
-          <Stop offset="0" stopColor="#2F4858" />
+          <Stop offset="0" stopColor="#5B88A6" />
           <Stop offset="0.5" stopColor="#5B88A6" />
           <Stop offset="1" stopColor="#E8895E" />
         </LinearGradient>
       </Defs>
       <Path
         d={ARC_PATH}
-        stroke="#2F4858"
+        stroke="#5B88A6"
         strokeOpacity={0.18}
         strokeWidth={3}
         strokeLinecap="round"
