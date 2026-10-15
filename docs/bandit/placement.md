@@ -20,7 +20,8 @@ One request = one placement event: a single `TASK` or one materialized series. A
 
 | Event | Reward |
 | --- | --- |
-| `RETAINED` | `+1` |
+| Completed in slot (`COMPLETE`, unmoved) | `+1` |
+| Skipped or missed (`SKIP`, `MISSED`, unmoved) | `-1` |
 | `MOVE` | `-clamp(abs(dragDistanceMinutes) / 240, 0, 1)` |
 | resize-only `MOVE` (`dragDistanceMinutes == 0`) | `0` |
 | `CREATE` | never sent |
@@ -61,10 +62,12 @@ One request = one placement event: a single `TASK` or one materialized series. A
 ## No free slot (single member)
 
 1. First call returns `NEEDS_INFEASIBLE_CONTEXT`.
-2. Second call (with `infeasible`) tries EDF displacement over the deadline day, widening to +/-1 day, giving `DISPLACED` with `moves`.
-   - The new task takes the earliest start, clear of fixed blocks, whose cascade succeeds.
-   - Colliding flexible tasks settle in deadline order. Each moves to the free start nearest its old one, on any day up to its own deadline (within `horizonOccupied`).
-   - Never onto a fixed block or an equal-deadline peer (no ripple shifts).
+2. Second call (with `infeasible`) runs cost-based displacement over the deadline day and +/-1 day ([ADR-0022](../adr/0022-anchor-levels-and-cost-based-displacement.md)).
+   - Never moves: `fixed`, `PINNED`, completed, started or starting within 2 h of `nowMs`.
+   - Move cost: `AUTO` 1, `CHOSEN` 10, plus hours moved, plus 10 when the local day changes.
+   - Every start clear of immovable blocks is tried; the cheapest cascade wins (ties: earlier window, earlier start).
+   - Colliding tasks settle in deadline order, each at its cheapest free start up to its own deadline (within `horizonOccupied`), never on a sibling sitting's day.
+   - Result: `DISPLACED`, or `NEEDS_CONFIRMATION` when the plan moves a `CHOSEN` task and `chosenMoves` is `ASK`. `moves[]` carry `anchor` and `cost`.
 3. Otherwise the user's policy applies:
    - `ACCEPT_CONFLICTS` gives `ACCEPTED_CONFLICTS` (min-overlap start; `conflicting` only if it really overlaps `horizonOccupied`).
    - `ACCEPT_LATE_DEADLINE` gives `ACCEPTED_LATE` (`late: true`).
@@ -81,7 +84,7 @@ One request = one placement event: a single `TASK` or one materialized series. A
 | Item | Behaviour |
 | --- | --- |
 | Validation | `422` (FastAPI `detail` list) |
-| Contract version | `422 {"code":"CONTRACT_VERSION","supported":1,"got":n}` |
+| Contract version | `422 {"code":"CONTRACT_VERSION","supported":2,"got":n}` |
 | Body size | `413` above 2 MB |
 | Bad or missing bearer | `401` |
 | Auth | `BANDIT_SERVICE_TOKEN` set requires `Authorization: Bearer <token>` on `/v1/place`, `/v1/update`; unset = open (dev/tests) |

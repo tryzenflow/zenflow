@@ -1,0 +1,50 @@
+---
+import type { Lang } from "../config";
+import { COPY } from "../content/copy";
+import Icon from "./Icon.astro";
+
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const c = COPY[lang];
+
+/** Seven features on a three column bento: wide, narrow / three narrow / narrow, wide. */
+const SPAN = ["md:col-span-2", "", "", "", "", "", "md:col-span-2"];
+const TINT = [
+  "var(--color-primary)",
+  "var(--color-lecture)",
+  "var(--color-accent)",
+  "var(--color-exam)",
+  "var(--color-done)",
+  "var(--color-assignment)",
+  "var(--color-primary)",
+];
+---
+
+<section class="mx-auto max-w-6xl px-4 py-24 sm:px-6">
+  <h2 class="max-w-2xl text-[clamp(2rem,5vw,3.25rem)] leading-tight font-extrabold tracking-tight text-balance">{c.featuresLabel}</h2>
+  <ul class="mt-12 grid gap-4 md:grid-cols-3">
+    {
+      c.features.map((f, i) => (
+        <li
+          class:list={[
+            "group relative overflow-hidden rounded-3xl border border-rule bg-card p-6 transition-[transform,box-shadow] duration-300 hover:-translate-y-1 hover:shadow-[0_24px_48px_-24px_rgb(70_82_214/0.4)]",
+            SPAN[i],
+          ]}
+          style={`--t:${TINT[i]}`}
+        >
+          <div
+            aria-hidden="true"
+            class="absolute -top-16 -right-16 size-48 rounded-full bg-[color-mix(in_srgb,var(--t)_22%,transparent)] blur-2xl transition-transform duration-500 group-hover:scale-125"
+          />
+          <span class="relative inline-flex size-12 items-center justify-center rounded-2xl bg-[color-mix(in_srgb,var(--t)_18%,var(--card))]">
+            <Icon name={f.icon} />
+          </span>
+          <h3 class="relative mt-5 text-xl font-extrabold tracking-tight">{f.title}</h3>
+          <p class="relative mt-2 text-muted">{f.body}</p>
+        </li>
+      ))
+    }
+  </ul>
+</section>

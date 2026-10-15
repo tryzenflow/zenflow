@@ -10,6 +10,7 @@ import {
   Trash2,
   X,
 } from "@/components/Icons";
+import { GlassButton } from "@/components/ui/glass-button";
 import { Text } from "@/components/ui/text";
 import { rescheduleWithToast } from "@/lib/reschedule-toast";
 import { useToast } from "@/components/ui/toast";
@@ -221,14 +222,11 @@ export default function NotificationsScreen() {
       <View className="h-14 flex-row items-center gap-2 border-b border-border/70 bg-background px-3">
         {isSelecting ? (
           <>
-            <Pressable
+            <GlassButton
               onPress={exitSelecting}
+              icon={X}
               accessibilityLabel={t("Cancel selection")}
-              hitSlop={8}
-              className="size-9 items-center justify-center rounded-full active:bg-muted"
-            >
-              <X size={20} className="text-foreground" />
-            </Pressable>
+            />
             <Text className="flex-1 text-[17px] font-semibold text-foreground">
               {selectedIds.size} {t("selected")}
             </Text>
@@ -260,14 +258,11 @@ export default function NotificationsScreen() {
           </>
         ) : (
           <>
-            <Pressable
+            <GlassButton
               onPress={() => safeBack(router)}
+              icon={ChevronLeft}
               accessibilityLabel={t("Back")}
-              hitSlop={8}
-              className="size-9 items-center justify-center rounded-full active:bg-muted"
-            >
-              <ChevronLeft size={22} className="text-foreground" />
-            </Pressable>
+            />
             <View className="flex-1 flex-row items-center gap-2">
               <Text className="text-xl font-bold tracking-tight text-foreground">
                 {t("Inbox")}

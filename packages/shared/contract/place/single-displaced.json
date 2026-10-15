@@ -1,12 +1,12 @@
 {
   "name": "single-displaced",
-  "description": "08:00-12:00 is two movable 2 h tasks (deadline next day); the new 60 min task has deadline 12:00. Call 2 repacks with an EDF cascade.",
+  "description": "08:00-12:00 is two movable 2 h tasks (deadline next day); the new 60 min task has deadline 12:00. f1 starts within 2 h of now (frozen), so the cheapest plan takes 10:00 and shifts f2 to 11:00 (cost 1+1). Anchors are omitted, so both default to AUTO.",
   "ignore": [
     "paramsVersion",
     "timingsMs"
   ],
   "request": {
-    "contractVersion": 1,
+    "contractVersion": 2,
     "requestId": "00000000-0000-4000-8000-000000000002-2",
     "mode": "PLACE",
     "nowMs": 1789977600000,
@@ -254,9 +254,9 @@
     }
   },
   "response": {
-    "contractVersion": 1,
+    "contractVersion": 2,
     "requestId": "00000000-0000-4000-8000-000000000002-2",
-    "paramsVersion": "py-arms6-v3-cf48d841c47f",
+    "paramsVersion": "py-arms6-v3-09152c3b4a67",
     "results": [
       {
         "id": "t1",
@@ -264,12 +264,14 @@
         "appliedPolicy": "HEURISTIC",
         "heuristic": null,
         "linucb": null,
-        "startMs": 1789977600000,
+        "startMs": 1789984800000,
         "moves": [
           {
-            "id": "f1",
-            "fromMs": 1789977600000,
-            "toMs": 1789992000000
+            "id": "f2",
+            "fromMs": 1789984800000,
+            "toMs": 1789988400000,
+            "anchor": "AUTO",
+            "cost": 2.0
           }
         ],
         "late": false,
@@ -277,12 +279,12 @@
       }
     ],
     "timingsMs": {
-      "decode": 0.223,
+      "decode": 0.084,
       "context": 0.0,
       "predict": 0.0,
-      "scan": 0.104,
-      "displace": 0.561,
-      "total": 1.168
+      "scan": 0.029,
+      "displace": 0.375,
+      "total": 0.535
     }
   }
 }

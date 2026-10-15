@@ -62,6 +62,7 @@ DISPATCH: dict[str, Any] = {
     "armOfMinute": arms.arm_of_minute,
     "overlapRate": arms.overlap_rate,
     "dragDistanceReward": reward.drag_distance_reward,
+    "completionReward": reward.completion_reward,
     "seriesDayWindows": lambda s, c: [
         list(w) for w in series_spread.series_day_windows(s, c)
     ],

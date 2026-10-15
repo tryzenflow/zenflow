@@ -1,0 +1,364 @@
+{
+  "name": "single-needs-confirmation",
+  "description": "A 120 min task due 12:00 needs 10-12, held by Chosen c and Auto a. The cheapest plan moves both (c 10+2, a 1+2), so Python asks first: NEEDS_CONFIRMATION with the full plan. Pinned p and completed d stay.",
+  "ignore": [
+    "paramsVersion",
+    "timingsMs"
+  ],
+  "request": {
+    "contractVersion": 2,
+    "requestId": "00000000-0000-4000-8000-000000000002-2",
+    "mode": "PLACE",
+    "nowMs": 1789977600000,
+    "timezone": "UTC",
+    "maxScanDays": 30,
+    "fixedOccupied": [],
+    "deadlineMs": 1789992000000,
+    "members": [
+      {
+        "id": "t1",
+        "durationMinutes": 120,
+        "primaryPolicy": "HEURISTIC",
+        "computeBoth": false
+      }
+    ],
+    "days": [
+      {
+        "dayStr": "2026-09-21",
+        "dayStartMs": 1789948800000,
+        "dayEndMs": 1790035200000,
+        "occupied": [
+          {
+            "startMs": 1789977600000,
+            "endMs": 1789984800000
+          },
+          {
+            "startMs": 1789984800000,
+            "endMs": 1789988400000
+          },
+          {
+            "startMs": 1789988400000,
+            "endMs": 1789992000000
+          },
+          {
+            "startMs": 1789999200000,
+            "endMs": 1790002800000
+          },
+          {
+            "startMs": 1790002800000,
+            "endMs": 1790006400000
+          },
+          {
+            "startMs": 1790010000000,
+            "endMs": 1790035200000
+          }
+        ],
+        "workloadByType": {
+          "LECTURE": {
+            "hours": 0,
+            "count": 0
+          },
+          "ASSIGNMENT": {
+            "hours": 0,
+            "count": 0
+          },
+          "EXAM": {
+            "hours": 0,
+            "count": 0
+          },
+          "TASK": {
+            "hours": 0,
+            "count": 0
+          },
+          "DND": {
+            "hours": 0,
+            "count": 0
+          }
+        }
+      }
+    ],
+    "user": {
+      "preferenceMatrix": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.5,
+        0.5,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.5,
+        0.5,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.5,
+        0.5,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.5,
+        0.5,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.5,
+        0.5,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.5,
+        0.5,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.5,
+        0.5,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "observationCount": 0
+    },
+    "infeasible": {
+      "flexible": [
+        {
+          "id": "c",
+          "durationMinutes": 60,
+          "deadlineMs": 1790582400000,
+          "startMs": 1789984800000,
+          "anchor": "CHOSEN"
+        },
+        {
+          "id": "a",
+          "durationMinutes": 60,
+          "deadlineMs": 1790582400000,
+          "startMs": 1789988400000,
+          "anchor": "AUTO"
+        },
+        {
+          "id": "p",
+          "durationMinutes": 60,
+          "deadlineMs": 1790582400000,
+          "startMs": 1789999200000,
+          "anchor": "PINNED"
+        },
+        {
+          "id": "d",
+          "durationMinutes": 60,
+          "deadlineMs": 1790582400000,
+          "startMs": 1790002800000,
+          "anchor": "AUTO",
+          "completed": true
+        }
+      ],
+      "fixed": [
+        {
+          "startMs": 1789977600000,
+          "endMs": 1789984800000
+        },
+        {
+          "startMs": 1790010000000,
+          "endMs": 1790035200000
+        }
+      ],
+      "horizonOccupied": [
+        {
+          "startMs": 1789977600000,
+          "endMs": 1789984800000
+        },
+        {
+          "startMs": 1789984800000,
+          "endMs": 1789988400000
+        },
+        {
+          "startMs": 1789988400000,
+          "endMs": 1789992000000
+        },
+        {
+          "startMs": 1789999200000,
+          "endMs": 1790002800000
+        },
+        {
+          "startMs": 1790002800000,
+          "endMs": 1790006400000
+        },
+        {
+          "startMs": 1790010000000,
+          "endMs": 1790035200000
+        }
+      ]
+    }
+  },
+  "response": {
+    "contractVersion": 2,
+    "requestId": "00000000-0000-4000-8000-000000000002-2",
+    "paramsVersion": "py-arms6-v3-09152c3b4a67",
+    "results": [
+      {
+        "id": "t1",
+        "outcome": "NEEDS_CONFIRMATION",
+        "appliedPolicy": "HEURISTIC",
+        "heuristic": null,
+        "linucb": null,
+        "startMs": 1789984800000,
+        "moves": [
+          {
+            "id": "c",
+            "fromMs": 1789984800000,
+            "toMs": 1789992000000,
+            "anchor": "CHOSEN",
+            "cost": 12.0
+          },
+          {
+            "id": "a",
+            "fromMs": 1789988400000,
+            "toMs": 1789995600000,
+            "anchor": "AUTO",
+            "cost": 3.0
+          }
+        ],
+        "late": false,
+        "conflicting": false
+      }
+    ],
+    "timingsMs": {
+      "decode": 0.084,
+      "context": 0.0,
+      "predict": 0.0,
+      "scan": 0.028,
+      "displace": 0.393,
+      "total": 0.563
+    }
+  }
+}

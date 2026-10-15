@@ -1,0 +1,51 @@
+---
+import type { Lang } from "../config";
+import { COPY } from "../content/copy";
+import Blip from "./Blip.astro";
+
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const c = COPY[lang];
+
+const BLIPS: Parameters<typeof Blip>[0][] = [
+  { body: "#6C7BF7", belly: "#fff", shape: 0, extra: "ears" },
+  { body: "#FFD66B", belly: "#fff", shape: 1, extra: "sprout" },
+  { body: "#5AB2FF", belly: "#fff", shape: 2, extra: "none" },
+  { body: "#FF6F91", belly: "#ffd6e0", shape: 0, extra: "horns" },
+  { body: "#4FD1A5", belly: "#fff", shape: 1, extra: "ears" },
+  { body: "#FFB547", belly: "#fff3dd", shape: 2, extra: "sprout" },
+  { body: "#B9B6C9", belly: "#fff", shape: 0, extra: "none" },
+  { body: "#8E9BFF", belly: "#fff", shape: 1, extra: "horns" },
+];
+---
+
+<section class="overflow-hidden py-24">
+  <div class="mx-auto max-w-6xl px-4 text-center sm:px-6">
+    <p class="inline-flex rounded-full bg-accent px-3 py-1 text-sm font-semibold text-[#3a2a00]">{c.blipsLabel}</p>
+    <h2 class="mt-3 text-[clamp(2rem,5vw,3.25rem)] leading-tight font-extrabold tracking-tight">{c.blipsTitle}</h2>
+    <p class="mt-2 text-lg text-muted">{c.blipsBody}</p>
+  </div>
+  <div
+    class="group mt-10 flex [mask-image:linear-gradient(90deg,transparent,#000_12%,#000_88%,transparent)] [--marquee-duration:36s] motion-reduce:overflow-x-auto"
+  >
+    {
+      [0, 1].map((copyIndex) => (
+        <ul
+          class:list={[
+            "flex shrink-0 animate-marquee gap-8 pr-8 group-hover:[animation-play-state:paused] motion-reduce:animate-none",
+            copyIndex === 1 && "motion-reduce:hidden",
+          ]}
+          aria-hidden={copyIndex === 1 ? "true" : undefined}
+        >
+          {BLIPS.map((b, i) => (
+            <li class="animate-bob motion-reduce:animate-none" style={`animation-delay:${-i * 0.3}s`}>
+              <Blip {...b} />
+            </li>
+          ))}
+        </ul>
+      ))
+    }
+  </div>
+</section>

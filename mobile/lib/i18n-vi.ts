@@ -1,6 +1,7 @@
 /** Vietnamese UI copy. English keys remain the English fallback. */
 export default {
   "Import my timetable": "Nhập thời khóa biểu",
+  "Show night hours": "Hiện giờ đêm",
   "Your password is stored encrypted. Disconnect in Settings to delete it.":
     "Mật khẩu được lưu mã hóa. Ngắt kết nối trong Cài đặt để xóa.",
   "Update available": "Có bản cập nhật",

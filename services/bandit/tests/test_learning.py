@@ -101,7 +101,7 @@ def simulate(
         if fixed_reward is not None:
             reward = fixed_reward
         elif arm == want:
-            reward = 1.0  # RETAINED (SESSION_RETAINED_REWARD)
+            reward = 1.0  # completed in slot (SESSION_COMPLETED_REWARD)
         else:
             reward = drag_distance_reward((moved_to - start) / MS_PER_MINUTE)
         if arm == want:

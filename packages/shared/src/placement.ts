@@ -11,7 +11,7 @@
  */
 import type { SchedulingArm } from "./bandit";
 
-export const PLACEMENT_CONTRACT_VERSION = 1;
+export const PLACEMENT_CONTRACT_VERSION = 2;
 
 export type PlacementPolicy = "HEURISTIC" | "LINUCB";
 
@@ -57,15 +57,40 @@ export interface PlacementMember {
   computeBoth: boolean;
 }
 
+/**
+ * How firmly a flexible session holds its slot (ADR-0022). `AUTO` moves for
+ * 1 plus hours moved, `CHOSEN` for 10 plus hours moved and only with the
+ * user's go-ahead, `PINNED` never. Fixed sessions go in `fixed`.
+ */
+export type PlacementAnchor = "AUTO" | "CHOSEN" | "PINNED";
+
+/**
+ * What to do with a plan that moves a `CHOSEN` session: `ASK` answers
+ * `NEEDS_CONFIRMATION`, `ALLOW` applies it (`DISPLACED`), `FORBID` treats
+ * Chosen sessions as pinned.
+ */
+export type ChosenMovePolicy = "ASK" | "ALLOW" | "FORBID";
+
+export interface PlacementFlexible {
+  id: string;
+  durationMinutes: number;
+  deadlineMs: number;
+  startMs: number;
+  /** Default `AUTO`. */
+  anchor?: PlacementAnchor;
+  /** Completed sessions never move. Started ones and those starting within
+   *  2 h of `nowMs` never move either; Python derives that from `startMs`. */
+  completed?: boolean;
+  /** Sittings of one series never share a local day after a move. */
+  seriesId?: string;
+}
+
 /** Only sent on the second call of the two-phase infeasible path. */
 export interface InfeasibleContext {
   policy?: "ACCEPT_CONFLICTS" | "ACCEPT_LATE_DEADLINE";
-  flexible: {
-    id: string;
-    durationMinutes: number;
-    deadlineMs: number;
-    startMs: number;
-  }[];
+  /** Default `ASK`. */
+  chosenMoves?: ChosenMovePolicy;
+  flexible: PlacementFlexible[];
   /** Deadline day +/- 1. */
   fixed: IntervalMs[];
   /** `now .. deadline + 30d`, for the fallback slot pickers. */
@@ -105,6 +130,13 @@ export type PlacementOutcome =
   | "PLACED"
   | "NEEDS_INFEASIBLE_CONTEXT"
   | "DISPLACED"
+  /**
+   * The cheapest displacement plan moves a `CHOSEN` session and
+   * `chosenMoves` is `ASK`: `startMs` and `moves` carry the full plan, nothing
+   * is applied. Resend with `chosenMoves: "ALLOW"` to apply it, `"FORBID"` to
+   * decline.
+   */
+  | "NEEDS_CONFIRMATION"
   | "ACCEPTED_CONFLICTS"
   | "ACCEPTED_LATE"
   /**
@@ -130,6 +162,15 @@ export interface LinucbPick extends HeuristicPick {
   weights: { wL: number; wS: number };
 }
 
+export interface PlacementMove {
+  id: string;
+  fromMs: number;
+  toMs: number;
+  anchor: "AUTO" | "CHOSEN";
+  /** Base for the anchor, plus hours moved, plus 10 when the local day changes. */
+  cost: number;
+}
+
 export interface PlacedMember {
   id: string;
   outcome: PlacementOutcome;
@@ -141,8 +182,8 @@ export interface PlacedMember {
   linucb: LinucbPick | null;
   /** Python's recommended start for the primary policy. */
   startMs: number | null;
-  /** Displacement, else `[]`. */
-  moves: { id: string; fromMs: number; toMs: number }[];
+  /** Displacement plan (`DISPLACED`, `NEEDS_CONFIRMATION`), else `[]`. */
+  moves: PlacementMove[];
   /** `ACCEPTED_LATE`, or an `ACCEPTED_LAST_RESORT` start ending after the deadline. */
   late: boolean;
   /** `ACCEPTED_CONFLICTS`, or an `ACCEPTED_LAST_RESORT` start that overlaps. */

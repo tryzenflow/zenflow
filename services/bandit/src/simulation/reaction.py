@@ -27,6 +27,7 @@ class ReactionDraws:
     eps_prop: float
     u_act: float
     eps_slots: NDArray[np.float64]  # one noise value per 15-min slot of the day
+    u_done: float  # uniform draw: does a kept or landed session get checked off
 
 
 def draw_reaction(
@@ -37,7 +38,18 @@ def draw_reaction(
         eps_prop=float(rng.standard_normal()),
         u_act=float(rng.random()),
         eps_slots=rng.standard_normal(SLOTS_PER_DAY),
+        u_done=float(rng.random()),
     )
+
+
+def completes(utility: float, draws: ReactionDraws) -> bool:
+    """Whether the student checks the session off in its slot (ADR-0022).
+
+    Modelled, not measured: the chance rises with the slot's hidden utility,
+    clipped to ``[0.05, 0.95]``, so a well-timed slot is done more often.
+    """
+    p_done = min(0.95, max(0.05, 0.25 + 0.6 * utility))
+    return draws.u_done < p_done
 
 
 def decide(

@@ -1,4 +1,4 @@
-import { Glass } from "@/components/ui/glass";
+import { GlassButton } from "@/components/ui/glass-button";
 import { Text } from "@/components/ui/text";
 import { useLanguage } from "@/hooks/use-language";
 import { useNow } from "@/hooks/use-now";
@@ -7,7 +7,7 @@ import type { DayStatus } from "@/lib/day-status";
 import { format, t } from "@/lib/i18n";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { zonedDate } from "@zenflow/core";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
 
 /** Minutes before a session when "in N min" is worth saying. */
 const SOON_MINUTES = 90;
@@ -48,38 +48,25 @@ export function NextUpPill({
       style={{ position: "absolute", top: 8, left: 0, right: 0, zIndex: 10 }}
       className="items-center px-6"
     >
-      {/* Outer view carries the shadow only; rounding + clipping live in `Glass`. */}
-      <View
-        style={{
-          maxWidth: "100%",
-          borderRadius: 9999,
-          shadowColor: "#000",
-          shadowOpacity: isDarkColorScheme ? 0.35 : 0.12,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: 6 },
-        }}
-      >
-        <Glass radius={9999} clear intensity={40}>
-          <Pressable
-            onPress={() => onOpenSession(status.taskId)}
-            accessibilityRole="button"
-            accessibilityLabel={`${t("Next up: {title}, {time}", { title: status.title, time })}${rel}`}
-            className="active:opacity-80"
-          >
-            <View className="min-h-9 flex-row items-center gap-2 px-3.5">
-              <View
-                className="size-2 rounded-full"
-                style={{ backgroundColor: theme.primary }}
-              />
-              <Text numberOfLines={1} className="shrink text-xs">
-                <Text className="text-xs font-semibold">{t("Next up")}</Text>
-                <Text className="text-xs text-muted-foreground">
-                  {` ${time}, ${status.title}${rel}`}
-                </Text>
+      <View style={{ maxWidth: "100%" }}>
+        <GlassButton
+          onPress={() => onOpenSession(status.taskId)}
+          accessibilityLabel={`${t("Next up: {title}, {time}", { title: status.title, time })}${rel}`}
+          haptic={false}
+        >
+          <View className="shrink flex-row items-center gap-2">
+            <View
+              className="size-2 rounded-full"
+              style={{ backgroundColor: theme.primary }}
+            />
+            <Text numberOfLines={1} className="shrink text-xs">
+              <Text className="text-xs font-semibold">{t("Next up")}</Text>
+              <Text className="text-xs text-muted-foreground">
+                {` ${time}, ${status.title}${rel}`}
               </Text>
-            </View>
-          </Pressable>
-        </Glass>
+            </Text>
+          </View>
+        </GlassButton>
       </View>
     </View>
   );

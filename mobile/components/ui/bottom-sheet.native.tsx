@@ -41,7 +41,7 @@ import type { NativeViewStyle } from "../../lib/native-style";
 import { useColorScheme } from "../../lib/useColorScheme";
 import { cn } from "../../lib/utils";
 import * as Slot from "../primitives/slot";
-import { Button } from "./button";
+import { GlassButton } from "./glass-button";
 import { Input } from "./input";
 
 // `GBottomSheetTextInput` wraps a `TextInput` from `react-native-gesture-handler`,
@@ -399,15 +399,12 @@ const BottomSheetHeader = React.forwardRef<
       {...props}
     >
       {children}
-      {/* Bare X (no circle), same as the other sheets' close buttons. */}
-      <Button
+      <GlassButton
         onPress={close}
-        variant="ghost"
+        icon={X}
         accessibilityLabel={t("Close")}
-        className="h-8 w-8 aspect-square self-start p-0 flex items-center justify-center"
-      >
-        <X className="text-muted-foreground" size={16} />
-      </Button>
+        style={{ alignSelf: "flex-start", marginRight: -6 }}
+      />
     </View>
   );
 });
