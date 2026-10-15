@@ -269,14 +269,20 @@ export default function RootLayout() {
                     as "on top of" the tabs instead of replacing them. */}
                 <Stack.Screen
                   name="task/new"
-                  options={{ presentation: "modal" }}
+                  options={{
+                    presentation: "transparentModal",
+                    animation: "slide_from_bottom",
+                  }}
                 />
                 {/* `getId`: opening the same session twice (double tap) focuses
                     the existing modal instead of stacking a second one. */}
                 <Stack.Screen
                   name="task/[id]/edit"
                   getId={({ params }) => String(params?.id ?? "")}
-                  options={{ presentation: "modal" }}
+                  options={{
+                    presentation: "transparentModal",
+                    animation: "slide_from_bottom",
+                  }}
                 />
                 {/* The ingestion inbox — LMS / portal notifications. */}
                 <Stack.Screen

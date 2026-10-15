@@ -86,13 +86,13 @@ is mounted under the splash so the launch URL `/` resolves, then the guards narr
 | `/(app)` (Week)     | home: paginated day timeline + 7-day chip strip                                   |
 | `/(app)/month`      | Monday-first month grid                                                           |
 | `/(app)/settings`   | profile, appearance, preferences (language, timezone, default reminder; synced to API), integrations |
-| `/task/new`         | create session (modal)                                                            |
-| `/task/[id]/edit`   | edit session (modal); type read-only                                              |
+| `/task/new`         | create task or event (bottom-sheet composer)                                      |
+| `/task/[id]/edit`   | edit session (same composer; type fixed)                                          |
 | `/notifications`    | ingestion inbox (modal)                                                           |
 
 Session model, series-scope editing, recurrence and reschedule match web: see
 [ADR-0002](../docs/adr/0002-scheduling-simplification.md).
-Reminders UI is `components/tasks/form/reminder-field.tsx` (hidden for `DND`); labels and the no-duplicate rule come from `@zenflow/core`.
+Task composer is `components/tasks/composer/` (fields in `composer-fields.tsx`, reminders in `reminder-field.tsx`, hidden for `DND`); quick-add parsing is `lib/task-parser.ts`; labels and the no-duplicate rule come from `@zenflow/core`.
 
 ## Getting started checklist
 

@@ -1,7 +1,7 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { formatTitle } from "@/lib/i18n";
-import { InlineDateField } from "@/components/tasks/form/inline-date-field";
+import { InlineDateField } from "@/components/ui/inline-date-field";
 import {
   BottomSheet,
   BottomSheetContent,
