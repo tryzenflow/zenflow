@@ -1,5 +1,6 @@
 import { useOffline } from "@/hooks/use-offline";
 import { findCachedSession } from "@/lib/session-cache";
+import { hideSessions } from "@/lib/hidden-sessions";
 import { t } from "@/lib/i18n";
 import { useUploadTracker } from "@/hooks/use-upload-tracker";
 import { goToCalendar, safeBack } from "@/lib/nav";
@@ -333,11 +334,24 @@ function EditSessionForm() {
           await removeSession(task.id);
         }
       } catch (error) {
+        unhide();
         showErrorToast(rootToast, error, t("Couldn't delete session"), "trash");
       }
     };
-    // Nothing is sent until the undo window closes; Undo cancels it.
-    const cancel = deferCommit(commit, UNDO_WINDOW_MS);
+    // The block goes at once; nothing is sent until the undo window closes,
+    // and Undo cancels the send and brings the block back.
+    const unhide = hideSessions(
+      scope === "series" && task.seriesId
+        ? { seriesId: task.seriesId }
+        : scope === "following" && task.seriesId && task.scheduledStartTime
+          ? { seriesId: task.seriesId, fromISO: task.scheduledStartTime }
+          : { id: task.id },
+    );
+    const cancelCommit = deferCommit(commit, UNDO_WINDOW_MS);
+    const cancel = () => {
+      cancelCommit();
+      unhide();
+    };
     rootToast({
       title:
         scope === "series"
