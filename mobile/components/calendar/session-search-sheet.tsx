@@ -10,6 +10,7 @@ import {
   useBottomSheet,
 } from "@/components/ui/bottom-sheet";
 import { Text } from "@/components/ui/text";
+import { highlightParts } from "@/lib/highlight";
 import { navigateOnce } from "@/lib/nav";
 import { t } from "@/lib/i18n";
 import type { Session } from "@zenflow/shared";
@@ -122,7 +123,18 @@ export const SessionSearchSheet = forwardRef<SessionSearchSheetHandle>(
               >
                 <View className="min-w-0 flex-1">
                   <Text numberOfLines={1} className="text-[15px] font-semibold">
-                    {session.title}
+                    {highlightParts(session.title, query.trim()).map((part, i) =>
+                      part.match ? (
+                        <Text
+                          key={i}
+                          className="rounded-[4px] bg-brand-sun/40 font-bold"
+                        >
+                          {part.text}
+                        </Text>
+                      ) : (
+                        <Text key={i}>{part.text}</Text>
+                      ),
+                    )}
                   </Text>
                 </View>
               </Pressable>
