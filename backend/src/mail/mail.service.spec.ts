@@ -3,6 +3,15 @@ import { MailerService } from "@nestjs-modules/mailer";
 import { MailService } from "./mail.service";
 import { PrismaService } from "../prisma/prisma.service";
 
+// `render` loads react-dom by dynamic import, which jest's CJS runtime rejects;
+// the rendered markup is checked in the preview run instead.
+jest.mock("@react-email/components", () => ({
+  render: async (props: object) => JSON.stringify(props),
+}));
+jest.mock("./templates/confirm-email", () => ({
+  ConfirmEmail: (props: object) => props,
+}));
+
 interface MailPayload {
   from?: string;
   attachments?: { path: string }[];
@@ -46,7 +55,7 @@ describe("MailService", () => {
       await service.sendLoginEmail("user@example.com", "123456");
       expect(sendMail.mock.calls[0][0]).toMatchObject({
         subject: "Xác nhận địa chỉ email của bạn",
-        context: { language: "vi", greeting: "Xin chào,", otp: "123456" },
+        html: expect.stringContaining("Xin chào,"),
       });
     });
     it("prefers the explicit language over the stored one, without a lookup", async () => {
@@ -59,10 +68,10 @@ describe("MailService", () => {
       expect(findUnique).not.toHaveBeenCalled();
       expect(sendMail.mock.calls[0][0]).toMatchObject({
         subject: "Xác nhận địa chỉ email của bạn",
-        context: { language: "vi" },
+        html: expect.stringContaining('"language":"vi"'),
       });
     });
-    it("sends the confirm-email template with the otp context", async () => {
+    it("sends the rendered confirm email with the otp", async () => {
       await service.sendLoginEmail("user@example.com", "123456");
 
       expect(sendMail).toHaveBeenCalledTimes(1);
@@ -70,8 +79,8 @@ describe("MailService", () => {
       expect(payload).toMatchObject({
         to: "user@example.com",
         subject: "Confirm your email account",
-        template: "./confirm-email",
-        context: { otp: "123456" },
+        html: expect.stringContaining("123456"),
+        text: expect.stringContaining("123456"),
       });
     });
 
