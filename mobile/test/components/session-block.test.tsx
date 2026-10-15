@@ -102,7 +102,7 @@ describe("SessionBlock — Other time", () => {
 
   it("offers no chip when the placement proposed no alternative", () => {
     renderBlock(segment({ minutes: 60 }));
-    expect(screen.queryByText("Other time")).toBeNull();
+    expect(screen.queryByTestId("other-time.s1")).toBeNull();
   });
 
   it("swaps to the alternative in one tap and drops the chip", async () => {
@@ -122,6 +122,6 @@ describe("SessionBlock — Other time", () => {
     await waitFor(() =>
       expect(swaps).toEqual([{ id: "s1", body: { slotProposalId: "p1", chose: "alternative" } }]),
     );
-    await waitFor(() => expect(screen.queryByText("Other time")).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId("other-time.s1")).toBeNull());
   });
 });

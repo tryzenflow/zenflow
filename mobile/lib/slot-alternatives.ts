@@ -1,11 +1,11 @@
 import { create } from "zustand";
-import { slotPick } from "@/api/tasks";
+import { slotPick, undoPlacement } from "@/api/tasks";
 import type { SlotPickResponse } from "@zenflow/shared";
 
 /**
  * The alternative slot a placement proposed for one session (ADR-0022 pairwise
  * proposal). The scheduler applies the primary; the block offers the alternative
- * as "Other time" until the user swaps or the next placement replaces it.
+ * with its time until the user swaps or the next placement replaces it.
  */
 export interface SlotAlternative {
   slotProposalId: string;
@@ -99,4 +99,19 @@ export async function chooseOtherTime(
   });
   forgetAlternative(sessionId);
   return picked;
+}
+
+/**
+ * Undo a swap to the alternative. The server moves the session back and
+ * clears the recorded pick, so the alternative is offered again.
+ */
+export async function undoOtherTime(
+  sessionId: string,
+  alternative: SlotAlternative,
+  undoGroupId: string,
+): Promise<void> {
+  await undoPlacement(undoGroupId);
+  useSlotAlternativeStore.setState((state) => ({
+    byId: { ...state.byId, [sessionId]: alternative },
+  }));
 }

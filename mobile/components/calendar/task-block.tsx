@@ -60,9 +60,11 @@ import { CheckOffButton } from "@/components/calendar/check-off-button";
 import { useCheckOff } from "@/hooks/use-check-off";
 import type { CheckState } from "@/lib/today-summary";
 import { useToast } from "@/components/ui/toast";
-import { showAlternativePickToast, showErrorToast } from "@/lib/task-toasts";
+import { showErrorToast } from "@/lib/task-toasts";
+import { showMovedToast } from "@/lib/move-toast";
 import {
   chooseOtherTime,
+  undoOtherTime,
   useSlotAlternative,
 } from "@/lib/slot-alternatives";
 
@@ -112,6 +114,15 @@ function fmt(iso: string, tz: string) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+/** "15:00" for the same day as `current`, else "Fri 15:00". */
+function otherTimeText(iso: string, current: string, tz: string) {
+  const at = toZonedTime(new Date(iso), tz);
+  const now = toZonedTime(new Date(current), tz);
+  if (at.toDateString() === now.toDateString()) return fmt(iso, tz);
+  const day = at.toLocaleDateString(locale(), { weekday: "short" });
+  return `${day} ${fmt(iso, tz)}`;
 }
 
 /** "9:00 AM" + "10:30 AM" → "9:00–10:30 AM". A mixed AM/PM span, or a 24h
@@ -255,16 +266,29 @@ function SessionBlockImpl({
   const { toast } = useToast();
   const alternative = useSlotAlternative(segment.taskId);
   const takeOtherTime = useCallback(() => {
+    if (!alternative) return;
     Haptics.selectionAsync().catch(() => undefined);
+    const fail = (error: unknown) =>
+      showErrorToast(toast, error, t("Couldn't move this session"), "calendar-x");
     chooseOtherTime(segment.taskId)
       .then((picked) => {
         const at = picked?.session.scheduledStartTime;
-        if (at) showAlternativePickToast(toast, at, tz);
+        if (!at) return;
+        const groupId = picked.undoGroupId;
+        showMovedToast(toast, {
+          to: zonedDate(at, tz),
+          withTime: true,
+          onUndo: groupId
+            ? () => void undoOtherTime(segment.taskId, alternative, groupId).catch(fail)
+            : undefined,
+        });
       })
-      .catch((error: unknown) =>
-        showErrorToast(toast, error, t("Couldn't move this session"), "calendar-x"),
-      );
-  }, [segment.taskId, toast, tz]);
+      .catch(fail);
+  }, [alternative, segment.taskId, toast, tz]);
+  // The chip names the time it moves to, with the weekday when it changes day.
+  const otherTimeLabel = alternative
+    ? otherTimeText(alternative.alternativeSlot, segment.taskStart, tz)
+    : "";
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const { isDarkColorScheme } = useColorScheme();
   const startMin = minutesOfDayLocal(segment.start, tz);
@@ -1014,13 +1038,13 @@ function SessionBlockImpl({
           onPress={takeOtherTime}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel={t("Other time")}
+          accessibilityLabel={t("Move to {time}", { time: otherTimeLabel })}
           testID={`other-time.${segment.taskId}`}
           className="absolute bottom-1.5 rounded-full border border-primary/40 bg-background/90 px-2.5 py-1"
           style={{ right: checkable ? CHECK_GUTTER_PX : 8 }}
         >
           <Text className="text-[11px] font-semibold leading-[14px] text-primary">
-            {t("Other time")}
+            {t("Or {time}", { time: otherTimeLabel })}
           </Text>
         </Pressable>
       ) : null}

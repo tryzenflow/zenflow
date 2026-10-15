@@ -242,23 +242,3 @@ export function showSkippedToast(
     duration: 4000,
   });
 }
-
-/**
- * Toast shown after the user picks the alternative slot in a divergent
- * placement (issue #41). Title "Moved to new slot", description "{when}. Thanks, noted for next time."
- */
-export function showAlternativePickToast(
-  toast: ToastFn,
-  alternativeSlot: string,
-  tz: string,
-): void {
-  const when = format(zonedDate(alternativeSlot, tz), "h:mm a 'on' EEE MMM d");
-  toast({
-    title: t("Moved to new slot"),
-    description: t("{when}. Thanks, noted for next time.", { when }),
-    variant: "success",
-    icon: "calendar-clock",
-    duration: 4000,
-    position: "bottom",
-  });
-}

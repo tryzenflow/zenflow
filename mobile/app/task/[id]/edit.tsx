@@ -198,7 +198,11 @@ function EditSessionForm() {
       // The block keeps the applied slot and offers "Other time" when the
       // placement proposed one.
       rememberPlacement(updated);
+      if (updated.scheduledStartTime) {
+        await warmLandingDay(updated.scheduledStartTime, tz);
+      }
 
+      // Toasts fire as the form leaves, so none shows over a form still open.
       showDisplacedToast(toast, updated.displacedSessions);
       toast({
         title: t("Session updated"),
@@ -224,7 +228,6 @@ function EditSessionForm() {
       }
       // Jump the calendar to the (possibly new) time and pulse the block.
       if (updated.scheduledStartTime) {
-        await warmLandingDay(updated.scheduledStartTime, tz);
         goToCalendar(router, {
           date: updated.scheduledStartTime,
           flash: updated.id,
@@ -364,12 +367,6 @@ function EditSessionForm() {
     deleteScopeSheet.current?.open(occurrenceDate);
   }
 
-  // Mount the composer once the saved values are in the form, so its line
-  // and fields start from them.
-  if (!task) {
-    return null;
-  }
-
   return (
     <>
       <TaskComposer
@@ -377,25 +374,34 @@ function EditSessionForm() {
         form={form}
         tz={tz}
         title={t("Edit session")}
-        subtitle={t("Created {date}", {
-          date: format(new Date(task.createdAt), "MMM d"),
-        })}
+        subtitle={
+          task
+            ? t("Created {date}", {
+                date: format(new Date(task.createdAt), "MMM d"),
+              })
+            : undefined
+        }
+        loading={!task}
         courses={courses}
         busy={loading || offline}
-        onDelete={offline ? undefined : onDelete}
+        onDelete={offline || !task ? undefined : onDelete}
         onNoteUpload={uploads.track}
-        editingInstance={{
-          scheduledStartTime: task.scheduledStartTime,
-          durationMinutes: task.durationMinutes,
-        }}
-        onValid={(values) => void onSubmit(values)}
+        editingInstance={
+          task
+            ? {
+                scheduledStartTime: task.scheduledStartTime,
+                durationMinutes: task.durationMinutes,
+              }
+            : undefined
+        }
+        onValid={onSubmit}
         onInvalid={onInvalid}
         onDismiss={() => safeBack(router)}
       />
 
       {/* One-offs delete straight away (`onDelete`), so only a series needs
           the scope sheet mounted. */}
-      {getSeriesKind(task) !== "none" && (
+      {task && getSeriesKind(task) !== "none" && (
         <DeleteRecurringSheet
           ref={deleteScopeSheet}
           kind={getSeriesKind(task) === "task" ? "task" : "recurring"}
