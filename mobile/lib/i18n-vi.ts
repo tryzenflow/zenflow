@@ -2,6 +2,7 @@
 export default {
   "Import my timetable": "Nhập thời khóa biểu",
   "Show night hours": "Hiện giờ đêm",
+  "{from} to {to}": "{from} đến {to}",
   "Your password is stored encrypted. Disconnect in Settings to delete it.":
     "Mật khẩu được lưu mã hóa. Ngắt kết nối trong Cài đặt để xóa.",
   "Update available": "Có bản cập nhật",
@@ -153,6 +154,20 @@ export default {
   Marks: "Điểm",
   "Loading marks": "Đang tải điểm",
   "Couldn't load marks": "Không tải được điểm",
+  Retry: "Thử lại",
+  "No credit": "Không tính tín chỉ",
+  credits: "tín chỉ",
+  "Excellent. {pct}% of courses are A": "Xuất sắc. {pct}% môn đạt điểm A",
+  "Strong. {pct}% of courses are A or B":
+    "Rất tốt. {pct}% môn đạt điểm A hoặc B",
+  "Solid. {pct}% of courses are A or B":
+    "Ổn định. {pct}% môn đạt điểm A hoặc B",
+  "Room to grow. {pct}% of courses are A or B":
+    "Còn tiến bộ được. {pct}% môn đạt điểm A hoặc B",
+  "Up {delta} from last semester": "Tăng {delta} so với học kỳ trước",
+  "Down {delta} from last semester": "Giảm {delta} so với học kỳ trước",
+  "Steady since last semester": "Giữ nguyên so với học kỳ trước",
+  "GPA by semester": "Điểm trung bình theo học kỳ",
   "Push alerts for reminders and schedule changes":
     "Thông báo đẩy về nhắc nhở và thay đổi lịch",
   "Reminder before each study session": "Nhắc trước mỗi buổi học",
@@ -474,25 +489,12 @@ export default {
     "Lịch này giờ kết thúc sau hạn chót.",
   "Scheduled after deadline": "Xếp sau hạn chót",
   "Moved {count} flexible tasks": "Đã dời {count} việc linh hoạt",
-  "Pinch the day to zoom the hours.": "Chụm hai ngón để phóng to thu nhỏ giờ.",
-  "Swipe the date strip to jump a whole week.":
-    "Vuốt thanh ngày để nhảy cả tuần.",
-  "Drag a held task to the screen edge to scroll as you move.":
-    "Kéo việc đang giữ chạm mép màn hình để cuộn khi di chuyển.",
-  "Hold a task without moving for Move to… and more.":
-    "Giữ yên một việc để mở Dời sang… và các tùy chọn khác.",
-  "Swipe a notification left to dismiss it.":
-    "Vuốt thông báo sang trái để xóa.",
-  "Taking longer than usual…": "Lâu hơn bình thường một chút…",
   "Zenflow is open to DLU students for now. Use your @dlu.edu.vn email.":
     "Hiện Zenflow chỉ dành cho sinh viên DLU. Hãy dùng email @dlu.edu.vn của bạn.",
   "Some sessions weren't moved": "Một số buổi chưa được dời",
   "{count} stayed put because the new slot conflicted.":
     "{count} buổi được giữ nguyên vì khung giờ mới bị trùng.",
   "To make room for the new session.": "Để nhường chỗ cho lịch mới.",
-  "Moved to new slot": "Đã chuyển sang khung giờ mới",
-  "{when}. Thanks, noted for next time.":
-    "{when}. Cảm ơn bạn, mình đã ghi nhớ cho lần sau.",
   "Nothing moved. Pick another time or keep this one.":
     "Chưa có gì thay đổi. Bạn chọn giờ khác hoặc giữ giờ này nhé.",
   "Updated {applied}, skipped {failed}":
@@ -662,12 +664,17 @@ export default {
   "Weekly": "Hằng tuần",
   "When": "Khi nào",
   "Essay due Friday 3h": "Bài luận hạn thứ 6 3h",
-  "Other time": "Giờ khác",
+  "Or {time}": "Hoặc {time}",
+  "Move to {time}": "Chuyển sang {time}",
   "Duration set to {duration}": "Đã đặt thời lượng {duration}",
   "Due {when}": "Hạn {when}",
   "{count} sittings of {duration}": "{count} buổi, mỗi buổi {duration}",
-  "Splits the total into sittings of about the same length, at most one a day.": "Chia tổng thời lượng thành các buổi gần bằng nhau, tối đa một buổi mỗi ngày.",
-  "{count} sittings of about {duration}": "{count} buổi, mỗi buổi khoảng {duration}",
+  "Splits the task into shorter sessions.": "Chia công việc thành các buổi làm việc nhỏ hơn.",
+  "{count} sittings of {duration} and {rest} of {last}":
+    "{count} buổi {duration} và {rest} buổi {last}",
+  "{days} days ({hours})": "{days} ngày ({hours})",
+  Hours: "Giờ",
+  Days: "Ngày",
   "Moved this occurrence": "Đã dời buổi này",
   "Apply to all": "Áp dụng cho tất cả",
   "Due {date}": "Hạn {date}",
