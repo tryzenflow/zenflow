@@ -313,12 +313,8 @@ model Session {
   // occurrence fan-out uses to find every session belonging to a course whose
   // cached items changed. Null for everything else.
   //
-  // Nullable and self-healing rather than backfilled by a script: the
-  // materializer repairs a missing back-link on the next run that sees the
-  // item, and deliberately does NOT count the repair as an upstream change —
-  // a back-link is invisible to the student, so folding it into
-  // differsFromUpstream would mark every ingested row "updated" on the first
-  // run after deploy and announce an entire calendar as changed.
+  // Set on create only. Rows ingested before this column existed are linked
+  // by `pnpm --filter backend backfill:lms-course` (scripts/backfill-lms-course.ts).
   lmsCourseId Int?
 
   reminders     SessionReminder[]

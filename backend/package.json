@@ -17,6 +17,7 @@
     "test": "jest",
     "golden:export": "ts-node scripts/export-golden-fixtures.ts",
     "backfill:unplaced": "dotenv -e .env.dev -- ts-node scripts/backfill-unplaced-tasks.ts",
+    "backfill:lms-course": "dotenv -e .env.dev -- ts-node scripts/backfill-lms-course.ts",
     "killswitch": "dotenv -e .env.dev -- ts-node src/killswitch/killswitch.cli.ts",
     "dlu:fake": "ts-node scripts/fake-dlu-server.ts",
     "prisma:migrate:deploy": "node scripts/with-database-url.cjs prisma migrate deploy",
