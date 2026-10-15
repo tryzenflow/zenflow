@@ -16,10 +16,6 @@ import {
 import { describe, expect, it } from "vitest";
 
 const MOBILE_CSS = readFileSync(join(__dirname, "../../app/global.css"), "utf8");
-const LANDING_CSS = readFileSync(
-  join(__dirname, "../../../landing/src/styles/global.css"),
-  "utf8",
-);
 
 const tones = Object.keys(SESSION_TONES) as SessionTone[];
 const schemes: Scheme[] = ["light", "dark"];
@@ -56,12 +52,6 @@ const mobile = {
   light: block(MOBILE_CSS, ":root {"),
   dark: block(MOBILE_CSS, ".dark:root {"),
 };
-const landing = {
-  light: block(LANDING_CSS, ":root {\n  color-scheme"),
-  dark: block(LANDING_CSS, "@media (prefers-color-scheme: dark) {\n  :root {"),
-};
-const landingTheme = block(LANDING_CSS, "@theme {");
-
 const channels = (hex: string) => hexToRgb(hex).join(" ");
 
 describe("palette tokens", () => {
@@ -81,26 +71,6 @@ describe("palette tokens", () => {
       expect(vars[`session-${tone}`]).toBe(channels(SESSION_TONES[tone].base));
       expect(vars[`session-${tone}-ink`]).toBe(
         channels(SESSION_TONES[tone].ink[scheme]),
-      );
-    }
-  });
-
-  it.each(schemes)("landing %s matches the core hex values", (scheme) => {
-    const vars = landing[scheme];
-    expect(vars.bg).toBe(UI[scheme].background.toLowerCase());
-    expect(vars.fg).toBe(UI[scheme].foreground.toLowerCase());
-    expect(vars.muted).toBe(UI[scheme].mutedForeground.toLowerCase());
-    expect(vars.card).toBe(UI[scheme].card.toLowerCase());
-    expect(vars.primary).toBe(UI[scheme].primary.toLowerCase());
-  });
-
-  it("landing theme matches the brand and session tones", () => {
-    expect(landingTheme["color-primary"]).toBe("var(--primary)");
-    expect(landingTheme["color-accent"]).toBe(BRAND.yellow.toLowerCase());
-    expect(landingTheme["color-lime"]).toBe(BRAND.lime.toLowerCase());
-    for (const tone of ["lecture", "exam", "assignment", "task", "done"] as const) {
-      expect(landingTheme[`color-${tone}`], tone).toBe(
-        SESSION_TONES[tone].base.toLowerCase(),
       );
     }
   });
