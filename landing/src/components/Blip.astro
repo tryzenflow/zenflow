@@ -27,14 +27,14 @@ const BODIES = [
   {
     extra === "sprout" && (
       <g>
-        <path d="M60 22v-10" stroke="#7DA886" stroke-width="4" stroke-linecap="round" />
-        <ellipse cx="68" cy="10" rx="9" ry="5" fill="#7DA886" transform="rotate(-20 68 10)" />
+        <path d="M60 22v-10" stroke="#4f6b14" stroke-width="4" stroke-linecap="round" />
+        <ellipse cx="68" cy="10" rx="9" ry="5" fill="#9bc53d" transform="rotate(-20 68 10)" />
       </g>
     )
   }
   {
     extra === "horns" && (
-      <g fill="#E8895E">
+      <g fill="#9a4a0c">
         <path d="M38 30l-6-16 14 10z" />
         <path d="M82 30l6-16-14 10z" />
       </g>
@@ -42,7 +42,7 @@ const BODIES = [
   }
   <path d={BODIES[shape]} fill={body}></path>
   <ellipse cx="60" cy="84" rx="26" ry="20" fill={belly} opacity=".55"></ellipse>
-  <g fill="#22333d">
+  <g fill="#0f0d0a">
     <ellipse cx="46" cy="60" rx="5" ry="6.5"></ellipse>
     <ellipse cx="74" cy="60" rx="5" ry="6.5"></ellipse>
   </g>
@@ -50,9 +50,9 @@ const BODIES = [
     <circle cx="47.5" cy="57.5" r="1.8"></circle>
     <circle cx="75.5" cy="57.5" r="1.8"></circle>
   </g>
-  <g fill="#2E7D7A" opacity=".45">
+  <g fill="#ff6900" opacity=".35">
     <ellipse cx="38" cy="72" rx="6" ry="3.5"></ellipse>
     <ellipse cx="82" cy="72" rx="6" ry="3.5"></ellipse>
   </g>
-  <path d="M54 72q6 6 12 0" stroke="#22333d" stroke-width="3" fill="none" stroke-linecap="round"></path>
+  <path d="M54 72q6 6 12 0" stroke="#0f0d0a" stroke-width="3" fill="none" stroke-linecap="round"></path>
 </svg>

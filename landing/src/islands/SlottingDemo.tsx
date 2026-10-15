@@ -66,11 +66,11 @@ function Demo({ copy }: { copy: DemoCopy }) {
   return (
     <div
       ref={ref}
-      className="relative w-full max-w-sm rounded-[28px] border border-rule bg-card p-4 shadow-[0_30px_60px_-24px_rgb(47_72_88/0.35)] [--slot:10px] sm:[--slot:11px]"
+      className="relative w-full max-w-sm rounded-[28px] border border-rule bg-card p-4 shadow-[0_30px_60px_-24px_rgb(255_105_0/0.3)] [--slot:10px] sm:[--slot:11px]"
     >
       <div className="mb-3 flex items-baseline justify-between px-1">
         <span className="text-lg font-extrabold tracking-tight">{copy.day}</span>
-        <span className="rounded-full bg-primary/12 px-2.5 py-0.5 text-xs font-semibold text-primary-ink dark:text-primary">
+        <span className="rounded-full bg-primary/12 px-2.5 py-0.5 text-xs font-semibold text-primary-ink">
           {copy.today}
         </span>
       </div>

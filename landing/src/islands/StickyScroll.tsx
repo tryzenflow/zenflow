@@ -1,4 +1,4 @@
-import { AnimatePresence, m, useMotionValueEvent, useScroll } from "motion/react";
+import { AnimatePresence, m, useMotionValueEvent, useScroll, useSpring, useTransform } from "motion/react";
 import { type CSSProperties, useRef, useState } from "react";
 import { Motion } from "./motion";
 
@@ -9,9 +9,9 @@ export interface StickyScrollProps {
   placed: string;
 }
 
-const TINTS = ["var(--color-lecture)", "var(--color-primary)", "var(--color-done)"];
+const TINTS = ["var(--color-accent)", "var(--color-primary)", "var(--color-lime)"];
 
-/** Aceternity sticky scroll reveal: three beats of text; the card beside them follows the one in view. */
+/** Aceternity sticky scroll reveal with a tracing beam: three beats of text; the card beside them follows the one in view. */
 export default function StickyScroll(props: StickyScrollProps) {
   return (
     <Motion>
@@ -27,16 +27,27 @@ function Beats(props: StickyScrollProps) {
   useMotionValueEvent(scrollYProgress, "change", (p) =>
     setActive(Math.min(props.beats.length - 1, Math.max(0, Math.floor(p * props.beats.length)))),
   );
+  const beam = useSpring(useTransform(scrollYProgress, [0, 1], [0, 1]), { stiffness: 300, damping: 40 });
 
   return (
     <div className="grid gap-10 md:grid-cols-2 md:gap-16">
-      <ol ref={ref} className="space-y-16 md:space-y-[38vh] md:py-[18vh]">
+      <ol ref={ref} className="relative space-y-16 pl-14 md:space-y-[38vh] md:py-[18vh]">
+        <span aria-hidden="true" className="absolute top-0 bottom-0 left-[17px] w-0.5 rounded-full bg-rule" />
+        <m.span
+          aria-hidden="true"
+          style={{ scaleY: beam }}
+          className="absolute top-0 bottom-0 left-[17px] w-0.5 origin-top rounded-full bg-linear-to-b from-orange via-accent to-lime shadow-[0_0_12px_var(--color-primary)]"
+        />
         {props.beats.map((beat, i) => (
-          <li key={beat.title} className="transition-opacity duration-300 md:opacity-[var(--o)]" style={{ "--o": i === active ? 1 : 0.35 } as CSSProperties}>
-            <span className="mb-3 inline-flex size-9 items-center justify-center rounded-full bg-accent text-sm font-extrabold text-[#16232b]">
+          <li key={beat.title} className="relative transition-opacity duration-300 md:opacity-[var(--o)]" style={{ "--o": i === active ? 1 : 0.35 } as CSSProperties}>
+            <span
+              className={`absolute -left-14 inline-flex size-9 items-center justify-center rounded-full text-sm font-extrabold transition-colors duration-300 ${
+                i <= active ? "bg-primary text-primary-fg shadow-[0_0_0_6px_var(--glow)]" : "border border-rule bg-card text-muted"
+              }`}
+            >
               {i + 1}
             </span>
-            <h3 className="text-2xl font-extrabold tracking-tight md:text-3xl">{beat.title}</h3>
+            <h3 className="pt-1 text-2xl font-extrabold tracking-tight md:text-3xl">{beat.title}</h3>
             <p className="mt-2 max-w-md text-lg text-muted">{beat.body}</p>
             <div className="mt-6 md:hidden">
               <Card index={i} {...props} />
@@ -99,7 +110,7 @@ function Card({ index, sources, task, placed }: StickyScrollProps & { index: num
             <span className="ml-0.5 inline-block h-5 w-0.5 translate-y-1 animate-pulse bg-primary" />
           </div>
           <div className="mt-3 flex gap-2 text-sm">
-            <span className="rounded-full bg-accent px-3 py-1 font-semibold text-[#16232b]">{task.minutes}</span>
+            <span className="rounded-full bg-accent px-3 py-1 font-semibold text-primary-fg">{task.minutes}</span>
             <span className="block-session rounded-full px-3 py-1 font-semibold [--kind:var(--color-assignment)]">{task.time}</span>
           </div>
         </div>
@@ -115,7 +126,12 @@ function Card({ index, sources, task, placed }: StickyScrollProps & { index: num
               {k === "task" ? task.title : null}
             </div>
           ))}
-          <div className="absolute -right-3 top-6 rounded-2xl border border-rule bg-card px-3 py-2 text-xs font-bold shadow-lg">{placed}</div>
+          <div className="absolute -right-3 top-6 flex items-center gap-1.5 rounded-2xl border border-rule bg-card px-3 py-2 text-xs font-bold shadow-lg">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-done)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12.5l4.2 4.2L19 7" />
+            </svg>
+            {placed}
+          </div>
         </div>
       )}
     </div>

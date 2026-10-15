@@ -3,12 +3,12 @@ import type { Lang } from "../config";
 /** Feature icons, drawn in `components/Icon.astro`. */
 export type IconName =
   | "calendar"
-  | "sparkles"
-  | "bell"
-  | "wifi-off"
+  | "sunrise"
+  | "sliders"
+  | "dial"
+  | "cloud-off"
   | "globe"
   | "lock"
-  | "trending"
   | "download"
   | "check";
 
@@ -153,7 +153,7 @@ export const COPY: Record<Lang, Copy> = {
     featuresLabel: "Built around how students plan",
     features: [
       {
-        icon: "sparkles",
+        icon: "sunrise",
         title: "Smart placement",
         body: "Tasks land in free slots before the deadline, never on top of a lecture or an exam.",
       },
@@ -163,17 +163,17 @@ export const COPY: Record<Lang, Copy> = {
         body: "When your timetable or an exam changes, your calendar and reminders change with it.",
       },
       {
-        icon: "trending",
+        icon: "sliders",
         title: "Learns your rhythm",
         body: "Move a task and Zenflow remembers the hours you prefer.",
       },
       {
-        icon: "bell",
+        icon: "dial",
         title: "Reminders that matter",
         body: "A nudge before each session, and when something moves.",
       },
       {
-        icon: "wifi-off",
+        icon: "cloud-off",
         title: "Works offline",
         body: "Your saved days stay readable without signal.",
       },
@@ -303,7 +303,7 @@ export const COPY: Record<Lang, Copy> = {
     featuresLabel: "Làm ra cho cách sinh viên lên kế hoạch",
     features: [
       {
-        icon: "sparkles",
+        icon: "sunrise",
         title: "Xếp lịch thông minh",
         body: "Việc được xếp vào giờ trống trước hạn nộp, không bao giờ đè lên giờ học hay giờ thi.",
       },
@@ -313,17 +313,17 @@ export const COPY: Record<Lang, Copy> = {
         body: "Khi thời khóa biểu hoặc lịch thi đổi, lịch và lời nhắc đổi theo.",
       },
       {
-        icon: "trending",
+        icon: "sliders",
         title: "Học theo thói quen",
         body: "Kéo một việc sang giờ khác, Zenflow nhớ khung giờ bạn thích.",
       },
       {
-        icon: "bell",
+        icon: "dial",
         title: "Nhắc đúng lúc",
         body: "Nhắc trước mỗi buổi và khi có gì thay đổi.",
       },
       {
-        icon: "wifi-off",
+        icon: "cloud-off",
         title: "Dùng được khi mất mạng",
         body: "Những ngày đã tải vẫn xem được khi không có sóng.",
       },

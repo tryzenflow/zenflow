@@ -1,0 +1,47 @@
+---
+/** State marks from mobile/components/brand/state-marks.tsx: an empty day and no results. */
+interface Props {
+  kind: "empty" | "searching";
+  size?: number;
+  class?: string;
+}
+const { kind, size = 56, class: className } = Astro.props;
+
+const CURVE =
+  "M220.5 51.5C220.5 51.5 172.668 65.7587 147.635 89.6235C122.602 113.488 136.249 158.201 104.912 183.517C80.2542 203.436 33 199.5 33 199.5";
+const id = `zf-mark-${kind}`;
+---
+
+<svg class={className} width={size} height={size} viewBox="0 0 260 260" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id={id} x1="48.5" y1="31.5" x2="222.5" y2="220.5" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF6900"></stop>
+      <stop offset=".3236" stop-color="#F0B100"></stop>
+      <stop offset="1" stop-color="#D8F999"></stop>
+    </linearGradient>
+  </defs>
+  {
+    kind === "empty" ? (
+      <>
+        <circle cx="130" cy="130" r="130" fill={`url(#${id})`} opacity=".3" />
+        <path d={CURVE} stroke="#FF8E3E" stroke-width="22" stroke-linecap="round" />
+      </>
+    ) : (
+      <>
+        <circle cx="130" cy="130" r="126" fill={`url(#${id})`} opacity=".28" />
+        <circle
+          cx="130"
+          cy="130"
+          r="126"
+          stroke="#FF8E3E"
+          stroke-opacity=".45"
+          stroke-width="5"
+          stroke-dasharray="2 14"
+          stroke-linecap="round"
+          class="origin-center animate-[spin_40s_linear_infinite] [transform-box:view-box] motion-reduce:animate-none"
+        />
+        <path d={CURVE} stroke="#FF8E3E" stroke-width="20" stroke-linecap="round" stroke-dasharray="0.1 26.2" />
+      </>
+    )
+  }
+</svg>

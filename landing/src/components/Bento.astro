@@ -1,6 +1,7 @@
 ---
 import type { Lang } from "../config";
 import { COPY } from "../content/copy";
+import Counter from "../islands/Counter";
 import Icon from "./Icon.astro";
 
 interface Props {
@@ -13,38 +14,54 @@ const c = COPY[lang];
 const SPAN = ["md:col-span-2", "", "", "", "", "", "md:col-span-2"];
 const TINT = [
   "var(--color-primary)",
-  "var(--color-lecture)",
   "var(--color-accent)",
-  "var(--color-exam)",
-  "var(--color-done)",
-  "var(--color-assignment)",
+  "var(--color-lime)",
+  "var(--color-primary)",
+  "var(--color-accent)",
+  "var(--color-lime)",
   "var(--color-primary)",
 ];
 ---
 
 <section class="mx-auto max-w-6xl px-4 py-24 sm:px-6">
-  <h2 class="max-w-2xl text-[clamp(2rem,5vw,3.25rem)] leading-tight font-extrabold tracking-tight text-balance">{c.featuresLabel}</h2>
+  <h2 data-reveal class="max-w-2xl text-[clamp(2rem,5vw,3.25rem)] leading-tight font-extrabold tracking-tight text-balance">
+    {c.featuresLabel}
+  </h2>
   <ul class="mt-12 grid gap-4 md:grid-cols-3">
     {
       c.features.map((f, i) => (
         <li
+          data-reveal
+          data-spotlight
           class:list={[
-            "group relative overflow-hidden rounded-3xl border border-rule bg-card p-6 transition-[transform,box-shadow] duration-300 hover:-translate-y-1 hover:shadow-[0_24px_48px_-24px_rgb(47_72_88/0.4)]",
+            "card-spotlight group overflow-hidden rounded-3xl border border-rule bg-card p-6 transition-transform duration-300 hover:-translate-y-1",
             SPAN[i],
           ]}
-          style={`--t:${TINT[i]}`}
+          style={`--t:${TINT[i]};--i:${i % 3}`}
         >
           <div
             aria-hidden="true"
-            class="absolute -top-16 -right-16 size-48 rounded-full bg-[color-mix(in_srgb,var(--t)_22%,transparent)] blur-2xl transition-transform duration-500 group-hover:scale-125"
+            class="absolute -top-16 -right-16 -z-10 size-48 rounded-full bg-[color-mix(in_srgb,var(--t)_22%,transparent)] blur-2xl transition-transform duration-500 group-hover:scale-125"
           />
-          <span class="relative inline-flex size-12 items-center justify-center rounded-2xl bg-[color-mix(in_srgb,var(--t)_18%,var(--card))]">
+          <span class="inline-flex size-12 items-center justify-center rounded-2xl bg-[color-mix(in_srgb,var(--t)_22%,var(--card))] text-primary-ink transition-transform duration-300 group-hover:-rotate-6">
             <Icon name={f.icon} />
           </span>
-          <h3 class="relative mt-5 text-xl font-extrabold tracking-tight">{f.title}</h3>
-          <p class="relative mt-2 text-muted">{f.body}</p>
+          <h3 class="mt-5 text-xl font-extrabold tracking-tight">{f.title}</h3>
+          <p class="mt-2 text-muted">{f.body}</p>
         </li>
       ))
     }
   </ul>
+  <dl class="mt-4 grid gap-4 sm:grid-cols-2">
+    {
+      c.counters.map((n, i) => (
+        <div data-reveal data-spotlight class="card-spotlight overflow-hidden rounded-3xl border border-rule bg-soft p-8" style={`--i:${i}`}>
+          <dt class="text-muted">{n.label}</dt>
+          <dd class="text-sunrise mt-1 text-6xl font-extrabold tracking-tight">
+            <Counter client:visible={{ rootMargin: "300px" }} value={n.value} />
+          </dd>
+        </div>
+      ))
+    }
+  </dl>
 </section>

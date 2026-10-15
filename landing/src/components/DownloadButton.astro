@@ -13,10 +13,14 @@ const { label, small = false } = Astro.props;
   href={APK_URL}
   rel="noopener"
   class:list={[
-    "inline-flex items-center gap-2.5 rounded-full bg-linear-135 from-[#2f4858] to-primary-ink font-extrabold text-white shadow-[0_12px_30px_-10px_rgb(47_72_88/0.7)] transition-transform hover:-translate-y-0.5",
-    small ? "px-4 py-2 text-sm" : "px-6 py-3.5 text-[17px]",
+    "group relative inline-flex items-center gap-2.5 overflow-hidden rounded-full font-extrabold text-primary-fg shadow-[0_12px_30px_-10px_rgb(255_105_0/0.6)] transition-transform hover:-translate-y-0.5",
+    small ? "bg-primary px-4 py-2 text-sm" : "border-moving px-6 py-3.5 text-[17px] motion-reduce:animate-none",
   ]}
 >
+  <span
+    aria-hidden="true"
+    class="absolute inset-y-0 -left-1/2 w-1/2 -skew-x-12 bg-linear-90 from-transparent via-white/45 to-transparent transition-transform duration-700 group-hover:translate-x-[300%]"
+  ></span>
   {!small && <Icon name="download" size={20} />}
   {label}
 </a>

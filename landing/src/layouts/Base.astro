@@ -32,8 +32,8 @@ const jsonLd = JSON.stringify({
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{c.title}</title>
     <meta name="description" content={c.description} />
-    <meta name="theme-color" content="#FBF5EC" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16232B" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#FEFCFA" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0F0D0A" media="(prefers-color-scheme: dark)" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="canonical" href={url} />
     {LANGS.map((l) => <link rel="alternate" hreflang={l} href={`${SITE_URL}${pathFor(l)}`} />)}
@@ -56,6 +56,9 @@ const jsonLd = JSON.stringify({
     <meta name="twitter:image" content={image} />
     <meta name="twitter:image:alt" content={c.shareAlt} />
     <script type="application/ld+json" set:html={jsonLd} />
+    <script is:inline>
+      document.documentElement.classList.add("js");
+    </script>
   </head>
   <body>
     <a
@@ -64,5 +67,26 @@ const jsonLd = JSON.stringify({
       >{c.skip}</a
     >
     <slot />
+    <script>
+      // Reveal [data-reveal] once in view; light [data-spotlight] cards where the pointer is.
+      const io = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            if (!e.isIntersecting) continue;
+            e.target.classList.add("in");
+            io.unobserve(e.target);
+          }
+        },
+        { rootMargin: "0px 0px -10% 0px" },
+      );
+      document.querySelectorAll("[data-reveal]").forEach((el) => io.observe(el));
+      document.querySelectorAll<HTMLElement>("[data-spotlight]").forEach((el) =>
+        el.addEventListener("pointermove", (e) => {
+          const r = el.getBoundingClientRect();
+          el.style.setProperty("--mx", `${e.clientX - r.left}px`);
+          el.style.setProperty("--my", `${e.clientY - r.top}px`);
+        }),
+      );
+    </script>
   </body>
 </html>
