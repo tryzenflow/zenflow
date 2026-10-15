@@ -5,9 +5,13 @@ import {
   CalendarClock,
   Check,
   ChevronRight,
+  Lock,
   MinusCircle,
   Plus,
 } from "@/components/Icons";
+import { pinSession, unpinSession } from "@/api/tasks";
+import { useToast } from "@/components/ui/toast";
+import { showErrorToast } from "@/lib/task-toasts";
 import { checkStateOf } from "@/lib/today-summary";
 import {
   BottomSheet,
@@ -46,6 +50,7 @@ export const BlockActionsSheet = forwardRef<
   useLanguage();
   const sheet = useBottomSheet();
   const checkOff = useCheckOff();
+  const { toast } = useToast();
   const [session, setSession] = useState<Session | null>(null);
 
   useImperativeHandle(
@@ -74,6 +79,21 @@ export const BlockActionsSheet = forwardRef<
     const s = session;
     sheet.close();
     void checkOff({ id: s.id, title: s.title }, kind, on);
+  };
+
+  const togglePin = () => {
+    if (!session) return;
+    const s = session;
+    const pinned = s.anchor === "PINNED";
+    sheet.close();
+    (pinned ? unpinSession(s.id) : pinSession(s.id)).catch((error: unknown) =>
+      showErrorToast(
+        toast,
+        error,
+        pinned ? t("Couldn't unpin this session") : t("Couldn't pin this session"),
+        "calendar-x",
+      ),
+    );
   };
 
   const state = session ? checkStateOf(session) : "open";
@@ -123,6 +143,19 @@ export const BlockActionsSheet = forwardRef<
             </Text>
             <ChevronRight size={16} className="text-primary/60" />
           </Pressable>
+
+          {session?.type === "TASK" && (
+            <Pressable
+              testID="block-action-pin"
+              onPress={togglePin}
+              className="flex-row items-center gap-3 rounded-xl px-3 py-3.5 active:opacity-70"
+            >
+              <Lock size={18} className="text-foreground" />
+              <Text className="flex-1 text-[14px] font-medium text-foreground">
+                {session.anchor === "PINNED" ? t("Unpin") : t("Pin in place")}
+              </Text>
+            </Pressable>
+          )}
 
           <Pressable
             onPress={() => run(onReschedule)}

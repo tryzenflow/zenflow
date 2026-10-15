@@ -1,8 +1,11 @@
 import type {
+  ConfirmPlacementRequest,
+  ConfirmPlacementResponse,
   CreateSessionInput,
   CreateSessionResponse,
   DeadlineOptionsResponse,
   RemoveSessionResponse,
+  UndoPlacementResponse,
   RemoveSessionSeriesResponse,
   Session,
   SessionDetailResponse,
@@ -155,6 +158,46 @@ export async function removeSeriesFrom(
 ): Promise<RemoveSessionSeriesResponse> {
   const { data } = await api.delete(
     `/sessions/series/${seriesId}/from/${sessionId}`,
+  );
+  notifySessionsMutated();
+  return data.data;
+}
+
+/** Pin a `TASK` in place: the scheduler never moves it (ADR-0022). */
+export async function pinSession(id: string): Promise<Session> {
+  const { data } = await api.post(`/sessions/${encodeURIComponent(id)}/pin`);
+  notifySessionsMutated();
+  return data.data;
+}
+
+/** Unpin a `TASK`: back to `AUTO`. */
+export async function unpinSession(id: string): Promise<Session> {
+  const { data } = await api.delete(`/sessions/${encodeURIComponent(id)}/pin`);
+  notifySessionsMutated();
+  return data.data;
+}
+
+/**
+ * Apply a plan the scheduler held for confirmation (`NEEDS_CONFIRMATION`).
+ * Single use: a 409 `PLACEMENT_STALE` means the plan no longer holds.
+ */
+export async function confirmPlacement(
+  planId: string,
+): Promise<ConfirmPlacementResponse> {
+  const body: ConfirmPlacementRequest = { planId };
+  const { data } = await api.post("/sessions/placement/confirm", body, {
+    timeout: SAVE_TIMEOUT_MS,
+  });
+  notifySessionsMutated();
+  return data.data;
+}
+
+/** Revert every move and create of one undo group (`undoGroupId` on a response). */
+export async function undoPlacement(
+  groupId: string,
+): Promise<UndoPlacementResponse> {
+  const { data } = await api.post(
+    `/sessions/undo/${encodeURIComponent(groupId)}`,
   );
   notifySessionsMutated();
   return data.data;

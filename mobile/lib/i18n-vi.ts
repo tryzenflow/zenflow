@@ -685,4 +685,30 @@ export default {
   "Placed at {time}, other sessions moved to fit it": "Đã xếp lúc {time}, các buổi khác đã dời để vừa lịch",
   "Placed at {time}, the best time left": "Đã xếp lúc {time}, khung giờ trống tốt nhất còn lại",
   "Swipe up to read the note": "Vuốt lên để đọc ghi chú",
+  "Can't move here": "Không thể dời tới đây",
+  "A pinned or fixed session is in the way.":
+    "Buổi đã ghim hoặc cố định đang chiếm chỗ.",
+  "Past the deadline?": "Quá hạn chót?",
+  "Keep late": "Giữ trễ hạn",
+  "Snap back": "Quay lại giờ cũ",
+  "Pin in place": "Ghim cố định",
+  Unpin: "Bỏ ghim",
+  "Couldn't pin this session": "Không ghim được buổi này",
+  "Couldn't unpin this session": "Không bỏ ghim được buổi này",
+  "The scheduler can move it to make room.": "Lịch có thể dời để nhường chỗ.",
+  "You set this time. The scheduler asks before it moves it.":
+    "Bạn đã chọn giờ này. Lịch sẽ hỏi trước khi dời.",
+  "The scheduler never moves it.": "Lịch không bao giờ dời buổi này.",
+  "Make room": "Nhường chỗ",
+  Before: "Trước",
+  After: "Sau",
+  Session: "Buổi học",
+  "Pinned and fixed sessions never move.":
+    "Buổi đã ghim và buổi cố định không bao giờ bị dời.",
+  "{title} needs a time. These sessions move to fit it.":
+    "{title} cần một khung giờ. Các buổi này sẽ dời để nhường chỗ.",
+  "Move it": "Dời lịch",
+  "Keep mine and accept late": "Giữ lịch của tôi, chấp nhận trễ",
+  "Pick another time": "Chọn giờ khác",
+  "The plan changed. Try again.": "Lịch đã thay đổi. Thử lại.",
 } as Record<string, string>;

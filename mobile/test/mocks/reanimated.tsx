@@ -25,6 +25,7 @@ export const withDelay = <T,>(_d: number, v: T) => v;
 export const runOnJS = <T extends (...a: never[]) => unknown>(f: T) => f;
 export const runOnUI = <T extends (...a: never[]) => unknown>(f: T) => f;
 export const interpolate = (v: number) => v;
+export const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
 export const cancelAnimation = () => {};
 export const useReducedMotion = () => true;
 export const useAnimatedProps = (fn: () => object) => fn();

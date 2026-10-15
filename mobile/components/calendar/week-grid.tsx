@@ -21,13 +21,23 @@ import {
 } from "@/lib/hour-height";
 import { format, formatTitle, t } from "@/lib/i18n";
 import { showMovedToast } from "@/lib/move-toast";
-import { restoreSessionTime } from "@/lib/move-undo";
+import { undoMove } from "@/lib/move-undo";
 import { isPastDeadlineDrop } from "@/lib/overdue";
 import {
   notifySessionsMutated,
   subscribeToSessionMutations,
 } from "@/lib/session-cache";
-import { showErrorToast, showSkippedToast } from "@/lib/task-toasts";
+import {
+  showDisplacedToast,
+  showErrorToast,
+  showSkippedToast,
+} from "@/lib/task-toasts";
+import {
+  type GhostShift,
+  blocksOnDay,
+  dropOnDay,
+  dropPreview,
+} from "@/lib/anchor";
 import {
   columnBlockFrame,
   weekColumnWidth,
@@ -212,6 +222,18 @@ function WeekPage({
   const [mutationTick, setMutationTick] = useState(0);
   const [unfolded, setUnfolded] = useState<ReadonlySet<FoldId>>(new Set());
   const [settleKey, setSettleKey] = useState(0);
+  // The block being dragged and the slot it currently previews (null when idle).
+  const [dragging, setDragging] = useState<{
+    taskId: string;
+    startMin: number;
+  } | null>(null);
+  const handleDragState = useCallback(
+    (snap: { startMin: number; taskId?: string } | null) =>
+      setDragging(
+        snap?.taskId ? { taskId: snap.taskId, startMin: snap.startMin } : null,
+      ),
+    [],
+  );
   const scrolledRef = useRef(false);
   const scrollViewRef = useRef<ScrollViewInstance>(null);
 
@@ -261,6 +283,23 @@ function WeekPage({
     [segmentsByDay],
   );
 
+  // Ghosts for the dragged block's day: the blocks its drop would push, at the
+  // slot it previews. A blocked drop shows none; it bounces back on release.
+  const dragGhosts = useMemo<{ dayIndex: number; ghosts: GhostShift[] } | null>(() => {
+    if (!dragging) return null;
+    const dragged = sessionsById.get(dragging.taskId);
+    if (!dragged?.scheduledStartTime) return null;
+    const dayKeyStr = dateKey(zonedDate(dragged.scheduledStartTime, tz));
+    const dayIndex = days.findIndex((d) => dateKey(d) === dayKeyStr);
+    if (dayIndex < 0) return null;
+    const preview = dropPreview(
+      { id: dragged.id, durationMin: dragged.durationMinutes },
+      dragging.startMin,
+      blocksOnDay(sessions ?? [], dayKeyStr, tz),
+    );
+    return { dayIndex, ghosts: preview.ghosts };
+  }, [dragging, sessionsById, sessions, days, tz]);
+
   const now = zonedNow(tz);
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const todayKey = dateKey(now);
@@ -305,13 +344,14 @@ function WeekPage({
             skipConflicting,
           });
           showSkippedToast(toast, updated.skippedSessionIds);
+          showDisplacedToast(toast, updated.displacedSessions);
           rememberPlacement(updated);
           showMovedToast(toast, {
             to: zonedDate(updated.scheduledStartTime ?? startISO, tz),
             withTime: true,
             onUndo: moveUndoable(session, scope)
               ? () =>
-                  void restoreSessionTime(session, scope, skipConflicting)
+                  void undoMove(updated, session, scope, skipConflicting)
                     .then(() => notifySessionsMutated())
                     .catch((error) =>
                       showErrorToast(
@@ -335,6 +375,20 @@ function WeekPage({
           setSettleKey((k) => k + 1);
         }
       };
+
+      // A drop onto a pinned or fixed session (or one that would push a pinned
+      // session out of the way) bounces back: nothing is sent.
+      const preview = dropOnDay(session, startISO, [...sessionsById.values()], tz);
+      if (preview.blocked) {
+        toast({
+          title: t("Can't move here"),
+          description: t("A pinned or fixed session is in the way."),
+          variant: "warning",
+          icon: "calendar-x",
+        });
+        setSettleKey((k) => k + 1);
+        return;
+      }
 
       const seriesKind = getSeriesKind(session);
       const needsScope = seriesKind === "recurring" || seriesKind === "task";
@@ -360,10 +414,10 @@ function WeekPage({
       };
 
       if (isPastDeadlineDrop(startISO, session.deadline ?? null)) {
-        confirm(t("Schedule after the deadline?"), {
+        confirm(t("Past the deadline?"), {
           description: t("This session will start past its due time."),
-          confirmLabel: t("Schedule anyway"),
-          cancelLabel: t("Cancel"),
+          confirmLabel: t("Keep late"),
+          cancelLabel: t("Snap back"),
           onConfirm: run,
           onCancel: () => setSettleKey((k) => k + 1),
         });
@@ -504,6 +558,8 @@ function WeekPage({
                       blockWidth={frame.width}
                       deadline={sessionsById.get(segment.taskId)?.deadline ?? null}
                       late={sessionsById.get(segment.taskId)?.late ?? false}
+                      anchor={sessionsById.get(segment.taskId)?.anchor}
+                      onDragStateChange={handleDragState}
                       onReschedule={handleReschedule}
                       settleKey={settleKey}
                       onPress={onSessionPress}
@@ -515,6 +571,24 @@ function WeekPage({
                     />
                   );
                 })}
+                {dragGhosts?.dayIndex === dayIndex &&
+                  dragGhosts.ghosts.map((ghost) => {
+                    const top = minToY(grid, ghost.toMin);
+                    const bottom = minToY(grid, ghost.toMin + ghost.durationMin);
+                    return (
+                      <View
+                        key={`ghost-${ghost.id}`}
+                        testID={`drag-ghost.${ghost.id}`}
+                        pointerEvents="none"
+                        className="absolute overflow-hidden rounded-[14px] border-[1.5px] border-dashed border-muted-foreground/50 bg-muted/40 px-2 py-1"
+                        style={{ left: 2, right: 2, top, height: Math.max(bottom - top, 16) }}
+                      >
+                        <Text numberOfLines={1} className="text-[11px] font-semibold text-muted-foreground">
+                          {sessionsById.get(ghost.id)?.title ?? ""}
+                        </Text>
+                      </View>
+                    );
+                  })}
               </View>
             );
           })}

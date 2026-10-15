@@ -7,7 +7,8 @@ import { locale } from "@/lib/i18n";
 import { format, formatTitle } from "@/lib/i18n";
 import { listSessions, updateSession } from "@/api/tasks";
 import { checkStateOf } from "@/lib/today-summary";
-import { restoreSessionTime } from "@/lib/move-undo";
+import { undoMove } from "@/lib/move-undo";
+import { dropOnDay } from "@/lib/anchor";
 import {
   AlertTriangle,
   GraduationCap,
@@ -26,7 +27,11 @@ import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import { useNow } from "@/hooks/use-now";
 import { useUserStore } from "@/hooks/use-user-store";
 import { isPastDeadlineDrop } from "@/lib/overdue";
-import { showErrorToast, showSkippedToast } from "@/lib/task-toasts";
+import {
+  showDisplacedToast,
+  showErrorToast,
+  showSkippedToast,
+} from "@/lib/task-toasts";
 import { useSpotlight } from "@/hooks/use-spotlight";
 import { showMovedToast } from "@/lib/move-toast";
 import {
@@ -888,6 +893,19 @@ export function DayTimeline({
 
   const handleReschedule = useCallback(
     async (taskId: string, startISO: string) => {
+      // A drop onto a pinned or fixed session bounces back (ADR-0022).
+      const dragged = tasks.find((t) => t.id === taskId);
+      if (dragged && dropOnDay(dragged, startISO, tasks, tz).blocked) {
+        toast({
+          title: t("Can't move here"),
+          description: t("A pinned or fixed session is in the way."),
+          variant: "warning",
+          icon: "calendar-x",
+        });
+        setSettleKey((k) => k + 1);
+        return;
+      }
+
       const commit = async (
         scope?: UpdateRecurringScope,
         skipConflicting?: boolean,
@@ -900,6 +918,7 @@ export function DayTimeline({
             skipConflicting,
           });
           showSkippedToast(toast, updated.skippedSessionIds);
+          showDisplacedToast(toast, updated.displacedSessions);
 
           // The block keeps the applied primary and offers "Other time".
           rememberPlacement(updated);
@@ -916,7 +935,7 @@ export function DayTimeline({
             onUndo:
               before && moveUndoable(before, scope)
                 ? () =>
-                  void restoreSessionTime(before, scope, skipConflicting)
+                  void undoMove(updated, before, scope, skipConflicting)
                     .then(() => refetch())
                     .catch((error) =>
                       showErrorToast(
@@ -977,10 +996,10 @@ export function DayTimeline({
       // back to its real (server) position.
       const deadline = deadlineBySession.get(taskId) ?? null;
       if (isPastDeadlineDrop(startISO, deadline)) {
-        confirm(t("Schedule after the deadline?"), {
+        confirm(t("Past the deadline?"), {
           description: t("This session will start past its due time."),
-          confirmLabel: t("Schedule anyway"),
-          cancelLabel: t("Cancel"),
+          confirmLabel: t("Keep late"),
+          cancelLabel: t("Snap back"),
           onConfirm: () => {
             commitWithScope();
           },
@@ -1368,6 +1387,7 @@ export function DayTimeline({
                       blockWidth={blockWidthPx}
                       deadline={deadlineBySession.get(segment.taskId) ?? null}
                       late={lateSessionIds.has(segment.taskId)}
+                      anchor={tasks.find((t) => t.id === segment.taskId)?.anchor}
                       checkState={checkStateById.get(segment.taskId)}
                       onReschedule={handleReschedule}
                       settleKey={settleKey}

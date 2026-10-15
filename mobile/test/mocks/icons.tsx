@@ -53,6 +53,7 @@ export const Fan = Icon;
 export const GalleryHorizontal = Icon;
 export const Github = Icon;
 export const Globe = Icon;
+export const Hand = Icon;
 export const GraduationCap = Icon;
 export const Highlighter = Icon;
 export const Home = Icon;

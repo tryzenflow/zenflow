@@ -51,6 +51,7 @@ import {
   Github,
   Globe,
   GraduationCap,
+  Hand,
   Highlighter,
   ImagePlus,
   Home,
@@ -232,6 +233,7 @@ interopIcon(Scale);
 interopIcon(CalendarClock);
 interopIcon(ClipboardList);
 interopIcon(GraduationCap);
+interopIcon(Hand);
 interopIcon(Notebook);
 interopIcon(Maximize2);
 interopIcon(Redo2);
@@ -289,6 +291,7 @@ export {
   GalleryHorizontal,
   Globe,
   GraduationCap,
+  Hand,
   Highlighter,
   ImagePlus,
   Info,

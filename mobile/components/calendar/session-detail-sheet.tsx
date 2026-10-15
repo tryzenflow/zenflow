@@ -6,11 +6,16 @@ import {
   Bell,
   CalendarClock,
   Clock,
+  Hand,
+  Lock,
   type LucideIcon,
   MapPin,
   Pencil,
   Tag,
 } from "@/components/Icons";
+import { pinSession, unpinSession } from "@/api/tasks";
+import { useToast } from "@/components/ui/toast";
+import { showErrorToast } from "@/lib/task-toasts";
 import {
   BottomSheet,
   BottomSheetContent,
@@ -29,6 +34,7 @@ import { placementReasonLine } from "@/lib/placement-reason";
 import { format, formatTitle, localizedDeadlineShort, t } from "@/lib/i18n";
 import { navigateOnce } from "@/lib/nav";
 import {
+  ANCHOR_HINT_KEYS,
   ANCHOR_LABEL_KEYS,
   SESSION_DETAIL_SNAP_POINTS,
   isFullSnap,
@@ -98,6 +104,7 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
     const sheet = useBottomSheet();
     const checkOff = useCheckOff();
     const { isDarkColorScheme } = useColorScheme();
+    const { toast } = useToast();
     const courseOverrides = useCourseColourStore((s) => s.overrides);
     const [session, setSession] = useState<Session | null>(null);
     const [checked, setChecked] = useState<CheckState | null>(null);
@@ -135,6 +142,25 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
       setTimeout(() => navigateOnce(() => router.push(href as Href)), 180);
     };
 
+    // Pin keeps the session where it is; unpin hands it back to the scheduler.
+    const togglePin = async () => {
+      if (!session) return;
+      const pinned = session.anchor === "PINNED";
+      try {
+        const next = pinned
+          ? await unpinSession(session.id)
+          : await pinSession(session.id);
+        setSession(next);
+      } catch (error) {
+        showErrorToast(
+          toast,
+          error,
+          pinned ? t("Couldn't unpin this session") : t("Couldn't pin this session"),
+          "calendar-x",
+        );
+      }
+    };
+
     const state: CheckState = session ? (checked ?? checkStateOf(session)) : "open";
     const stripe = session?.courseKey
       ? courseStyleFor(session.courseKey, courseOverrides, isDarkColorScheme ? "dark" : "light")?.stripe
@@ -167,11 +193,6 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
                   )}
                   <View className="flex-row flex-wrap items-center gap-2">
                     <SessionTypeBadge type={session.type} size="lg" />
-                    {session.type === "TASK" && (
-                      <Text className="text-[13px] text-muted-foreground">
-                        {t(ANCHOR_LABEL_KEYS[session.anchor])}
-                      </Text>
-                    )}
                   </View>
                   <Text
                     testID="session-detail-title"
@@ -204,6 +225,36 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
                       <Text className="text-[15px] text-muted-foreground">{t("Not scheduled yet")}</Text>
                     )}
                   </DetailRow>
+
+                  {session.type === "TASK" && (
+                    <DetailRow
+                      icon={
+                        session.anchor === "PINNED"
+                          ? Lock
+                          : session.anchor === "CHOSEN"
+                            ? Hand
+                            : Clock
+                      }
+                    >
+                      <Text testID="session-detail-anchor" className="text-[15px] font-medium">
+                        {t(ANCHOR_LABEL_KEYS[session.anchor])}
+                      </Text>
+                      <Text className="text-[13px] text-muted-foreground">
+                        {t(ANCHOR_HINT_KEYS[session.anchor])}
+                      </Text>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        testID="session-detail-pin"
+                        onPress={togglePin}
+                        className="mt-2 self-start"
+                      >
+                        <Text className="text-[13px] font-semibold text-foreground">
+                          {session.anchor === "PINNED" ? t("Unpin") : t("Pin in place")}
+                        </Text>
+                      </Button>
+                    </DetailRow>
+                  )}
 
                   {session.deadline && (
                     <DetailRow icon={CalendarClock}>

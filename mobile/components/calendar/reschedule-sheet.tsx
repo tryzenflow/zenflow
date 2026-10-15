@@ -235,10 +235,10 @@ export const RescheduleSheet = forwardRef<
       session.type === "TASK" &&
       isPastDeadlineDrop(pickedISO, session.deadline)
     ) {
-      confirm(t("Schedule after the deadline?"), {
+      confirm(t("Past the deadline?"), {
         description: t("This session will start past its due time."),
-        confirmLabel: t("Schedule anyway"),
-        cancelLabel: t("Cancel"),
+        confirmLabel: t("Keep late"),
+        cancelLabel: t("Snap back"),
         onConfirm: () => {
           commitWithScope();
         },

@@ -1,0 +1,56 @@
+appId: com.zenflow.app
+tags: [anchor]
+---
+- runFlow: ../subflows/launch-signed-in.yaml
+# A task placed on its own, then dragged: a drop on a free slot marks it Chosen.
+- tapOn:
+    id: fab.new-task
+- tapOn:
+    id: task.title
+- inputText: E2E chosen block
+- pressKey: Enter
+- scrollUntilVisible:
+    element:
+      id: task.deadline.chip.noRush
+- tapOn:
+    id: task.deadline.chip.noRush
+- tapOn:
+    id: task.save
+- extendedWaitUntil:
+    visible: ".*E2E chosen block.*"
+    timeout: 20000
+# Hold the block, then drag it down a few slots (hold lifts it at 350 ms).
+- swipe:
+    start: "50%,38%"
+    end: "50%,52%"
+    duration: 1200
+# An urgent task due today has no free slot: the plan moves the Chosen block.
+- tapOn:
+    id: fab.new-task
+- tapOn:
+    id: task.title
+- inputText: E2E urgent essay
+- pressKey: Enter
+- scrollUntilVisible:
+    element:
+      id: task.deadline.chip.today
+- tapOn:
+    id: task.deadline.chip.today
+- tapOn:
+    id: task.save
+- extendedWaitUntil:
+    visible: "Make room"
+    timeout: 20000
+- assertVisible: "Before"
+- assertVisible: "After"
+- tapOn:
+    id: make-room.move
+# Undo the cascade from the toast: the urgent task goes and the Chosen block returns.
+- extendedWaitUntil:
+    visible: "Undo"
+    timeout: 10000
+- tapOn: "Undo"
+- extendedWaitUntil:
+    notVisible: ".*E2E urgent essay.*"
+    timeout: 20000
+- assertVisible: ".*E2E chosen block.*"
