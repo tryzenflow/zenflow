@@ -3,6 +3,7 @@ import { useAfterPaint } from "@/hooks/use-after-paint";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import { listSessions } from "@/api/tasks";
 import { MonthGrid } from "@/components/calendar/month-grid";
+import { EmptyMark } from "@/components/brand/state-marks";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { useLanguage } from "@/hooks/use-language";
@@ -372,9 +373,12 @@ export const MonthPage = memo(function MonthPage({
                 </View>
               ) : null}
               {!loading && data != null && list.length === 0 ? (
-                <Text className="px-4 py-3 text-[13px] text-muted-foreground">
-                  {t("Nothing scheduled")}
-                </Text>
+                <View className="items-center gap-3 px-8 pt-8">
+                  <EmptyMark size={56} />
+                  <Text className="text-center text-[15px] text-muted-foreground">
+                    {t("Nothing scheduled")}
+                  </Text>
+                </View>
               ) : null}
               {(loading ? NO_SESSIONS : list).map((session) => (
                 <SessionRow

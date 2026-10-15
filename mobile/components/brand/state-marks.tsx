@@ -73,3 +73,27 @@ export function ErrorMark({ size = 84 }: { size?: number }) {
     </Svg>
   );
 }
+
+/** Empty day: a soft sun with the curve at rest, solid (no dots: nothing searched for). */
+export function EmptyMark({ size = 56 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 260 260" fill="none">
+      <Defs>
+        <LinearGradient
+          id="zf-empty"
+          x1={48.5}
+          y1={31.5}
+          x2={222.5}
+          y2={220.5}
+          gradientUnits="userSpaceOnUse"
+        >
+          <Stop stopColor="#FF6900" offset={0} />
+          <Stop stopColor="#F0B100" offset={0.323567} />
+          <Stop stopColor="#D8F999" offset={1} />
+        </LinearGradient>
+      </Defs>
+      <Circle cx={130} cy={130} r={130} fill="url(#zf-empty)" opacity={0.3} />
+      <Path d={CURVE} stroke="#FF8E3E" strokeWidth={22} strokeLinecap="round" />
+    </Svg>
+  );
+}
