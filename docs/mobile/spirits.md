@@ -1,6 +1,6 @@
 # Spirits (Linh thú)
 
-Dev-facing design for the collectible spirits that replace Blips. Art: [mockups/spirits.html](../../mockups/spirits.html). Landing roster: [landing/src/content/spirits.ts](../../landing/src/content/spirits.ts). Parts library: #259.
+Dev-facing design for the collectible spirits that replace Blips. Art: [mockups/spirits.html](../../mockups/spirits.html). Landing roster: [usezenflow/landing](https://github.com/usezenflow/landing) `src/content/spirits.ts`. Parts library: #259.
 
 ## Rules
 
