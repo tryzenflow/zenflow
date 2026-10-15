@@ -199,7 +199,7 @@ const ENV: Record<string, string> = {
     PORTAL_MASTER,
 };
 
-const USER = { id: "u1" } as User;
+const USER = { id: "u1", email: "sv123@dlu.edu.vn" } as User;
 const creds = {
   provider: "LMS" as const,
   username: "sv123",
@@ -345,6 +345,29 @@ describe("IntegrationsService", () => {
       expect(db.keys).toHaveLength(0);
     });
 
+    it("rejects a DLU login that isn't the student's own ID before calling DLU", async () => {
+      await expect(
+        service.connect(USER, { ...creds, username: "sv999" }),
+      ).rejects.toThrow("doesn't match your student ID sv123");
+      expect(verifyCredentials).not.toHaveBeenCalled();
+      expect(db.integrations).toHaveLength(0);
+    });
+
+    it("accepts the student's own ID in any case and with stray spaces", async () => {
+      await service.connect(USER, { ...creds, username: " SV123 " });
+
+      expect(db.integrations).toHaveLength(1);
+    });
+
+    it("does not check an address outside DLU", async () => {
+      await service.connect({ id: "u1", email: "dev@example.test" } as User, {
+        ...creds,
+        username: "anything",
+      });
+
+      expect(db.integrations).toHaveLength(1);
+    });
+
     it("maps an unreachable DLU to 503 (not a bad-password error)", async () => {
       verifyCredentials.mockRejectedValue(new Error("timeout"));
 
@@ -386,9 +409,12 @@ describe("IntegrationsService", () => {
       await service.connect(USER, creds);
       const revealSpy = jest.spyOn(service, "revealCredentials");
 
-      const status = await service.update(USER, "LMS", {
-        username: "new-user",
-      });
+      // An address outside DLU, so any username may be connected.
+      const status = await service.update(
+        { id: "u1", email: "dev@example.test" } as User,
+        "LMS",
+        { username: "new-user" },
+      );
 
       expect(revealSpy).toHaveBeenCalledWith("u1", "LMS");
       expect(verifyCredentials).toHaveBeenLastCalledWith(

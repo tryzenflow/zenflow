@@ -112,9 +112,9 @@ A student's LMS or portal login for ingestion. Credentials are never returned.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/integrations` | Connect `{ provider, username, password }`: live-login probe, then encrypt and upsert |
+| POST | `/integrations` | Connect `{ provider, username, password }`: live-login probe, then encrypt and upsert. 400 `STUDENT_ID_MISMATCH` when a `@dlu.edu.vn` account sends a username other than its own student ID |
 | GET | `/integrations` | `[{ provider, connected, lastVerifiedAt, lastSyncedAt, lastSyncStatus, lastSuccessAt, failing }]` |
-| PATCH | `/integrations/:provider` | Update credentials (probe, then write) |
+| PATCH | `/integrations/:provider` | Update credentials (same student ID rule, probe, then write) |
 | DELETE | `/integrations/:provider` | Disconnect. Idempotent, keeps the encryption key |
 | POST | `/integrations/:provider/sync` | Queue fetch jobs and wait up to `SYNC_MANUAL_WAIT_MS` |
 

@@ -29,6 +29,11 @@ import { SyncCooldownException } from "./sync-cooldown.exception";
 import { SyncInflightGuard } from "./sync-inflight.service";
 import { IntegrationAuthService } from "./integration-auth.service";
 import {
+  STUDENT_ID_MISMATCH,
+  studentIdOf,
+  usernameMatchesEmail,
+} from "./student-id";
+import {
   IngestionSyncService,
   ManualSyncUnavailableError,
   type ManualSyncOutcome,
@@ -350,6 +355,14 @@ export class IntegrationsService {
     provider: IntegrationProvider,
     credentials: { username: string; password: string },
   ): Promise<IntegrationStatus> {
+    if (!usernameMatchesEmail(user.email, credentials.username)) {
+      throw new BadRequestException({
+        success: false,
+        message: `This DLU ${this.label(provider)} account doesn't match your student ID ${studentIdOf(user.email)}.`,
+        code: STUDENT_ID_MISMATCH,
+      });
+    }
+
     let valid: boolean;
     try {
       valid = await this.integrationAuth.verifyCredentials(
