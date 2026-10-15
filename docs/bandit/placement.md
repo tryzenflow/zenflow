@@ -29,8 +29,8 @@ One request = one placement event: a single `TASK` or one materialized series. A
 ## Scan window (`src/place.py`)
 
 - Local days from the next 15-min boundary to the deadline, capped by `maxScanDays`.
-- Series member: window from `series_day_windows`, span `min(floor((deadline - next15) / 1 day), 59)` days.
-- Days already holding `MAX_SERIES_PER_DAY` (1) siblings are skipped; siblings' intervals are hard blocks.
+- Series member: window from `series_day_windows`, span `min(floor((deadline - next15) / 1 day), 59)` days. More members than days are dealt evenly across them. A member with no room in its window scans the whole range.
+- Days already holding the series day cap are skipped: `MAX_SERIES_PER_DAY` (3), raised to `ceil(members / days)` so every member fits (`series_day_cap`); each sibling blocks its interval plus `SERIES_GAP_MINUTES` (15) on both sides.
 
 ## Policies
 
@@ -51,7 +51,7 @@ One request = one placement event: a single `TASK` or one materialized series. A
 
 - Trigger: `members.length > 1`, every member `computeBoth: true`, one shared `primaryPolicy`. Nest rolls both once per series.
 - `_Placer.run` builds two whole-series plans over the same batch via `_run_plan(policy)`: all-heuristic and all-LinUCB.
-  - Each plan has its own sibling ledger (non-overlap and `MAX_SERIES_PER_DAY`) and its own last resort.
+  - Each plan has its own sibling ledger (sibling gap and the day cap) and its own last resort.
   - Per member, LinUCB falls back to the heuristic when it finds no slot.
 - Per member: `heuristic` and `linucb` are its picks in each plan (`null` where that plan fell back or went last resort).
 - `startMs`, `outcome`, `appliedPolicy`, `late`, `conflicting` come from the primary plan, so applied starts are unchanged.

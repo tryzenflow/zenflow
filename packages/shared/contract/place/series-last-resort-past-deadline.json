@@ -319,7 +319,7 @@
   "response": {
     "contractVersion": 3,
     "requestId": "00000000-0000-4000-8000-000000000002",
-    "paramsVersion": "py-arms6-v3-ee353b63de78",
+    "paramsVersion": "py-arms6-v3-46a0e88a66be",
     "results": [
       {
         "id": "a",
@@ -339,7 +339,7 @@
         "appliedPolicy": "HEURISTIC",
         "heuristic": null,
         "linucb": null,
-        "startMs": 1789981200000,
+        "startMs": 1789982100000,
         "moves": [],
         "late": true,
         "conflicting": false,
@@ -347,12 +347,12 @@
       }
     ],
     "timingsMs": {
-      "decode": 0.161,
+      "decode": 0.088,
       "context": 0.0,
       "predict": 0.0,
       "scan": 0.0,
       "displace": 0.0,
-      "total": 0.485
+      "total": 0.149
     }
   }
 }

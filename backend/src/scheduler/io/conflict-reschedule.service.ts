@@ -27,7 +27,7 @@ interface ConflictRow {
  * "Reschedule them all" for a sync-conflict notification (issue #62 D): every
  * listed task that still overlaps something is re-placed through the normal
  * placement path, earliest deadline first; `TASK` series sittings are
- * re-placed as a series to keep one per day. Moves are recorded as
+ * re-placed as a series to keep the per-day cap and sibling gap. Moves are recorded as
  * `SYSTEM_MOVE` under one undo group. Idempotent; unmovable tasks go to
  * `failedSessionIds`.
  *

@@ -14,7 +14,7 @@ import {
   ValidateIf,
 } from "class-validator";
 import { TIME_GRANULARITY } from "../../common/constants";
-import { MAX_SCAN_DAYS, MAX_SERIES_PER_DAY } from "../../scheduler/constants";
+import { MAX_SCAN_DAYS } from "../../scheduler/constants";
 import { IsRRule } from "../../common/validators/rrule.decorator";
 import { IsFeasibleTaskWindow } from "../../common/validators/feasible-task-window.decorator";
 import {
@@ -38,13 +38,11 @@ export const SESSION_TYPES: SessionType[] = [
 ];
 
 /**
- * Ceiling on how many sittings a `TASK` series may request. The placer can
- * never place more than `MAX_SERIES_PER_DAY` sittings/day over its
- * `MAX_SCAN_DAYS`-day scheduling horizon, so a request above this product can
- * never be placed in full no matter how loose the deadline is (issue #33) —
- * `MAX_SERIES_PER_DAY × MAX_SCAN_DAYS` = 1 × 60 = 60.
+ * Ceiling on how many sittings a `TASK` series may request (issue #33): one
+ * per day of the `MAX_SCAN_DAYS` horizon, well under what the placer can seat
+ * at `MAX_SERIES_PER_DAY` a day.
  */
-export const MAX_SESSION_COUNT = MAX_SERIES_PER_DAY * MAX_SCAN_DAYS;
+export const MAX_SESSION_COUNT = MAX_SCAN_DAYS;
 
 /**
  * The 3-tab create form, flattened. `type` discriminates:

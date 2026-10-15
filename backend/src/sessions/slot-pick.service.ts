@@ -7,6 +7,7 @@ import type {
 import { SchedulingModel, type User } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
 import { MS_PER_MINUTE, overlapsAny } from "../scheduler/core/slot";
+import { SERIES_GAP_MINUTES } from "../scheduler/constants";
 import { SchedulingFeedbackService } from "../scheduler/io/scheduling-feedback.service";
 import { WITH_TAGS_AND_SERIES } from "./types/session-row";
 import { toSessionDto } from "./session-mapper";
@@ -29,6 +30,23 @@ type LoadedProposal = {
   chosenByUser: SchedulingModel | null;
   firstModifiedAt: Date | null;
 };
+
+type PairwiseProposal = Pick<
+  LoadedProposal,
+  "primaryPolicy" | "heuristicProposal" | "modelProposal" | "pairwiseShown"
+>;
+
+/** The other algorithm's raw pick, present only when the event was pairwise-sampled. */
+export function alternativeStartOf(proposal: PairwiseProposal): Date | null {
+  if (!proposal.pairwiseShown) return null;
+  const source =
+    proposal.primaryPolicy === SchedulingModel.LINUCB
+      ? proposal.heuristicProposal
+      : proposal.modelProposal;
+  const iso = (source as { scheduledStartTime?: string } | null)
+    ?.scheduledStartTime;
+  return iso ? new Date(iso) : null;
+}
 
 /**
  * `POST /sessions/:id/slot-pick` (`docs/scheduler/ab-testing.md` §3): records
@@ -118,25 +136,12 @@ export class SlotPickService {
       : SchedulingModel.LINUCB;
   }
 
-  /** The other algorithm's raw pick — only present when this event was
-   * actually pairwise-sampled. */
-  private alternativeStart(proposal: LoadedProposal): Date | null {
-    if (!proposal.pairwiseShown) return null;
-    const source =
-      proposal.primaryPolicy === SchedulingModel.LINUCB
-        ? proposal.heuristicProposal
-        : proposal.modelProposal;
-    const iso = (source as { scheduledStartTime?: string } | null)
-      ?.scheduledStartTime;
-    return iso ? new Date(iso) : null;
-  }
-
   private async tryApplyAlternative(
     sessionId: string,
     proposal: LoadedProposal,
     user: User,
   ): Promise<AppliedAlternative | null> {
-    const altStart = this.alternativeStart(proposal);
+    const altStart = alternativeStartOf(proposal);
     if (!altStart) return null;
     await this.assertNoSiblingClash(sessionId, altStart, user);
     return this.moveSessionTo(sessionId, altStart, user);
@@ -145,7 +150,7 @@ export class SlotPickService {
   /**
    * A series sitting's alternative came from an independent plan, and its
    * siblings may have moved since (#58): refuse (409 `SLOT_TAKEN`, nothing
-   * recorded) when it would overlap any other live sitting of the series.
+   * recorded) when it would come within the series gap of another live sitting.
    */
   private async assertNoSiblingClash(
     sessionId: string,
@@ -168,9 +173,13 @@ export class SlotPickService {
       select: { scheduledStartTime: true, durationMinutes: true },
     });
     const start = altStart.getTime();
+    const gap = SERIES_GAP_MINUTES * MS_PER_MINUTE;
     const occupied = siblings.map((s) => {
       const from = (s.scheduledStartTime as Date).getTime();
-      return { start: from, end: from + s.durationMinutes * MS_PER_MINUTE };
+      return {
+        start: from - gap,
+        end: from + s.durationMinutes * MS_PER_MINUTE + gap,
+      };
     });
     if (
       overlapsAny(

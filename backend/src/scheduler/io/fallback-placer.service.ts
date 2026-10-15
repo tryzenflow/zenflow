@@ -1,6 +1,9 @@
 import { Injectable } from "@nestjs/common";
-import { MAX_SCAN_DAYS, MAX_SERIES_PER_DAY } from "../constants";
-import { seriesDayWindows } from "../core/series-spread";
+import {
+  MAX_SCAN_DAYS,
+  SERIES_GAP_MINUTES,
+} from "../constants";
+import { seriesDayCap, seriesDayWindows } from "../core/series-spread";
 import {
   addDaysStr,
   ceilToSlot,
@@ -51,7 +54,7 @@ export class FallbackPlacer {
 
   /**
    * Heuristic-only series loop: one day-window per member, at most
-   * `MAX_SERIES_PER_DAY` per day, siblings never overlap. Returns one row per
+   * `seriesDayCap` per day, siblings `SERIES_GAP_MINUTES` apart. Returns one row per
    * member (`null` start = no free slot before the deadline).
    */
   async placeSeries(
@@ -79,18 +82,24 @@ export class FallbackPlacer {
       MAX_SCAN_DAYS - 1,
     );
     const windows = seriesDayWindows(daySpan, members.length);
-    const siblings: Interval[] = [...fixedOccupied];
+    // Siblings block their slot plus the series gap on each side.
+    const gapMs = SERIES_GAP_MINUTES * MS_PER_MINUTE;
+    const block = (iv: Interval): Interval => ({
+      start: iv.start - gapMs,
+      end: iv.end + gapMs,
+    });
+    const siblings: Interval[] = fixedOccupied.map(block);
     const countByDay = new Map<string, number>();
     // Already-placed siblings count toward the per-day cap too.
     for (const iv of fixedOccupied) {
       const d = localDateStr(new Date(iv.start), timezone);
       countByDay.set(d, (countByDay.get(d) ?? 0) + 1);
     }
-    const capped = (d: string) =>
-      (countByDay.get(d) ?? 0) >= MAX_SERIES_PER_DAY;
+    const dayCap = seriesDayCap(daySpan, members.length);
+    const capped = (d: string) => (countByDay.get(d) ?? 0) >= dayCap;
     const fullRange = { lo: 0, hi: daySpan };
 
-    // Pass 0: own bucket. Pass 1: whole `now … deadline` range, one per day.
+    // Pass 0: own bucket. Pass 1: whole `now … deadline` range, capped per day.
     // Pass 2: no per-day cap.
     const passes: {
       range: (i: number) => { lo: number; hi: number };
@@ -127,10 +136,12 @@ export class FallbackPlacer {
         if (!slot) continue;
         rows[i].scheduledStartTime = slot.start;
         const startMs = slot.start.getTime();
-        siblings.push({
-          start: startMs,
-          end: startMs + m.durationMinutes * MS_PER_MINUTE,
-        });
+        siblings.push(
+          block({
+            start: startMs,
+            end: startMs + m.durationMinutes * MS_PER_MINUTE,
+          }),
+        );
         const day = localDateStr(slot.start, timezone);
         countByDay.set(day, (countByDay.get(day) ?? 0) + 1);
       }

@@ -5,6 +5,8 @@
  * ("Series bounded window").
  */
 
+import { MAX_SERIES_PER_DAY } from "../constants";
+
 /**
  * Non-overlapping day-window `[lo, hi]` (inclusive day offsets from the scan
  * start) for each of `count` members spread across `[0, daySpan]`
@@ -27,12 +29,10 @@
  * member's bucket, so no two members' windows can overlap by construction.
  *
  * `count` may exceed `daySpan + 1` (more sessions requested than days
- * available) — buckets then collapse toward the tail, several members
- * sharing a single day's window. That's a genuinely unsolvable overlap (more
- * sessions than days), not something this function can spread away;
- * {@link MAX_SERIES_PER_DAY} and the series pre-flight
- * (`TaskPlacementService.canPlaceSeries`) are what keep that case safe, not
- * this function.
+ * available): members are then dealt evenly across the days, a few sharing
+ * each day's window. {@link MAX_SERIES_PER_DAY}, the sibling gap and the
+ * series pre-flight (`TaskPlacementService.canPlaceSeries`) keep that case
+ * safe.
  */
 export function seriesDayWindows(
   daySpan: number,
@@ -41,6 +41,13 @@ export function seriesDayWindows(
   const span = Math.max(0, Math.floor(daySpan));
   const totalDays = span + 1;
   const n = Math.max(1, Math.floor(count));
+  if (n > totalDays) {
+    // More sittings than days: spread them evenly, a few to a day.
+    return Array.from({ length: n }, (_, i) => {
+      const day = Math.floor((i * totalDays) / n);
+      return [day, day] as [number, number];
+    });
+  }
   const base = Math.floor(totalDays / n);
   const remainder = totalDays % n;
 
@@ -82,4 +89,14 @@ export function seriesWindowsAreDisjoint(
   const span = Math.max(0, Math.floor(daySpan));
   const n = Math.max(1, Math.floor(count));
   return n <= span + 1;
+}
+
+/**
+ * Most sittings of one series on a day: {@link MAX_SERIES_PER_DAY}, raised so
+ * `count` sittings always fit across the `daySpan + 1` days.
+ */
+export function seriesDayCap(daySpan: number, count: number): number {
+  const totalDays = Math.max(0, Math.floor(daySpan)) + 1;
+  const n = Math.max(1, Math.floor(count));
+  return Math.max(MAX_SERIES_PER_DAY, Math.ceil(n / totalDays));
 }

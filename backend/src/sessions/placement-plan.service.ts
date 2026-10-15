@@ -7,7 +7,7 @@ import type {
   Session as SharedSession,
   UndoPlacementResponse,
 } from "@zenflow/shared";
-import { SessionEventType, type User } from "../../generated/prisma";
+import { Prisma, SessionEventType, type User } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
 import { wouldConflict } from "../scheduler/io/conflict-check";
 import { DisplacementService } from "../scheduler/io/displacement.service";
@@ -18,6 +18,7 @@ import { SessionCrudService } from "./session-crud.service";
 import { toSessionDto } from "./session-mapper";
 import { WITH_TAGS_AND_SERIES, type SessionRow } from "./types/session-row";
 import { PlacementStaleException } from "./placement-plan.exception";
+import { alternativeStartOf } from "./slot-pick.service";
 
 /** A session a plan moves must not have started within this window (ADR-0022). */
 const FROZEN_WINDOW_MS = 2 * 60 * MS_PER_MINUTE;
@@ -224,6 +225,47 @@ export class PlacementPlanService {
     };
   }
 
+  /**
+   * An undone move onto a pairwise alternative clears the recorded pick, so
+   * the A/B data never counts a choice the user took back. The alternative
+   * stays on offer.
+   */
+  private async reopenAlternativePick(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    sessionId: string,
+    undoneStart: string,
+  ): Promise<void> {
+    const proposals = await tx.slotProposal.findMany({
+      where: {
+        userId,
+        sessionId,
+        pairwiseShown: true,
+        chosenByUser: { not: null },
+      },
+      select: {
+        id: true,
+        primaryPolicy: true,
+        heuristicProposal: true,
+        modelProposal: true,
+        pairwiseShown: true,
+        chosenByUser: true,
+      },
+    });
+    const reopen = proposals
+      .filter(
+        (p) =>
+          p.chosenByUser !== p.primaryPolicy &&
+          alternativeStartOf(p)?.getTime() === Date.parse(undoneStart),
+      )
+      .map((p) => p.id);
+    if (reopen.length === 0) return;
+    await tx.slotProposal.updateMany({
+      where: { id: { in: reopen } },
+      data: { chosenByUser: null },
+    });
+  }
+
   /** Runs the writes of an interactive transaction in order. */
   private async runWrites(writes: PromiseLike<unknown>[]): Promise<void> {
     for (const w of writes) await w;
@@ -289,6 +331,7 @@ export class PlacementPlanService {
           where: { id },
           data: { scheduledStartTime: new Date(from) },
         });
+        await this.reopenAlternativePick(tx, user.id, id, to);
         restored.push({ id, from: to, to: from });
       }
     });

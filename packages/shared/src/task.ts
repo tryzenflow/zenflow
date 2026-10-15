@@ -300,7 +300,7 @@ export interface CreateTaskInput {
   /**
    * Minutes of each session when a series splits one total unevenly. Length
    * equals `sessionCount`, each a multiple of 15; `durationMinutes` is then the
-   * average. Omitted → every session is `durationMinutes`.
+   * first one. Omitted → every session is `durationMinutes`.
    */
   sessionDurations?: number[];
   tags?: string[];

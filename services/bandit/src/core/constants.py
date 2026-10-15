@@ -64,5 +64,7 @@ DISPLACE_COST_CROSS_DAY = 10
 
 # Placement scan scope (ADR-0003; owned by Python, echoed via ``paramsVersion``).
 SCAN_CAP_DAYS = 30
-MAX_SERIES_PER_DAY = 1
+MAX_SERIES_PER_DAY = 3
+# Minimum gap between two sittings of one series on the same day.
+SERIES_GAP_MINUTES = 15
 INFEASIBLE_HORIZON_DAYS = 30

@@ -65,8 +65,8 @@ export class SeriesService {
    * no `rrule`) plus `count` linked `Session` rows, then hand the batch to
    * {@link TaskPlacementService.placeSeriesOnCreate} — each member is spread
    * across `now … deadline` from ONE series-level 50/50 heuristic-or-LinUCB
-   * roll (#58), `MAX_SERIES_PER_DAY` per calendar day, no member overlapping
-   * another and no existing session moved. Each `sessions[]` entry carries its
+   * roll (#58), `MAX_SERIES_PER_DAY` per calendar day, members at least
+   * `SERIES_GAP_MINUTES` apart and no existing session moved. Each `sessions[]` entry carries its
    * sitting's `SeriesSittingProposal` fields (≤5 alternatives when sampled).
    */
   async createTaskSeries(

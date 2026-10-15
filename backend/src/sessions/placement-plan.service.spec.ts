@@ -1,7 +1,7 @@
 import { NotFoundException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import type { PlacementMove } from "@zenflow/shared";
-import type { User } from "../../generated/prisma";
+import { SchedulingModel, type User } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
 import { DisplacementService } from "../scheduler/io/displacement.service";
 import { wouldConflict } from "../scheduler/io/conflict-check";
@@ -74,6 +74,10 @@ async function make() {
       update: jest.fn().mockResolvedValue({ id: "new" }),
     },
     sessionEvent: { findMany: jest.fn().mockResolvedValue([]) },
+    slotProposal: {
+      findMany: jest.fn().mockResolvedValue([]),
+      updateMany: jest.fn(),
+    },
     $transaction: jest.fn(),
   };
   // Interactive transactions run against the same mock client.
@@ -236,5 +240,36 @@ describe("PlacementPlanService.undo", () => {
       },
     ]);
     expect(res.skippedSessionIds).toEqual(["b"]);
+  });
+
+  it("clears a pairwise pick whose alternative move it undoes", async () => {
+    const { svc, prisma } = await make();
+    const FROM = START;
+    const TO = START + HOUR;
+    prisma.sessionEvent.findMany.mockResolvedValue([event("a", FROM, TO)]);
+    prisma.session.findFirst.mockResolvedValue({
+      scheduledStartTime: new Date(TO),
+    });
+    const proposal = (id: string, alternative: number) => ({
+      id,
+      primaryPolicy: SchedulingModel.HEURISTIC,
+      chosenByUser: SchedulingModel.LINUCB,
+      pairwiseShown: true,
+      heuristicProposal: {},
+      modelProposal: {
+        scheduledStartTime: new Date(alternative).toISOString(),
+      },
+    });
+    prisma.slotProposal.findMany.mockResolvedValue([
+      proposal("picked", TO),
+      proposal("other", TO + HOUR),
+    ]);
+
+    await svc.undo(user, "g1");
+
+    expect(prisma.slotProposal.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["picked"] } },
+      data: { chosenByUser: null },
+    });
   });
 });

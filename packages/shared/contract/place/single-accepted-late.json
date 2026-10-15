@@ -250,7 +250,7 @@
   "response": {
     "contractVersion": 3,
     "requestId": "00000000-0000-4000-8000-000000000002-2",
-    "paramsVersion": "py-arms6-v3-ee353b63de78",
+    "paramsVersion": "py-arms6-v3-46a0e88a66be",
     "results": [
       {
         "id": "t1",
@@ -266,12 +266,12 @@
       }
     ],
     "timingsMs": {
-      "decode": 0.142,
+      "decode": 0.085,
       "context": 0.0,
       "predict": 0.0,
-      "scan": 0.05,
-      "displace": 0.133,
-      "total": 0.453
+      "scan": 0.025,
+      "displace": 0.097,
+      "total": 0.263
     }
   }
 }
