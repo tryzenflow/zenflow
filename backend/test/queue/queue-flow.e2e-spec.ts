@@ -3,6 +3,7 @@ import * as path from "path";
 import { Queue, type Job } from "bullmq";
 import Redis from "ioredis";
 import request from "supertest";
+import type { StudentMarksResponse, StudentResponse } from "@zenflow/shared";
 import { PrismaClient } from "../../generated/prisma";
 import {
   ALL_QUEUES,
@@ -12,7 +13,6 @@ import {
   NOTIFY_QUEUE,
   PORTAL_DISCOVERY_QUEUE,
   PORTAL_FETCH_QUEUE,
-  PORTAL_MARKS_QUEUE,
   PORTAL_PROFILE_QUEUE,
   PORTAL_WEEK_QUEUE,
   type FetchJobData,
@@ -228,7 +228,8 @@ describe("1. connect and the 5 second watcher enqueue, worker roles consume", ()
       500,
     );
     const res = await student.agent.get("/api/v1/users/me/student").expect(200);
-    expect(res.body.data.profile).toMatchObject({
+    const body = res.body as { data: StudentResponse };
+    expect(body.data.profile).toMatchObject({
       fullName: "Sinh Viên Mẫu",
       className: "CTK47A",
       cohort: "Khóa 47",
@@ -236,7 +237,8 @@ describe("1. connect and the 5 second watcher enqueue, worker roles consume", ()
       creditsEarned: 101,
     });
     const marks = await student.agent.get("/api/v1/users/me/marks").expect(200);
-    expect(marks.body.data.terms[0].marks).toHaveLength(2);
+    const marksBody = marks.body as { data: StudentMarksResponse };
+    expect(marksBody.data.terms[0].marks).toHaveLength(2);
     // PII from the marks rows is never stored or returned.
     expect(JSON.stringify([res.body, marks.body])).not.toContain("0900000000");
   });

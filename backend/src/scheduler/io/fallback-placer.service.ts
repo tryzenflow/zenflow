@@ -1,8 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import {
-  MAX_SCAN_DAYS,
-  SERIES_GAP_MINUTES,
-} from "../constants";
+import { MAX_SCAN_DAYS, SERIES_GAP_MINUTES } from "../constants";
 import { seriesDayCap, seriesDayWindows } from "../core/series-spread";
 import {
   addDaysStr,
