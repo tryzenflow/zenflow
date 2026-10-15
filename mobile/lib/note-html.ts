@@ -7,8 +7,8 @@ import type { useToast } from "@/components/ui/toast";
 import { Linking } from "react-native";
 
 /**
- * Shared by the description editor (`components/tasks/form/description-field.tsx`)
- * and the read-only session view (`components/tasks/session-view.tsx`): both
+ * Shared by the description editor (`components/tasks/note/description-field.tsx`)
+ * and the read-only session view (`components/tasks/note/description-field.tsx`): both
  * render note HTML inside a WebView document that can't see the app's CSS
  * variables, so the palette is repeated here as literals.
  */

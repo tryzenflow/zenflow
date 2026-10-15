@@ -14,21 +14,19 @@ import {
   truncateSessionSeries,
   updateSession,
 } from "@/api/tasks";
-import { Trash2 } from "@/components/Icons";
 import {
   type DeleteRecurringScope,
   DeleteRecurringSheet,
   type DeleteRecurringSheetHandle,
 } from "@/components/tasks/delete-recurring-sheet";
-import { SessionFormScreen } from "@/components/tasks/task-form-screen";
-import { SessionView } from "@/components/tasks/session-view";
-import { SessionSheetFields } from "@/components/tasks/task-sheet-fields";
-import { Button } from "@/components/ui/button";
-import { Text } from "@/components/ui/text";
+import { TaskComposer } from "@/components/tasks/composer/task-composer";
+import { useCourseNames } from "@/hooks/use-course-names";
 import {
   ModalToastScope,
   useModalToast,
+  useRootToast,
 } from "@/components/tasks/modal-toast-scope";
+import { UNDO_WINDOW_MS, deferCommit } from "@/lib/undo";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
 import { setPendingSlotPick } from "@/lib/pending-slot-pick";
@@ -54,7 +52,6 @@ import type { Session, UpdateSessionInput } from "@zenflow/shared";
 
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
 
 const EMPTY_DEFAULTS: EditSessionFormValues = {
   type: "TASK",
@@ -90,13 +87,13 @@ function EditSessionForm() {
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
   const { toast } = useModalToast();
+  // The undo toast and any error outlive this modal, so they go to the root stack.
+  const { toast: rootToast } = useRootToast();
   const [task, setSession] = useState<Session | null>(null);
   const [deleting, setDeleting] = useState(false);
-  // Opens as a read-only page; the header switch flips into the edit form.
-  const [editingRequested, setEditing] = useState(false);
-  // Read-only while offline: no edit switch, no delete.
+  // Read-only while offline: the composer locks its fields and footer.
   const offline = useOffline();
-  const editing = editingRequested && !offline;
+  const courses = useCourseNames();
   const deleteScopeSheet = useRef<DeleteRecurringSheetHandle>(null);
 
   const form = useSessionForm({ defaultValues: EMPTY_DEFAULTS });
@@ -295,37 +292,45 @@ function EditSessionForm() {
     if (first?.message) showSplitToast(toast, String(first.message));
   }
 
-  async function runDelete(scope: DeleteRecurringScope) {
+  function runDelete(scope: DeleteRecurringScope) {
     if (!task || deleting) return;
     const seriesKind = getSeriesKind(task);
     setDeleting(true);
-    try {
-      if (scope === "series" && task.seriesId) {
-        // Generic — works for both a recurring (rrule) series and a
-        // materialized TASK series.
-        await removeSessionSeries(task.seriesId);
-      } else if (
-        scope === "following" &&
-        task.seriesId &&
-        seriesKind === "recurring" &&
-        task.scheduledStartTime
-      ) {
-        await truncateSessionSeries(task.seriesId, task.scheduledStartTime);
-      } else if (
-        scope === "following" &&
-        task.seriesId &&
-        seriesKind === "task"
-      ) {
-        // `task.id` is already a plain session id for a materialized TASK
-        // sitting (no occurrence-ref parsing needed).
-        await removeSeriesFrom(task.seriesId, task.id);
-      } else {
-        // "occurrence": for a recurring session `task.id` is
-        // "<seriesId>::<start>" and the backend drops just that date; for a
-        // TASK sitting or a one-off it's a plain delete.
-        await removeSession(task.id);
+    const commit = async () => {
+      try {
+        if (scope === "series" && task.seriesId) {
+          // Generic — works for both a recurring (rrule) series and a
+          // materialized TASK series.
+          await removeSessionSeries(task.seriesId);
+        } else if (
+          scope === "following" &&
+          task.seriesId &&
+          seriesKind === "recurring" &&
+          task.scheduledStartTime
+        ) {
+          await truncateSessionSeries(task.seriesId, task.scheduledStartTime);
+        } else if (
+          scope === "following" &&
+          task.seriesId &&
+          seriesKind === "task"
+        ) {
+          // `task.id` is already a plain session id for a materialized TASK
+          // sitting (no occurrence-ref parsing needed).
+          await removeSeriesFrom(task.seriesId, task.id);
+        } else {
+          // "occurrence": for a recurring session `task.id` is
+          // "<seriesId>::<start>" and the backend drops just that date; for a
+          // TASK sitting or a one-off it's a plain delete.
+          await removeSession(task.id);
+        }
+      } catch (error) {
+        showErrorToast(rootToast, error, t("Couldn't delete session"), "trash");
       }
-      toast(
+    };
+    // Nothing is sent until the undo window closes; Undo cancels it.
+    const cancel = deferCommit(commit, UNDO_WINDOW_MS);
+    rootToast({
+      title:
         scope === "series"
           ? t("Series deleted")
           : scope === "following"
@@ -333,15 +338,11 @@ function EditSessionForm() {
               ? t("This and later sittings removed")
               : t("This and later occurrences removed")
             : t("Session deleted"),
-        "success",
-        { icon: "trash" },
-      );
-      safeBack(router);
-    } catch (error) {
-      showErrorToast(toast, error, t("Couldn't delete session"), "trash");
-    } finally {
-      setDeleting(false);
-    }
+      icon: "trash",
+      duration: UNDO_WINDOW_MS,
+      action: { label: t("Undo"), onPress: cancel },
+    });
+    safeBack(router);
   }
 
   function onDelete() {
@@ -357,82 +358,44 @@ function EditSessionForm() {
     deleteScopeSheet.current?.open(occurrenceDate);
   }
 
+  // Mount the composer once the saved values are in the form, so its line
+  // and fields start from them.
+  if (!task) {
+    return null;
+  }
+
   return (
-    <SessionFormScreen
-      title={editing ? t("Edit session") : t("Session details")}
-      editSwitch={
-        task && !offline
-          ? { value: editing, onValueChange: setEditing }
-          : undefined
-      }
-      subtitle={
-        task
-          ? t("Created {date}", {
-              date: format(new Date(task.createdAt), "MMM d"),
-            })
-          : undefined
-      }
-      headerRight={
-        offline ? undefined : (
-        <Pressable
-          disabled={loading}
-          testID="task.delete"
-          onPress={onDelete}
-          className="h-10 w-10 items-center justify-center rounded-full bg-destructive/15"
-          accessibilityLabel={t("Delete session")}
-        >
-          <Trash2 size={20} className="text-destructive" />
-        </Pressable>
-        )
-      }
-      footer={
-        editing ? (
-          <Button
-            testID="task.save"
-            className="h-[52px] w-full"
-            disabled={loading}
-            onPress={form.handleSubmit(onSubmit, onInvalid)}
-          >
-            <Text className="text-base font-semibold text-primary-foreground">
-              {loading ? t("Saving…") : t("Save changes")}
-            </Text>
-          </Button>
-        ) : undefined
-      }
-    >
-      {task && !editing ? (
-        <SessionView task={task} values={form.watch()} tz={tz} />
-      ) : task ? (
-        <SessionSheetFields
-          onNoteUpload={uploads.track}
-          initialValue={form.getValues("note") ?? task.note ?? ""}
-          form={form}
-          tz={tz}
-          disabled={loading}
-          editing
-          editingInstance={{
-            scheduledStartTime: task.scheduledStartTime,
-            durationMinutes: task.durationMinutes,
-          }}
-        />
-      ) : (
-        <View className="items-center py-16">
-          <ActivityIndicator />
-          <Text className="mt-3 text-sm text-muted-foreground">
-            {t("Loading session…")}
-          </Text>
-        </View>
-      )}
+    <>
+      <TaskComposer
+        mode="edit"
+        form={form}
+        tz={tz}
+        title={t("Edit session")}
+        subtitle={t("Created {date}", {
+          date: format(new Date(task.createdAt), "MMM d"),
+        })}
+        courses={courses}
+        busy={loading || offline}
+        onDelete={offline ? undefined : onDelete}
+        onNoteUpload={uploads.track}
+        editingInstance={{
+          scheduledStartTime: task.scheduledStartTime,
+          durationMinutes: task.durationMinutes,
+        }}
+        onValid={(values) => void onSubmit(values)}
+        onInvalid={onInvalid}
+        onDismiss={() => safeBack(router)}
+      />
 
       {/* One-offs delete straight away (`onDelete`), so only a series needs
           the scope sheet mounted. */}
-      {task && getSeriesKind(task) !== "none" && (
+      {getSeriesKind(task) !== "none" && (
         <DeleteRecurringSheet
           ref={deleteScopeSheet}
           kind={getSeriesKind(task) === "task" ? "task" : "recurring"}
           onChoose={runDelete}
         />
       )}
-    </SessionFormScreen>
+    </>
   );
 }

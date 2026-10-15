@@ -21,6 +21,7 @@ import {
 } from "@/lib/hour-height";
 import { format, formatTitle, t } from "@/lib/i18n";
 import { showMovedToast } from "@/lib/move-toast";
+import { restoreSessionTime } from "@/lib/move-undo";
 import { isPastDeadlineDrop } from "@/lib/overdue";
 import {
   notifySessionsMutated,
@@ -333,6 +334,17 @@ function WeekPage({
           showMovedToast(toast, {
             to: zonedDate(updated.scheduledStartTime ?? startISO, tz),
             withTime: true,
+            onUndo: () =>
+              void restoreSessionTime(session, scope, skipConflicting)
+                .then(() => notifySessionsMutated())
+                .catch((error) =>
+                  showErrorToast(
+                    toast,
+                    error,
+                    t("Couldn't move this session"),
+                    "calendar-x",
+                  ),
+                ),
           });
         } catch (error) {
           showErrorToast(

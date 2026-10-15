@@ -35,6 +35,16 @@ export function ModalToastScope({ children }: { children: ReactNode }) {
 }
 
 /**
+ * The root-layout toast stack, for a message that must outlive the modal (an
+ * undo toast after a delete, or an error from work that runs after the form
+ * has closed). Outside a {@link ModalToastScope} it is the local stack.
+ */
+export function useRootToast(): ToastApi {
+  const local = useToast();
+  return useContext(RootToastContext) ?? local;
+}
+
+/**
  * `toast`/`confirm` for a form living in a {@link ModalToastScope}. Errors and anything with action buttons (the infeasible-policy prompt)
  * must be seen while the modal is still up, so they go to the in-modal stack.
  * Everything else (success, warnings, tips, "moved N tasks") is fired right before the

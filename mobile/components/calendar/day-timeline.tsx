@@ -6,6 +6,8 @@ import { useLanguage } from "@/hooks/use-language";
 import { locale } from "@/lib/i18n";
 import { format, formatTitle } from "@/lib/i18n";
 import { listSessions, updateSession } from "@/api/tasks";
+import { checkStateOf } from "@/lib/today-summary";
+import { restoreSessionTime } from "@/lib/move-undo";
 import {
   AlertTriangle,
   GraduationCap,
@@ -569,6 +571,11 @@ export function DayTimeline({
     return set;
   }, [tasks]);
 
+  const checkStateById = useMemo(
+    () => new Map(tasks.map((t) => [t.id, checkStateOf(t)] as const)),
+    [tasks],
+  );
+
   const isToday = useMemo(() => {
     const live = toZonedTime(now, tz);
     return (
@@ -895,6 +902,7 @@ export function DayTimeline({
         scope?: UpdateRecurringScope,
         skipConflicting?: boolean,
       ) => {
+        const before = tasks.find((t) => t.id === taskId);
         try {
           const updated = await updateSession(taskId, {
             scheduledStartTime: startISO,
@@ -941,6 +949,19 @@ export function DayTimeline({
           showMovedToast(toast, {
             to: zonedDate(updated.scheduledStartTime ?? startISO, tz),
             withTime: true,
+            onUndo: before
+              ? () =>
+                  void restoreSessionTime(before, scope, skipConflicting)
+                    .then(() => refetch())
+                    .catch((error) =>
+                      showErrorToast(
+                        toast,
+                        error,
+                        t("Couldn't move this session"),
+                        "calendar-x",
+                      ),
+                    )
+              : undefined,
           });
         } catch (error) {
           showErrorToast(
@@ -1383,6 +1404,7 @@ export function DayTimeline({
                       blockWidth={blockWidthPx}
                       deadline={deadlineBySession.get(segment.taskId) ?? null}
                       late={lateSessionIds.has(segment.taskId)}
+                      checkState={checkStateById.get(segment.taskId)}
                       onReschedule={handleReschedule}
                       settleKey={settleKey}
                       onDragStateChange={handleDragStateChange}

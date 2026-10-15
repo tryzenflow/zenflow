@@ -89,7 +89,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ...(googleServicesFile ? { googleServicesFile } : {}),
     // Resize the visible window when the keyboard opens instead of the
     // default pan behavior — required for `KeyboardAvoidingView`
-    // (`SessionFormScreen`) to work; without this the fixed footer + focused
+    // (the task composer sheet) to work; without this the fixed footer + focused
     // input near the bottom of the task form scroll can end up hidden under
     // the keyboard on Android (mirrors the `android_keyboardInputMode`
     // already passed to `BottomSheetModal` for the tag picker's own sheet).

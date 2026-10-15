@@ -1,7 +1,7 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { formatTitle } from "@/lib/i18n";
-import { InlineDateField } from "@/components/tasks/form/inline-date-field";
+import { InlineDateField } from "@/components/ui/inline-date-field";
 import {
   BottomSheet,
   BottomSheetContent,
@@ -13,7 +13,9 @@ import { Text } from "@/components/ui/text";
 import { TimePickerInline } from "@/components/ui/time-picker";
 import { useToast } from "@/components/ui/toast";
 import { showMovedToast } from "@/lib/move-toast";
+import { restoreSessionTime } from "@/lib/move-undo";
 import { isPastDeadlineDrop } from "@/lib/overdue";
+import { showErrorToast } from "@/lib/task-toasts";
 import {
   getSeriesKind,
   snapToNearestLaterQuarterHour,
@@ -167,6 +169,7 @@ export const RescheduleSheet = forwardRef<
     if (!session || !pickedISO || busy) return;
     setBusy(true);
     try {
+      const before = session;
       await onConfirm(
         session.id,
         pickedISO,
@@ -174,10 +177,20 @@ export const RescheduleSheet = forwardRef<
         scope,
         skipConflicting,
       );
-      // Same confirmation a drag-and-drop move gets.
+      // Same confirmation a drag-and-drop move gets, with the same undo.
       showMovedToast(toast, {
         to: zonedDate(pickedISO, tz),
         withTime: true,
+        onUndo: () =>
+          void restoreSessionTime(before, scope, skipConflicting).catch(
+            (error) =>
+              showErrorToast(
+                toast,
+                error,
+                t("Couldn't move this session"),
+                "calendar-x",
+              ),
+          ),
       });
       onMoved?.(session, pickedISO);
       sheet.close();
