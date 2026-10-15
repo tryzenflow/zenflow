@@ -199,6 +199,9 @@ const jobModules = [
           .positive()
           .default(600), // 10 min
         OTP_VERIFY_EMAIL_LIMIT: Joi.number().integer().positive().default(10),
+        // Proxy hops in front of the app whose X-Forwarded-* headers are trusted
+        // (Cloudflare + nginx = 2; 0 when exposed directly).
+        TRUST_PROXY_HOPS: Joi.number().integer().min(0).default(2),
         // Minimum gap between two syncs of one provider for a student, manual or
         // background (`POST /integrations/:provider/sync` answers 429 inside it).
         SYNC_MANUAL_COOLDOWN_SEC: Joi.number()

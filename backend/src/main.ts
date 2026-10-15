@@ -47,12 +47,12 @@ async function bootstrap() {
   app.enableShutdownHooks();
   // Cloudflare fronts the nginx reverse proxy, which terminates TLS and forwards
   // plain HTTP to this app with the real scheme in `X-Forwarded-Proto`. Trusting
-  // both hops makes `req.secure` reflect that header (so express-session emits
+  // both hops (`TRUST_PROXY_HOPS`, default 2) makes `req.secure` reflect that header (so express-session emits
   // the `Secure` session cookie) and makes `req.ip` the client, not a Cloudflare
   // edge. nginx must append to `X-Forwarded-For`. This must be set before the
   // session middleware is registered.
-  app.set("trust proxy", 2);
   const configService = app.get(ConfigService);
+  app.set("trust proxy", configService.get<number>("TRUST_PROXY_HOPS"));
   // The public legal pages live at the site root (`/privacy`, `/terms`), so the
   // app stores and the login screen can link to short stable URLs.
   // The landing page (`/`), `robots.txt` and `sitemap.xml` sit there too, and its

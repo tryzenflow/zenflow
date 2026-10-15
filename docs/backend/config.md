@@ -21,6 +21,7 @@ For: developers and operators setting up the API. Source of truth: the Joi schem
 | `SESSION_SECRET` | none | Required. |
 | `SESSION_TTL_MS` | 604800000 (7 d) | Rolling idle lifetime. Sets cookie `maxAge` and Redis TTL. |
 | `COOKIE_SECURE` / `COOKIE_SAMESITE` | `true` / `lax` | Cross-site prod needs `true` + `none`. |
+| `TRUST_PROXY_HOPS` | 2 | Proxy hops whose `X-Forwarded-*` is trusted (Cloudflare + nginx). `0` when exposed directly. |
 | `MAIL_HOST` / `MAIL_PORT` / `MAIL_SECURE` / `MAIL_USER` / `MAIL_PASSWORD` / `MAIL_FROM` | none / 587 / `false` / unset / unset / none | `MAIL_HOST` and `MAIL_FROM` required. No `MAIL_USER` = unauthenticated SMTP (Mailpit). |
 | `LEGAL_CONTACT_EMAIL` | unset | Contact on `/privacy` and `/terms`. Unset shows a `[set LEGAL_CONTACT_EMAIL]` placeholder. Set in prod. |
 | `PUBLIC_URL` | unset | Public origin for canonical, hreflang, `og:url` and share-image tags on `/`, `/privacy` and `/terms`. Unset omits them. |
