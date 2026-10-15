@@ -1,4 +1,5 @@
 import { format, t } from "./i18n";
+import { UNDO_WINDOW_MS } from "./undo";
 import type { useToast } from "@/components/ui/toast";
 
 type Toast = ReturnType<typeof useToast>["toast"];
@@ -6,19 +7,29 @@ type Toast = ReturnType<typeof useToast>["toast"];
 /**
  * Confirms a drag-and-drop reschedule. A quiet "Moved to …" every time; the
  * very first move (the checklist step just ticked) gets a warmer toast that
- * also says why dragging is worth it.
+ * also says why dragging is worth it. `onUndo` adds an Undo button for the
+ * undo window.
  */
 export function showMovedToast(
   toast: Toast,
-  opts: { first: boolean; to: Date; withTime: boolean },
+  opts: {
+    first: boolean;
+    to: Date;
+    withTime: boolean;
+    onUndo?: () => void;
+  },
 ): void {
+  const action = opts.onUndo
+    ? { label: t("Undo"), onPress: opts.onUndo }
+    : undefined;
   if (opts.first) {
     toast({
       title: t("Nice! You moved a task."),
       description: t("Zenflow learns from every move to place tasks better."),
       variant: "success",
       icon: "sparkles",
-      duration: 5000,
+      duration: opts.onUndo ? UNDO_WINDOW_MS : 5000,
+      action,
     });
     return;
   }
@@ -30,5 +41,7 @@ export function showMovedToast(
     }),
     variant: "success",
     icon: "calendar-check",
+    duration: opts.onUndo ? UNDO_WINDOW_MS : undefined,
+    action,
   });
 }

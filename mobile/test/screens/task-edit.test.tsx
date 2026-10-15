@@ -26,6 +26,13 @@ const task = (over = {}) =>
     ...over,
   });
 
+// Deletes wait out the undo window before they are sent; shorten it so the
+// tests run in real time.
+vi.mock("@/lib/undo", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/undo")>()),
+  UNDO_WINDOW_MS: 300,
+}));
+
 const toastShown = (text: string | RegExp) =>
   waitFor(() => expect(screen.getAllByText(text).length).toBeGreaterThan(0));
 
@@ -169,21 +176,28 @@ describe("EditSessionScreen — editing", () => {
 });
 
 describe("EditSessionScreen — deleting", () => {
-  it("deletes a one-off session straight away", async () => {
+  it("deletes a one-off session once the undo window closes", async () => {
     await open();
     fireEvent.click(screen.getByTestId("task.delete"));
     await toastShown("Session deleted");
-    expect(requests).toEqual([expect.objectContaining({ method: "DELETE" })]);
-    expect(requests[0].url.pathname).toBe("/sessions/t1");
     expect(router.back).toHaveBeenCalled();
+    await waitFor(() => expect(requests).toEqual([expect.objectContaining({ method: "DELETE" })]));
+    expect(requests[0].url.pathname).toBe("/sessions/t1");
   });
 
-  it("reports a failed delete and stays", async () => {
+  it("cancels the delete when Undo is pressed", async () => {
+    await open();
+    fireEvent.click(screen.getByTestId("task.delete"));
+    fireEvent.click(await screen.findByText("Undo"));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(requests).toEqual([]);
+  });
+
+  it("reports a failed delete on the root toast", async () => {
     await open();
     server.use(http.delete(/\/sessions\/.*/, () => HttpResponse.json({ message: "Locked" }, { status: 400 })));
     fireEvent.click(screen.getByTestId("task.delete"));
     await toastShown(/Locked|Couldn't delete session/);
-    expect(router.back).not.toHaveBeenCalled();
   });
 
   describe("recurring fixed session", () => {
@@ -205,7 +219,7 @@ describe("EditSessionScreen — deleting", () => {
       expect(requests).toEqual([]);
       fireEvent.click(screen.getByText("This occurrence"));
       await toastShown("Session deleted");
-      expect(requests).toHaveLength(1);
+      await waitFor(() => expect(requests).toHaveLength(1));
       expect(decodeURIComponent(requests[0].url.pathname)).toBe(`/sessions/${occurrenceId}`);
     });
 
@@ -214,6 +228,7 @@ describe("EditSessionScreen — deleting", () => {
       fireEvent.click(screen.getByTestId("task.delete"));
       fireEvent.click(await screen.findByText("This and all following"));
       await toastShown("This and later occurrences removed");
+      await waitFor(() => expect(requests).toHaveLength(1));
       expect(requests[0].url.pathname).toBe("/sessions/series/ser1/truncate");
       expect(requests[0].url.searchParams.get("from")).toBe("2026-10-15T03:00:00.000Z");
     });
@@ -223,6 +238,7 @@ describe("EditSessionScreen — deleting", () => {
       fireEvent.click(screen.getByTestId("task.delete"));
       fireEvent.click(await screen.findByText("All occurrences"));
       await toastShown("Series deleted");
+      await waitFor(() => expect(requests).toHaveLength(1));
       expect(requests[0].url.pathname).toBe("/sessions/series/ser1");
       expect(router.back).toHaveBeenCalled();
     });
@@ -234,6 +250,7 @@ describe("EditSessionScreen — deleting", () => {
     expect(await screen.findByText("Delete session", { selector: "div" })).toBeTruthy();
     fireEvent.click(screen.getByText("This and all later sittings"));
     await toastShown("This and later sittings removed");
+    await waitFor(() => expect(requests).toHaveLength(1));
     expect(requests[0].url.pathname).toBe("/sessions/series/ser2/from/t1");
   });
 });

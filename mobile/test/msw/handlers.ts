@@ -34,6 +34,18 @@ export const handlers = [
     }),
   ),
   http.get(`${API}/sessions`, () => HttpResponse.json({ data: { sessions: [] } })),
+  http.get(`${API}/users/me/streak`, () =>
+    HttpResponse.json({
+      data: {
+        current: 0,
+        longest: 0,
+        freezesAvailable: 0,
+        frozenDays: [],
+        lastActiveDay: null,
+        todayDone: false,
+      },
+    }),
+  ),
   http.get(`${API}/tags`, () => HttpResponse.json({ data: { tags: [] } })),
   http.patch(`${API}/users/update/basic-info`, () => HttpResponse.json({ data: testUser })),
   http.patch(`${API}/users/me`, () => HttpResponse.json({ data: testUser })),

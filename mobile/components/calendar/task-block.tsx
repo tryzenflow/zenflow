@@ -50,6 +50,14 @@ import {
   dragTargetMin,
   minToY,
 } from "@/lib/day-grid";
+import { CheckOffButton } from "@/components/calendar/check-off-button";
+import { useCheckOff } from "@/hooks/use-check-off";
+import type { CheckState } from "@/lib/today-summary";
+
+/** Blocks shorter than this have no room for the check-off disc. */
+const CHECKABLE_MIN_HEIGHT = 40;
+/** Right gutter that keeps a block's title clear of the check-off disc. */
+const CHECK_GUTTER_PX = 40;
 
 /** Gap (px) between the DND hatch's diagonal lines. */
 const HATCH_SPACING = 7;
@@ -165,6 +173,8 @@ interface SessionBlockProps {
   /** Bumped by the parent when a drop didn't move the session (save failed,
    * scope sheet cancelled) — releases the drop pin so the card snaps back. */
   settleKey?: number;
+  /** The session's done or skipped state; `undefined` hides the check-off disc. */
+  checkState?: CheckState;
 }
 
 function SessionBlockImpl({
@@ -191,8 +201,10 @@ function SessionBlockImpl({
   flash = false,
   tip = false,
   settleKey = 0,
+  checkState,
 }: SessionBlockProps) {
   useLanguage();
+  const checkOff = useCheckOff();
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const { isDarkColorScheme } = useColorScheme();
   const courseOverrides = useCourseColourStore((s) => s.overrides);
@@ -633,6 +645,14 @@ function SessionBlockImpl({
 
   const composedGesture = Gesture.Simultaneous(panGesture, tapGesture);
 
+  // The check-off disc sits outside the drag gesture so a tap on it never
+  // opens the session; it fades while the block is lifted for a move.
+  const checkable =
+    !!checkState && isInteractive && !drawsThrough && height >= CHECKABLE_MIN_HEIGHT;
+  const checkFadeStyle = useAnimatedStyle(() => ({
+    opacity: 1 - liftProgress.value,
+  }));
+
   // Glass edge: each state tints its own rim (below); the only extra ring is
   // the "landing" flash on create / reschedule / teleport.
   // Always a ring class (transparent at rest): a className that gains `ring-*`
@@ -719,6 +739,7 @@ function SessionBlockImpl({
             moveStyle,
             { height },
             courseColour ? { backgroundColor: courseColour.tint } : null,
+            checkable ? { paddingRight: CHECK_GUTTER_PX } : null,
           ]}
           className={cn(
             "flex overflow-hidden rounded-[14px]",
@@ -875,6 +896,23 @@ function SessionBlockImpl({
           )}
         </Animated.View>
       </GestureDetector>
+      {checkable && checkState ? (
+        <Animated.View
+          pointerEvents="box-none"
+          style={[
+            checkFadeStyle,
+            { position: "absolute", right: 0, top: (height - 44) / 2 },
+          ]}
+        >
+          <CheckOffButton
+            state={checkState}
+            title={segment.title}
+            onToggle={(next) =>
+              checkOff({ id: segment.taskId, title: segment.title }, "complete", next === "done")
+            }
+          />
+        </Animated.View>
+      ) : null}
     </Animated.View>
   );
 }
