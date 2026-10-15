@@ -28,7 +28,7 @@ import { courseStyleFor } from "@/lib/course-colour";
 import { sessionTypeIcon } from "./session-type-badge";
 import { toZonedTime } from "date-fns-tz";
 import * as Haptics from "expo-haptics";
-import { memo, useCallback, useEffect, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useState } from "react";
 import { BlurView } from "expo-blur";
 import {
   Platform,
@@ -776,13 +776,17 @@ function SessionBlockImpl({
           style={[
             moveStyle,
             { height },
+            // Title at the top of a tall block; centred only when it is one line high.
+            tier !== "full"
+              ? { paddingTop: Math.max(0, Math.min(5, (height - 14) / 2)) }
+              : null,
             courseColour ? { backgroundColor: courseColour.tint } : null,
             checkable ? { paddingRight: CHECK_GUTTER_PX } : null,
           ]}
           className={cn(
             "flex overflow-hidden rounded-[14px]",
             tier !== "full"
-              ? "flex-row items-center gap-1 pl-3.5 pr-2"
+              ? "flex-row items-start gap-1 pl-3.5 pr-2"
               : "flex-col gap-0.5 pl-4 pr-2.5 py-1.5",
             segment.continues && !drawsThrough && "rounded-b-none",
             segment.continued && "rounded-t-none [border-top-style:dashed]",
@@ -863,7 +867,10 @@ function SessionBlockImpl({
           {tier !== "full" ? (
             // Short blocks: one row. Under 24px the title alone; under 44px the
             // title and start time. No badges or chips at any tier.
-            <View className="w-full min-w-0 flex-row items-center gap-1.5">
+            <View
+              key="compact"
+              className="w-full min-w-0 flex-row items-center gap-1.5"
+            >
               {/* Explicit px line heights: `leading-none` clipped the tops of
                   the glyphs on Android. */}
               {courseColour && (
@@ -894,7 +901,7 @@ function SessionBlockImpl({
               )}
             </View>
           ) : (
-            <>
+            <Fragment key="full">
               <View className="w-full min-w-0 flex-row items-center gap-1.5">
                 {courseColour && (
                   <TypeIcon size={12} color={courseColour.ink} />
@@ -940,7 +947,7 @@ function SessionBlockImpl({
                     : segment.location}
                 </Text>
               )}
-            </>
+            </Fragment>
           )}
         </Animated.View>
       </GestureDetector>

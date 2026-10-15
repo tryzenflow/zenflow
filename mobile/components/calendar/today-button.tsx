@@ -3,13 +3,19 @@ import { useLanguage } from "@/hooks/use-language";
 import { CalendarDays } from "@/components/Icons";
 import { GlassButton } from "@/components/ui/glass-button";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
-import { View } from "react-native";
-import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import { useEffect } from "react";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
 /**
  * Small floating "jump to today" pill, bottom-centre — above the floating
  * tab-bar pill and clear of the bottom-right create FAB. Shown by the Week /
  * Month screens only while today isn't the day / month currently in view.
+ * The wrapper is always mounted and faded by opacity: inserting or removing it with a layout
+ * animation shifts the screen's child indices and Fabric asserts on unmount.
  */
 export function TodayButton({
   visible,
@@ -20,28 +26,35 @@ export function TodayButton({
 }) {
   useLanguage();
   const tabBarOverlay = useTabBarOverlayHeight();
-  if (!visible) return null;
+  const shown = useSharedValue(visible ? 1 : 0);
+  useEffect(() => {
+    shown.value = withTiming(visible ? 1 : 0, { duration: visible ? 160 : 120 });
+  }, [visible, shown]);
+  const fade = useAnimatedStyle(() => ({ opacity: shown.value }));
   return (
     <Animated.View
-      entering={FadeIn.duration(160)}
-      exiting={FadeOut.duration(120)}
-      pointerEvents="box-none"
-      style={{
-        position: "absolute",
-        left: 0,
-        right: 0,
-        bottom: tabBarOverlay + 8,
-        alignItems: "center",
-        zIndex: 34,
-      }}
+      pointerEvents={visible ? "box-none" : "none"}
+      style={[
+        {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: tabBarOverlay + 8,
+          alignItems: "center",
+          zIndex: 34,
+        },
+        fade,
+      ]}
     >
-      <GlassButton
-        icon={CalendarDays}
-        onPress={onPress}
-        accessibilityLabel={t("Jump to today")}
-      >
-        {t("Today")}
-      </GlassButton>
+      {visible ? (
+        <GlassButton
+          icon={CalendarDays}
+          onPress={onPress}
+          accessibilityLabel={t("Jump to today")}
+        >
+          {t("Today")}
+        </GlassButton>
+      ) : null}
     </Animated.View>
   );
 }

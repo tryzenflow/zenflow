@@ -81,7 +81,6 @@ import {
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
-  FadeIn,
   useAnimatedStyle,
   useSharedValue,
   clamp,
@@ -440,12 +439,10 @@ export function DayTimeline({
   }, [loading, error, onStateChange]);
 
   // A cold day shows the skeleton straight away and keeps it up for a moment
-  // (`useDelayedLoading`), then fades the real grid in — never blank → data.
-  // Warm days aren't `loading`, so they stay instant (no fade either: a page
-  // swiped in must look like it was always there).
+  // (`useDelayedLoading`), then swaps in the real grid — never blank → data.
+  // Warm days aren't `loading`, so they stay instant (a page swiped in must
+  // look like it was always there).
   const showSkeleton = useDelayedLoading(loading);
-  const hadSkeletonRef = useRef(showSkeleton);
-  if (showSkeleton) hadSkeletonRef.current = true;
 
   const refetch = useCallback(async () => {
     try {
@@ -1237,9 +1234,6 @@ export function DayTimeline({
         ) : (
           <GestureDetector gesture={zoomGesture}>
             <Animated.View
-              entering={
-                hadSkeletonRef.current ? FadeIn.duration(220) : undefined
-              }
               style={animatedContentStyle}
               className="relative"
             >

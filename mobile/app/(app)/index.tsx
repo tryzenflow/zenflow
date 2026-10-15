@@ -98,6 +98,7 @@ export default function CalendarScreen() {
   const [view, setView] = useState<CalendarView>(() =>
     isCalendarView(viewParam) ? viewParam : "day",
   );
+  const everShown = useRef(new Set<CalendarView>());
   // Seeds from the optional `date` query param (ISO instant) so another screen
   // can deep-link into a specific day. `zonedDate` keeps the user-tz wall clock
   // in the local fields, never a bare `new Date()`.
@@ -367,6 +368,13 @@ export default function CalendarScreen() {
         ? dateKey(weekStart(focusedDate)) === dateKey(weekStart(now))
         : dateKey(visibleDate) === dateKey(now);
 
+  // Every view keeps a fixed slot under the screen root and, once opened, stays
+  // mounted (hidden with display none). Mounting or unmounting a whole view in
+  // the same commit as its siblings shifts child indices and Fabric asserts.
+  everShown.current.add(view);
+  const slotStyle = (id: CalendarView) =>
+    view === id ? undefined : ({ display: "none" } as const);
+
   return (
     <View className="flex-1 bg-background">
       <CalendarHeader
@@ -376,7 +384,8 @@ export default function CalendarScreen() {
         onSearch={() => setSearchOpen(true)}
       />
 
-      {view === "day" ? (
+      <View className="flex-1" style={slotStyle("day")}>
+        {everShown.current.has("day") ? (
         <>
           <WeekHeader
             ref={headerRef}
@@ -414,9 +423,11 @@ export default function CalendarScreen() {
             />
           </View>
         </>
-      ) : null}
+        ) : null}
+      </View>
 
-      {view === "week" ? (
+      <View className="flex-1" style={slotStyle("week")}>
+        {everShown.current.has("week") ? (
         <WeekGrid
           anchor={focusedDate}
           tz={tz}
@@ -428,9 +439,11 @@ export default function CalendarScreen() {
           onRequestBlockMenu={handleRequestBlockMenu}
           onRequestScopedUpdate={handleRequestScopedUpdate}
         />
-      ) : null}
+        ) : null}
+      </View>
 
-      {view === "month" ? (
+      <View className="flex-1" style={slotStyle("month")}>
+        {everShown.current.has("month") ? (
         <MonthView
           date={focusedDate}
           onDateChange={handleMonthDateChange}
@@ -438,16 +451,18 @@ export default function CalendarScreen() {
           reloadToken={focusTick}
           onOpenDay={openDayView}
         />
-      ) : null}
+        ) : null}
+      </View>
 
       <TodayButton
         visible={!isAtToday}
         onPress={() => commitFocusedDate(zonedNow(tz))}
       />
 
-      {!offline && (view !== "day" || timelineState === "ready") && (
-        <CreateSessionFab tz={tz} />
-      )}
+      <CreateSessionFab
+        tz={tz}
+        hidden={offline || (view === "day" && timelineState !== "ready")}
+      />
 
       <SessionDetailSheet ref={sessionDetailSheetRef} tz={tz} />
       <BlockActionsSheet
