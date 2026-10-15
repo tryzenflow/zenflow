@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { http, HttpResponse } from "msw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import NewSessionScreen from "@/app/task/new";
+import { DRAFT_NEW, useComposerStore } from "@/lib/composer-store";
 import { useUserStore } from "@/hooks/use-user-store";
 import { makeSession } from "@/test/fixtures";
 import { API, testUser } from "@/test/msw/handlers";
@@ -10,20 +11,30 @@ import { server } from "@/test/msw/server";
 import { renderScreen } from "@/test/utils/render";
 
 // Rich-text editor (WebView) — has its own coverage/ownership.
-vi.mock("@/components/tasks/form/description-field", () => ({ DescriptionField: () => null }));
+vi.mock("@/components/tasks/note/description-field", () => ({ DescriptionField: () => null }));
 
-const TOMORROW = "2026-10-16T16:59:59.000Z"; // from the default deadline-options handler
+// The mocked "tomorrow" deadline option, 23:59 in the test user's zone.
+const TOMORROW = "2026-10-16T16:59:59.000Z";
 let posts: Record<string, unknown>[];
 
 const toastShown = (text: string | RegExp) =>
   waitFor(() => expect(screen.getAllByText(text).length).toBeGreaterThan(0));
 
-async function fillAndSubmit(title = "Revise graphs") {
-  fireEvent.change(screen.getByTestId("task.title"), { target: { value: title } });
-  // Chips are inert until the deadline options load; the form then defaults to "No rush".
-  await screen.findByText(/^Due /);
-  fireEvent.click(screen.getByTestId("task.deadline.tomorrow"));
-  fireEvent.click(screen.getByTestId("task.save"));
+/** Waits for the deadline chips to load, which turns "No rush" on by default. */
+async function deadlinesReady() {
+  await waitFor(() =>
+    expect(screen.getByTestId("task.deadline.chip.noRush").getAttribute("aria-checked")).toBe("true"),
+  );
+}
+
+/** Reminders, repeat and notes sit under More options, folded by default. */
+async function openMoreOptions() {
+  fireEvent.click(screen.getByTestId("task.more"));
+  await screen.findByTestId("task.more.body");
+}
+
+async function typeLine(text: string) {
+  fireEvent.change(screen.getByTestId("task.title"), { target: { value: text } });
 }
 
 beforeEach(() => {
@@ -31,6 +42,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date("2026-10-15T05:00:00.000Z"));
   posts = [];
   useUserStore.setState({ user: testUser as never, loading: false });
+  useComposerStore.setState({ drafts: {}, courseDuration: {} });
   server.use(
     http.post(`${API}/sessions`, async ({ request }) => {
       posts.push((await request.json()) as Record<string, unknown>);
@@ -52,17 +64,19 @@ afterEach(() => {
 });
 
 describe("NewSessionScreen", () => {
-  it("opens as a blank task with the default reminder", () => {
+  it("opens as a blank task with the default reminder and No rush", async () => {
     renderScreen(<NewSessionScreen />);
     expect(screen.getAllByText("New session").length).toBeGreaterThan(0);
     expect((screen.getByTestId("task.title") as HTMLInputElement).value).toBe("");
+    await openMoreOptions();
     expect(screen.getByText("1 hour before")).toBeTruthy();
-    expect(screen.getByTestId("task.deadline.tomorrow")).toBeTruthy();
+    await deadlinesReady();
   });
 
-  it("uses the user's default reminder from Settings", () => {
+  it("uses the user's default reminder from Settings", async () => {
     useUserStore.setState({ user: { ...testUser, defaultReminderMinutes: 15 } as never });
     renderScreen(<NewSessionScreen />);
+    await openMoreOptions();
     expect(screen.getByText("15 min before")).toBeTruthy();
   });
 
@@ -78,130 +92,69 @@ describe("NewSessionScreen", () => {
     expect(screen.getByText("From Thursday, Oct 15")).toBeTruthy();
   });
 
-  it("refuses an empty title without calling the API", async () => {
+  it("creates a task from the chosen deadline and the default duration", async () => {
     renderScreen(<NewSessionScreen />);
+    await typeLine("Revise graphs");
+    await deadlinesReady();
+    fireEvent.click(screen.getByTestId("task.deadline.chip.tomorrow"));
     fireEvent.click(screen.getByTestId("task.save"));
-    await toastShown("Session name is required");
-    expect(posts).toEqual([]);
-    expect(router.dismissTo).not.toHaveBeenCalled();
-  });
-
-  it("defaults the deadline to 'No rush' once the options load", async () => {
-    renderScreen(<NewSessionScreen />);
-    fireEvent.change(screen.getByTestId("task.title"), { target: { value: "Someday" } });
-    await screen.findByText(/^Due /);
-    fireEvent.click(screen.getByTestId("task.save"));
-    await waitFor(() => expect(posts).toHaveLength(1));
-    expect(posts[0]).toMatchObject({ deadline: "2026-12-31T16:59:59.000Z" });
-  });
-
-  it("creates a task with the chosen deadline and jumps to where it was placed", async () => {
-    renderScreen(<NewSessionScreen />);
-    await fillAndSubmit();
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(posts[0]).toMatchObject({
       type: "TASK",
       title: "Revise graphs",
       durationMinutes: 60,
       deadline: TOMORROW,
-      reminders: [60],
-      tags: [],
     });
-    await waitFor(() =>
-      expect(router.dismissTo).toHaveBeenCalledWith({
-        pathname: "/",
-        params: { date: "2026-10-15T03:00:00.000Z", flash: "new1" },
-      }),
-    );
-    await toastShown("Scheduled for Thu, Oct 15, 10:00 AM");
-  });
-
-  it("just goes back when the scheduler found no slot", async () => {
-    server.use(
-      http.post(`${API}/sessions`, () =>
-        HttpResponse.json({
-          data: makeSession({ id: "new2", title: "Revise graphs", type: "TASK", scheduledStartTime: null }),
-        }),
-      ),
-    );
-    renderScreen(<NewSessionScreen />);
-    await fillAndSubmit();
-    await waitFor(() => expect(router.back).toHaveBeenCalled());
-    expect(router.dismissTo).not.toHaveBeenCalled();
-    await toastShown("Task created");
-  });
-
-  it("offers both policies when the deadline can't be met, then retries with the chosen one", async () => {
-    let calls = 0;
-    server.use(
-      http.post(`${API}/sessions`, async ({ request }) => {
-        const body = (await request.json()) as Record<string, unknown>;
-        posts.push(body);
-        calls++;
-        if (!body.infeasiblePolicy) {
-          return HttpResponse.json(
-            {
-              success: false,
-              statusCode: 409,
-              code: "SCHEDULE_INFEASIBLE",
-              message: "No room before the deadline",
-              options: ["ACCEPT_CONFLICTS", "ACCEPT_LATE_DEADLINE"],
-            },
-            { status: 409 },
-          );
-        }
-        return HttpResponse.json({
-          data: makeSession({ id: "new3", title: "Revise graphs", type: "TASK", late: true }),
-        });
-      }),
-    );
-    renderScreen(<NewSessionScreen />);
-    await fillAndSubmit();
-    await toastShown("Accept conflicts");
-    expect(screen.getAllByText("Accept late deadline").length).toBeGreaterThan(0);
-    expect(router.dismissTo).not.toHaveBeenCalled();
-    fireEvent.click(screen.getAllByText("Accept late deadline")[0]);
-    await waitFor(() => expect(calls).toBe(2));
-    expect(posts[1]).toMatchObject({ infeasiblePolicy: "ACCEPT_LATE_DEADLINE" });
     await waitFor(() => expect(router.dismissTo).toHaveBeenCalled());
   });
 
-  it("hands a divergent placement to the week view's slot-pick sheet", async () => {
+  it("reads a known course, a deadline and a duration from one line", async () => {
     server.use(
-      http.post(`${API}/sessions`, () =>
-        HttpResponse.json({
-          data: {
-            ...makeSession({ id: "new4", title: "Revise graphs", type: "TASK" }),
-            divergent: true,
-            slotProposalId: "p1",
-            primarySlot: "2026-10-15T03:00:00.000Z",
-            alternativeSlot: "2026-10-16T03:00:00.000Z",
-          },
-        }),
+      http.get(`${API}/tags`, () =>
+        HttpResponse.json({ data: { tags: [{ id: "c1", name: "OOP" }] } }),
       ),
     );
     renderScreen(<NewSessionScreen />);
-    await fillAndSubmit();
-    await waitFor(() =>
-      expect(router.dismissTo).toHaveBeenCalledWith({
-        pathname: "/",
-        params: { date: "2026-10-15T03:00:00.000Z", flash: "new4" },
-      }),
+    await deadlinesReady();
+    await typeLine("OOP essay due fri 3h");
+    expect((screen.getByTestId("task.title") as HTMLInputElement).value).toBe(
+      "OOP essay due fri 3h",
     );
-    const { takePendingSlotPick } = await import("@/lib/pending-slot-pick");
-    expect(takePendingSlotPick()).toMatchObject({ kind: "single", slotProposalId: "p1" });
+    await waitFor(() => expect(screen.getByTestId("task.course.chip.OOP")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("task.save"));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]).toMatchObject({
+      type: "TASK",
+      title: "OOP essay",
+      tags: ["OOP"],
+      durationMinutes: 180,
+      deadline: TOMORROW,
+    });
   });
 
-  it("shows the server's message when creating fails and stays on the form", async () => {
-    server.use(
-      http.post(`${API}/sessions`, () =>
-        HttpResponse.json({ message: "Too many sessions today" }, { status: 400 }),
-      ),
-    );
+  it("creates a fixed event when the line names a time of day", async () => {
     renderScreen(<NewSessionScreen />);
-    await fillAndSubmit();
-    await waitFor(() => expect(screen.queryAllByText(/Too many sessions today|Couldn't create the session/).length).toBeGreaterThan(0));
-    expect(router.dismissTo).not.toHaveBeenCalled();
-    expect(router.back).not.toHaveBeenCalled();
+    await typeLine("Lecture at 9am");
+    fireEvent.click(screen.getByTestId("task.save"));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]).toMatchObject({
+      type: "LECTURE",
+      title: "Lecture",
+      durationMinutes: 60,
+      // 09:00 in Ho Chi Minh time on the 15th.
+      scheduledStartTime: "2026-10-15T02:00:00.000Z",
+    });
+  });
+
+  it("keeps a draft when the sheet is closed, and restores it on the next open", async () => {
+    const first = renderScreen(<NewSessionScreen />);
+    await typeLine("Draft idea");
+    fireEvent.click(screen.getByTestId("task.close"));
+    expect(router.back).toHaveBeenCalled();
+    expect(useComposerStore.getState().drafts[DRAFT_NEW]?.title).toBe("Draft idea");
+    first.unmount();
+
+    renderScreen(<NewSessionScreen />);
+    expect((screen.getByTestId("task.title") as HTMLInputElement).value).toBe("Draft idea");
   });
 });

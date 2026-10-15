@@ -9,8 +9,8 @@ import { API, testUser } from "@/test/msw/handlers";
 import { server } from "@/test/msw/server";
 import { renderScreen } from "@/test/utils/render";
 
-// Rich-text editor / viewer (WebView) — has its own coverage/ownership.
-vi.mock("@/components/tasks/form/description-field", () => ({ DescriptionField: () => null }));
+// Rich-text editor (WebView) — has its own coverage/ownership.
+vi.mock("@/components/tasks/note/description-field", () => ({ DescriptionField: () => null }));
 
 vi.mock("@/lib/geist-webview-font", () => ({ loadGeistWebviewFontDataUri: async () => "" }));
 
@@ -55,17 +55,15 @@ function serve(session: ReturnType<typeof makeSession>) {
   );
 }
 
+/** Renders the screen and waits until the composer shows the saved values. */
 async function open(session = task()) {
   serve(session);
   vi.mocked(useLocalSearchParams).mockReturnValue({ id: session.id } as never);
   renderScreen(<EditSessionScreen />);
-  await screen.findByText("Session details");
-  await screen.findByText(session.title);
-}
-
-async function startEditing() {
-  fireEvent.click(screen.getByTestId("task.mode.edit"));
-  await screen.findByText("Edit session");
+  await screen.findByTestId("task.save");
+  await waitFor(() =>
+    expect((screen.getByTestId("task.title") as HTMLInputElement).value).toBe(session.title),
+  );
 }
 
 beforeEach(() => {
@@ -80,11 +78,12 @@ afterEach(() => {
   vi.mocked(useLocalSearchParams).mockReturnValue({} as never);
 });
 
-describe("EditSessionScreen — viewing", () => {
-  it("opens read-only with the session's details", async () => {
+describe("EditSessionScreen — opening", () => {
+  it("opens in edit mode with the saved values", async () => {
     await open();
-    expect(screen.getByText("Revise graphs")).toBeTruthy();
-    expect(screen.queryByTestId("task.save")).toBeNull();
+    expect(screen.getByText("Edit session")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("task.more"));
+    expect(await screen.findByText("1 hour before")).toBeTruthy();
   });
 
   it("closes with a toast when the session can't be loaded", async () => {
@@ -102,13 +101,10 @@ describe("EditSessionScreen — viewing", () => {
   });
 });
 
-describe("EditSessionScreen — editing", () => {
-  it("prefills the form and saves changes, then jumps to the block", async () => {
+describe("EditSessionScreen — saving", () => {
+  it("saves changes, then jumps to the block", async () => {
     await open();
-    await startEditing();
-    const title = screen.getByTestId("task.title") as HTMLInputElement;
-    expect(title.value).toBe("Revise graphs");
-    fireEvent.change(title, { target: { value: "Revise trees" } });
+    fireEvent.change(screen.getByTestId("task.title"), { target: { value: "Revise trees" } });
     fireEvent.click(screen.getByTestId("task.save"));
     await waitFor(() => expect(requests.filter((r) => r.method === "PATCH")).toHaveLength(1));
     const patch = requests.find((r) => r.method === "PATCH");
@@ -125,7 +121,6 @@ describe("EditSessionScreen — editing", () => {
 
   it("refuses an empty title", async () => {
     await open();
-    await startEditing();
     fireEvent.change(screen.getByTestId("task.title"), { target: { value: "" } });
     fireEvent.click(screen.getByTestId("task.save"));
     await toastShown("Session name is required");
@@ -155,7 +150,6 @@ describe("EditSessionScreen — editing", () => {
         return HttpResponse.json({ data: { ...current, ...body } });
       }),
     );
-    await startEditing();
     fireEvent.change(screen.getByTestId("task.title"), { target: { value: "Revise trees" } });
     fireEvent.click(screen.getByTestId("task.save"));
     await toastShown("Accept conflicts");
@@ -166,7 +160,6 @@ describe("EditSessionScreen — editing", () => {
 
   it("shows an error and stays when the update fails", async () => {
     await open();
-    await startEditing();
     server.use(http.patch(`${API}/sessions/:id`, () => HttpResponse.json({ message: "Conflict with exam" }, { status: 400 })));
     fireEvent.change(screen.getByTestId("task.title"), { target: { value: "Revise trees" } });
     fireEvent.click(screen.getByTestId("task.save"));

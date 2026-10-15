@@ -2,11 +2,9 @@ import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { format } from "@/lib/i18n";
 import { createSession } from "@/api/tasks";
-import { SessionTypeTabs } from "@/components/tasks/form/session-type-tabs";
-import { SessionFormScreen } from "@/components/tasks/task-form-screen";
-import { SessionSheetFields } from "@/components/tasks/task-sheet-fields";
-import { Button } from "@/components/ui/button";
-import { Text } from "@/components/ui/text";
+import { TaskComposer } from "@/components/tasks/composer/task-composer";
+import { useCourseNames } from "@/hooks/use-course-names";
+import { DRAFT_NEW, useComposerStore } from "@/lib/composer-store";
 import {
   ModalToastScope,
   useModalToast,
@@ -44,7 +42,7 @@ import {
 } from "@zenflow/shared";
 
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 const DEFAULT_DURATION = 60;
 const DEFAULT_SESSION_COUNT = 1;
@@ -187,38 +185,12 @@ function NewSessionForm() {
     return base;
   }, [start, deadline, sessions, title, tz, user?.defaultReminderMinutes]);
 
-  const form = useSessionForm({ defaultValues: initialDefaults });
+  // A draft from an earlier swipe-down wins over the route prefill.
+  const [draft] = useState(() => useComposerStore.getState().drafts[DRAFT_NEW]);
+  const form = useSessionForm({ defaultValues: draft ?? initialDefaults });
   const loading = form.formState.isSubmitting;
   const type = form.watch("type");
-
-  function switchType(next: SessionFormType) {
-    const common = {
-      title: form.getValues("title"),
-      note: form.getValues("note"),
-      location: form.getValues("location"),
-      tags: form.getValues("tags"),
-      reminders: form.getValues("reminders"),
-    };
-    form.reset(
-      next === "TASK"
-        ? {
-            ...common,
-            type: "TASK",
-            duration: form.getValues("duration") ?? DEFAULT_DURATION,
-            sessionCount:
-              form.getValues("sessionCount") ?? DEFAULT_SESSION_COUNT,
-            deadline: form.getValues("deadline") ?? "",
-          }
-        : {
-            ...common,
-            type: next,
-            date: form.getValues("date"),
-            startTime: form.getValues("startTime") ?? "09:00",
-            endTime: form.getValues("endTime") ?? "10:00",
-            rrule: form.getValues("rrule"),
-          },
-    );
-  }
+  const courses = useCourseNames();
 
   const uploads = useUploadTracker();
 
@@ -227,6 +199,7 @@ function NewSessionForm() {
     const handleCreated = async (
       response: Awaited<ReturnType<typeof createSession>>,
     ) => {
+      useComposerStore.getState().clearDraft(DRAFT_NEW);
       void uploads.settle(values.note);
       completeStep("create-task");
       useLastCreated.getState().set(response.id);
@@ -338,35 +311,18 @@ function NewSessionForm() {
         });
 
   return (
-    <SessionFormScreen
+    <TaskComposer
+      mode="create"
+      form={form}
+      tz={tz}
       title={t("New session")}
       subtitle={subtitle}
-      footer={
-        <Button
-          testID="task.save"
-          className="h-[52px] w-full"
-          disabled={loading}
-          onPress={form.handleSubmit(onSubmit, onInvalid)}
-        >
-          <Text className="text-base font-semibold text-primary-foreground">
-            {loading ? t("Adding…") : t("Add session")}
-          </Text>
-        </Button>
-      }
-    >
-      <SessionSheetFields
-        onNoteUpload={uploads.track}
-        form={form}
-        tz={tz}
-        disabled={loading}
-        typeSelector={
-          <SessionTypeTabs
-            value={type}
-            onChange={switchType}
-            disabled={loading}
-          />
-        }
-      />
-    </SessionFormScreen>
+      courses={courses}
+      busy={loading}
+      onNoteUpload={uploads.track}
+      onValid={(values) => void onSubmit(values)}
+      onInvalid={onInvalid}
+      onDismiss={() => safeBack(router)}
+    />
   );
 }

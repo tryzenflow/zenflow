@@ -14,17 +14,13 @@ import {
   truncateSessionSeries,
   updateSession,
 } from "@/api/tasks";
-import { Trash2 } from "@/components/Icons";
 import {
   type DeleteRecurringScope,
   DeleteRecurringSheet,
   type DeleteRecurringSheetHandle,
 } from "@/components/tasks/delete-recurring-sheet";
-import { SessionFormScreen } from "@/components/tasks/task-form-screen";
-import { SessionView } from "@/components/tasks/session-view";
-import { SessionSheetFields } from "@/components/tasks/task-sheet-fields";
-import { Button } from "@/components/ui/button";
-import { Text } from "@/components/ui/text";
+import { TaskComposer } from "@/components/tasks/composer/task-composer";
+import { useCourseNames } from "@/hooks/use-course-names";
 import {
   ModalToastScope,
   useModalToast,
@@ -56,7 +52,6 @@ import type { Session, UpdateSessionInput } from "@zenflow/shared";
 
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
 
 const EMPTY_DEFAULTS: EditSessionFormValues = {
   type: "TASK",
@@ -96,11 +91,9 @@ function EditSessionForm() {
   const { toast: rootToast } = useRootToast();
   const [task, setSession] = useState<Session | null>(null);
   const [deleting, setDeleting] = useState(false);
-  // Opens as a read-only page; the header switch flips into the edit form.
-  const [editingRequested, setEditing] = useState(false);
-  // Read-only while offline: no edit switch, no delete.
+  // Read-only while offline: the composer locks its fields and footer.
   const offline = useOffline();
-  const editing = editingRequested && !offline;
+  const courses = useCourseNames();
   const deleteScopeSheet = useRef<DeleteRecurringSheetHandle>(null);
 
   const form = useSessionForm({ defaultValues: EMPTY_DEFAULTS });
@@ -365,82 +358,44 @@ function EditSessionForm() {
     deleteScopeSheet.current?.open(occurrenceDate);
   }
 
+  // Mount the composer once the saved values are in the form, so its line
+  // and fields start from them.
+  if (!task) {
+    return null;
+  }
+
   return (
-    <SessionFormScreen
-      title={editing ? t("Edit session") : t("Session details")}
-      editSwitch={
-        task && !offline
-          ? { value: editing, onValueChange: setEditing }
-          : undefined
-      }
-      subtitle={
-        task
-          ? t("Created {date}", {
-              date: format(new Date(task.createdAt), "MMM d"),
-            })
-          : undefined
-      }
-      headerRight={
-        offline ? undefined : (
-        <Pressable
-          disabled={loading}
-          testID="task.delete"
-          onPress={onDelete}
-          className="h-10 w-10 items-center justify-center rounded-full bg-destructive/15"
-          accessibilityLabel={t("Delete session")}
-        >
-          <Trash2 size={20} className="text-destructive" />
-        </Pressable>
-        )
-      }
-      footer={
-        editing ? (
-          <Button
-            testID="task.save"
-            className="h-[52px] w-full"
-            disabled={loading}
-            onPress={form.handleSubmit(onSubmit, onInvalid)}
-          >
-            <Text className="text-base font-semibold text-primary-foreground">
-              {loading ? t("Saving…") : t("Save changes")}
-            </Text>
-          </Button>
-        ) : undefined
-      }
-    >
-      {task && !editing ? (
-        <SessionView task={task} values={form.watch()} tz={tz} />
-      ) : task ? (
-        <SessionSheetFields
-          onNoteUpload={uploads.track}
-          initialValue={form.getValues("note") ?? task.note ?? ""}
-          form={form}
-          tz={tz}
-          disabled={loading}
-          editing
-          editingInstance={{
-            scheduledStartTime: task.scheduledStartTime,
-            durationMinutes: task.durationMinutes,
-          }}
-        />
-      ) : (
-        <View className="items-center py-16">
-          <ActivityIndicator />
-          <Text className="mt-3 text-sm text-muted-foreground">
-            {t("Loading session…")}
-          </Text>
-        </View>
-      )}
+    <>
+      <TaskComposer
+        mode="edit"
+        form={form}
+        tz={tz}
+        title={t("Edit session")}
+        subtitle={t("Created {date}", {
+          date: format(new Date(task.createdAt), "MMM d"),
+        })}
+        courses={courses}
+        busy={loading || offline}
+        onDelete={offline ? undefined : onDelete}
+        onNoteUpload={uploads.track}
+        editingInstance={{
+          scheduledStartTime: task.scheduledStartTime,
+          durationMinutes: task.durationMinutes,
+        }}
+        onValid={(values) => void onSubmit(values)}
+        onInvalid={onInvalid}
+        onDismiss={() => safeBack(router)}
+      />
 
       {/* One-offs delete straight away (`onDelete`), so only a series needs
           the scope sheet mounted. */}
-      {task && getSeriesKind(task) !== "none" && (
+      {getSeriesKind(task) !== "none" && (
         <DeleteRecurringSheet
           ref={deleteScopeSheet}
           kind={getSeriesKind(task) === "task" ? "task" : "recurring"}
           onChoose={runDelete}
         />
       )}
-    </SessionFormScreen>
+    </>
   );
 }
