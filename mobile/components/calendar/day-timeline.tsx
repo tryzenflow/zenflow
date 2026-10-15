@@ -20,7 +20,6 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
-import { completeStep } from "@/hooks/use-checklist";
 import { useLastCreated } from "@/hooks/use-last-created";
 import { type DayStatus, deriveDayStatus } from "@/lib/day-status";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading";
@@ -28,7 +27,6 @@ import { useNow } from "@/hooks/use-now";
 import { useUserStore } from "@/hooks/use-user-store";
 import { isPastDeadlineDrop } from "@/lib/overdue";
 import { showErrorToast, showSkippedToast } from "@/lib/task-toasts";
-import { type PeekBlock, peekBlocksFromSegments } from "@/lib/peek";
 import { useSpotlight } from "@/hooks/use-spotlight";
 import { showMovedToast } from "@/lib/move-toast";
 import {
@@ -47,7 +45,6 @@ import {
   subscribeTimelineScroll,
 } from "@/lib/timeline-scroll";
 import {
-  DAILY_HORIZON,
   eventsForDay,
   getOverlapLayout,
   getSeriesKind,
@@ -90,7 +87,6 @@ import { SessionBlock } from "./task-block";
 import {
   type DayGrid,
   type FoldId,
-  type MinuteSpan,
   FOLD_BAR_HEIGHT,
   HOUR_HEIGHT_MAX,
   HOUR_HEIGHT_MIN,
@@ -98,6 +94,7 @@ import {
   foldedNightRanges,
   gridHeightFor,
   minToY,
+  minuteSpanOf,
   scrollAnchorMin,
   scrollYForMin,
   visibleHourMinutes,
@@ -174,18 +171,6 @@ function stackShifts(
 
 const GUTTER_WIDTH = TIME_GUTTER_WIDTH;
 
-/** Minute span of a segment on the wall clock, as the fold maths reads it. */
-function minuteSpanOf(segment: DaySegment, tz: string): MinuteSpan {
-  const start = toZonedTime(new Date(segment.start), tz);
-  const end = toZonedTime(new Date(segment.end), tz);
-  const startMin = start.getHours() * 60 + start.getMinutes();
-  const rawEnd = end.getHours() * 60 + end.getMinutes();
-  return {
-    startMin,
-    endMin: segment.continues || rawEnd === 0 ? DAILY_HORIZON : rawEnd,
-  };
-}
-
 const LOADING_PLACEHOLDERS = [
   { startMin: 8 * 60 + 15, duration: 60 },
   { startMin: 10 * 60, duration: 110 },
@@ -261,13 +246,6 @@ interface DayTimelineProps {
     slotProposalId: string,
     onPick: (chose: "primary" | "alternative") => Promise<void>,
   ) => void;
-  /** Reports this day's sessions as mini-day blocks so a parent week pager
-   * can render its next-day peek strip from real data. */
-  onPeekChange?: (blocks: PeekBlock[], dayKey: string) => void;
-  /** Right padding (px) reserved on the grid for a parent's next-day peek
-   * sliver, so blocks/lines stop short of it instead of running under it.
-   * Default 0. */
-  rightInset?: number;
   /** True when this is the page the pager is focused on. Only the active page
    * is the source of truth for the shared scroll position (`syncScroll`) and
    * only it should drive a parent's header/slice callbacks. Default `true` for
@@ -300,8 +278,6 @@ export function DayTimeline({
   onRequestBlockMenu,
   onRequestScopedUpdate,
   onRequestSlotPick,
-  onPeekChange,
-  rightInset = 0,
   isActive = true,
   syncScroll = false,
   flashSessionId = null,
@@ -354,7 +330,7 @@ export function DayTimeline({
     void loadHourHeight();
     return subscribeHourHeight(() => setHourHeightState(getHourHeight()));
   }, []);
-  const contentWidth = screenWidth - GUTTER_WIDTH - rightInset;
+  const contentWidth = screenWidth - GUTTER_WIDTH;
 
   const dayKey = format(date, "yyyy-MM-dd");
 
@@ -580,17 +556,6 @@ export function DayTimeline({
 
   const bottomInset = contentBottomInset ?? (showHeader ? tabBarOverlay : 0);
   contentHeightRef.current = totalHeight + bottomInset;
-
-  // Report this day's blocks so a parent Week pager can draw its next-day
-  // peek strip from real data.
-  const peekBlocks = useMemo(
-    () => peekBlocksFromSegments(segments, date, tz),
-    [segments, date, tz],
-  );
-
-  useEffect(() => {
-    onPeekChange?.(peekBlocks, dayKey);
-  }, [peekBlocks, dayKey, onPeekChange]);
 
   const deadlineBySession = useMemo(() => {
     const map = new Map<string, string>();
@@ -944,7 +909,6 @@ export function DayTimeline({
             scope,
             skipConflicting,
           });
-          const firstMove = completeStep("move-task");
           showSkippedToast(toast, updated.skippedSessionIds);
 
           // Handle divergent response — show picker for primary vs alternative slot
@@ -983,7 +947,6 @@ export function DayTimeline({
             prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)),
           );
           showMovedToast(toast, {
-            first: firstMove,
             to: zonedDate(updated.scheduledStartTime ?? startISO, tz),
             withTime: true,
             onUndo: before
@@ -1285,7 +1248,7 @@ export function DayTimeline({
 
             <View
               className="absolute top-0 bottom-0 bg-card"
-              style={{ left: GUTTER_WIDTH, right: rightInset }}
+              style={{ left: GUTTER_WIDTH, right: 0 }}
             >
               {hourLineMins.map((min) => (
                 <View
@@ -1340,7 +1303,7 @@ export function DayTimeline({
                 className="absolute top-0 bg-card"
                 style={{
                   left: GUTTER_WIDTH,
-                  right: rightInset,
+                  right: 0,
                   bottom: -bottomInset,
                 }}
               >

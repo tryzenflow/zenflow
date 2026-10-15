@@ -58,22 +58,36 @@ function Row({
   );
 }
 
-/** Preferences + Notifications sections (mockups/settings.html). */
 const TZ_RESULT_LIMIT = 50;
 
-export function PreferencesSection() {
-  useLanguage();
-  const { prefs, update } = usePreferences();
-  const { setEnabled, active } = useNotificationState();
+/** Saves a preference patch, toasting when the save fails. */
+function usePreferenceSave() {
+  const { update } = usePreferences();
   const { toast } = useToast();
-  const languageSheet = useRef<OptionSheetHandle>(null);
+  return async (patch: Parameters<typeof update>[0]) => {
+    if (!(await update(patch))) {
+      toast({
+        title: t("Couldn't save preference"),
+        description: t("Try again in a moment."),
+        variant: "destructive",
+        icon: Sliders,
+      });
+    }
+  };
+}
+
+/**
+ * The timezone row, shown under Advanced. Searchable, nearest-to-device-first
+ * (same ordering as onboarding). With no query the pinned "Device" row leads;
+ * the full list is capped, with a "refine your search" hint for the rest.
+ */
+export function TimezoneRow() {
+  useLanguage();
+  const { prefs } = usePreferences();
+  const save = usePreferenceSave();
   const timezoneSheet = useRef<OptionSheetHandle>(null);
-  const reminderSheet = useRef<OptionSheetHandle>(null);
 
   const device = deviceTimezone();
-  // Searchable, nearest-to-device-first (same ordering as onboarding). With no
-  // query the pinned "Device" row leads; the full list is capped, with a
-  // "refine your search" hint for the rest.
   const tzSearch = useMemo(
     () => ({
       placeholder: t("Search all timezones"),
@@ -100,16 +114,36 @@ export function PreferencesSection() {
   );
   const tzLabel = prefs.timezoneMode === "device" ? device : prefs.timezone;
 
-  async function save(patch: Parameters<typeof update>[0]) {
-    if (!(await update(patch))) {
-      toast({
-        title: t("Couldn't save preference"),
-        description: t("Try again in a moment."),
-        variant: "destructive",
-        icon: Sliders,
-      });
-    }
-  }
+  return (
+    <>
+      <View className="overflow-hidden rounded-2xl border border-border bg-card">
+        <Row
+          Icon={Clock}
+          title={t("Timezone")}
+          value={tzLabel}
+          onPress={() => timezoneSheet.current?.open()}
+        />
+      </View>
+      <OptionSheet
+        ref={timezoneSheet}
+        title={t("Timezone")}
+        options={[]}
+        search={tzSearch}
+        value={timezonePickerValue(prefs)}
+        onSelect={(timezone) => save({ timezone })}
+      />
+    </>
+  );
+}
+
+/** Preferences + Notifications sections (mockups/settings.html). */
+export function PreferencesSection() {
+  useLanguage();
+  const { prefs } = usePreferences();
+  const { setEnabled, active } = useNotificationState();
+  const save = usePreferenceSave();
+  const languageSheet = useRef<OptionSheetHandle>(null);
+  const reminderSheet = useRef<OptionSheetHandle>(null);
 
   async function toggleNotifications(on: boolean) {
     await setEnabled(on);
@@ -127,13 +161,6 @@ export function PreferencesSection() {
             return l ? `${l.flag} ${l.label}` : "";
           })()}
           onPress={() => languageSheet.current?.open()}
-        />
-        <View className="h-px bg-border" />
-        <Row
-          Icon={Clock}
-          title={t("Timezone")}
-          value={tzLabel}
-          onPress={() => timezoneSheet.current?.open()}
         />
         <View className="h-px bg-border" />
         <Row
@@ -171,14 +198,6 @@ export function PreferencesSection() {
         options={LANGUAGES}
         value={prefs.language}
         onSelect={(language) => save({ language })}
-      />
-      <OptionSheet
-        ref={timezoneSheet}
-        title={t("Timezone")}
-        options={[]}
-        search={tzSearch}
-        value={timezonePickerValue(prefs)}
-        onSelect={(timezone) => save({ timezone })}
       />
       <OptionSheet
         ref={reminderSheet}

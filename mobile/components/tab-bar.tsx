@@ -1,4 +1,3 @@
-import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
 import { Glass } from "@/components/ui/glass";
 import { resolveGeistFontFamily } from "@/components/ui/text";
 import { useLanguage } from "@/hooks/use-language";
@@ -52,7 +51,6 @@ function TabItem({
   onLongPress,
   accessibilityLabel,
   testID,
-  spotlight,
 }: {
   index: number;
   position: SharedValue<number>;
@@ -65,7 +63,6 @@ function TabItem({
   onLongPress: () => void;
   accessibilityLabel: string;
   testID?: string;
-  spotlight: boolean;
 }) {
   const activeOpacity = useAnimatedStyle(() => ({
     opacity: interpolate(
@@ -105,7 +102,6 @@ function TabItem({
       testID={testID}
       className="flex-1 items-center justify-center gap-1"
     >
-      {spotlight ? <SpotlightAnchor step="open-month" ignoreFocus /> : null}
       <Animated.View collapsable={false} style={lift}>
         {renderIcon(false, mutedColor)}
         <Animated.View
@@ -221,7 +217,6 @@ export function AppTabBar({
         }
         accessibilityLabel={options.tabBarAccessibilityLabel ?? label}
         testID={`tab.${route.name}`}
-        spotlight={route.name === "month"}
       />
     );
   }

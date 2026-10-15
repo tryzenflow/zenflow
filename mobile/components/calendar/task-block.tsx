@@ -173,6 +173,8 @@ interface SessionBlockProps {
   /** Bumped by the parent when a drop didn't move the session (save failed,
    * scope sheet cancelled) — releases the drop pin so the card snaps back. */
   settleKey?: number;
+  /** Always draw the one-line title, whatever the block's height (week grid). */
+  titleOnly?: boolean;
   /** The session's done or skipped state; `undefined` hides the check-off disc. */
   checkState?: CheckState;
 }
@@ -201,6 +203,7 @@ function SessionBlockImpl({
   flash = false,
   tip = false,
   settleKey = 0,
+  titleOnly = false,
   checkState,
 }: SessionBlockProps) {
   useLanguage();
@@ -228,7 +231,7 @@ function SessionBlockImpl({
   // has its true pixel extent.
   const topPx = minToY(grid, startMin);
   const height = Math.max(minToY(grid, endMin) - topPx, 16);
-  const tier = blockTier(height);
+  const tier = titleOnly ? "title" : blockTier(height);
 
   // Overlapping blocks render in their normal type colour — no conflict state,
   // no annotation. `layout` still cascades them (see `DayTimeline`).

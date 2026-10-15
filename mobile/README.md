@@ -77,15 +77,15 @@ mobile/
 
 The root layout uses `Stack.Protected` guards (Zustand-driven): signed out mounts only login,
 signed in without `onboardedAt` only onboarding, else the app. While the session loads every group
-is mounted under the splash so the launch URL `/` resolves, then the guards narrow. Custom tab bar: Week, Month, Settings.
+is mounted under the splash so the launch URL `/` resolves, then the guards narrow. Custom tab bar: Calendar, Today, Me.
 
 | Route               | Screen                                                                            |
 | ------------------- | --------------------------------------------------------------------------------- |
 | `/(auth)/login`     | student ID or email then OTP; timezone captured on verify                         |
 | `/(onboarding)`     | first-run setup (tag picker)                                                      |
-| `/(app)` (Week)     | home: paginated day timeline + 7-day chip strip                                   |
-| `/(app)/month`      | Monday-first month grid                                                           |
-| `/(app)/settings`   | profile, appearance, preferences (language, timezone, default reminder; synced to API), integrations |
+| `/(app)` (Calendar) | home: Day, Week or Month view behind one header; Day is the timeline + 7-day chip strip |
+| `/(app)/today`      | Today tab: redirects to the calendar's Day view on today                          |
+| `/(app)/settings`   | Me tab: profile, appearance, preferences (language, default reminder), integrations; Advanced holds timezone and storage |
 | `/task/new`         | create task or event (bottom-sheet composer)                                      |
 | `/task/[id]/edit`   | edit session (same composer; type fixed)                                          |
 | `/notifications`    | ingestion inbox (modal)                                                           |
@@ -96,12 +96,11 @@ Task composer is `components/tasks/composer/` (fields in `composer-fields.tsx`, 
 
 ## Getting started checklist
 
-- A "Getting started" pill on Week and Month ([`components/checklist/getting-started.tsx`](components/checklist/getting-started.tsx)) opens a sheet of steps.
+- A "Getting started" pill in the calendar header ([`components/checklist/getting-started.tsx`](components/checklist/getting-started.tsx)) opens a sheet of three steps.
 - A step ticks itself via `completeStep(id)` ([`hooks/use-checklist.ts`](hooks/use-checklist.ts)) where the action succeeds.
-- Steps and copy: [`lib/checklist.ts`](lib/checklist.ts). Ids: `CHECKLIST_STEPS` in `@zenflow/shared` (rebuild it after editing).
+- Steps and copy: [`lib/checklist.ts`](lib/checklist.ts). Ids: `CHECKLIST_STEPS` in `@zenflow/shared`; retired ids stay in `LEGACY_TIP_IDS` so stored progress still validates.
 - Done steps and `checklist-hidden` live on `User.seenTips` via `PATCH /users/update/basic-info { seenTip }`, so progress follows the user.
 - The pill disappears when every step is done or hidden.
-- Tapping a step spotlights its control: put `<SpotlightAnchor step="..." />` inside it; [`hooks/use-spotlight.ts`](hooks/use-spotlight.ts) carries the request.
 - Steps needing a task (`STEP_NEEDS`) point at the + button until one exists. Placement math: [`lib/spotlight.ts`](lib/spotlight.ts).
 
 ## Push and live notifications

@@ -1,5 +1,6 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
+import { completeStep } from "@/hooks/use-checklist";
 import {
   connectIntegration,
   disconnectIntegration,
@@ -326,6 +327,7 @@ export function DluAccountsSection({
               { signal: controller.signal },
             );
       updateIntegration(selectedProvider, status);
+      if (mode === "connect") completeStep("connect-dlu");
       toast(
         mode === "connect" ? t("Connected") : t("Credentials updated"),
         "success",

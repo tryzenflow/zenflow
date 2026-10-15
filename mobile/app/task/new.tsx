@@ -201,7 +201,7 @@ function NewSessionForm() {
     ) => {
       useComposerStore.getState().clearDraft(DRAFT_NEW);
       void uploads.settle(values.note);
-      completeStep("create-task");
+      completeStep("add-task");
       useLastCreated.getState().set(response.id);
       // Handle divergent response — present a primary-vs-alternative pick.
       // The week view owns the slot-pick sheet, so hand the payload off and

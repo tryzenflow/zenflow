@@ -108,7 +108,6 @@ describe("showMovedToast", () => {
   it("puts the date and the time together in the title", () => {
     const toast = vi.fn();
     showMovedToast(toast, {
-      first: false,
       to: new Date(2026, 9, 12, 9, 0),
       withTime: true,
     });
@@ -120,7 +119,6 @@ describe("showMovedToast", () => {
   it("puts the date in the title when there is no time", () => {
     const toast = vi.fn();
     showMovedToast(toast, {
-      first: false,
       to: new Date(2026, 9, 12),
       withTime: false,
     });

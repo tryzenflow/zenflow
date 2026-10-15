@@ -1,4 +1,5 @@
 import { markSession } from "@/api/check-off";
+import { completeStep } from "@/hooks/use-checklist";
 import type { CheckInAction } from "@/lib/daily-push";
 
 /**
@@ -15,5 +16,7 @@ export async function applyCheckIn(
     sessionIds.map((id) => markSession(id, kind)),
   );
   const applied = results.filter((r) => r.status === "fulfilled").length;
+  // Marking sessions done from the evening check-in finishes the step.
+  if (action === "done" && applied > 0) completeStep("finish-session");
   return { applied, failed: results.length - applied };
 }

@@ -2,14 +2,14 @@ import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
 import { Text } from "@/components/ui/text";
 import { useSpotlight } from "@/hooks/use-spotlight";
-import { STEP_COPY } from "@/lib/checklist";
 import {
   arrowLeft,
   bubblePlacement,
   type Rect,
+  SPOTLIGHT_COPY,
   spotlightRect,
 } from "@/lib/spotlight";
-import type { ChecklistStep } from "@zenflow/shared";
+import type { SpotlightStep } from "@/lib/spotlight";
 import { type ReactNode, useState } from "react";
 import {
   Modal,
@@ -75,7 +75,7 @@ function Layer({
 
 /** Steps whose how-to is a gesture; shown as a looping fingertip over the control. */
 type Gesture = "drag-down" | "drag-to-cell" | "hold";
-const GESTURE: Partial<Record<ChecklistStep, Gesture>> = {
+const GESTURE: Partial<Record<SpotlightStep, Gesture>> = {
   "move-task": "drag-down",
   "block-actions": "hold",
   // Dragged out of the day's bottom sheet onto a cell of the month grid.
@@ -255,7 +255,7 @@ export function Spotlight({
   rect,
   onDismiss,
 }: {
-  step: ChecklistStep;
+  step: SpotlightStep;
   rect: Rect;
   onDismiss: () => void;
 }) {
@@ -264,7 +264,7 @@ export function Spotlight({
   const insets = useSafeAreaInsets();
   const [bubbleHeight, setBubbleHeight] = useState(FALLBACK_BUBBLE_HEIGHT);
   const dragTarget = useSpotlight((s) => s.dragTarget);
-  const { title, hint } = STEP_COPY[step];
+  const { title, hint } = SPOTLIGHT_COPY[step];
 
   const spot = spotlightRect(rect, screen);
   const bubbleWidth = screen.width - GUTTER * 2;
