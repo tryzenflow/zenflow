@@ -1,9 +1,14 @@
+import { zonedDate } from "@zenflow/core";
+import { format } from "date-fns";
 import { describe, expect, it } from "vitest";
 import {
   addCustomTag,
   canGoBack,
+  dndRoutinePayloads,
   filterTimezones,
+  initialTagSelection,
   mergeTagNames,
+  missingRoutines,
   newTagsForBulk,
   nextStep,
   pendingSetupItems,
@@ -53,6 +58,24 @@ describe("step navigation", () => {
 });
 
 describe("tags", () => {
+  it("pre-ticks the first four, or resumes existing", () => {
+    expect(initialTagSelection([])).toEqual([
+      "Study",
+      "Exam",
+      "Assignment",
+      "Project",
+    ]);
+    // Sync-created tags (LMS/portal) don't count as resuming: defaults stay ticked.
+    expect(initialTagSelection(["Thesis"])).toEqual([
+      "Study",
+      "Exam",
+      "Assignment",
+      "Project",
+      "Thesis",
+    ]);
+    // Resuming with saved suggestions keeps exactly those.
+    expect(initialTagSelection(["Lab", "Thesis"])).toEqual(["Lab", "Thesis"]);
+  });
   it("toggles case-insensitively", () => {
     expect(toggleTag(["Study"], "study")).toEqual([]);
     expect(toggleTag([], "Lab")).toEqual(["Lab"]);
@@ -144,5 +167,71 @@ describe("utcOffsetMinutes", () => {
     expect(utcOffsetMinutes("Asia/Kolkata", jan)).toBe(330);
     expect(utcOffsetMinutes("America/New_York", jan)).toBe(-300);
     expect(utcOffsetMinutes("UTC", jan)).toBe(0);
+  });
+});
+
+describe("default routines", () => {
+  const HCM = "Asia/Ho_Chi_Minh"; // UTC+7, no DST
+  const at10 = new Date("2026-10-15T03:00:00Z"); // 10:00 in HCM
+  const at21 = new Date("2026-10-15T14:00:00Z"); // 21:00 in HCM
+
+  it("builds one daily DND per routine, durations on the 15-minute grid", () => {
+    const payloads = dndRoutinePayloads(HCM, at10);
+    expect(payloads.map((p) => [p.title, p.durationMinutes])).toEqual([
+      ["Sleep", 420],
+      ["Lunch break", 60],
+      ["Dinner", 60],
+    ]);
+    for (const p of payloads) {
+      expect(p.type).toBe("DND");
+      expect(p.rrule).toBe("FREQ=DAILY");
+      expect(p.durationMinutes % 15).toBe(0);
+      expect(p).not.toHaveProperty("reminders");
+    }
+  });
+
+  it("starts each routine today in the user's zone while still ahead", () => {
+    const [sleep, lunch, dinner] = dndRoutinePayloads(HCM, at10);
+    expect(sleep.scheduledStartTime).toBe("2026-10-15T16:00:00.000Z"); // 23:00 HCM
+    expect(lunch.scheduledStartTime).toBe("2026-10-15T04:30:00.000Z"); // 11:30 HCM
+    expect(dinner.scheduledStartTime).toBe("2026-10-15T10:00:00.000Z"); // 17:00 HCM
+  });
+
+  it("moves a routine whose start has passed to tomorrow", () => {
+    const [sleep, lunch, dinner] = dndRoutinePayloads(HCM, at21);
+    expect(sleep.scheduledStartTime).toBe("2026-10-15T16:00:00.000Z");
+    expect(lunch.scheduledStartTime).toBe("2026-10-16T04:30:00.000Z");
+    expect(dinner.scheduledStartTime).toBe("2026-10-16T10:00:00.000Z");
+  });
+
+  it("anchors the wall clock in the user's zone, not UTC", () => {
+    // 08:00 in New York (EDT, UTC-4): 23:00 is 03:00 UTC the next day.
+    const [sleep] = dndRoutinePayloads(
+      "America/New_York",
+      new Date("2026-10-15T12:00:00Z"),
+    );
+    expect(sleep.scheduledStartTime).toBe("2026-10-16T03:00:00.000Z");
+  });
+
+  it("runs the sleep block from 23:00 to 06:00 across midnight", () => {
+    const [sleep] = dndRoutinePayloads(HCM, at10);
+    const start = new Date(sleep.scheduledStartTime);
+    const end = new Date(start.getTime() + sleep.durationMinutes * 60_000);
+    const wall = (d: Date) =>
+      format(zonedDate(d.toISOString(), HCM), "yyyy-MM-dd HH:mm");
+    expect(wall(start)).toBe("2026-10-15 23:00");
+    expect(wall(end)).toBe("2026-10-16 06:00");
+  });
+
+  it("skips routines already stored as DND series, ignoring case", () => {
+    const payloads = dndRoutinePayloads(HCM, at10);
+    const existing = [
+      { type: "DND" as const, title: "sleep", rrule: "FREQ=DAILY" },
+      { type: "TASK" as const, title: "Dinner", rrule: null },
+    ];
+    expect(missingRoutines(payloads, existing).map((p) => p.title)).toEqual([
+      "Lunch break",
+      "Dinner",
+    ]);
   });
 });

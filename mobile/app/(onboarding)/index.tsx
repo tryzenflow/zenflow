@@ -1,6 +1,8 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { listIntegrations } from "@/api/integrations";
+import { createTagsBulk, listTags } from "@/api/tags";
+import { createSession, searchSessions } from "@/api/tasks";
 import { updateBasicInfo } from "@/api/users";
 import {
   AlertCircle,
@@ -28,6 +30,10 @@ import {
   FIRST_STEP,
   type OnboardingStep,
   canGoBack,
+  dndRoutinePayloads,
+  initialTagSelection,
+  missingRoutines,
+  newTagsForBulk,
   nextStep,
   prevStep,
   stepProgress,
@@ -336,9 +342,45 @@ export default function OnboardingScreen() {
     go();
   }
 
+  /** Best effort: the four suggested tags; never blocks onboarding. */
+  async function seedDefaultTags() {
+    try {
+      const existing = (await listTags()).map((tag) => tag.name);
+      const names = newTagsForBulk(initialTagSelection(existing), existing);
+      if (names.length > 0) await createTagsBulk(names);
+    } catch {
+      // Not worth blocking the first run on.
+    }
+  }
+
+  /**
+   * Best effort: the daily Sleep, Lunch break and Dinner DND series in the
+   * user's timezone. Series already present by title are skipped. A failed
+   * lookup creates nothing, so a retry can't duplicate them.
+   */
+  async function seedDefaultRoutines() {
+    try {
+      const now = new Date();
+      const payloads = dndRoutinePayloads(user?.timezone || "UTC", now);
+      const found = await Promise.all(
+        payloads.map((p) =>
+          searchSessions({ q: p.title, anchor: now.toISOString(), limit: 50 }),
+        ),
+      );
+      const existing = found.flatMap((r) => r.sessions);
+      for (const payload of missingRoutines(payloads, existing)) {
+        await createSession(payload).catch(() => {});
+      }
+    } catch {
+      // Not worth blocking the first run on.
+    }
+  }
+
   async function finish() {
     setBusy(true);
     try {
+      await seedDefaultTags();
+      await seedDefaultRoutines();
       // Idempotent; the root AuthGate then routes to the app.
       updateUser(await updateBasicInfo({ onboarded: true }));
     } catch {
