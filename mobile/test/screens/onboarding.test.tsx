@@ -183,15 +183,17 @@ describe("OnboardingScreen", () => {
     const isDisabled = (el: HTMLElement) =>
       el.hasAttribute("disabled") || el.getAttribute("aria-disabled") === "true";
 
-    it("offers the four bands with their hours and nothing picked", async () => {
+    it("offers the four bands with their hours and Morning preselected", async () => {
       await openFocus();
       for (const label of ["Morning", "Afternoon", "Evening", "Late night"]) {
         expect(screen.getByText(label)).toBeTruthy();
       }
       expect(screen.getByText("08:00 to 12:00")).toBeTruthy();
       expect(screen.getByText("21:00 to 02:00")).toBeTruthy();
-      expect(screen.getAllByRole("radio").every((r) => r.getAttribute("aria-checked") === "false")).toBe(true);
-      expect(isDisabled(primary())).toBe(true);
+      expect(
+        screen.getByTestId("onboarding.focus.MORNING").getAttribute("aria-checked"),
+      ).toBe("true");
+      expect(isDisabled(primary())).toBe(false);
     });
 
     it("saves the picked band and moves to the LMS step", async () => {
@@ -330,7 +332,7 @@ describe("OnboardingScreen", () => {
       expect(sessionBodies.every((b) => b.type === "DND" && b.rrule === "FREQ=DAILY")).toBe(true);
       expect([sleep.durationMinutes, lunch.durationMinutes, dinner.durationMinutes]).toEqual([420, 60, 60]);
       const wall = (iso: string) => format(zonedDate(iso, "Asia/Ho_Chi_Minh"), "HH:mm");
-      expect([sleep, lunch, dinner].map((b) => wall(b.scheduledStartTime))).toEqual(["23:00", "11:30", "17:00"]);
+      expect([sleep, lunch, dinner].map((b) => wall(b.scheduledStartTime))).toEqual(["23:00", "11:30", "18:00"]);
     });
 
     it("skips a routine that already exists as a DND series", async () => {
