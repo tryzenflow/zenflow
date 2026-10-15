@@ -10,13 +10,13 @@ import { checkStateOf } from "@/lib/today-summary";
 import { undoMove } from "@/lib/move-undo";
 import { dropOnDay } from "@/lib/anchor";
 import {
-  AlertTriangle,
   GraduationCap,
   Plus,
   RefreshCcw,
   RotateCw,
 } from "@/components/Icons";
 import { useDluConnected } from "@/hooks/use-dlu-connected";
+import { ErrorMark } from "@/components/brand/state-marks";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
@@ -1180,8 +1180,8 @@ export function DayTimeline({
       >
         {error ? (
           <>
-            <View className="mb-3.5 size-[76px] items-center justify-center rounded-[22px] border border-destructive/35 bg-destructive/15">
-              <AlertTriangle size={34} className="text-destructive" />
+            <View className="mb-4">
+              <ErrorMark size={84} />
             </View>
             <Text className="text-center text-lg font-bold">
               {t("Couldn't load your day")}

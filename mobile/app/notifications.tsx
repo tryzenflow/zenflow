@@ -1,4 +1,7 @@
+import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { useAfterPaint } from "@/hooks/use-after-paint";
+import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import { t } from "@/lib/i18n";
 import { safeBack } from "@/lib/nav";
 import { useLanguage } from "@/hooks/use-language";
@@ -85,6 +88,8 @@ export default function NotificationsScreen() {
   const items = useNotificationsStore((s) => s.items);
   const unreadCount = useNotificationsStore((s) => s.unreadCount);
   const loading = useNotificationsStore((s) => s.loading);
+  const painted = useAfterPaint();
+  const showSkeleton = useDelayedLoading(loading || !painted);
   const refreshing = useNotificationsStore((s) => s.refreshing);
   const fetchNotifications = useNotificationsStore((s) => s.fetchNotifications);
   const dismiss = useNotificationsStore((s) => s.dismiss);
@@ -297,10 +302,8 @@ export default function NotificationsScreen() {
       </View>
 
       {/* Body */}
-      {loading ? (
-        <View className="flex-1 items-center justify-center py-20">
-          <Spinner />
-        </View>
+      {showSkeleton ? (
+        <NotificationsSkeleton />
       ) : (
         <FlatList
           data={items}
@@ -388,6 +391,28 @@ export default function NotificationsScreen() {
           </View>
         </Modal>
       )}
+    </View>
+  );
+}
+
+const SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
+
+/** Rows shaped like `NotificationRowItem`: icon badge, title, meta line. */
+function NotificationsSkeleton() {
+  return (
+    <View testID="notifications.skeleton">
+      {SKELETON_ROWS.map((i) => (
+        <View
+          key={i}
+          className="flex-row items-center gap-3.5 border-b border-border/70 px-4 py-3.5"
+        >
+          <Skeleton className="h-11 w-11 rounded-2xl" />
+          <View className="flex-1 gap-2">
+            <Skeleton className={i % 2 ? "h-4 w-3/5" : "h-4 w-4/5"} />
+            <Skeleton className="h-3 w-2/5" />
+          </View>
+        </View>
+      ))}
     </View>
   );
 }

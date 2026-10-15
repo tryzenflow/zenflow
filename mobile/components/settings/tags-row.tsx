@@ -1,11 +1,7 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { createTagsBulk, listTags } from "@/api/tags";
-import {
-  ChevronRight,
-  List,
-  Tag,
-} from "@/components/Icons";
+import { ChevronRight, List, Tag } from "@/components/Icons";
 import { TagPicker } from "@/components/onboarding/tag-picker";
 import { SettingsSectionLabel } from "@/components/settings/settings-header";
 import {
@@ -16,6 +12,7 @@ import {
   useBottomSheet,
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { mergeTagNames, newTagsForBulk } from "@/lib/onboarding";
@@ -100,8 +97,11 @@ export function TagsRow() {
               disabled={saving}
               onPress={save}
             >
+              {saving && (
+                <View className="mr-2"><Spinner size={18} tone="onPrimary" /></View>
+              )}
               <Text className="font-semibold text-primary-foreground">
-                {t("Save")}
+                {saving ? t("Saving…") : t("Save")}
               </Text>
             </Button>
           </BottomSheetView>

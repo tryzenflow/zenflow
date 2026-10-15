@@ -8,11 +8,7 @@ import { getDailyPush, updateDailyPush } from "@/api/daily-push";
 import { useToast } from "@/components/ui/toast";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
-import {
-  DEFAULT_DAILY_TIMES,
-  dateToTime,
-  timeToDate,
-} from "@/lib/daily-push";
+import { DEFAULT_DAILY_TIMES, dateToTime, timeToDate } from "@/lib/daily-push";
 import { t } from "@/lib/i18n";
 
 type Row = {

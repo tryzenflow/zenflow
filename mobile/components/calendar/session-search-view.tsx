@@ -63,7 +63,11 @@ export function SessionSearchView({ onClose }: { onClose: () => void }) {
           rightElement={<Search size={18} className="text-muted-foreground" />}
         />
       </View>
-      <SessionAgenda term={term} onOpenSession={onClose} />
+      <SessionAgenda
+        term={term}
+        pending={query.trim() !== term}
+        onOpenSession={onClose}
+      />
     </View>
   );
 }

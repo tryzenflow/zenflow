@@ -130,11 +130,23 @@ export default function CalendarScreen() {
   // reports the centred day per whole-page crossing via `onVisibleDateChange`),
   // then reconciles to `focusedDate` on settle.
   const [visibleDate, setVisibleDate] = useState(focusedDate);
+  // Month swipes stay inside Month view: the hidden Day and Week views would
+  // re-render and refetch on each one. The parent keeps the month in a ref and
+  // only whether it is the current one, and commits it when the view changes.
+  const monthDateRef = useRef<Date | null>(null);
+  const [monthAtToday, setMonthAtToday] = useState(
+    () => monthLabel(focusedDate) === monthLabel(zonedNow(tz)),
+  );
   // A committed focus change (swipe settle, chip tap, deep link) moves both.
-  const commitFocusedDate = useCallback((day: Date) => {
-    setFocusedDate(day);
-    setVisibleDate(day);
-  }, []);
+  const commitFocusedDate = useCallback(
+    (day: Date) => {
+      monthDateRef.current = null;
+      setMonthAtToday(monthLabel(day) === monthLabel(zonedNow(tz)));
+      setFocusedDate(day);
+      setVisibleDate(day);
+    },
+    [tz],
+  );
   // The user picked a day in the Day strip (chip tap or swipe).
   const handleUserSwitchDay = useCallback(
     (day: Date) => {
@@ -147,10 +159,12 @@ export default function CalendarScreen() {
   }, []);
   const handleViewChange = useCallback(
     (next: CalendarView) => {
-      setVisibleDate(focusedDate);
+      const monthDate = view === "month" ? monthDateRef.current : null;
+      if (monthDate) commitFocusedDate(monthDate);
+      else setVisibleDate(focusedDate);
       setView(next);
     },
-    [focusedDate],
+    [view, focusedDate, commitFocusedDate],
   );
   // Week and Month "open this day" (tap a Week header, double-tap a Month
   // cell): Day view on that day.
@@ -161,12 +175,13 @@ export default function CalendarScreen() {
     },
     [commitFocusedDate],
   );
-  // Month swipes and chevrons move the focus to the month they land on.
+  // Month swipes, chevrons and day taps.
   const handleMonthDateChange = useCallback(
     (next: Date) => {
-      commitFocusedDate(next);
+      monthDateRef.current = next;
+      setMonthAtToday(monthLabel(next) === monthLabel(zonedNow(tz)));
     },
-    [commitFocusedDate],
+    [tz],
   );
   // Global refetch tick — bumped on every screen focus so *every* mounted day
   // re-syncs (a task created/edited on another screen shows up the moment we
@@ -439,7 +454,7 @@ export default function CalendarScreen() {
   const now = zonedNow(tz);
   const isAtToday =
     view === "month"
-      ? monthLabel(focusedDate) === monthLabel(now)
+      ? monthAtToday
       : view === "week"
         ? dateKey(weekStart(focusedDate)) === dateKey(weekStart(now))
         : dateKey(visibleDate) === dateKey(now);

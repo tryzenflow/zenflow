@@ -14,6 +14,7 @@ import {
   useBottomSheet,
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { useColorScheme } from "@/lib/useColorScheme";
@@ -174,6 +175,9 @@ export function ProfileRow({
           </View>
           <View className="px-5 pt-3.5">
             <Button className="w-full" disabled={saving} onPress={save}>
+              {saving && (
+                <View className="mr-2"><Spinner size={18} tone="onPrimary" /></View>
+              )}
               <Text className="font-semibold text-primary-foreground">
                 {saving ? t("Saving…") : t("Save changes")}
               </Text>

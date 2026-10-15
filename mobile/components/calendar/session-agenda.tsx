@@ -1,6 +1,10 @@
 import { searchSessions } from "@/api/tasks";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DayHeaderSkeleton,
+  SessionRowSkeleton,
+} from "@/components/calendar/session-row-skeleton";
 import { Text } from "@/components/ui/text";
+import { useAfterPaint } from "@/hooks/use-after-paint";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import { useUserStore } from "@/hooks/use-user-store";
 import { highlightParts } from "@/lib/highlight";
@@ -18,26 +22,26 @@ import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { deriveState, SESSION_TONES, sessionTone } from "@zenflow/core";
 import type { Session, SessionSearchDirection } from "@zenflow/shared";
 import { SunriseIcon } from "@/components/brand/icons";
+import { NoResultsMark } from "@/components/brand/state-marks";
 import { type Href, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, View } from "react-native";
 
 const PAGE_SIZE = 20;
-/** A load shorter than this never shows a skeleton. */
-const SKELETON_DELAY_MS = 500;
 
 type Status = "loading" | "ready" | "failed";
 
-const EMPTY_SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
+const NO_ROWS: SearchListRow[] = [];
+const EMPTY_SKELETON_ROWS = [0, 1, 2, 3, 4, 5, 6, 7];
 
+/** Day headers and rows in the agenda's own layout. */
 function AgendaSkeleton() {
   return (
-    <View testID="session-agenda.skeleton" className="px-4 pt-4">
+    <View testID="session-agenda.skeleton">
       {EMPTY_SKELETON_ROWS.map((i) => (
-        <View key={i} className="mb-4 gap-2">
-          {i % 3 === 0 ? <Skeleton className="h-3 w-28" /> : null}
-          <Skeleton className="h-3 w-24" />
-          <Skeleton className="h-4 w-4/5" />
+        <View key={i}>
+          {i % 3 === 0 ? <DayHeaderSkeleton /> : null}
+          <SessionRowSkeleton wide={i % 2 === 0} />
         </View>
       ))}
     </View>
@@ -47,15 +51,18 @@ function AgendaSkeleton() {
 /**
  * Infinite agenda of the user's sessions: day headers, rows in ascending order,
  * pages loading both ways around the moment it opened. `term` filters it (the
- * search screen) or is empty (the List view). Results stay on screen while a
- * new term loads; a skeleton replaces them only after a 500ms wait.
+ * search screen) or is empty (the List view). A skeleton replaces the rows
+ * while a term is typed or loading.
  */
 export function SessionAgenda({
   term,
+  pending = false,
   onOpenSession,
   testIDPrefix = "session-search",
 }: {
   term: string;
+  /** A new term is on its way (typed, still debouncing): show the skeleton now. */
+  pending?: boolean;
   /** Called before navigating to a session. */
   onOpenSession?: () => void;
   testIDPrefix?: string;
@@ -132,10 +139,12 @@ export function SessionAgenda({
     [sessions, tz],
   );
 
-  const showSkeleton = useDelayedLoading(status === "loading", {
-    // A search shows its skeleton at once; the plain list waits.
-    delayMs: term.length > 0 ? 0 : SKELETON_DELAY_MS,
-  });
+  // Every load shows its skeleton at once and holds it briefly, so rows never
+  // pop in over old ones; the first rows render after the screen has painted.
+  const painted = useAfterPaint();
+  const showSkeleton = useDelayedLoading(
+    pending || !painted || status === "loading",
+  );
 
   const openSession = (session: Session) => {
     onOpenSession?.();
@@ -198,9 +207,13 @@ export function SessionAgenda({
   };
 
   const empty =
-    status === "ready" ? (
+    status === "ready" && !showSkeleton ? (
       <View className="items-center gap-3 px-8 pt-24">
-        <SunriseIcon size={56} color="#FF8E3E" />
+        {hasQuery ? (
+          <NoResultsMark size={72} />
+        ) : (
+          <SunriseIcon size={56} color="#FF8E3E" />
+        )}
         <Text className="text-center text-[15px] text-muted-foreground">
           {hasQuery ? t("No sessions match") : t("No sessions yet")}
         </Text>
@@ -209,15 +222,15 @@ export function SessionAgenda({
 
   return (
     <View className="flex-1">
-      {status === "failed" ? (
+      {status === "failed" && !showSkeleton ? (
         <Text className="px-4 py-3 text-[13px] text-muted-foreground">
           {t("Couldn't search right now")}
         </Text>
       ) : null}
-      {showSkeleton && status === "loading" ? <AgendaSkeleton /> : null}
+      {showSkeleton ? <AgendaSkeleton /> : null}
       <FlatList
-        style={showSkeleton && status === "loading" ? { display: "none" } : undefined}
-        data={rows}
+        style={showSkeleton ? { display: "none" } : undefined}
+        data={showSkeleton ? NO_ROWS : rows}
         keyExtractor={(row) => row.key}
         renderItem={renderRow}
         keyboardShouldPersistTaps="handled"

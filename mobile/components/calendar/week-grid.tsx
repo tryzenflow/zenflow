@@ -1,6 +1,7 @@
 import { listSessions, updateSession } from "@/api/tasks";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
+import { useAfterPaint } from "@/hooks/use-after-paint";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import { dayBarsByDay } from "@/lib/day-bar";
 import { checkStateOf } from "@/lib/today-summary";
@@ -312,26 +313,30 @@ function WeekPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekKey, focusTick, mutationTick]);
 
-  const loading = useDelayedLoading(sessions === null && !failed);
+  // A new week paints its columns first; blocks follow once it has painted,
+  // behind a skeleton held briefly so they never pop in.
+  const painted = useAfterPaint();
+  const loading = useDelayedLoading((!painted || sessions === null) && !failed);
+  const shown = loading ? null : sessions;
   const barsByDay = useMemo(
-    () => dayBarsByDay(sessions ?? [], tz),
-    [sessions, tz],
+    () => dayBarsByDay(shown ?? [], tz),
+    [shown, tz],
   );
 
   const sessionsById = useMemo(
-    () => new Map((sessions ?? []).map((s) => [s.id, s])),
-    [sessions],
+    () => new Map((shown ?? []).map((s) => [s.id, s])),
+    [shown],
   );
 
   const checkStateById = useMemo(
-    () => new Map((sessions ?? []).map((s) => [s.id, checkStateOf(s)] as const)),
-    [sessions],
+    () => new Map((shown ?? []).map((s) => [s.id, checkStateOf(s)] as const)),
+    [shown],
   );
 
   const segmentsByDay = useMemo<DaySegment[][]>(() => {
-    const blocks = tasksToBlocks(sessions ?? []);
+    const blocks = tasksToBlocks(shown ?? []);
     return days.map((day) => eventsForDay(blocks, day, tz));
-  }, [sessions, days, tz]);
+  }, [shown, days, tz]);
 
   const grid: DayGrid = useMemo(() => buildDayGrid(hourHeight), [hourHeight]);
   const layouts = useMemo(
@@ -357,10 +362,10 @@ function WeekPage({
     const preview = dropPreview(
       { id: dragged.id, durationMin: dragged.durationMinutes },
       dragging.startMin,
-      blocksOnDay(sessions ?? [], dayKeyStr, tz),
+      blocksOnDay(shown ?? [], dayKeyStr, tz),
     );
     return { dayIndex, ghosts: preview.ghosts, fromIndex };
-  }, [dragging, sessionsById, sessions, days, tz]);
+  }, [dragging, sessionsById, shown, days, tz]);
 
   const now = zonedNow(tz);
   const nowMin = now.getHours() * 60 + now.getMinutes();

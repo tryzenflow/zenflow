@@ -3,6 +3,8 @@ import { CheckOffButton } from "@/components/calendar/check-off-button";
 import { SessionTypeBadge } from "@/components/calendar/session-type-badge";
 import { localizedReminderLabel } from "@/components/tasks/composer/reminder-field";
 import { NoteSkeleton } from "@/components/tasks/note-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import {
   Bell,
   CalendarClock,
@@ -54,6 +56,7 @@ import {
   Suspense,
   forwardRef,
   lazy,
+  startTransition,
   useImperativeHandle,
   useState,
 } from "react";
@@ -99,6 +102,25 @@ function DetailRow({ icon: Icon, children }: { icon: LucideIcon; children: React
   );
 }
 
+const SKELETON_ROWS = [0, 1, 2];
+
+/** Detail rows while the body renders: an icon slot, then two lines. */
+function DetailSkeleton() {
+  return (
+    <View testID="session-detail-skeleton" className="gap-4 px-5 pb-4 pt-2">
+      {SKELETON_ROWS.map((i) => (
+        <View key={i} className="flex-row items-start gap-3">
+          <Skeleton className="h-5 w-5 rounded-full" />
+          <View className="flex-1 gap-1.5">
+            <Skeleton className={i === 0 ? "h-4 w-3/5" : "h-4 w-2/5"} />
+            <Skeleton className="h-3 w-1/3" />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 /**
  * The session detail sheet a calendar block opens. It peeks at the details and
  * snaps to full for the note, which loads only once the sheet reaches full.
@@ -115,6 +137,9 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
     const [session, setSession] = useState<Session | null>(null);
     const [checked, setChecked] = useState<CheckState | null>(null);
     const [noteMounted, setNoteMounted] = useState(false);
+    // The header paints with the sheet; the rows follow once it has painted.
+    const [bodyReady, setBodyReady] = useState(false);
+    const showSkeleton = useDelayedLoading(!bodyReady);
 
     useImperativeHandle(
       ref,
@@ -123,7 +148,9 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
           setSession(next);
           setChecked(null);
           setNoteMounted(false);
+          setBodyReady(false);
           sheet.open();
+          requestAnimationFrame(() => startTransition(() => setBodyReady(true)));
         },
       }),
       [sheet],
@@ -217,6 +244,9 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
                 />
               </BottomSheetHeader>
 
+              {!bodyReady || showSkeleton ? (
+                <DetailSkeleton />
+              ) : (
               <BottomSheetScrollView>
                 <BottomSheetView className="gap-4 px-5 pb-4 pt-2">
                   <DetailRow icon={Clock}>
@@ -333,6 +363,7 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
                   )}
                 </BottomSheetView>
               </BottomSheetScrollView>
+              )}
             </>
           )}
         </BottomSheetContent>

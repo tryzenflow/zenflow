@@ -30,6 +30,7 @@ import {
   useBottomSheet,
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
@@ -208,7 +209,9 @@ function syncErrorToast(
       };
     if (status === 503)
       return {
-        title: t("Couldn't reach {provider}", { provider: PROVIDER_LABEL[provider] }),
+        title: t("Couldn't reach {provider}", {
+          provider: PROVIDER_LABEL[provider],
+        }),
         description: t("Try again in a bit."),
       };
   }
@@ -229,9 +232,7 @@ function errorMessageFor(
         provider: PROVIDER_LABEL[provider],
       });
   }
-  return t(
-    "Sign-in didn't work. Check your student ID and password.",
-  );
+  return t("Sign-in didn't work. Check your student ID and password.");
 }
 
 /**
@@ -494,7 +495,9 @@ export function DluAccountsSection({
                   >
                     <RefreshCw size={14} className="text-primary-foreground" />
                     <Text className="text-[13px] font-semibold text-primary-foreground">
-                      {syncing.includes(provider) ? t("Syncing…") : t("Sync now")}
+                      {syncing.includes(provider)
+                        ? t("Syncing…")
+                        : t("Sync now")}
                     </Text>
                   </Button>
                 </View>
@@ -539,7 +542,10 @@ export function DluAccountsSection({
 
         {/* Sign-in / update-credentials sheet */}
         <BottomSheetContent ref={signInSheet.ref}>
-          <BottomSheetView hadHeader={false} style={{ paddingBottom: sheetBottom }}>
+          <BottomSheetView
+            hadHeader={false}
+            style={{ paddingBottom: sheetBottom }}
+          >
             <View className="pb-3 pt-1">
               <Text className="text-xl font-bold tracking-tight">
                 {mode === "connect"
@@ -639,6 +645,9 @@ export function DluAccountsSection({
               disabled={!canSubmit}
               onPress={handleSubmit}
             >
+              {isSubmitting && (
+                <View className="mr-2"><Spinner size={18} tone="onPrimary" /></View>
+              )}
               <Text className="font-semibold text-primary-foreground">
                 {isSubmitting
                   ? mode === "connect"
@@ -656,7 +665,10 @@ export function DluAccountsSection({
 
         {/* Disconnect confirm sheet */}
         <BottomSheetContent ref={confirmSheet.ref}>
-          <BottomSheetView hadHeader={false} style={{ paddingBottom: sheetBottom }}>
+          <BottomSheetView
+            hadHeader={false}
+            style={{ paddingBottom: sheetBottom }}
+          >
             <View className="pb-3 pt-1">
               <Text className="text-xl font-bold tracking-tight">
                 {t("Disconnect {provider}?", { provider: selectedName })}

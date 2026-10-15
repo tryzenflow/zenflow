@@ -49,7 +49,6 @@ import {
   STUDENT_EMAIL_DOMAIN,
   switchLoginMode,
 } from "@/lib/login-id";
-import { Loader2Icon } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /**

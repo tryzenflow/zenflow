@@ -74,7 +74,6 @@ import {
   Unlink,
   List,
   ListOrdered,
-  Loader,
   Lock,
   LogOut,
   type LucideIcon,
@@ -142,7 +141,6 @@ interopIcon(AlarmClockIcon);
 interopIcon(AlertCircle);
 interopIcon(AlignRight);
 interopIcon(Baby);
-interopIcon(Loader);
 interopIcon(BadgeAlert);
 interopIcon(Calendar);
 interopIcon(CircleUserRound);
@@ -321,7 +319,6 @@ export {
   List,
   ListOrdered,
   Lock,
-  Loader,
   LogOut,
   Settings,
   Mail,

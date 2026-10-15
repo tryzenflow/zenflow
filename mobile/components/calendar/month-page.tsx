@@ -1,4 +1,5 @@
-import { Skeleton } from "@/components/ui/skeleton";
+import { SessionRowSkeleton } from "@/components/calendar/session-row-skeleton";
+import { useAfterPaint } from "@/hooks/use-after-paint";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import { listSessions } from "@/api/tasks";
 import { MonthGrid } from "@/components/calendar/month-grid";
@@ -7,7 +8,7 @@ import { useToast } from "@/components/ui/toast";
 import { useLanguage } from "@/hooks/use-language";
 import { useScreenFocusedRef } from "@/hooks/use-screen-focused-ref";
 import { useConnectivity } from "@/lib/connectivity";
-import { dayBarsByDay } from "@/lib/day-bar";
+import { type DayBar, dayBarsByDay } from "@/lib/day-bar";
 import { format, t } from "@/lib/i18n";
 import {
   dateKey,
@@ -27,7 +28,14 @@ import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { showErrorToast } from "@/lib/task-toasts";
 import { deriveState, SESSION_TONES, sessionTone, zonedNow } from "@zenflow/core";
 import type { Session } from "@zenflow/shared";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import * as Haptics from "expo-haptics";
 import {
   type HostInstance,
@@ -184,6 +192,7 @@ function SessionRow({
 }
 
 const NO_SESSIONS: Session[] = [];
+const NO_BARS = new Map<string, DayBar>();
 
 /**
  * One month: the compact grid with load bars, and under it the selected day's
@@ -263,13 +272,21 @@ export const MonthPage = memo(function MonthPage({
     });
   }, [refetch, screenFocused]);
 
-  const tasksByDate = useMemo(
-    () => groupSessionsByDate(sessions ?? [], tz),
-    [sessions, tz],
-  );
-  const bars = useMemo(() => dayBarsByDay(sessions ?? [], tz), [sessions, tz]);
+  // A new page paints its dates first; bars and the day's list follow in a
+  // later, interruptible render, so mounting a page never stalls a swipe.
+  const showData = useAfterPaint();
+  // The skeleton is held briefly, so bars and rows arrive together.
+  const loading = useDelayedLoading(!showData || sessions === null);
+  const data = loading ? null : sessions;
 
-  const loading = useDelayedLoading(sessions === null);
+  const tasksByDate = useMemo(
+    () => groupSessionsByDate(data ?? [], tz),
+    [data, tz],
+  );
+  const bars = useMemo(
+    () => (data ? dayBarsByDay(data, tz) : NO_BARS),
+    [data, tz],
+  );
 
   // Drag a session from the list onto a day of the grid.
   const pageRef = useRef<HostInstance>(null);
@@ -348,21 +365,18 @@ export const MonthPage = memo(function MonthPage({
               showsVerticalScrollIndicator={false}
             >
               {loading ? (
-                <View testID="month.skeleton" className="gap-3 px-4 pt-3">
+                <View testID="month.skeleton">
                   {[0, 1, 2].map((i) => (
-                    <View key={i} className="gap-1.5">
-                      <Skeleton className="h-3 w-24" />
-                      <Skeleton className="h-4 w-4/5" />
-                    </View>
+                    <SessionRowSkeleton key={i} wide={i % 2 === 0} />
                   ))}
                 </View>
               ) : null}
-              {sessions != null && list.length === 0 ? (
+              {!loading && data != null && list.length === 0 ? (
                 <Text className="px-4 py-3 text-[13px] text-muted-foreground">
                   {t("Nothing scheduled")}
                 </Text>
               ) : null}
-              {list.map((session) => (
+              {(loading ? NO_SESSIONS : list).map((session) => (
                 <SessionRow
                   key={`${session.id}${isContinuationEntry(session) ? ":tail" : ""}`}
                   session={session}

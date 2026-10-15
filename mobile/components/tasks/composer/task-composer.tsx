@@ -1,3 +1,6 @@
+import { ComposerSkeleton } from "@/components/tasks/composer/composer-skeleton";
+import { useAfterPaint } from "@/hooks/use-after-paint";
+import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import { useLanguage } from "@/hooks/use-language";
 import { format, t } from "@/lib/i18n";
 import { durationLabel } from "@/components/ui/duration-slider";
@@ -12,6 +15,7 @@ import {
   useBottomSheet,
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Chip } from "@/components/ui/chip-group";
 import { GlassButton } from "@/components/ui/glass-button";
 import { Text } from "@/components/ui/text";
@@ -55,12 +59,14 @@ export interface TaskComposerProps {
   onDelete?: () => void;
   /** Ids of files uploaded into the notes, for the save/cancel cleanup. */
   onNoteUpload?: (ids: string[]) => void;
-  /** Runs with the validated values. */
-  onValid: (values: SessionFormValues) => void;
+  /** Runs with the validated values. The form stays busy until it settles. */
+  onValid: (values: SessionFormValues) => void | Promise<void>;
   onInvalid: (errors: Record<string, { message?: string } | undefined>) => void;
   /** The sheet was dismissed by a swipe, the backdrop or Close. */
   onDismiss: () => void;
   /** Edit mode: the schedule of the sitting open, to bound the split. */
+  /** The saved values are still loading: the body shows a skeleton. */
+  loading?: boolean;
   editingInstance?: { scheduledStartTime: string | null; durationMinutes: number };
 }
 
@@ -108,10 +114,15 @@ export function TaskComposer({
   onInvalid,
   onDismiss,
   editingInstance,
+  loading = false,
 }: TaskComposerProps) {
   useLanguage();
   const sheet = useBottomSheet();
   const create = mode === "create";
+  // Edit slides up with a skeleton and renders its fields once the sheet has
+  // painted; create stays instant so typing can start at once.
+  const painted = useAfterPaint();
+  const showSkeleton = useDelayedLoading(!create && (loading || !painted));
   const type = form.watch("type");
   const kind: ComposerKind = type === "TASK" ? "TASK" : "EVENT";
   const isTask = kind === "TASK";
@@ -120,6 +131,12 @@ export function TaskComposer({
   const [line, setLine] = useState(() => form.getValues("title") ?? "");
   const lastParse = useRef<ParseResult | null>(null);
   const [parsed, setParsed] = useState<ParseResult | null>(null);
+
+  // Saved values arrive after mount in edit mode: start the line from them.
+  useEffect(() => {
+    if (!loading) setLine(form.getValues("title") ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   useEffect(() => {
     sheet.open();
@@ -206,7 +223,7 @@ export function TaskComposer({
     if (create && values.type === "TASK" && values.tags?.[0] && values.duration) {
       remember(values.tags[0], values.duration);
     }
-    onValid(values);
+    return onValid(values);
   }, onInvalid);
 
   const submitLabel = busy
@@ -260,6 +277,10 @@ export function TaskComposer({
             contentContainerStyle={{ paddingBottom: 24, gap: 16 }}
             keyboardShouldPersistTaps="handled"
           >
+            {showSkeleton ? (
+              <ComposerSkeleton />
+            ) : (
+            <>
             {create && (
               <View className="flex-row gap-2" testID="task.kind">
                 <Chip
@@ -321,6 +342,8 @@ export function TaskComposer({
               onNoteUpload={onNoteUpload}
               noteInitialValue={form.getValues("note") ?? ""}
             />
+            </>
+            )}
           </BottomSheetScrollView>
 
           <View
@@ -330,9 +353,12 @@ export function TaskComposer({
             <Button
               testID="task.save"
               className="h-[52px] w-full"
-              disabled={busy}
+              disabled={busy || showSkeleton}
               onPress={() => void submit()}
             >
+              {busy && (
+                <View className="mr-2"><Spinner size={18} tone="onPrimary" /></View>
+              )}
               <Text className="text-base font-semibold text-primary-foreground">
                 {submitLabel}
               </Text>

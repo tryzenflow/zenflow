@@ -11,6 +11,7 @@ import { makeSession } from "@/test/fixtures";
 import { API } from "@/test/msw/handlers";
 import { server } from "@/test/msw/server";
 import { renderScreen } from "@/test/utils/render";
+import { waitForContent } from "@/test/utils/skeleton";
 
 // Props of the sheet's content on its last render, so a test can move it to a snap point
 // (gestures do not run under happy-dom).
@@ -80,6 +81,7 @@ describe("SessionDetailSheet", () => {
     expect((await screen.findByTestId("session-detail-title")).textContent).toBe(
       "Algorithms lecture",
     );
+    await waitForContent();
     expect(screen.getByText("10:00 AM to 11:30 AM")).toBeTruthy();
     expect(screen.getByText("Room B201")).toBeTruthy();
     expect(screen.getByText("Algorithms")).toBeTruthy();
@@ -99,6 +101,7 @@ describe("SessionDetailSheet", () => {
       ),
     );
     await screen.findByTestId("session-detail-title");
+    await waitForContent();
     expect(screen.getByTestId("session-detail-reason").textContent).toBe(
       "Placed at 9:00 PM, you usually study then",
     );
@@ -126,6 +129,7 @@ describe("SessionDetailSheet", () => {
     );
     await screen.findByTestId("session-detail-title");
     expect(screen.queryByTestId("session-note")).toBeNull();
+    await waitForContent();
     expect(screen.getByText("Swipe up to read the note")).toBeTruthy();
 
     snapTo(1);

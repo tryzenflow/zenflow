@@ -3,15 +3,17 @@ import { MonthPage } from "@/components/calendar/month-page";
 import { MonthPager } from "@/components/calendar/month-pager";
 import { Text } from "@/components/ui/text";
 import { t } from "@/lib/i18n";
-import {
-  addMonths,
-  dateKey,
-  monthLabel,
-} from "@/lib/month-date-math";
+import { addMonths, dateKey, monthLabel } from "@/lib/month-date-math";
 import { zonedNow } from "@zenflow/core";
 import type { Session } from "@zenflow/shared";
 import { isSameMonth, startOfMonth } from "date-fns";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Pressable, View } from "react-native";
 
 interface MonthViewProps {
@@ -48,6 +50,9 @@ export function MonthView({
   const [monthDate, setMonthDate] = useState(date);
   const [visibleMonth, setVisibleMonth] = useState(date);
   const [selected, setSelected] = useState(date);
+  // The header paints from `visibleMonth` at once; the pages follow at lower
+  // priority, so re-rendering their cells never holds the title back.
+  const activeMonth = useDeferredValue(visibleMonth);
 
   // A date from the parent (view switch, Today) re-seeds the selection and,
   // when it lands in another month, the month on screen.
@@ -78,22 +83,25 @@ export function MonthView({
     [onDateChange, tz],
   );
 
-  // First tap selects a day; tapping the selected day opens it.
+  // First tap selects a day; tapping the selected day opens it. Reads state
+  // through refs so its identity holds and memoized pages skip re-rendering.
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
   const selectDay = useCallback(
     (day: Date) => {
-      if (dateKey(day) === dateKey(selected)) {
+      if (dateKey(day) === dateKey(selectedRef.current)) {
         onOpenDay(day);
         return;
       }
       setSelected(day);
       lastDateRef.current = day;
-      if (!isSameMonth(day, monthDate)) {
+      if (!isSameMonth(day, monthRef.current)) {
         setMonthDate(day);
         setVisibleMonth(day);
       }
       onDateChange(day);
     },
-    [selected, monthDate, onDateChange, onOpenDay],
+    [onDateChange, onOpenDay],
   );
 
   return (
@@ -133,7 +141,7 @@ export function MonthView({
               monthDate={pageMonthDate}
               tz={tz}
               reloadToken={reloadToken}
-              isActive={isSameMonth(pageMonthDate, visibleMonth)}
+              isActive={isSameMonth(pageMonthDate, activeMonth)}
               selectedDate={selected}
               onSelectDay={selectDay}
               onOpenDay={onOpenDay}

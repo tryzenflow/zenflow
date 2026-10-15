@@ -12,6 +12,7 @@ import { makeSession } from "@/test/fixtures";
 import { API } from "@/test/msw/handlers";
 import { server } from "@/test/msw/server";
 import { renderScreen } from "@/test/utils/render";
+import { waitForContent } from "@/test/utils/skeleton";
 import type { DaySegment, SessionAnchor } from "@zenflow/shared";
 
 const TZ = "UTC";
@@ -89,7 +90,7 @@ describe("SessionDetailSheet pin", () => {
     );
   });
 
-  function openSession(anchor: SessionAnchor) {
+  async function openSession(anchor: SessionAnchor) {
     const ref: RefObject<SessionDetailSheetHandle | null> = createRef();
     renderScreen(<SessionDetailSheet ref={ref} tz="UTC" />);
     act(() =>
@@ -97,10 +98,11 @@ describe("SessionDetailSheet pin", () => {
         makeSession({ id: "t1", title: "Essay", type: "TASK", anchor, scheduledStartTime: START }),
       ),
     );
+    await waitForContent();
   }
 
   it("explains the state in one line and pins an auto task", async () => {
-    openSession("AUTO");
+    await openSession("AUTO");
     expect(screen.getByTestId("session-detail-anchor").textContent).toBe("Moves freely");
     expect(screen.getByText("The scheduler can move it to make room.")).toBeTruthy();
 
@@ -114,7 +116,7 @@ describe("SessionDetailSheet pin", () => {
   });
 
   it("unpins a pinned task back to auto", async () => {
-    openSession("PINNED");
+    await openSession("PINNED");
     fireEvent.click(screen.getByTestId("session-detail-pin"));
 
     await waitFor(() => expect(posted).toEqual(["unpin:t1"]));

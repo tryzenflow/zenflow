@@ -15,7 +15,7 @@ export const FadeInDown = passthrough();
 export const FadeOutUp = passthrough();
 export const Layout = passthrough();
 export const LinearTransition = passthrough();
-export const Easing = { out: (f: unknown) => f, in: (f: unknown) => f, inOut: (f: unknown) => f, ease: () => 0, quad: () => 0, cubic: () => 0, bezier: () => () => 0 };
+export const Easing = { out: (f: unknown) => f, in: (f: unknown) => f, inOut: (f: unknown) => f, ease: () => 0, quad: () => 0, cubic: () => 0, bezier: () => () => 0, bezierFn: () => () => 0, linear: (t: number) => t, sin: () => 0 };
 export const useSharedValue = <T,>(v: T) => React.useRef({ value: v }).current;
 export const useAnimatedStyle = (fn: () => object) => fn();
 export const useDerivedValue = <T,>(fn: () => T) => ({ value: fn() });
