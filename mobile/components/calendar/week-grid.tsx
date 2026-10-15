@@ -1,4 +1,6 @@
 import { listSessions, updateSession } from "@/api/tasks";
+import { useHiddenVersion } from "@/hooks/use-hidden-version";
+import { filterHidden } from "@/lib/hidden-sessions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { useAfterPaint } from "@/hooks/use-after-paint";
@@ -317,7 +319,12 @@ function WeekPage({
   // behind a skeleton held briefly so they never pop in.
   const painted = useAfterPaint();
   const loading = useDelayedLoading((!painted || sessions === null) && !failed);
-  const shown = loading ? null : sessions;
+  const hiddenVersion = useHiddenVersion();
+  const shown = useMemo(
+    () => (loading || sessions === null ? null : filterHidden(sessions)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [loading, sessions, hiddenVersion],
+  );
   const barsByDay = useMemo(
     () => dayBarsByDay(shown ?? [], tz),
     [shown, tz],

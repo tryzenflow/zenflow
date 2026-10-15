@@ -45,9 +45,18 @@ cp -r flows subflows scripts screenshots "$work/e2e/"
   "$work/e2e/screenshots/capture.yaml")
 
 mkdir -p "$dest"
-for name in week month settings new-task; do
+# PNG_DIR=<dir> also keeps the full-size PNGs, numbered for ios.json (screenshot-1.png ...).
+landing=" week month new-task settings "
+n=0
+for name in day week month list new-task settings marks; do
+  n=$((n + 1))
   png="$work/$name.png"
   [ -f "$png" ] || { echo "Missing $name.png: the flow did not reach that screen" >&2; exit 1; }
+  if [ -n "${PNG_DIR:-}" ]; then
+    mkdir -p "$PNG_DIR"
+    cp "$png" "$PNG_DIR/screenshot-$n.png"
+  fi
+  case "$landing" in *" $name "*) ;; *) continue ;; esac
   if command -v cwebp >/dev/null; then
     cwebp -quiet -q 82 -resize 480 0 "$png" -o "$dest/$name.webp"
   else

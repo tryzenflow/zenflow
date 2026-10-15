@@ -12,6 +12,7 @@ import {
 } from "@/components/Icons";
 import { pinSession, removeSession, unpinSession } from "@/api/tasks";
 import { UNDO_WINDOW_MS, deferCommit } from "@/lib/undo";
+import { hideSessions } from "@/lib/hidden-sessions";
 import { useToast } from "@/components/ui/toast";
 import { showErrorToast } from "@/lib/task-toasts";
 import { checkStateOf } from "@/lib/today-summary";
@@ -89,11 +90,19 @@ export const BlockActionsSheet = forwardRef<
     if (!session) return;
     const s = session;
     sheet.close();
-    const cancel = deferCommit(() => {
-      removeSession(s.id).catch((error: unknown) =>
-        showErrorToast(toast, error, t("Couldn't delete session"), "trash"),
-      );
+    const unhide = hideSessions({ id: s.id });
+    const cancelCommit = deferCommit(() => {
+      // On success the hide stays: the deleted id never returns, and the
+      // refetch drops the row without a flash.
+      removeSession(s.id).catch((error: unknown) => {
+        unhide();
+        showErrorToast(toast, error, t("Couldn't delete session"), "trash");
+      });
     }, UNDO_WINDOW_MS);
+    const cancel = () => {
+      cancelCommit();
+      unhide();
+    };
     toast({
       title: t("Session deleted"),
       icon: "trash",

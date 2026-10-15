@@ -1,7 +1,9 @@
 import { GlassButton } from "@/components/ui/glass-button";
+import { cn } from "@/lib/utils";
 import { CheckOffButton } from "@/components/calendar/check-off-button";
 import { SessionTypeBadge } from "@/components/calendar/session-type-badge";
 import { localizedReminderLabel } from "@/components/tasks/composer/reminder-field";
+import { SessionProperties } from "@/components/tasks/note/session-properties";
 import { SessionNote } from "@/components/tasks/note/session-note";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading";
@@ -41,7 +43,6 @@ import {
   ANCHOR_HINT_KEYS,
   ANCHOR_LABEL_KEYS,
   SESSION_DETAIL_SNAP_POINTS,
-  isFullSnap,
   sessionEditHref,
 } from "@/lib/session-detail";
 import { isNoteEmpty } from "@/lib/note-html";
@@ -112,8 +113,7 @@ function DetailSkeleton() {
 }
 
 /**
- * The session detail sheet a calendar block opens. It peeks at the details and
- * snaps to full for the note, which loads only once the sheet reaches full.
+ * The session detail sheet a calendar block opens: the details, then the note.
  * Check-off is the block's disc; Edit opens the composer for this session.
  */
 export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDetailSheetProps>(
@@ -126,7 +126,6 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
     const { toast } = useToast();
     const [session, setSession] = useState<Session | null>(null);
     const [checked, setChecked] = useState<CheckState | null>(null);
-    const [noteMounted, setNoteMounted] = useState(false);
     // The header paints with the sheet; the rows follow once it has painted.
     const [bodyReady, setBodyReady] = useState(false);
     const showSkeleton = useDelayedLoading(!bodyReady);
@@ -137,7 +136,6 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
         open: (next) => {
           setSession(next);
           setChecked(null);
-          setNoteMounted(false);
           setBodyReady(false);
           sheet.open();
           requestAnimationFrame(() => startTransition(() => setBodyReady(true)));
@@ -145,14 +143,6 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
       }),
       [sheet],
     );
-
-    const handleSnapChange = (index: number) => {
-      if (isFullSnap(index)) setNoteMounted(true);
-    };
-    // Starts loading as soon as the sheet heads for full, not once it settles.
-    const handleAnimate = (_from: number, to: number) => {
-      if (isFullSnap(to)) setNoteMounted(true);
-    };
 
     const onToggle = async (next: "done" | "open"): Promise<boolean> => {
       if (!session) return false;
@@ -202,14 +192,18 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
           ref={sheet.ref}
           snapPoints={SESSION_DETAIL_SNAP_POINTS}
           enableDynamicSizing={false}
-          onChange={handleSnapChange}
-          onAnimate={handleAnimate}
         >
           {session && (
             <>
               <BottomSheetHeader className="items-start gap-3 border-b-0 px-5 pb-2">
                 {session.type === "TASK" ? (
-                  <CheckOffButton state={state} title={session.title} onToggle={onToggle} />
+                  <CheckOffButton
+                    state={state}
+                    title={session.title}
+                    onToggle={onToggle}
+                    // The disc sits 8pt inside its 44pt target; pull it back to line up with the rows below.
+                    style={{ marginLeft: -8, marginRight: -4 }}
+                  />
                 ) : null}
                 <View className="min-w-0 flex-1 gap-1.5">
                   {stripe && (
@@ -224,7 +218,10 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
                   </View>
                   <Text
                     testID="session-detail-title"
-                    className="text-[20px] font-bold leading-tight tracking-tight"
+                    className={cn(
+                      "text-[20px] font-bold leading-tight tracking-tight",
+                      state === "done" && "line-through",
+                    )}
                     numberOfLines={2}
                   >
                     {session.title}
@@ -242,27 +239,17 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
               {!bodyReady || showSkeleton ? (
                 <DetailSkeleton />
               ) : (
-              <BottomSheetScrollView>
-                <BottomSheetView className="gap-4 px-5 pb-4 pt-2">
-                  <DetailRow icon={Clock}>
-                    {session.scheduledStartTime ? (
-                      <>
-                        <Text className="text-[15px] font-medium">
-                          {timeRangeLabel(session.scheduledStartTime, session.durationMinutes, tz)}
-                        </Text>
-                        <Text className="text-[13px] text-muted-foreground">
-                          {formatTitle(zonedDate(session.scheduledStartTime, tz), "EEE MMM d")}
-                        </Text>
-                        {reasonLine && (
-                          <Text testID="session-detail-reason" className="text-[13px] text-muted-foreground">
-                            {reasonLine}
-                          </Text>
-                        )}
-                      </>
-                    ) : (
-                      <Text className="text-[15px] text-muted-foreground">{t("Not scheduled yet")}</Text>
-                    )}
-                  </DetailRow>
+              <BottomSheetScrollView
+                contentContainerStyle={{ paddingBottom: 40 }}
+                nestedScrollEnabled
+              >
+                <View className="gap-4 px-5 pb-4 pt-2">
+                  <SessionProperties task={session} tz={tz} />
+                  {reasonLine && (
+                    <Text testID="session-detail-reason" className="text-[13px] text-muted-foreground">
+                      {reasonLine}
+                    </Text>
+                  )}
 
                   {session.type === "TASK" && (
                     <DetailRow
@@ -303,58 +290,13 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
                     </DetailRow>
                   )}
 
-                  {session.deadline && (
-                    <DetailRow icon={CalendarClock}>
-                      <Text className="text-[15px]">
-                        {t("Due {date}", {
-                          date: localizedDeadlineExact(session.deadline, tz, new Date()),
-                        })}
-                      </Text>
-                    </DetailRow>
-                  )}
-
-                  {session.location && (
-                    <DetailRow icon={MapPin}>
-                      <Text className="text-[15px]">{session.location}</Text>
-                    </DetailRow>
-                  )}
-
-                  {session.tags.length > 0 && (
-                    <DetailRow icon={Tag}>
-                      <View className="flex-row flex-wrap gap-1.5 pt-0.5">
-                        {session.tags.map((tag) => (
-                          <View
-                            key={tag}
-                            className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5"
-                          >
-                            <Text className="text-[13px] font-semibold text-primary">{tag}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    </DetailRow>
-                  )}
-
-                  {session.reminders.length > 0 && (
-                    <DetailRow icon={Bell}>
-                      <Text className="text-[15px]">
-                        {session.reminders.map(localizedReminderLabel).join(", ")}
-                      </Text>
-                    </DetailRow>
-                  )}
-
-                  {hasNote && (
+                  {hasNote && session.note && (
                     <View className="gap-2">
                       <Text className="text-[13px] font-semibold text-muted-foreground">{t("Notes")}</Text>
-                      {noteMounted && session.note ? (
-                        <SessionNote key={session.id} html={session.note} />
-                      ) : (
-                        <Text className="text-[14px] text-muted-foreground">
-                          {t("Swipe up to read the note")}
-                        </Text>
-                      )}
+                      <SessionNote key={session.id} html={session.note} />
                     </View>
                   )}
-                </BottomSheetView>
+                </View>
               </BottomSheetScrollView>
               )}
             </>

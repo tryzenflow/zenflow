@@ -5,10 +5,6 @@ export const SESSION_DETAIL_SNAP_POINTS = ["66%", "92%"];
 export const PEEK_SNAP_INDEX = 0;
 export const FULL_SNAP_INDEX = 1;
 
-/** Only the full snap shows the note; the note WebView first loads there. */
-export function isFullSnap(index: number): boolean {
-  return index === FULL_SNAP_INDEX;
-}
 
 /** Composer route for a session. A recurring occurrence id has `::` and `:`, so it is encoded. */
 export function sessionEditHref(sessionId: string): string {

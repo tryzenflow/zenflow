@@ -4,7 +4,6 @@ import {
   FULL_SNAP_INDEX,
   PEEK_SNAP_INDEX,
   SESSION_DETAIL_SNAP_POINTS,
-  isFullSnap,
   sessionEditHref,
 } from "../session-detail";
 
@@ -13,12 +12,6 @@ describe("session detail snap points", () => {
     expect(SESSION_DETAIL_SNAP_POINTS).toHaveLength(2);
     expect(PEEK_SNAP_INDEX).toBe(0);
     expect(FULL_SNAP_INDEX).toBe(1);
-  });
-
-  it("counts only the full snap as full", () => {
-    expect(isFullSnap(FULL_SNAP_INDEX)).toBe(true);
-    expect(isFullSnap(PEEK_SNAP_INDEX)).toBe(false);
-    expect(isFullSnap(-1)).toBe(false);
   });
 });
 

@@ -70,6 +70,8 @@ import type {
 import { useRouter, type Href } from "expo-router";
 import { toZonedTime } from "date-fns-tz";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useHiddenVersion } from "@/hooks/use-hidden-version";
+import { filterHidden } from "@/lib/hidden-sessions";
 import {
   type LayoutChangeEvent,
   type NativeScrollEvent,
@@ -469,10 +471,12 @@ export function DayTimeline({
     }
   }, [date]);
 
+  const hiddenVersion = useHiddenVersion();
   const segments = useMemo(() => {
-    const blocks = tasksToBlocks(tasks);
+    const blocks = tasksToBlocks(filterHidden(tasks));
     return eventsForDay(blocks, date, tz);
-  }, [tasks, date, tz]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, date, tz, hiddenVersion]);
 
   // Saved tasks for this day (prefetched offline) beat the error screen; an
   // empty day we can't refresh (offline, or its last refresh failed) gets it.

@@ -9,7 +9,6 @@ import { cn } from "@/lib/utils";
 import {
   DAILY_HORIZON,
   TIME_GRANULARITY,
-  isOnlineLocation,
   zonedDate,
   zonedWallClockToUtc,
 } from "@zenflow/core";
@@ -56,6 +55,7 @@ import {
   dragTargetMin,
   minToY,
 } from "@/lib/day-grid";
+import { LocationChip } from "@/components/calendar/location-chip";
 import { CheckOffButton } from "@/components/calendar/check-off-button";
 import { useCheckOff } from "@/hooks/use-check-off";
 import type { CheckState } from "@/lib/today-summary";
@@ -970,7 +970,10 @@ function SessionBlockImpl({
                   the glyphs on Android. */}
               <TypeIcon size={11} color={typeInk} />
               <Text
-                className="min-w-0 flex-1 text-[11px] font-semibold leading-[14px]"
+                className={cn(
+                  "min-w-0 flex-1 text-[11px] font-semibold leading-[14px]",
+                  isDone && "line-through",
+                )}
                 style={COMPACT_TEXT_STYLE}
                 numberOfLines={1}
                 ellipsizeMode="tail"
@@ -1003,8 +1006,11 @@ function SessionBlockImpl({
               <View className="w-full min-w-0 flex-row items-center gap-1.5">
                 <SessionTypeBadge type={segment.type} size="md" className="shrink-0" />
                 <Text
-                  className="min-w-0 shrink text-[12px] font-semibold leading-4"
-                                    numberOfLines={1}
+                  className={cn(
+                    "min-w-0 shrink text-[12px] font-semibold leading-4",
+                    isDone && "line-through",
+                  )}
+                  numberOfLines={1}
                   ellipsizeMode="tail"
                 >
                   {segment.title}
@@ -1036,15 +1042,7 @@ function SessionBlockImpl({
                     )}
               </Text>
               {!!segment.location && !segment.continued && (
-                <Text
-                  className="text-[11px] font-medium leading-[14px] text-muted-foreground"
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  {isOnlineLocation(segment.location)
-                    ? t("Online")
-                    : segment.location}
-                </Text>
+                <LocationChip location={segment.location} compact />
               )}
             </Fragment>
           )}
@@ -1073,7 +1071,7 @@ function SessionBlockImpl({
             {
               position: "absolute",
               right: 0,
-              top: checkAtTop ? 0 : (height - 44) / 2,
+              top: checkAtTop || tier === "full" ? 0 : (height - 44) / 2,
             },
           ]}
         >

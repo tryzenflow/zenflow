@@ -43,11 +43,6 @@ vi.mock("@/lib/geist-webview-font", () => ({
 
 const TZ = "Asia/Ho_Chi_Minh";
 
-function snapTo(index: number) {
-  const onChange = sheet.props?.onChange as (index: number) => void;
-  act(() => onChange(index));
-}
-
 function renderSheet() {
   const ref: RefObject<SessionDetailSheetHandle | null> = createRef();
   renderScreen(<SessionDetailSheet ref={ref} tz={TZ} />);
@@ -82,7 +77,7 @@ describe("SessionDetailSheet", () => {
       "Algorithms lecture",
     );
     await waitForContent();
-    expect(screen.getByText("10:00 AM to 11:30 AM")).toBeTruthy();
+    expect(screen.getByText(/10:00 AM – 11:30 AM/)).toBeTruthy();
     expect(screen.getByText("Room B201")).toBeTruthy();
     expect(screen.getByText("Algorithms")).toBeTruthy();
     expect(screen.getByText("Pinned in place")).toBeTruthy();
@@ -122,17 +117,13 @@ describe("SessionDetailSheet", () => {
     expect(screen.queryByTestId("session-detail-reason")).toBeNull();
   });
 
-  it("keeps the note off the peek snap and loads it at full", async () => {
+  it("shows the note with the details", async () => {
     const ref = renderSheet();
     act(() =>
       ref.current?.open(makeSession({ id: "a", note: "<p>Read chapter 4</p>" })),
     );
     await screen.findByTestId("session-detail-title");
-    expect(screen.queryByTestId("session-note")).toBeNull();
     await waitForContent();
-    expect(screen.getByText("Swipe up to read the note")).toBeTruthy();
-
-    snapTo(1);
     const note = await screen.findByTestId("session-note");
     expect(note.getAttribute("data-html")).toContain("<p>Read chapter 4</p>");
   });
@@ -141,8 +132,7 @@ describe("SessionDetailSheet", () => {
     const ref = renderSheet();
     act(() => ref.current?.open(makeSession({ id: "a", note: "<p></p>" })));
     await screen.findByTestId("session-detail-title");
-    expect(screen.queryByText("Swipe up to read the note")).toBeNull();
-    snapTo(1);
+    await waitForContent();
     expect(screen.queryByTestId("session-note")).toBeNull();
   });
 
