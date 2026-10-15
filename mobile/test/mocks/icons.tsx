@@ -124,3 +124,8 @@ export const X = Icon;
 export type LucideIcon = typeof Icon;
 export type IconProps = Record<string, unknown>;
 export default Icon;
+export const Redo2 = Icon;
+export const SkipForward = Icon;
+export const Sunrise = Icon;
+export const Sunset = Icon;
+export const Undo2 = Icon;

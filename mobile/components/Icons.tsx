@@ -66,6 +66,7 @@ import {
   Maximize2,
   Redo2,
   Undo2,
+  SkipForward,
   Flame,
   Pencil,
   Repeat,
@@ -247,6 +248,7 @@ interopIcon(Notebook);
 interopIcon(Maximize2);
 interopIcon(Redo2);
 interopIcon(Undo2);
+interopIcon(SkipForward);
 interopIcon(Flame);
 interopIcon(Pencil);
 interopIcon(Repeat);
@@ -314,6 +316,7 @@ export {
   Maximize2,
   Redo2,
   Undo2,
+  SkipForward,
   Flame,
   Pencil,
   Repeat,

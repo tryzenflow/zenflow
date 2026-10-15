@@ -22,7 +22,7 @@ import {
   sessionTone,
 } from "@zenflow/core";
 import type { DaySegment, SessionAnchor } from "@zenflow/shared";
-import { Hand, Lock } from "@/components/Icons";
+import { Hand, Lock, SkipForward } from "@/components/Icons";
 import { anchorMark } from "@/lib/anchor";
 import { toZonedTime } from "date-fns-tz";
 import * as Haptics from "expo-haptics";
@@ -787,13 +787,20 @@ function SessionBlockImpl({
     isDarkColorScheme ? 0.45 : 0.55,
   );
   // A done block shows a green left stripe and fades as a whole.
-  const doneBlockStyle = isDone ? ({ opacity: 0.62 } as const) : null;
+  const isSkipped = checkState === "skipped";
+  const doneBlockStyle = isDone
+    ? ({ opacity: 0.62 } as const)
+    : isSkipped
+      ? ({ opacity: 0.45 } as const)
+      : null;
   const topRadius = segment.continued ? 0 : 14;
   const bottomRadius = segment.continues && !drawsThrough ? 0 : 14;
 
   const accentColor = isDone
     ? DONE_GREEN
-    : SESSION_TONES[tone].base;
+    : isSkipped
+      ? SESSION_TONES.dnd.base
+      : SESSION_TONES[tone].base;
   // Meta/time text: the tone's AA ink, or the course ink.
   const timeClass = SESSION_TONE_CLASSES[tone].text;
   // The type icon wears the course ink on a course block, so the type stays
@@ -975,6 +982,11 @@ function SessionBlockImpl({
                   <MarkIcon size={11} className={timeClass} />
                 </View>
               )}
+              {isSkipped && (
+                <View testID={`skip-mark.${segment.taskId}`} className="shrink-0">
+                  <SkipForward size={11} className="text-muted-foreground" />
+                </View>
+              )}
               {tier === "time" && (
                 <Text
                   className={cn("shrink-0 text-[11px] font-medium leading-[14px]", timeClass)}
@@ -1000,6 +1012,11 @@ function SessionBlockImpl({
                 {MarkIcon && (
                   <View testID={`anchor-mark.${segment.taskId}`} className="shrink-0">
                     <MarkIcon size={12} className={timeClass} />
+                  </View>
+                )}
+                {isSkipped && (
+                  <View testID={`skip-mark.${segment.taskId}`} className="shrink-0">
+                    <SkipForward size={12} className="text-muted-foreground" />
                   </View>
                 )}
               </View>

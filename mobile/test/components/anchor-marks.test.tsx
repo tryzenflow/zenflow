@@ -37,7 +37,10 @@ function segment(id: string): DaySegment {
   } as DaySegment;
 }
 
-function renderBlock(anchor: SessionAnchor | undefined) {
+function renderBlock(
+  anchor: SessionAnchor | undefined,
+  checkState?: "open" | "done" | "skipped",
+) {
   return renderScreen(
     <SessionBlock
       segment={segment("b1")}
@@ -47,6 +50,7 @@ function renderBlock(anchor: SessionAnchor | undefined) {
       leftOffset={0}
       blockWidth={300}
       anchor={anchor}
+      checkState={checkState}
       titleOnly
     />,
   );
@@ -66,6 +70,17 @@ describe("SessionBlock anchor mark", () => {
   it("shows no mark on an auto session", () => {
     renderBlock("AUTO");
     expect(screen.queryByTestId("anchor-mark.b1")).toBeNull();
+  });
+
+  it("shows a skip mark beside the anchor on a skipped session", () => {
+    renderBlock("CHOSEN", "skipped");
+    expect(screen.getByTestId("anchor-mark.b1")).toBeTruthy();
+    expect(screen.getByTestId("skip-mark.b1")).toBeTruthy();
+  });
+
+  it("shows no skip mark on an open session", () => {
+    renderBlock("AUTO", "open");
+    expect(screen.queryByTestId("skip-mark.b1")).toBeNull();
   });
 });
 
