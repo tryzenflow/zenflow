@@ -41,10 +41,10 @@ interface Blob {
 }
 
 const BLOBS: Blob[] = [
-  { id: "slate", color: "#6C7BF7", x: 0.12, y: 0.86, size: 0.95, alpha: [0.18, 0.2], dx: 150, dy: -110, ms: 7000 },
-  { id: "sun", color: "#FFD66B", x: 0.88, y: 0.62, size: 0.8, alpha: [0.2, 0.12], dx: -130, dy: 100, ms: 9000 },
-  { id: "sky", color: "#5AB2FF", x: 0.9, y: 0.06, size: 0.85, alpha: [0.18, 0.14], dx: -120, dy: 130, ms: 11000 },
-  { id: "pink", color: "#FF6F91", x: 0.05, y: 0.14, size: 0.7, alpha: [0.12, 0.1], dx: 130, dy: 90, ms: 8000 },
+  { id: "slate", color: "#2F4858", x: 0.12, y: 0.86, size: 0.95, alpha: [0.18, 0.2], dx: 150, dy: -110, ms: 7000 },
+  { id: "sun", color: "#E8895E", x: 0.88, y: 0.62, size: 0.8, alpha: [0.2, 0.12], dx: -130, dy: 100, ms: 9000 },
+  { id: "sky", color: "#5B88A6", x: 0.9, y: 0.06, size: 0.85, alpha: [0.18, 0.14], dx: -120, dy: 130, ms: 11000 },
+  { id: "peach", color: "#E3A98A", x: 0.05, y: 0.14, size: 0.7, alpha: [0.12, 0.1], dx: 130, dy: 90, ms: 8000 },
 ];
 
 // Lively multipliers: wider travel, brighter core, Y cycle out of step with X.
@@ -136,12 +136,12 @@ function BlobLayer({
 /** Two sunrise washes; the second cross-fades over the first and back. */
 const SWEEP = {
   light: {
-    a: ["#5AB2FF33", "#5AB2FF00", "#FFD66B40"],
-    b: ["#FFD66B40", "#FFD66B00", "#6C7BF728"],
+    a: ["#5B88A633", "#5B88A600", "#E8895E40"],
+    b: ["#E8895E40", "#E8895E00", "#2F485828"],
   },
   dark: {
-    a: ["#6C7BF724", "#6C7BF700", "#FFD66B14"],
-    b: ["#5AB2FF24", "#5AB2FF00", "#FF6F911C"],
+    a: ["#C9D6DB24", "#C9D6DB00", "#E8895E14"],
+    b: ["#5B88A624", "#5B88A600", "#E3A98A1C"],
   },
 } as const;
 

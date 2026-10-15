@@ -1,3 +1,5 @@
+import { UI } from "@zenflow/core";
+
 // Re-export calendar constants from the shared core package.
 export {
   DAILY_HORIZON,
@@ -5,26 +7,25 @@ export {
   WEEK_STARTS_ON,
 } from "@zenflow/core";
 
-// React Navigation's native header/tab-bar chrome takes plain color strings, not `className` —
-// this is the one hand-maintained hex mirror of the Sand and slate tokens for that purpose only.
-// Keep in sync with app/global.css.
+// React Navigation's native header/tab-bar chrome takes plain color strings, not `className`.
+// Derived from the core `UI` tokens, the same values app/global.css carries.
 export const NAV_THEME = {
   light: {
-    background: "#FBFAF7",
-    border: "#E6E5EE",
-    card: "#FFFFFF",
-    notification: "#6C7BF7",
-    primary: "#6C7BF7",
-    text: "#1C1D2B",
-    mutedForeground: "#686A7E",
+    background: UI.light.background,
+    border: UI.light.border,
+    card: UI.light.card,
+    notification: UI.light.primary,
+    primary: UI.light.primary,
+    text: UI.light.foreground,
+    mutedForeground: UI.light.mutedForeground,
   },
   dark: {
-    background: "#15161F",
-    border: "#2E3043",
-    card: "#1E2030",
-    notification: "#6C7BF7",
-    primary: "#6C7BF7",
-    text: "#ECECF4",
-    mutedForeground: "#A3A5B8",
+    background: UI.dark.background,
+    border: UI.dark.border,
+    card: UI.dark.card,
+    notification: UI.dark.primary,
+    primary: UI.dark.primary,
+    text: UI.dark.foreground,
+    mutedForeground: UI.dark.mutedForeground,
   },
 };

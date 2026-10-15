@@ -3,27 +3,30 @@ import type { Scheme } from "./palette";
 /**
  * One course colour: the stripe and dot `base`, and the text `ink` read on the
  * 12% (light) or 22% (dark) tint. Every `ink` is AA (4.5:1) on both tints of
- * its scheme; `course-colour.spec.ts` keeps that true.
+ * its scheme; `mobile/lib/__tests__/course-colour.test.ts` keeps that true.
  */
 export interface CourseSwatch {
   base: string;
   ink: Record<Scheme, string>;
 }
 
-/** The 12 course colours, in picker order. */
+/**
+ * The 12 course colours, in picker order. Sand and slate family hues; no
+ * violet, no blue-violet and no red (cherry is reserved for late work).
+ */
 export const COURSE_SWATCHES: readonly CourseSwatch[] = [
-  { base: "#2F80ED", ink: { light: "#153A6B", dark: "#C7DDFA" } },
-  { base: "#7B61FF", ink: { light: "#3B2F7B", dark: "#E8E3FF" } },
-  { base: "#D6336C", ink: { light: "#6A1936", dark: "#FCF1F5" } },
-  { base: "#E8590C", ink: { light: "#692805", dark: "#FEF7F3" } },
-  { base: "#F2A900", ink: { light: "#563C00", dark: "#FFFEFD" } },
-  { base: "#2F9E44", ink: { light: "#15451E", dark: "#CDE8D2" } },
-  { base: "#0CA678", ink: { light: "#054532", dark: "#C5EADF" } },
-  { base: "#1098AD", ink: { light: "#07434C", dark: "#C2E5EA" } },
-  { base: "#A61E4D", ink: { light: "#691331", dark: "#F5E7EC" } },
-  { base: "#5C7CFA", ink: { light: "#2A3871", dark: "#DAE2FE" } },
-  { base: "#94D82D", ink: { light: "#31480F", dark: "#F2FAE5" } },
-  { base: "#B5179E", ink: { light: "#650D59", dark: "#F8E9F6" } },
+  { base: "#2F6F85", ink: { light: "#2E6C81", dark: "#8DABB0" } },
+  { base: "#5B88A6", ink: { light: "#476B83", dark: "#99B1BD" } },
+  { base: "#2E7D7A", ink: { light: "#2A6F6E", dark: "#89B0A8" } },
+  { base: "#7DA886", ink: { light: "#516F5F", dark: "#A1BDA1" } },
+  { base: "#8C9A4E", ink: { light: "#606D41", dark: "#B0B680" } },
+  { base: "#D9A23E", ink: { light: "#7E6735", dark: "#DEB15E" } },
+  { base: "#E8895E", ink: { light: "#8E5D48", dark: "#EBA481" } },
+  { base: "#C0643F", ink: { light: "#98543A", dark: "#D59C81" } },
+  { base: "#E3A98A", ink: { light: "#7D665A", dark: "#E5B194" } },
+  { base: "#8A6A4F", ink: { light: "#7B614A", dark: "#B9A48F" } },
+  { base: "#8FA3AD", ink: { light: "#5B6C75", dark: "#ADB9BC" } },
+  { base: "#5E6E77", ink: { light: "#586770", dark: "#A3A8A7" } },
 ];
 
 export const COURSE_SWATCH_COUNT = COURSE_SWATCHES.length;

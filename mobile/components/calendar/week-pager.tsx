@@ -77,7 +77,7 @@ const SETTLE = {
  * sheet — long-press a block). */
 const NAV_EDGE_ZONE = 56;
 const NAV_HOLD_MS = 340;
-const SLATE_RGB = "108, 123, 247";
+const SLATE_RGB = "47, 72, 88";
 
 /** Stable empty peek list — a fresh `[]` each render would re-run the strip's
  * memo for nothing. */

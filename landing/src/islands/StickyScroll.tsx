@@ -33,7 +33,7 @@ function Beats(props: StickyScrollProps) {
       <ol ref={ref} className="space-y-16 md:space-y-[38vh] md:py-[18vh]">
         {props.beats.map((beat, i) => (
           <li key={beat.title} className="transition-opacity duration-300 md:opacity-[var(--o)]" style={{ "--o": i === active ? 1 : 0.35 } as CSSProperties}>
-            <span className="mb-3 inline-flex size-9 items-center justify-center rounded-full bg-accent text-sm font-extrabold text-[#3a2a00]">
+            <span className="mb-3 inline-flex size-9 items-center justify-center rounded-full bg-accent text-sm font-extrabold text-[#16232b]">
               {i + 1}
             </span>
             <h3 className="text-2xl font-extrabold tracking-tight md:text-3xl">{beat.title}</h3>
@@ -99,7 +99,7 @@ function Card({ index, sources, task, placed }: StickyScrollProps & { index: num
             <span className="ml-0.5 inline-block h-5 w-0.5 translate-y-1 animate-pulse bg-primary" />
           </div>
           <div className="mt-3 flex gap-2 text-sm">
-            <span className="rounded-full bg-accent px-3 py-1 font-semibold text-[#3a2a00]">{task.minutes}</span>
+            <span className="rounded-full bg-accent px-3 py-1 font-semibold text-[#16232b]">{task.minutes}</span>
             <span className="block-session rounded-full px-3 py-1 font-semibold [--kind:var(--color-assignment)]">{task.time}</span>
           </div>
         </div>

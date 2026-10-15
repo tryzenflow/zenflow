@@ -70,11 +70,11 @@ describe("courseStyleFor", () => {
     const dark = courseStyleFor(KEY, overrides, "dark");
     const swatch = COURSE_SWATCHES[2];
     expect(light).toEqual({
-      tint: "rgba(214, 51, 108, 0.12)",
+      tint: "rgba(46, 125, 122, 0.12)",
       stripe: swatch.base,
       ink: swatch.ink.light,
     });
-    expect(dark?.tint).toBe("rgba(214, 51, 108, 0.22)");
+    expect(dark?.tint).toBe("rgba(46, 125, 122, 0.22)");
     expect(dark?.ink).toBe(swatch.ink.dark);
   });
 });

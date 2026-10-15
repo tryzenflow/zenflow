@@ -140,7 +140,7 @@ export async function ensureAndroidChannel(): Promise<void> {
         sound: pushSoundFile(tone),
         vibrationPattern:
           tone === "urgent" ? [0, 200, 120, 200] : [0, 250, 250, 250],
-        lightColor: "#6C7BF7",
+        lightColor: "#2F4858",
         lockscreenVisibility:
           Notifications.AndroidNotificationVisibility.PUBLIC,
       }),

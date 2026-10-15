@@ -5,7 +5,7 @@ import type { NativeViewStyle } from "@/lib/native-style";
  * Hard-coded rather than read from `NAV_THEME` because the primary fill is
  * the same in light and dark mode, so the glow shouldn't flip either.
  */
-export const FAB_GLOW_COLOR = "rgb(108,123,247)";
+export const FAB_GLOW_COLOR = "rgb(47,72,88)";
 
 /**
  * Wide, soft half of the glow — goes on a wrapper `View` around the button.

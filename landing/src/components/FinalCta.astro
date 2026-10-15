@@ -15,13 +15,13 @@ const qr = await QRCode.toString(APK_URL, {
   type: "svg",
   margin: 0,
   errorCorrectionLevel: "M",
-  color: { dark: "#1d1e2cff", light: "#ffffffff" },
+  color: { dark: "#22333dff", light: "#ffffffff" },
 });
 ---
 
 <section class="px-4 py-24 sm:px-6">
   <div
-    class="relative mx-auto max-w-6xl overflow-hidden rounded-[2.5rem] bg-[#1d1e2c] px-6 py-14 text-white sm:px-12 sm:py-20"
+    class="relative mx-auto max-w-6xl overflow-hidden rounded-[2.5rem] bg-[#22333d] px-6 py-14 text-white sm:px-12 sm:py-20"
   >
     <div aria-hidden="true" class="pointer-events-none absolute inset-0">
       <div class="absolute -top-32 -left-24 size-[30rem] animate-drift rounded-full bg-primary/45 blur-3xl"></div>
@@ -37,7 +37,7 @@ const qr = await QRCode.toString(APK_URL, {
           {
             c.steps.map((s, i) => (
               <li class="flex gap-3">
-                <span class="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-extrabold text-[#3a2a00]">
+                <span class="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-extrabold text-[#16232b]">
                   {i + 1}
                 </span>
                 {s}
