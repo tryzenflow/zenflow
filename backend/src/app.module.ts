@@ -13,6 +13,7 @@ import { MailModule } from "./mail/mail.module";
 import { UsersModule } from "./users/users.module";
 import { SessionsModule } from "./sessions/sessions.module";
 import { StreaksModule } from "./streaks/streaks.module";
+import { CourseColoursModule } from "./course-colours/course-colours.module";
 import { TagsModule } from "./tags/tags.module";
 import { FilesModule } from "./files/files.module";
 import { SchedulerModule } from "./scheduler/scheduler.module";
@@ -539,6 +540,7 @@ const jobModules = [
     MailModule,
     SessionsModule,
     StreaksModule,
+    CourseColoursModule,
     CryptoModule,
     LMSModule,
     PortalAPIModule,

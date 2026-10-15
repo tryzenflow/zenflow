@@ -50,6 +50,8 @@ export interface FixedSessionInput {
    * for every other fixed session (including a user-pinned one).
    */
   scheduleStudyUnitId?: string | null;
+  /** Moodle course id for an LMS-ingested ASSIGNMENT / EXAM; null/absent otherwise. */
+  lmsCourseId?: number | null;
   tagIds?: readonly string[];
 }
 
@@ -76,6 +78,7 @@ export async function insertFixedSession(
       externalKey: input.externalKey ?? null,
       seriesId: input.seriesId ?? null,
       scheduleStudyUnitId: input.scheduleStudyUnitId ?? null,
+      lmsCourseId: input.lmsCourseId ?? null,
       tags: { connect: (input.tagIds ?? []).map((id) => ({ id })) },
       userId: input.userId,
     },

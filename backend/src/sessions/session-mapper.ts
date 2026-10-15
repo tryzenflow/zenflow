@@ -28,6 +28,19 @@ export function isLate(row: SessionRow): boolean {
   );
 }
 
+/**
+ * The course a row belongs to: `lms:<Moodle course id>` for an LMS item,
+ * `portal:<ScheduleStudyUnitID>` for a portal meeting or exam, else null.
+ */
+export function courseKeyOf(row: {
+  lmsCourseId: number | null;
+  scheduleStudyUnitId: string | null;
+}): string | null {
+  if (row.lmsCourseId !== null) return `lms:${row.lmsCourseId}`;
+  if (row.scheduleStudyUnitId) return `portal:${row.scheduleStudyUnitId}`;
+  return null;
+}
+
 /** Map a Prisma `Session` row to the `@zenflow/shared` API shape (dates → ISO). */
 export function toSessionDto(row: SessionRow): SharedSession {
   return {
@@ -46,6 +59,7 @@ export function toSessionDto(row: SessionRow): SharedSession {
     seriesId: row.seriesId,
     rrule: row.series?.rrule ?? null,
     timetableGroupId: row.scheduleStudyUnitId,
+    courseKey: courseKeyOf(row),
     sessionIndex: row.sessionIndex,
     sessionTotal: row.sessionTotal,
     reminders: (row.reminders ?? [])

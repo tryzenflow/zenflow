@@ -1,5 +1,6 @@
 import {
   NO_SERIES_SITTING_PROPOSAL,
+  courseKeyOf,
   toSeriesSessionDto,
 } from "./session-mapper";
 import type { SessionRow } from "./types/session-row";
@@ -87,5 +88,25 @@ describe("toSeriesSessionDto (#58)", () => {
       alternativeSlot: null,
       divergent: false,
     });
+  });
+});
+
+describe("courseKeyOf", () => {
+  it("keys an LMS item by its Moodle course id", () => {
+    expect(courseKeyOf({ lmsCourseId: 90001, scheduleStudyUnitId: null })).toBe(
+      "lms:90001",
+    );
+  });
+
+  it("keys a portal item by its section id", () => {
+    expect(
+      courseKeyOf({ lmsCourseId: null, scheduleStudyUnitId: "99910AB100101" }),
+    ).toBe("portal:99910AB100101");
+  });
+
+  it("is null for a user-created session", () => {
+    expect(
+      courseKeyOf({ lmsCourseId: null, scheduleStudyUnitId: null }),
+    ).toBeNull();
   });
 });

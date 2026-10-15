@@ -13,3 +13,4 @@ export * from "./placement";
 export * from "./file";
 export * from "./file-limits";
 export * from "./streak";
+export * from "./course-colour";
