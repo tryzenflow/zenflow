@@ -35,7 +35,7 @@ For developers and API clients. Live schema: Swagger UI at `<API_URL>/api`.
 
 - `timezone` is set at signup (`x-timezone`) and editable. Changing it re-keys recurring `exdates`.
 - `defaultReminderMinutes`: 0 none, default 10.
-- Signup seeds 4 daily `DND` blocks (breakfast, lunch, evening, sleep).
+- Signup does not create `DND` blocks. Mobile onboarding creates 3 daily `DND` routines (sleep, lunch break, dinner).
 
 ## Sessions (`/sessions`)
 
