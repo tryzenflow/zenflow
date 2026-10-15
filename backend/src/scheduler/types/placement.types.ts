@@ -1,6 +1,7 @@
 import type {
-  PlacementPlan,
   PlacementMove,
+  PlacementPlan,
+  PlacementReason,
   SchedulingArm,
 } from "@zenflow/shared";
 import type { Interval } from "../core/slot";
@@ -50,6 +51,8 @@ export interface PlacementResult {
   displaced?: { id: string; from: Date; to: Date }[];
   /** `true` when the frozen TS fallback placed this (placement service unavailable, ADR-0003). */
   degraded?: boolean;
+  /** Why `scheduledStartTime` was chosen (Python); `null`/absent for a fallback. */
+  placementReason?: PlacementReason | null;
   /** `true` when no real slot existed and the "never unplaced" last resort was applied. */
   lastResort?: boolean;
   /** Undo handle for the moves this placement applied (`SYSTEM_MOVE` group). Absent when none moved. */
@@ -86,6 +89,8 @@ export interface SeriesPlacementRow {
   scheduledStartTime: Date | null;
   /** `true` when the frozen TS fallback placed the series (ADR-0003). */
   degraded?: boolean;
+  /** Why `scheduledStartTime` was chosen (Python); `null`/absent for a fallback. */
+  placementReason?: PlacementReason | null;
   /** `true` when no real slot existed and the "never unplaced" last resort was applied. */
   lastResort?: boolean;
   /** This sitting's `SlotProposal` id; `null`/absent when the write failed or none was recorded. */

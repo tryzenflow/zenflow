@@ -7,7 +7,7 @@ One request = one placement event: a single `TASK` or one materialized series. A
 ## Contract
 
 - Types: `packages/shared/src/placement.ts`, mirrored by `services/bandit/src/schemas_place.py`.
-- Wire rules: `extra="forbid"`, camelCase, epoch-ms ints, `contractVersion: 1`.
+- Wire rules: `extra="forbid"`, camelCase, epoch-ms ints, `contractVersion: 3`.
 - Fixtures: `packages/shared/contract/place/*.json` (see its README).
 - Deterministic: no randomness, no clock (`nowMs` is a field); same body gives the same picks.
 
@@ -78,6 +78,21 @@ One request = one placement event: a single `TASK` or one materialized series. A
    - else `last_resort_pin`: the latest on-grid start ending by the deadline, or the next slot once that has passed, pushed past siblings;
    - a series whose deadline has passed is pinned back-to-back.
    - `PREFLIGHT` still answers `INFEASIBLE`, so Nest can reject before writing.
+
+## Reason codes
+
+Each result has `reason` (`src/core/reason.py`), or `null` when `startMs` is `null`. Rules run in order for a `PLACED` start:
+
+| Code | When |
+| --- | --- |
+| `ONLY_FREE_SLOT` | the scan found exactly one free start on the candidate days |
+| `PREFERRED_HOUR` | the preference-matrix cell at the start is at least `0.5` |
+| `NEAR_CLASS` | the start touches or is within 30 min of an occupied block on its day |
+| `BEFORE_DEADLINE` | none of the above |
+
+Other outcomes: `DISPLACED` and `NEEDS_CONFIRMATION` give `MOVED_FOR_DEADLINE`; `ACCEPTED_CONFLICTS`, `ACCEPTED_LATE` and `ACCEPTED_LAST_RESORT` give `BEST_AVAILABLE`.
+
+Blocks carry no type on the wire, so `NEAR_CLASS` counts any occupied block, not only lectures.
 
 ## Errors, auth, observability
 

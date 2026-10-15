@@ -284,11 +284,19 @@ describe("TaskPlacementService.placeSeriesOnCreate", () => {
     expect(prisma.session.update).toHaveBeenCalledTimes(2);
     expect(prisma.session.update).toHaveBeenCalledWith({
       where: { id: "m1" },
-      data: { scheduledStartTime: start1 },
+      data: {
+        scheduledStartTime: start1,
+        placementReason: null,
+        placementReasonStartAt: null,
+      },
     });
     expect(prisma.session.update).toHaveBeenCalledWith({
       where: { id: "m3" },
-      data: { scheduledStartTime: start2 },
+      data: {
+        scheduledStartTime: start2,
+        placementReason: null,
+        placementReasonStartAt: null,
+      },
     });
     expect(prisma.$transaction).toHaveBeenCalledWith([
       "update-one",

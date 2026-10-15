@@ -270,6 +270,12 @@ model Session {
   anchor     SessionAnchor @default(AUTO)
   anchoredAt DateTime?
 
+  // Why the scheduler picked the start (issue #254). The reason describes
+  // `placementReasonStartAt`; once the start moves by any other write, the two
+  // differ and the reason is not shown.
+  placementReason        PlacementReason?
+  placementReasonStartAt DateTime?
+
   // Per-user labels (implicit many-to-many).
   tags Tag[]
 
@@ -527,6 +533,16 @@ enum SessionAnchor {
   AUTO
   CHOSEN
   PINNED
+}
+
+// Why the scheduler picked a start (services/bandit/src/core/reason.py).
+enum PlacementReason {
+  PREFERRED_HOUR
+  BEFORE_DEADLINE
+  ONLY_FREE_SLOT
+  NEAR_CLASS
+  MOVED_FOR_DEADLINE
+  BEST_AVAILABLE
 }
 
 enum SessionEventType {

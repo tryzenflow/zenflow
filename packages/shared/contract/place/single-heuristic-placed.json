@@ -6,7 +6,7 @@
     "timingsMs"
   ],
   "request": {
-    "contractVersion": 2,
+    "contractVersion": 3,
     "requestId": "00000000-0000-4000-8000-000000000001",
     "mode": "PLACE",
     "nowMs": 1789977600000,
@@ -232,7 +232,7 @@
     }
   },
   "response": {
-    "contractVersion": 2,
+    "contractVersion": 3,
     "requestId": "00000000-0000-4000-8000-000000000001",
     "paramsVersion": "ignored",
     "results": [
@@ -248,7 +248,8 @@
         "startMs": 1790001000000,
         "moves": [],
         "late": false,
-        "conflicting": false
+        "conflicting": false,
+        "reason": "PREFERRED_HOUR"
       }
     ],
     "timingsMs": {

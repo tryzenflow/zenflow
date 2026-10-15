@@ -1,3 +1,5 @@
+import type { PlacementReason } from "./placement";
+
 /**
  * What kind of session this is.
  *
@@ -104,6 +106,11 @@ export interface Session {
   anchor: SessionAnchor;
   /** ISO-8601 instant the anchor was last set by the user, or `null` while `AUTO`. */
   anchoredAt: string | null;
+  /**
+   * Why the scheduler picked the current start. `null` when unscheduled, when
+   * the start was set by the user or a move since, or for a fallback placement.
+   */
+  placementReason: PlacementReason | null;
   createdAt: string;
   updatedAt: string;
 }

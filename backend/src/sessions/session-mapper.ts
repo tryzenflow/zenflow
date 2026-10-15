@@ -1,6 +1,7 @@
 import type { Prisma } from "../../generated/prisma";
 import type {
   CreateSessionResponse,
+  PlacementReason,
   SeriesSession,
   SeriesSittingProposal,
   Session as SharedSession,
@@ -41,6 +42,25 @@ export function courseKeyOf(row: {
   return null;
 }
 
+/**
+ * The reason for the row's current start, or null. A reason whose stamped start
+ * differs from `scheduledStartTime` was for an earlier start: the session has
+ * been moved (by the user, a displacement or a reschedule) since.
+ */
+export function placementReasonOf(
+  row: Pick<
+    SessionRow,
+    "placementReason" | "placementReasonStartAt" | "scheduledStartTime"
+  >,
+): PlacementReason | null {
+  if (!row.placementReason || !row.placementReasonStartAt) return null;
+  if (!row.scheduledStartTime) return null;
+  return row.placementReasonStartAt.getTime() ===
+    row.scheduledStartTime.getTime()
+    ? row.placementReason
+    : null;
+}
+
 /** Map a Prisma `Session` row to the `@zenflow/shared` API shape (dates → ISO). */
 export function toSessionDto(row: SessionRow): SharedSession {
   return {
@@ -70,6 +90,7 @@ export function toSessionDto(row: SessionRow): SharedSession {
     skipped: row.skipped,
     anchor: row.anchor,
     anchoredAt: row.anchoredAt ? row.anchoredAt.toISOString() : null,
+    placementReason: placementReasonOf(row),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

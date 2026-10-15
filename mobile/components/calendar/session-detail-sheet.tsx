@@ -25,6 +25,7 @@ import { useCheckOff } from "@/hooks/use-check-off";
 import { useCourseColourStore } from "@/hooks/use-course-colours";
 import { useLanguage } from "@/hooks/use-language";
 import { courseStyleFor } from "@/lib/course-colour";
+import { placementReasonLine } from "@/lib/placement-reason";
 import { format, formatTitle, localizedDeadlineShort, t } from "@/lib/i18n";
 import { navigateOnce } from "@/lib/nav";
 import {
@@ -139,6 +140,10 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
       ? courseStyleFor(session.courseKey, courseOverrides, isDarkColorScheme ? "dark" : "light")?.stripe
       : undefined;
     const hasNote = !!session?.note && !isNoteEmpty(session.note);
+    const reasonLine =
+      session?.scheduledStartTime && session.placementReason
+        ? placementReasonLine(session.placementReason, session.scheduledStartTime, tz)
+        : null;
 
     return (
       <BottomSheet>
@@ -189,6 +194,11 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
                         <Text className="text-[13px] text-muted-foreground">
                           {formatTitle(zonedDate(session.scheduledStartTime, tz), "EEE MMM d")}
                         </Text>
+                        {reasonLine && (
+                          <Text testID="session-detail-reason" className="text-[13px] text-muted-foreground">
+                            {reasonLine}
+                          </Text>
+                        )}
                       </>
                     ) : (
                       <Text className="text-[15px] text-muted-foreground">{t("Not scheduled yet")}</Text>

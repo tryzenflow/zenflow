@@ -221,6 +221,7 @@ def _old_run(req: PlaceRequest) -> list[PlacedMember]:
             moves=[],
             late=False,
             conflicting=False,
+            reason=None,
         )
         dur_ms = m.duration_minutes * consts.MS_PER_MINUTE
         if placer.next15 + dur_ms > req.deadline_ms:
@@ -270,6 +271,7 @@ def _old_run(req: PlaceRequest) -> list[PlacedMember]:
                 moves=[],
                 late=False,
                 conflicting=False,
+                reason=None,
             )
             for m in members
         ]
@@ -299,7 +301,11 @@ def _assert_equivalent(req: PlaceRequest) -> list[PlacedMember]:
     old_results = _old_run(req)
     assert len(new_results) == len(old_results)
     for new, old in zip(new_results, old_results, strict=True):
-        assert new.model_dump() == old.model_dump(), (new.id, new, old)
+        # The oracle predates the reason code (#254); check it separately.
+        assert new.model_dump(exclude={"reason"}) == old.model_dump(
+            exclude={"reason"}
+        ), (new.id, new, old)
+        assert (new.reason is None) == (new.start_ms is None), new.id
     return new_results
 
 

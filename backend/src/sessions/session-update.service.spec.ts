@@ -54,6 +54,8 @@ function session(overrides: Partial<SessionRow> & { id: string }): SessionRow {
     skipped: false,
     anchor: "AUTO",
     anchoredAt: null,
+    placementReason: null,
+    placementReasonStartAt: null,
     deleted: false,
     userId: user.id,
     seriesId: null,

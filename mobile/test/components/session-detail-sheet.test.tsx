@@ -87,6 +87,38 @@ describe("SessionDetailSheet", () => {
     expect(screen.getByText("Edit")).toBeTruthy();
   });
 
+  it("shows the localized reason for the placed start", async () => {
+    const ref = renderSheet();
+    act(() =>
+      ref.current?.open(
+        makeSession({
+          id: "a",
+          scheduledStartTime: "2026-10-15T14:00:00.000Z",
+          placementReason: "PREFERRED_HOUR",
+        }),
+      ),
+    );
+    await screen.findByTestId("session-detail-title");
+    expect(screen.getByTestId("session-detail-reason").textContent).toBe(
+      "Placed at 9:00 PM, you usually study then",
+    );
+  });
+
+  it("shows no reason when the start was not placed by the scheduler", async () => {
+    const ref = renderSheet();
+    act(() =>
+      ref.current?.open(
+        makeSession({
+          id: "a",
+          scheduledStartTime: "2026-10-15T14:00:00.000Z",
+          placementReason: null,
+        }),
+      ),
+    );
+    await screen.findByTestId("session-detail-title");
+    expect(screen.queryByTestId("session-detail-reason")).toBeNull();
+  });
+
   it("keeps the note off the peek snap and loads it at full", async () => {
     const ref = renderSheet();
     act(() =>

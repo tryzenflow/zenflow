@@ -4,6 +4,7 @@ import { Prisma, type User } from "../../../generated/prisma";
 import { withSpan } from "../../observability/otel";
 import { PrismaService } from "../../prisma/prisma.service";
 import { PythonPlacer } from "./python-placer.service";
+import { placementData } from "./placement-write";
 import { toPlacementPlanDto } from "./placement-plan";
 import { PLACEMENT_PLAN_TTL_MS } from "../constants";
 import { ScheduleInfeasibleException } from "../schedule-infeasible.exception";
@@ -267,7 +268,7 @@ export class TaskPlacementService {
       placed.map((p) =>
         this.prisma.session.update({
           where: { id: p.id },
-          data: { scheduledStartTime: p.scheduledStartTime },
+          data: placementData(p),
         }),
       ),
     );
@@ -314,12 +315,12 @@ export class TaskPlacementService {
       }),
       // Never writes a `null` start: `placeSeries` gives every member one.
       ...upcoming.flatMap((m) => {
-        const start = startById.get(m.id);
-        return start
+        const p = placementById.get(m.id);
+        return p?.scheduledStartTime
           ? [
               this.prisma.session.update({
                 where: { id: m.id },
-                data: { scheduledStartTime: start },
+                data: placementData(p),
               }),
             ]
           : [];
