@@ -28,10 +28,11 @@ import type { Session, UpdateScope } from "@zenflow/shared";
 import * as Haptics from "expo-haptics";
 import { forwardRef, useImperativeHandle, useMemo, useState } from "react";
 import { View } from "react-native";
-import type {
-  PendingSessionUpdate,
-  UpdateRecurringScope,
-} from "./update-recurring-sheet";
+import {
+  type PendingSessionUpdate,
+  type UpdateRecurringScope,
+  moveUndoable,
+} from "@/lib/recurring-scope";
 
 export interface RescheduleSheetHandle {
   /** Open the "Move to…" picker for `session`, seeded from its current start
@@ -58,10 +59,9 @@ interface RescheduleSheetProps {
    * instant — the calendar screen re-points its focus / refetches / pulses the
    * block from here (the handler the old cross-day-drag drop used to run). */
   onMoved?: (session: Session, startISO: string) => void;
-  /** When `session` belongs to a series (`getSeriesKind` !== "none"), defers
-   * the commit to the caller's scope-confirmation sheet (`UpdateRecurringSheet`)
-   * instead of committing directly. `onResolve(null)` means the user backed
-   * out — the sheet stays open, nothing was committed. */
+  /** When `session` belongs to a series (`getSeriesKind` !== "none"), the
+   * caller picks the commit scope (`resolveMoveScope`) before this commits.
+   * `onResolve(null)` means the user undid it: nothing was committed. */
   onRequestScopedUpdate?: (
     session: Session,
     pending: PendingSessionUpdate,
@@ -181,16 +181,18 @@ export const RescheduleSheet = forwardRef<
       showMovedToast(toast, {
         to: zonedDate(pickedISO, tz),
         withTime: true,
-        onUndo: () =>
-          void restoreSessionTime(before, scope, skipConflicting).catch(
-            (error) =>
-              showErrorToast(
-                toast,
-                error,
-                t("Couldn't move this session"),
-                "calendar-x",
-              ),
-          ),
+        onUndo: moveUndoable(before, scope)
+          ? () =>
+              void restoreSessionTime(before, scope, skipConflicting).catch(
+                (error) =>
+                  showErrorToast(
+                    toast,
+                    error,
+                    t("Couldn't move this session"),
+                    "calendar-x",
+                  ),
+              )
+          : undefined,
       });
       onMoved?.(session, pickedISO);
       sheet.close();
@@ -209,6 +211,9 @@ export const RescheduleSheet = forwardRef<
     // A timetable-grouped lecture moves just that meeting — no scope prompt.
     const needsScope = seriesKind === "recurring" || seriesKind === "task";
     if (needsScope && onRequestScopedUpdate) {
+      // A recurring move asks nothing and waits out its undo window, so the
+      // sheet closes now; the undo toast carries the rest.
+      if (seriesKind === "recurring") sheet.close();
       onRequestScopedUpdate(
         session,
         { scheduledStartTime: pickedISO, durationMinutes },

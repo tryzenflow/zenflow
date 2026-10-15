@@ -13,11 +13,10 @@ import { completeStep } from "@/hooks/use-checklist";
 import { useLastCreated } from "@/hooks/use-last-created";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
-import { setPendingSlotPick } from "@/lib/pending-slot-pick";
+import { rememberPlacement } from "@/lib/slot-alternatives";
 import { useUploadTracker } from "@/hooks/use-upload-tracker";
 import { goToCalendar, safeBack } from "@/lib/nav";
 import { warmLandingDay } from "@/lib/warm-day";
-import { divergentSittings } from "@/lib/series-alternatives";
 import {
   RESCHEDULE_HINT,
   placementToastMessage,
@@ -203,48 +202,9 @@ function NewSessionForm() {
       void uploads.settle(values.note);
       completeStep("add-task");
       useLastCreated.getState().set(response.id);
-      // Handle divergent response — present a primary-vs-alternative pick.
-      // The week view owns the slot-pick sheet, so hand the payload off and
-      // land there first; `useFocusEffect` (app/(app)/index.tsx) opens the
-      // sheet over the week view and the new block is already behind it.
-      if (
-        response.divergent &&
-        response.slotProposalId &&
-        response.primarySlot &&
-        response.alternativeSlot
-      ) {
-        setPendingSlotPick({
-          kind: "single",
-          session: response,
-          primarySlot: response.primarySlot,
-          alternativeSlot: response.alternativeSlot,
-          slotProposalId: response.slotProposalId,
-          tz,
-        });
-        await warmLandingDay(response.primarySlot, tz);
-        goToCalendar(router, { date: response.primarySlot, flash: response.id });
-        return;
-      }
-
-      // A `sessionCount > 1` series (#59): the divergence rides on `sessions[]`,
-      // while the top-level fields are hard-set to `NO_SLOT_PROPOSAL` server
-      // side, so the single-session guard above can never match one. Filter to
-      // the sittings that actually diverge and hand those off.
-      const series = divergentSittings(response.sessions);
-      if (series.length > 0) {
-        setPendingSlotPick({
-          kind: "series",
-          title: response.title,
-          sittings: series,
-          tz,
-        });
-        await warmLandingDay(series[0].primarySlot, tz);
-        goToCalendar(router, {
-          date: series[0].primarySlot,
-          flash: series[0].session.id,
-        });
-        return;
-      }
+      // The block keeps the applied slot and offers "Other time" when the
+      // placement proposed one; no sheet opens.
+      rememberPlacement(response);
 
       showDisplacedToast(toast, response.displacedSessions);
       const { message, variant } = placementToastMessage(response, user);

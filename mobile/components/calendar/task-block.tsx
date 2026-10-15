@@ -28,7 +28,13 @@ import { toZonedTime } from "date-fns-tz";
 import * as Haptics from "expo-haptics";
 import { memo, useCallback, useEffect, useState } from "react";
 import { BlurView } from "expo-blur";
-import { Platform, StyleSheet, View, useWindowDimensions } from "react-native";
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useOffline } from "@/hooks/use-offline";
 import Svg, { Path } from "react-native-svg";
@@ -53,6 +59,12 @@ import {
 import { CheckOffButton } from "@/components/calendar/check-off-button";
 import { useCheckOff } from "@/hooks/use-check-off";
 import type { CheckState } from "@/lib/today-summary";
+import { useToast } from "@/components/ui/toast";
+import { showAlternativePickToast, showErrorToast } from "@/lib/task-toasts";
+import {
+  chooseOtherTime,
+  useSlotAlternative,
+} from "@/lib/slot-alternatives";
 
 /** Blocks shorter than this have no room for the check-off disc. */
 const CHECKABLE_MIN_HEIGHT = 40;
@@ -208,6 +220,19 @@ function SessionBlockImpl({
 }: SessionBlockProps) {
   useLanguage();
   const checkOff = useCheckOff();
+  const { toast } = useToast();
+  const alternative = useSlotAlternative(segment.taskId);
+  const takeOtherTime = useCallback(() => {
+    Haptics.selectionAsync().catch(() => undefined);
+    chooseOtherTime(segment.taskId)
+      .then((picked) => {
+        const at = picked?.session.scheduledStartTime;
+        if (at) showAlternativePickToast(toast, at, tz);
+      })
+      .catch((error: unknown) =>
+        showErrorToast(toast, error, t("Couldn't move this session"), "calendar-x"),
+      );
+  }, [segment.taskId, toast, tz]);
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const { isDarkColorScheme } = useColorScheme();
   const courseOverrides = useCourseColourStore((s) => s.overrides);
@@ -240,7 +265,7 @@ function SessionBlockImpl({
   // Any whole (non-split) block can be dragged/long-pressed into "Move
   // to…" — fixed types (DND/ASSIGNMENT/EXAM/LECTURE) route through the same
   // gesture as TASK now; a series/recurring touch is disambiguated by the
-  // scope-confirmation sheet upstream (see `update-recurring-sheet.tsx`),
+  // scope rule upstream (`resolveMoveScope` in `lib/recurring-scope.ts`),
   // not by locking the gesture out here.
   // Offline there is nothing to write: drag and long-press are off, tap still opens.
   const offline = useOffline();
@@ -899,6 +924,21 @@ function SessionBlockImpl({
           )}
         </Animated.View>
       </GestureDetector>
+      {alternative && !isSplit && tier === "full" ? (
+        <Pressable
+          onPress={takeOtherTime}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t("Other time")}
+          testID={`other-time.${segment.taskId}`}
+          className="absolute bottom-1.5 rounded-full border border-primary/40 bg-background/90 px-2.5 py-1"
+          style={{ right: checkable ? CHECK_GUTTER_PX : 8 }}
+        >
+          <Text className="text-[11px] font-semibold leading-[14px] text-primary">
+            {t("Other time")}
+          </Text>
+        </Pressable>
+      ) : null}
       {checkable && checkState ? (
         <Animated.View
           pointerEvents="box-none"

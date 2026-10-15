@@ -1,8 +1,12 @@
-import { screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { http, HttpResponse } from "msw";
+import { beforeEach, describe, expect, it } from "vitest";
 import { SessionBlock } from "@/components/calendar/task-block";
 import { buildDayGrid } from "@/lib/day-grid";
+import { useSlotAlternativeStore } from "@/lib/slot-alternatives";
 import type { DaySegment } from "@zenflow/shared";
+import { API } from "@/test/msw/handlers";
+import { server } from "@/test/msw/server";
 import { renderScreen } from "@/test/utils/render";
 
 // Tz is UTC so the wall clock in the fixtures reads the same as the ISO string.
@@ -74,5 +78,50 @@ describe("SessionBlock content tiers", () => {
     renderBlock(segment({ minutes: 60 }), "2026-10-15T08:00:00.000Z");
     expect(screen.queryByText(/^Due/)).toBeNull();
     expect(screen.queryByText("Overdue")).toBeNull();
+  });
+});
+
+describe("SessionBlock — Other time", () => {
+  let swaps: unknown[];
+
+  beforeEach(() => {
+    useSlotAlternativeStore.setState({ byId: {} });
+    swaps = [];
+    server.use(
+      http.post(`${API}/sessions/:id/slot-pick`, async ({ request, params }) => {
+        swaps.push({ id: params.id, body: await request.json() });
+        return HttpResponse.json({
+          data: {
+            session: { id: params.id, scheduledStartTime: "2026-10-15T06:00:00.000Z" },
+            chosenByUser: "alternative",
+          },
+        });
+      }),
+    );
+  });
+
+  it("offers no chip when the placement proposed no alternative", () => {
+    renderBlock(segment({ minutes: 60 }));
+    expect(screen.queryByText("Other time")).toBeNull();
+  });
+
+  it("swaps to the alternative in one tap and drops the chip", async () => {
+    useSlotAlternativeStore.setState({
+      byId: {
+        s1: {
+          slotProposalId: "p1",
+          primarySlot: "2026-10-15T03:00:00.000Z",
+          alternativeSlot: "2026-10-15T06:00:00.000Z",
+        },
+      },
+    });
+    renderBlock(segment({ minutes: 60 }));
+
+    fireEvent.click(screen.getByTestId("other-time.s1"));
+
+    await waitFor(() =>
+      expect(swaps).toEqual([{ id: "s1", body: { slotProposalId: "p1", chose: "alternative" } }]),
+    );
+    await waitFor(() => expect(screen.queryByText("Other time")).toBeNull());
   });
 });

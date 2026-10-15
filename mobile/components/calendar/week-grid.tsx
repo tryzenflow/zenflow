@@ -59,27 +59,23 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { NowIndicator } from "./now-indicator";
-import { type PendingSessionUpdate, type UpdateRecurringScope } from "./update-recurring-sheet";
+import {
+  type PendingSessionUpdate,
+  type RecurringScopeChoice,
+  type UpdateRecurringScope,
+  moveUndoable,
+} from "@/lib/recurring-scope";
+import { rememberPlacement } from "@/lib/slot-alternatives";
 import { SessionBlock } from "./task-block";
 import { TIME_GUTTER_WIDTH, TimeGutter } from "./time-gutter";
 
 /** Start-of-day anchor for a week with nothing to scroll to. */
 const DEFAULT_ANCHOR_MIN = 8 * 60;
 
-export type WeekSlotPick = (
-  session: Session,
-  primarySlot: string,
-  alternativeSlot: string,
-  slotProposalId: string,
-  onPick: (chose: "primary" | "alternative") => Promise<void>,
-) => void;
-
 export type WeekScopeRequest = (
   session: Session,
   pending: PendingSessionUpdate,
-  onResolve: (
-    choice: { scope: UpdateRecurringScope; skipConflicting: boolean } | null,
-  ) => void,
+  onResolve: (choice: RecurringScopeChoice) => void,
 ) => void;
 
 export interface WeekGridProps {
@@ -96,7 +92,6 @@ export interface WeekGridProps {
   onRequestReschedule?: (session: Session) => void;
   onRequestBlockMenu?: (session: Session) => void;
   onRequestScopedUpdate?: WeekScopeRequest;
-  onRequestSlotPick?: WeekSlotPick;
 }
 
 function useHourHeight(): number {
@@ -124,7 +119,6 @@ export function WeekGrid({
   onRequestReschedule,
   onRequestBlockMenu,
   onRequestScopedUpdate,
-  onRequestSlotPick,
 }: WeekGridProps) {
   useLanguage();
   const { width } = useWindowDimensions();
@@ -176,7 +170,6 @@ export function WeekGrid({
             onRequestReschedule={onRequestReschedule}
             onRequestBlockMenu={onRequestBlockMenu}
             onRequestScopedUpdate={onRequestScopedUpdate}
-            onRequestSlotPick={onRequestSlotPick}
           />
         </View>
       ))}
@@ -194,7 +187,6 @@ interface WeekPageProps {
   onRequestReschedule?: (session: Session) => void;
   onRequestBlockMenu?: (session: Session) => void;
   onRequestScopedUpdate?: WeekScopeRequest;
-  onRequestSlotPick?: WeekSlotPick;
 }
 
 function WeekPage({
@@ -207,7 +199,6 @@ function WeekPage({
   onRequestReschedule,
   onRequestBlockMenu,
   onRequestScopedUpdate,
-  onRequestSlotPick,
 }: WeekPageProps) {
   const { toast, confirm } = useToast();
   const tabBarOverlay = useTabBarOverlayHeight();
@@ -314,37 +305,23 @@ function WeekPage({
             skipConflicting,
           });
           showSkippedToast(toast, updated.skippedSessionIds);
-          if (
-            updated.divergent &&
-            updated.slotProposalId &&
-            updated.primarySlot &&
-            updated.alternativeSlot &&
-            onRequestSlotPick
-          ) {
-            // The slot picker's confirm runs the pick; this only refetches.
-            onRequestSlotPick(
-              session,
-              updated.primarySlot,
-              updated.alternativeSlot,
-              updated.slotProposalId,
-              async () => notifySessionsMutated(),
-            );
-            return;
-          }
+          rememberPlacement(updated);
           showMovedToast(toast, {
             to: zonedDate(updated.scheduledStartTime ?? startISO, tz),
             withTime: true,
-            onUndo: () =>
-              void restoreSessionTime(session, scope, skipConflicting)
-                .then(() => notifySessionsMutated())
-                .catch((error) =>
-                  showErrorToast(
-                    toast,
-                    error,
-                    t("Couldn't move this session"),
-                    "calendar-x",
-                  ),
-                ),
+            onUndo: moveUndoable(session, scope)
+              ? () =>
+                  void restoreSessionTime(session, scope, skipConflicting)
+                    .then(() => notifySessionsMutated())
+                    .catch((error) =>
+                      showErrorToast(
+                        toast,
+                        error,
+                        t("Couldn't move this session"),
+                        "calendar-x",
+                      ),
+                    )
+              : undefined,
           });
         } catch (error) {
           showErrorToast(
@@ -400,7 +377,6 @@ function WeekPage({
       confirm,
       tz,
       onRequestScopedUpdate,
-      onRequestSlotPick,
     ],
   );
 

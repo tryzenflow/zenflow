@@ -29,13 +29,12 @@ import {
 } from "react";
 import { Pressable, View } from "react-native";
 
-/** Which slice of a series a reschedule/resize should hit. */
-export type UpdateRecurringScope = "occurrence" | "following" | "series";
+import type {
+  PendingSessionUpdate,
+  UpdateRecurringScope,
+} from "@/lib/recurring-scope";
 
-export interface PendingSessionUpdate {
-  scheduledStartTime: string;
-  durationMinutes: number;
-}
+export type { PendingSessionUpdate, UpdateRecurringScope };
 
 export interface UpdateRecurringSheetHandle {
   /** Open the scope chooser for `session`, which is about to be moved/resized

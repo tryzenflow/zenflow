@@ -109,6 +109,9 @@ export class SessionUpdateService {
       );
       if (followingSplit) return followingSplit;
 
+      const detached = await this.handleOccurrenceDetach(id, occ, dto, user);
+      if (detached) return detached;
+
       id = await this.resolveOccurrenceTarget(id, occ, dto, user);
 
       const siblingScope = occ
@@ -252,6 +255,48 @@ export class SessionUpdateService {
         ? skippedSessionIds
         : undefined,
     };
+  }
+
+  /**
+   * A recurring occurrence ref with `scope: "occurrence"` and a reschedule
+   * moves just that occurrence: the series keeps its time and the occurrence
+   * reappears as a one-off. A PATCH that also changes the rrule is a series
+   * change and falls through. `null` otherwise.
+   */
+  private async handleOccurrenceDetach(
+    id: string,
+    occ: OccurrenceRef | null,
+    dto: UpdateSessionDto,
+    user: User,
+  ): Promise<UpdateSessionResponse | null> {
+    if (
+      !(
+        occ &&
+        dto.scope === "occurrence" &&
+        isRescheduleChange(dto) &&
+        dto.rrule === undefined
+      )
+    ) {
+      return null;
+    }
+    const rep = await this.prisma.session.findFirst({
+      where: { seriesId: occ.seriesId, userId: user.id, deleted: false },
+      select: { scheduledStartTime: true, durationMinutes: true },
+    });
+    if (!rep || !rep.scheduledStartTime)
+      throw new NotFoundException(`Cannot find session with id ${id}`);
+
+    const session = await this.series.detachOccurrence(
+      occ.seriesId,
+      occ.startISO,
+      {
+        scheduledStartTime:
+          dto.scheduledStartTime ?? rep.scheduledStartTime.toISOString(),
+        durationMinutes: dto.durationMinutes ?? rep.durationMinutes,
+      },
+      user,
+    );
+    return { ...session, ...NO_SLOT_PROPOSAL };
   }
 
   /**

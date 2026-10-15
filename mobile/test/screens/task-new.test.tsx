@@ -4,6 +4,7 @@ import { http, HttpResponse } from "msw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import NewSessionScreen from "@/app/task/new";
 import { DRAFT_NEW, useComposerStore } from "@/lib/composer-store";
+import { useSlotAlternativeStore } from "@/lib/slot-alternatives";
 import { useUserStore } from "@/hooks/use-user-store";
 import { makeSession } from "@/test/fixtures";
 import { API, testUser } from "@/test/msw/handlers";
@@ -156,5 +157,45 @@ describe("NewSessionScreen", () => {
 
     renderScreen(<NewSessionScreen />);
     expect((screen.getByTestId("task.title") as HTMLInputElement).value).toBe("Draft idea");
+  });
+
+  it("applies the placed slot with no choice sheet and keeps the alternative for Other time", async () => {
+    server.use(
+      http.post(`${API}/sessions`, () =>
+        HttpResponse.json({
+          data: {
+            ...makeSession({
+              id: "new1",
+              title: "Revise graphs",
+              type: "TASK",
+              scheduledStartTime: "2026-10-15T03:00:00.000Z",
+            }),
+            divergent: true,
+            slotProposalId: "sp1",
+            primarySlot: "2026-10-15T03:00:00.000Z",
+            alternativeSlot: "2026-10-15T06:00:00.000Z",
+          },
+        }),
+      ),
+    );
+    useSlotAlternativeStore.setState({ byId: {} });
+    renderScreen(<NewSessionScreen />);
+    await typeLine("Revise graphs");
+    await deadlinesReady();
+    fireEvent.click(screen.getByTestId("task.deadline.chip.tomorrow"));
+    fireEvent.click(screen.getByTestId("task.save"));
+
+    await waitFor(() =>
+      expect(router.dismissTo).toHaveBeenCalledWith({
+        pathname: "/",
+        params: { date: "2026-10-15T03:00:00.000Z", flash: "new1" },
+      }),
+    );
+    expect(useSlotAlternativeStore.getState().byId.new1).toEqual({
+      slotProposalId: "sp1",
+      primarySlot: "2026-10-15T03:00:00.000Z",
+      alternativeSlot: "2026-10-15T06:00:00.000Z",
+    });
+    expect(screen.queryByText("Choose a time")).toBeNull();
   });
 });

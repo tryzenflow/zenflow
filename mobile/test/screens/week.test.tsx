@@ -17,7 +17,6 @@ vi.mock("@/components/checklist/getting-started", () => ({ GettingStarted: () =>
 vi.mock("@/components/tasks/create-task-fab", () => ({ CreateSessionFab: () => null }));
 vi.mock("@/components/calendar/block-actions-sheet", () => ({ BlockActionsSheet: () => null }));
 vi.mock("@/components/calendar/reschedule-sheet", () => ({ RescheduleSheet: () => null }));
-vi.mock("@/components/calendar/series-slot-pick-sheet", () => ({ SeriesSlotPickSheet: () => null }));
 vi.mock("@/components/calendar/update-recurring-sheet", () => ({ UpdateRecurringSheet: () => null }));
 vi.mock("@/lib/tab-bar-metrics", () => ({ useTabBarOverlayHeight: () => 0 }));
 

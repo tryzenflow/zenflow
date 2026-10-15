@@ -470,6 +470,49 @@ export class SeriesService {
   }
 
   /**
+   * "This occurrence only" move of a recurring fixed series: the occurrence is
+   * excluded from the series (see {@link excludeOccurrence}) and created again
+   * as a one-off at its new start. The rest of the series keeps its time.
+   */
+  async detachOccurrence(
+    seriesId: string,
+    occurrenceStartISO: string,
+    change: { scheduledStartTime: string; durationMinutes: number },
+    user: User,
+  ): Promise<SharedSession> {
+    const rep = await this.prisma.session.findFirst({
+      where: { seriesId, userId: user.id, deleted: false },
+      orderBy: { createdAt: "asc" },
+      include: WITH_TAGS_AND_SERIES,
+    });
+    if (!rep)
+      throw new NotFoundException(`Cannot find recurring series ${seriesId}`);
+
+    await this.excludeOccurrence(seriesId, occurrenceStartISO, user);
+    const created = await this.prisma.$transaction(async (tx) => {
+      const s = await tx.session.create({
+        data: {
+          type: rep.type,
+          source: rep.source,
+          title: rep.title,
+          note: rep.note,
+          location: rep.location,
+          durationMinutes: change.durationMinutes,
+          deadline: null,
+          scheduledStartTime: new Date(change.scheduledStartTime),
+          tags: { connect: rep.tags.map((t) => ({ id: t.id })) },
+          userId: user.id,
+        },
+        include: WITH_TAGS_AND_SERIES,
+      });
+      await tx.sessionEvent.create({ data: createEventData(s, user.id) });
+      recordCreateEvent();
+      return s;
+    });
+    return toSessionDto(created);
+  }
+
+  /**
    * "Delete this occurrence and every one after it" — pull the series' `rrule`
    * `UNTIL` back to just before `fromStartISO`. If the cutoff lands on or before
    * the first occurrence, the whole series is deleted instead.
