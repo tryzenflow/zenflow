@@ -692,7 +692,11 @@ describe("4. notification fan-out from a worker", () => {
       ]);
       for (const j of jobs) expect(await j.getState()).toBe("completed");
     }
-    const allPush = (await jobsOf(notifyQ())).length;
+    // This student's push jobs only: the queue is shared, and other students'
+    // marks notes keep landing in it.
+    const pushCount = async () =>
+      (await Promise.all(rows.map((r) => pushJobsFor(r.id)))).flat().length;
+    const allPush = await pushCount();
 
     // A quiet re-run (same data upstream) raises nothing and enqueues nothing.
     await sleep((TUNING.cooldownSec + 1) * 1000);
@@ -700,7 +704,7 @@ describe("4. notification fan-out from a worker", () => {
     await s.agent.post("/api/v1/integrations/LMS/sync").expect(201);
     await sleep(1_000);
     expect(await noteRows(s)).toHaveLength(rows.length);
-    expect((await jobsOf(notifyQ())).length).toBe(allPush);
+    expect(await pushCount()).toBe(allPush);
     expect(sse.events).toHaveLength(rows.length);
 
     sse.close();
