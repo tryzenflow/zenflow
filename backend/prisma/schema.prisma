@@ -71,6 +71,7 @@ model User {
   // occurrence cache without walking their timetable.
   portalSectionEnrollments PortalSectionEnrollment[]
   lmsCourseEnrollments     LmsCourseEnrollment[]
+  placementPlans           PlacementPlan[]
 }
 
 /**
@@ -251,6 +252,12 @@ model Session {
   // Unused on a recurring representative: occurrences use SessionOccurrenceState.
   completedAt DateTime?
   skipped     Boolean   @default(false)
+
+  // How firmly the scheduler may move this session (ADR-0022). AUTO moves
+  // freely, CHOSEN only with the user's confirmation, PINNED never. Set by a
+  // user drag or time pick (CHOSEN), the pin routes (PINNED) and unpin (AUTO).
+  anchor     SessionAnchor @default(AUTO)
+  anchoredAt DateTime?
 
   // Per-user labels (implicit many-to-many).
   tags Tag[]
@@ -509,6 +516,12 @@ model SlotProposal {
   @@index([experimentId])
 }
 
+enum SessionAnchor {
+  AUTO
+  CHOSEN
+  PINNED
+}
+
 enum SessionEventType {
   CREATE
   MOVE // user drag or resize of a scheduled TASK (negative signal)
@@ -533,6 +546,10 @@ model SessionEvent {
   // can be reverted (delete the series) as one action. Null for a single-sitting
   // create. Plain scalar, not a relation: it must survive the series' deletion.
   seriesId            String?
+  // Shared by every row one user action wrote (a drag's MOVE, a cascade's
+  // SYSTEM_MOVEs, a confirmed plan). `POST /sessions/undo/:groupId` reverts them
+  // together. Null for rows written outside such an action.
+  groupId             String?
   occurredAt          DateTime         @default(now())
 
   // Nullable + SetNull so RETAINED / observation-count history survives a
@@ -553,6 +570,26 @@ model SessionEvent {
   @@index([sessionId])
   @@index([slotProposalId])
   @@index([seriesId])
+  @@index([groupId])
+}
+
+/// A placement the user has to confirm (ADR-0022): the cheapest plan moves a
+/// CHOSEN session. Nothing is applied until `POST /sessions/placement/confirm`.
+/// `subjectId` is the session being placed (null for a create, which is
+/// inserted from `createInput` on confirm). `moves` is the plan's `PlacementMove[]`.
+model PlacementPlan {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId   String?
+  subjectFrom DateTime? // the subject's start when the plan was made (null for a create)
+  startAt     DateTime // the subject's planned start
+  moves       Json
+  createInput Json? // the CreateSessionDto of a create that needs confirmation
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model File {
