@@ -9,6 +9,7 @@ import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { completeStep } from "@/hooks/use-checklist";
 import { showMovedToast } from "@/lib/move-toast";
+import { restoreSessionTime } from "@/lib/move-undo";
 import {
   dateKey,
   getMonthGridDays,
@@ -449,6 +450,24 @@ export const MonthPage = memo(function MonthPage({
           first: firstMove,
           to: zonedDate(newStartISO, tz),
           withTime: false,
+          onUndo: () =>
+            void restoreSessionTime(original)
+              .then((reverted) => {
+                if (!reverted) return;
+                setSessions((cur) =>
+                  (cur ?? []).map((t) =>
+                    t.id === original.id ? reverted : t,
+                  ),
+                );
+              })
+              .catch((error) =>
+                showErrorToast(
+                  toast,
+                  error,
+                  t("Couldn't reschedule task"),
+                  "calendar-x",
+                ),
+              ),
         });
         setSessions((cur) =>
           (cur ?? []).map((t) => (t.id === original.id ? updated : t)),

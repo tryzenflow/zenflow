@@ -1,6 +1,14 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
-import { CalendarClock, ChevronRight, Plus } from "@/components/Icons";
+import { useCheckOff } from "@/hooks/use-check-off";
+import {
+  CalendarClock,
+  Check,
+  ChevronRight,
+  MinusCircle,
+  Plus,
+} from "@/components/Icons";
+import { checkStateOf } from "@/lib/today-summary";
 import {
   BottomSheet,
   BottomSheetContent,
@@ -37,6 +45,7 @@ export const BlockActionsSheet = forwardRef<
 >(({ onReschedule, onSessionBefore }, ref) => {
   useLanguage();
   const sheet = useBottomSheet();
+  const checkOff = useCheckOff();
   const [session, setSession] = useState<Session | null>(null);
 
   useImperativeHandle(
@@ -60,6 +69,15 @@ export const BlockActionsSheet = forwardRef<
     setTimeout(() => fn(s), 180);
   };
 
+  const toggleCheck = (kind: "complete" | "skip", on: boolean) => {
+    if (!session) return;
+    const s = session;
+    sheet.close();
+    void checkOff({ id: s.id, title: s.title }, kind, on);
+  };
+
+  const state = session ? checkStateOf(session) : "open";
+
   return (
     <BottomSheet>
       <BottomSheetContent ref={sheet.ref}>
@@ -72,6 +90,28 @@ export const BlockActionsSheet = forwardRef<
               {session?.title ?? ""}
             </Text>
           </View>
+
+          <Pressable
+            testID="block-action-done"
+            onPress={() => toggleCheck("complete", state !== "done")}
+            className="flex-row items-center gap-3 rounded-xl px-3 py-3.5 active:opacity-70"
+          >
+            <Check size={18} className="text-foreground" />
+            <Text className="flex-1 text-[14px] font-medium text-foreground">
+              {state === "done" ? t("Mark as not done") : t("Mark as done")}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            testID="block-action-skip"
+            onPress={() => toggleCheck("skip", state !== "skipped")}
+            className="flex-row items-center gap-3 rounded-xl px-3 py-3.5 active:opacity-70"
+          >
+            <MinusCircle size={18} className="text-foreground" />
+            <Text className="flex-1 text-[14px] font-medium text-foreground">
+              {state === "skipped" ? t("Undo skip") : t("Skip this session")}
+            </Text>
+          </Pressable>
 
           <Pressable
             onPress={() => run(onSessionBefore)}

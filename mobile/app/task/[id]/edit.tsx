@@ -28,7 +28,9 @@ import { Text } from "@/components/ui/text";
 import {
   ModalToastScope,
   useModalToast,
+  useRootToast,
 } from "@/components/tasks/modal-toast-scope";
+import { UNDO_WINDOW_MS, deferCommit } from "@/lib/undo";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
 import { setPendingSlotPick } from "@/lib/pending-slot-pick";
@@ -90,6 +92,8 @@ function EditSessionForm() {
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
   const { toast } = useModalToast();
+  // The undo toast and any error outlive this modal, so they go to the root stack.
+  const { toast: rootToast } = useRootToast();
   const [task, setSession] = useState<Session | null>(null);
   const [deleting, setDeleting] = useState(false);
   // Opens as a read-only page; the header switch flips into the edit form.
@@ -295,37 +299,45 @@ function EditSessionForm() {
     if (first?.message) showSplitToast(toast, String(first.message));
   }
 
-  async function runDelete(scope: DeleteRecurringScope) {
+  function runDelete(scope: DeleteRecurringScope) {
     if (!task || deleting) return;
     const seriesKind = getSeriesKind(task);
     setDeleting(true);
-    try {
-      if (scope === "series" && task.seriesId) {
-        // Generic — works for both a recurring (rrule) series and a
-        // materialized TASK series.
-        await removeSessionSeries(task.seriesId);
-      } else if (
-        scope === "following" &&
-        task.seriesId &&
-        seriesKind === "recurring" &&
-        task.scheduledStartTime
-      ) {
-        await truncateSessionSeries(task.seriesId, task.scheduledStartTime);
-      } else if (
-        scope === "following" &&
-        task.seriesId &&
-        seriesKind === "task"
-      ) {
-        // `task.id` is already a plain session id for a materialized TASK
-        // sitting (no occurrence-ref parsing needed).
-        await removeSeriesFrom(task.seriesId, task.id);
-      } else {
-        // "occurrence": for a recurring session `task.id` is
-        // "<seriesId>::<start>" and the backend drops just that date; for a
-        // TASK sitting or a one-off it's a plain delete.
-        await removeSession(task.id);
+    const commit = async () => {
+      try {
+        if (scope === "series" && task.seriesId) {
+          // Generic — works for both a recurring (rrule) series and a
+          // materialized TASK series.
+          await removeSessionSeries(task.seriesId);
+        } else if (
+          scope === "following" &&
+          task.seriesId &&
+          seriesKind === "recurring" &&
+          task.scheduledStartTime
+        ) {
+          await truncateSessionSeries(task.seriesId, task.scheduledStartTime);
+        } else if (
+          scope === "following" &&
+          task.seriesId &&
+          seriesKind === "task"
+        ) {
+          // `task.id` is already a plain session id for a materialized TASK
+          // sitting (no occurrence-ref parsing needed).
+          await removeSeriesFrom(task.seriesId, task.id);
+        } else {
+          // "occurrence": for a recurring session `task.id` is
+          // "<seriesId>::<start>" and the backend drops just that date; for a
+          // TASK sitting or a one-off it's a plain delete.
+          await removeSession(task.id);
+        }
+      } catch (error) {
+        showErrorToast(rootToast, error, t("Couldn't delete session"), "trash");
       }
-      toast(
+    };
+    // Nothing is sent until the undo window closes; Undo cancels it.
+    const cancel = deferCommit(commit, UNDO_WINDOW_MS);
+    rootToast({
+      title:
         scope === "series"
           ? t("Series deleted")
           : scope === "following"
@@ -333,15 +345,11 @@ function EditSessionForm() {
               ? t("This and later sittings removed")
               : t("This and later occurrences removed")
             : t("Session deleted"),
-        "success",
-        { icon: "trash" },
-      );
-      safeBack(router);
-    } catch (error) {
-      showErrorToast(toast, error, t("Couldn't delete session"), "trash");
-    } finally {
-      setDeleting(false);
-    }
+      icon: "trash",
+      duration: UNDO_WINDOW_MS,
+      action: { label: t("Undo"), onPress: cancel },
+    });
+    safeBack(router);
   }
 
   function onDelete() {

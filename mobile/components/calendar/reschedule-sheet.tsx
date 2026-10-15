@@ -14,7 +14,9 @@ import { TimePickerInline } from "@/components/ui/time-picker";
 import { useToast } from "@/components/ui/toast";
 import { completeStep } from "@/hooks/use-checklist";
 import { showMovedToast } from "@/lib/move-toast";
+import { restoreSessionTime } from "@/lib/move-undo";
 import { isPastDeadlineDrop } from "@/lib/overdue";
+import { showErrorToast } from "@/lib/task-toasts";
 import {
   getSeriesKind,
   snapToNearestLaterQuarterHour,
@@ -168,6 +170,7 @@ export const RescheduleSheet = forwardRef<
     if (!session || !pickedISO || busy) return;
     setBusy(true);
     try {
+      const before = session;
       await onConfirm(
         session.id,
         pickedISO,
@@ -175,11 +178,21 @@ export const RescheduleSheet = forwardRef<
         scope,
         skipConflicting,
       );
-      // Same confirmation a drag-and-drop move gets.
+      // Same confirmation a drag-and-drop move gets, with the same undo.
       showMovedToast(toast, {
         first: completeStep("move-day"),
         to: zonedDate(pickedISO, tz),
         withTime: true,
+        onUndo: () =>
+          void restoreSessionTime(before, scope, skipConflicting).catch(
+            (error) =>
+              showErrorToast(
+                toast,
+                error,
+                t("Couldn't move this session"),
+                "calendar-x",
+              ),
+          ),
       });
       onMoved?.(session, pickedISO);
       sheet.close();
