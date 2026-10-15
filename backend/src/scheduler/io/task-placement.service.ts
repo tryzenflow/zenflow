@@ -1,9 +1,11 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
-import type { InfeasiblePolicy } from "@zenflow/shared";
-import { type User } from "../../../generated/prisma";
+import type { ChosenMovePolicy, InfeasiblePolicy } from "@zenflow/shared";
+import { Prisma, type User } from "../../../generated/prisma";
 import { withSpan } from "../../observability/otel";
 import { PrismaService } from "../../prisma/prisma.service";
 import { PythonPlacer } from "./python-placer.service";
+import { toPlacementPlanDto } from "./placement-plan";
+import { PLACEMENT_PLAN_TTL_MS } from "../constants";
 import { ScheduleInfeasibleException } from "../schedule-infeasible.exception";
 import {
   blocksPlacement,
@@ -20,6 +22,15 @@ import type {
 
 type Trigger = "create" | "deadline-change";
 
+/** Options a single placement shares with its caller (ADR-0022). */
+interface SinglePlacementOptions {
+  chosenMoves?: ChosenMovePolicy;
+  /** Groups the moves this placement applies under one undo entry. */
+  undoGroupId?: string;
+  /** A create's `CreateSessionDto`, kept with a plan so a confirm can insert it. */
+  createInput?: Prisma.InputJsonValue;
+}
+
 /**
  * The single placement entry point `sessions/` talks to. It owns the whole
  * "place a `TASK` and persist its `scheduledStartTime`" flow by delegating to
@@ -35,12 +46,17 @@ export class TaskPlacementService {
     private readonly python: PythonPlacer,
   ) {}
 
-  /** Place a freshly-created single `TASK`. */
+  /**
+   * Place a freshly-created single `TASK`. A plan that moves a `CHOSEN`
+   * session comes back as `pendingPlan`; the caller stops the create there.
+   */
   placeOnCreate(args: {
     user: User;
     task: PlaceableTask;
     now: Date;
     infeasiblePolicy?: InfeasiblePolicy;
+    createInput?: Prisma.InputJsonValue;
+    undoGroupId?: string;
   }): Promise<PlacementResult> {
     return this.placeSingle(
       args.user,
@@ -48,6 +64,8 @@ export class TaskPlacementService {
       "create",
       args.now,
       args.infeasiblePolicy,
+      true,
+      { createInput: args.createInput, undoGroupId: args.undoGroupId },
     );
   }
 
@@ -62,6 +80,8 @@ export class TaskPlacementService {
     now: Date;
     infeasiblePolicy?: InfeasiblePolicy;
     allowLastResort?: boolean;
+    chosenMoves?: ChosenMovePolicy;
+    undoGroupId?: string;
   }): Promise<PlacementResult> {
     return this.placeSingle(
       args.user,
@@ -70,18 +90,20 @@ export class TaskPlacementService {
       args.now,
       args.infeasiblePolicy,
       args.allowLastResort ?? true,
+      { chosenMoves: args.chosenMoves, undoGroupId: args.undoGroupId },
     );
   }
 
-  private placeSingle(
+  private async placeSingle(
     user: User,
     task: PlaceableTask,
     trigger: Trigger,
     now: Date,
     policy?: InfeasiblePolicy,
     allowLastResort = true,
+    options: SinglePlacementOptions = {},
   ): Promise<PlacementResult> {
-    return withSpan(
+    const res = await withSpan(
       "scheduler.placeSingle",
       () =>
         this.python.placeSingle(
@@ -91,9 +113,52 @@ export class TaskPlacementService {
           now,
           policy,
           allowLastResort,
+          options.chosenMoves ?? "ASK",
+          options.undoGroupId,
         ),
       { "scheduling.trigger": trigger, "session.id": task.id },
     );
+    if (!res.needsConfirmation) return res;
+    return this.keepPendingPlan(user, task, trigger, now, res, options);
+  }
+
+  /**
+   * Stores a plan Python left for confirmation (ADR-0022). A create's plan
+   * keeps the create input and no subject; a re-place keeps the subject's
+   * current start so a confirm can detect that it changed.
+   */
+  private async keepPendingPlan(
+    user: User,
+    task: PlaceableTask,
+    trigger: Trigger,
+    now: Date,
+    res: PlacementResult,
+    options: SinglePlacementOptions,
+  ): Promise<PlacementResult> {
+    const pending = res.needsConfirmation;
+    if (!pending) return res;
+    const isCreate = trigger === "create";
+    const row = await this.prisma.placementPlan.create({
+      data: {
+        userId: user.id,
+        subjectId: isCreate ? null : task.id,
+        subjectFrom:
+          !isCreate && task.prevStartMs !== undefined
+            ? new Date(task.prevStartMs)
+            : null,
+        startAt: new Date(pending.startMs),
+        moves: pending.moves as unknown as Prisma.InputJsonValue,
+        ...(options.createInput !== undefined
+          ? { createInput: options.createInput }
+          : {}),
+        expiresAt: new Date(now.getTime() + PLACEMENT_PLAN_TTL_MS),
+      },
+    });
+    return {
+      ...res,
+      needsConfirmation: undefined,
+      pendingPlan: toPlacementPlanDto(row),
+    };
   }
 
   /**

@@ -1,6 +1,8 @@
 import { Injectable, Logger, Optional } from "@nestjs/common";
+import { randomUUID } from "crypto";
 import { ClsService } from "nestjs-cls";
 import type {
+  ChosenMovePolicy,
   InfeasiblePolicy,
   PlacedMember,
   PlacementMember,
@@ -128,7 +130,10 @@ export class PythonPlacer {
       throw new ScheduleInfeasibleException();
     }
     this.noteSource("python");
-    if (placed(res.response.results[0].outcome) || policy) return;
+    const outcome = res.response.results[0].outcome;
+    // A plan that needs confirmation is a feasible placement: the real
+    // placement returns it as `needsConfirmation` (nothing is written here).
+    if (placed(outcome) || policy || outcome === "NEEDS_CONFIRMATION") return;
     throw new ScheduleInfeasibleException();
   }
 
@@ -187,6 +192,8 @@ export class PythonPlacer {
     now: Date,
     policy?: InfeasiblePolicy,
     allowLastResort = true,
+    chosenMoves: ChosenMovePolicy = "ASK",
+    undoGroupId?: string,
   ): Promise<PlacementResult> {
     const assignment = this.experiment.assignPolicy();
     const tStart = Date.now();
@@ -205,7 +212,13 @@ export class PythonPlacer {
       maxScanDays: SCAN_CAP_DAYS,
       excludeSessionIds: [task.id],
     });
-    const res = await this.gateway.placeSingleTwoPhase(req, user, task, policy);
+    const res = await this.gateway.placeSingleTwoPhase(
+      req,
+      user,
+      task,
+      policy,
+      chosenMoves,
+    );
     if (!res.ok) {
       const degraded = await this.placeSingleDegraded(
         user,
@@ -232,6 +245,22 @@ export class PythonPlacer {
     this.noteSource("python");
 
     const r = res.response.results[0];
+    if (r.outcome === "NEEDS_CONFIRMATION" && r.startMs !== null) {
+      // Nothing is applied: the plan moves a CHOSEN session and must be
+      // confirmed first (ADR-0022). Only the caller stores it.
+      this.logger.log(
+        `schedule[${trigger}] source=python session=${task.id} outcome=NEEDS_CONFIRMATION moves=${r.moves.length} paramsVersion=${res.response.paramsVersion}`,
+      );
+      return {
+        scheduledStartTime: null,
+        appliedPolicy: "NONE",
+        slotProposalId: null,
+        alternativeSlot: null,
+        divergent: false,
+        needsConfirmation: { startMs: r.startMs, moves: r.moves },
+      };
+    }
+
     let lastResort = r.outcome === "ACCEPTED_LAST_RESORT";
     let start =
       placed(r.outcome) &&
@@ -254,8 +283,9 @@ export class PythonPlacer {
     }
     lastResort = lastResort && start !== null;
     const tApply = Date.now();
+    const groupId = r.moves.length ? (undoGroupId ?? randomUUID()) : undefined;
     const displaced: AppliedMove[] = r.moves.length
-      ? await this.applyMoves(user.id, r.moves)
+      ? await this.applyMoves(user.id, r.moves, groupId)
       : [];
     if (start !== null) {
       await this.prisma.session.update({
@@ -336,6 +366,7 @@ export class PythonPlacer {
         divergent && rawAlternative !== null ? new Date(rawAlternative) : null,
       divergent,
       displaced: displaced.length ? displaced : undefined,
+      ...(groupId ? { undoGroupId: groupId } : {}),
       ...(lastResort ? { lastResort: true } : {}),
     };
   }
@@ -689,6 +720,7 @@ export class PythonPlacer {
   private async applyMoves(
     userId: string,
     moves: { id: string; fromMs: number; toMs: number }[],
+    groupId?: string,
   ): Promise<AppliedMove[]> {
     const rows = await this.prisma.session.findMany({
       where: { id: { in: moves.map((m) => m.id) }, deleted: false },
@@ -699,6 +731,7 @@ export class PythonPlacer {
       userId,
       moves,
       (id) => dur.get(id) ?? 15,
+      groupId,
     );
   }
 

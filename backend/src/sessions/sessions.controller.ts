@@ -24,6 +24,9 @@ import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { type User } from "../../generated/prisma";
 import { deadlineOptions } from "./utils/deadline-options";
+import { ConfirmPlacementDto } from "./dto/confirm-placement.dto";
+import { PlacementPlanService } from "./placement-plan.service";
+import { SessionAnchorService } from "./session-anchor.service";
 
 @Controller("sessions")
 @UseGuards(CookieAuthGuard)
@@ -32,7 +35,34 @@ export class SessionsController {
   constructor(
     private readonly sessionsService: SessionsService,
     private readonly searchService: SessionSearchService,
+    private readonly placementPlans: PlacementPlanService,
+    private readonly anchors: SessionAnchorService,
   ) {}
+
+  // NOTE: must precede @Post(":id/...") routes so "placement" isn't matched as an :id.
+  /** Apply a plan the scheduler asked to confirm (ADR-0022). Atomic. */
+  @Post("placement/confirm")
+  async confirmPlacement(
+    @Body() dto: ConfirmPlacementDto,
+    @CurrentUser() user: User,
+  ) {
+    const data = await this.placementPlans.confirm(user, dto.planId);
+    return { success: true, message: "Placement confirmed", data };
+  }
+
+  /** Revert every move one undo group made (a drag, a cascade or a confirmed plan). */
+  @Post("undo/:groupId")
+  async undoPlacement(
+    @Param("groupId") groupId: string,
+    @CurrentUser() user: User,
+  ) {
+    const data = await this.placementPlans.undo(user, groupId);
+    return {
+      success: true,
+      message: `Restored ${data.restored.length} session(s)`,
+      data,
+    };
+  }
 
   @Post()
   async create(@Body() dto: CreateSessionDto, @CurrentUser() user: User) {
@@ -96,6 +126,20 @@ export class SessionsController {
   ) {
     const data = await this.sessionsService.update(id, dto, user);
     return { success: true, message: "Session updated", data };
+  }
+
+  /** Pin a task: the scheduler never moves it (ADR-0022). */
+  @Post(":id/pin")
+  async pin(@Param("id") id: string, @CurrentUser() user: User) {
+    const data = await this.anchors.pin(id, user);
+    return { success: true, message: "Session pinned", data };
+  }
+
+  /** Unpin a task: back to `AUTO`. */
+  @Delete(":id/pin")
+  async unpin(@Param("id") id: string, @CurrentUser() user: User) {
+    const data = await this.anchors.unpin(id, user);
+    return { success: true, message: "Session unpinned", data };
   }
 
   @Post(":id/slot-pick")

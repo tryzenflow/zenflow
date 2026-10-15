@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { randomUUID } from "crypto";
 import type { InfeasiblePolicy, UpdateSessionResponse } from "@zenflow/shared";
 import { Prisma, type User } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
@@ -63,6 +64,8 @@ interface FieldDiffResult {
   updated: SessionRow;
   firstMove: FirstMove | null;
   newDeadline: Date | null;
+  /** Undo group of the `MOVE` this PATCH wrote, or `null` when it moved nothing. */
+  undoGroupId: string | null;
 }
 
 /**
@@ -115,7 +118,7 @@ export class SessionUpdateService {
 
       if (!occ) await this.guardDeadlineEdit(id, dto, user, now);
 
-      const { updated, firstMove, newDeadline } =
+      const { updated, firstMove, newDeadline, undoGroupId } =
         await this.runFieldDiffTransaction(id, dto, user, now);
 
       if (firstMove) {
@@ -159,7 +162,11 @@ export class SessionUpdateService {
         user,
       );
 
-      return { ...toUpdateSessionResponse(updated), skippedSessionIds };
+      return {
+        ...toUpdateSessionResponse(updated),
+        skippedSessionIds,
+        ...(undoGroupId ? { undoGroupId } : {}),
+      };
     } catch (error) {
       mapSessionPrismaError(error, id, "update");
     }
@@ -423,20 +430,32 @@ export class SessionUpdateService {
         // back to its upstream (LMS/portal) position on their next sync.
         data.lastMovedAt = now;
       }
+      if (startChanged && existing.type === "TASK") {
+        // A drag, "move to" or time pick fixes the slot: the scheduler may
+        // only move it again after the user confirms (ADR-0022).
+        data.anchor = "CHOSEN";
+        data.anchoredAt = now;
+      }
 
       const move = this.buildMoveEventData(existing, nextStart, startChanged);
       let firstMove: FirstMove | null = null;
+      let undoGroupId: string | null = null;
       if (move) {
+        undoGroupId = randomUUID();
         const event = await tx.sessionEvent.create({
-          data: moveEventData({
-            sessionId: id,
-            userId: user.id,
-            oldStart: existing.scheduledStartTime as Date,
-            oldDurationMinutes: existing.durationMinutes,
-            newStart: move.movedTo,
-            newDurationMinutes: dto.durationMinutes ?? existing.durationMinutes,
-            dragDistanceMinutes: move.dragDistanceMinutes,
-          }),
+          data: {
+            ...moveEventData({
+              sessionId: id,
+              userId: user.id,
+              oldStart: existing.scheduledStartTime as Date,
+              oldDurationMinutes: existing.durationMinutes,
+              newStart: move.movedTo,
+              newDurationMinutes:
+                dto.durationMinutes ?? existing.durationMinutes,
+              dragDistanceMinutes: move.dragDistanceMinutes,
+            }),
+            groupId: undoGroupId,
+          },
           select: { id: true },
         });
         recordUserMove(move.dragDistanceMinutes);
@@ -460,7 +479,7 @@ export class SessionUpdateService {
         await tx.sessionSeries.delete({ where: { id: orphanedSeriesId } });
       }
 
-      return { updated: row, newDeadline, firstMove };
+      return { updated: row, newDeadline, firstMove, undoGroupId };
     });
   }
 
@@ -628,14 +647,19 @@ export class SessionUpdateService {
       now,
       infeasiblePolicy,
     });
-    return toUpdateSessionResponse(
-      {
-        ...updated,
-        scheduledStartTime:
-          placement.scheduledStartTime ?? updated.scheduledStartTime,
-      },
-      slotProposalFieldsOf(placement),
-    );
+    return {
+      ...toUpdateSessionResponse(
+        {
+          ...updated,
+          scheduledStartTime:
+            placement.scheduledStartTime ?? updated.scheduledStartTime,
+        },
+        slotProposalFieldsOf(placement),
+      ),
+      ...(placement.pendingPlan
+        ? { placementPlan: placement.pendingPlan }
+        : {}),
+    };
   }
 
   /**

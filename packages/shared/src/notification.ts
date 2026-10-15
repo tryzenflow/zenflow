@@ -124,8 +124,13 @@ export interface NotificationDto {
 export interface RescheduleConflictsResponse {
   /** Tasks successfully re-placed (each recorded as a `SYSTEM_MOVE`). */
   rescheduled: DisplacedSessionRef[];
-  /** Tasks that could not be re-placed conflict-free (still conflicting). */
+  /**
+   * Tasks that could not be re-placed conflict-free (still conflicting). A
+   * `PINNED` task that clashes is always listed here: the scheduler never moves it.
+   */
   failedSessionIds: string[];
+  /** Undo handle for every move this call made (`POST /sessions/undo/:groupId`). Absent when nothing moved. */
+  undoGroupId?: string;
   /** `true` when any task was re-placed by the basic fallback (placement service unavailable). */
   schedulingDegraded?: boolean;
 }

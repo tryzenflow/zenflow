@@ -55,12 +55,22 @@ Drag, resize and reschedule are all `PATCH /sessions/:id` (a `MOVE` signal).
 | DELETE | `/sessions/series/:seriesId/truncate?from=` | Recurring: pull `UNTIL` back ("this and following") |
 | DELETE | `/sessions/series/:seriesId/from/:sessionId` | Materialized `TASK` series: delete that sitting and later ones |
 | DELETE | `/sessions/timetable-group/:sessionId[/from]` | Portal `LECTURE`s only: soft-delete a section's meetings |
-| POST | `/sessions/:id/slot-pick` | `{ slotProposalId, chose }`: record a pairwise A/B pick ([ab-testing](../scheduler/ab-testing.md)) |
+| POST | `/sessions/:id/pin` | `TASK` only: anchor `PINNED`. The scheduler never moves it |
+| DELETE | `/sessions/:id/pin` | Anchor back to `AUTO` |
+| POST | `/sessions/placement/confirm` | `{ planId }`: apply a plan the scheduler held for confirmation. Atomic, single use. `201` with `{ session, displacedSessions, undoGroupId }`. `409 PLACEMENT_STALE` when the plan no longer holds |
+| POST | `/sessions/undo/:groupId` | Revert every move and create of one undo group. `201` with `{ undoGroupId, restored, removedSessionIds, skippedSessionIds }` |
+| POST | `/sessions/:id/slot-pick` | `{ slotProposalId, chose }`: record a pairwise A/B pick ([ab-testing](../scheduler/ab-testing.md)). An `alternative` pick sets the anchor to `CHOSEN` and returns `undoGroupId` |
 | POST | `/sessions/:id/complete` | Mark done. Clears skip. Idempotent |
 | DELETE | `/sessions/:id/complete` | Undo done |
 | POST | `/sessions/:id/skip` | Mark skipped (missed). Clears done. Idempotent |
 | DELETE | `/sessions/:id/skip` | Undo skip |
 
+- **Anchors (ADR-0022):** every `Session` carries `anchor` (`AUTO` | `CHOSEN` | `PINNED`) and `anchoredAt`. A drag, "move to" or time pick sets `CHOSEN` on a `TASK`. Pin sets `PINNED`; unpin sets `AUTO`.
+- **Confirmation:** a create or deadline change whose only plan moves a `CHOSEN` session is not applied.
+  - `POST /sessions` answers `409` with `code: "NEEDS_CONFIRMATION"` and `data.plan` (`{ id, sessionId, start, moves[], expiresAt }`). Confirm with `POST /sessions/placement/confirm`.
+  - A deadline `PATCH` answers `200` with `placementPlan` set. The session keeps its start; the deadline is saved.
+- **Undo:** each request that moves sessions returns `undoGroupId`. `POST /sessions/undo/:groupId` reverts that group only. A create in the group is removed (soft delete).
+- **Sync conflicts:** `POST /notifications/:id/reschedule-conflicts` never moves a `PINNED` task (it stays in `failedSessionIds`) and does not displace a `CHOSEN` one. Its `undoGroupId` covers the call.
 - **Infeasible deadline:** displacement repacks flexible tasks on the deadline day (EDF, `SYSTEM_MOVE` events, `displacedSessions[]`).
 - If that fails: `409 SCHEDULE_INFEASIBLE` with `options: ["ACCEPT_CONFLICTS","ACCEPT_LATE_DEADLINE"]`. The client retries with `infeasiblePolicy`.
 - Every `Session` carries `late: boolean`.

@@ -52,6 +52,8 @@ function session(overrides: Partial<SessionRow> & { id: string }): SessionRow {
     syncMissedAt: null,
     completedAt: null,
     skipped: false,
+    anchor: "AUTO",
+    anchoredAt: null,
     deleted: false,
     userId: user.id,
     seriesId: null,

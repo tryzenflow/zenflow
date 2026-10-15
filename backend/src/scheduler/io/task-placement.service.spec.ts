@@ -75,6 +75,8 @@ describe("TaskPlacementService.placeOnCreate / placeOnDeadlineChange", () => {
       now,
       "ACCEPT_CONFLICTS",
       true,
+      "ASK",
+      undefined,
     );
   });
 
@@ -95,6 +97,8 @@ describe("TaskPlacementService.placeOnCreate / placeOnDeadlineChange", () => {
       now,
       undefined,
       true,
+      "ASK",
+      undefined,
     );
     await svc.placeOnDeadlineChange({
       user,
@@ -109,6 +113,8 @@ describe("TaskPlacementService.placeOnCreate / placeOnDeadlineChange", () => {
       now,
       undefined,
       false,
+      "ASK",
+      undefined,
     );
   });
 });
