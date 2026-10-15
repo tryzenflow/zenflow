@@ -12,7 +12,7 @@ import { useNotificationState } from "@/hooks/use-notification-toggle";
 import { PreferencesSection } from "@/components/settings/preferences-section";
 import { ProfileRow } from "@/components/settings/profile-row";
 import { SettingsSectionLabel } from "@/components/settings/settings-header";
-import { StorageSection } from "@/components/settings/storage-section";
+import { AdvancedSection } from "@/components/settings/advanced-section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
@@ -38,7 +38,7 @@ import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-/** Single flat Settings screen — mirrors mockups/settings.html exactly. */
+/** The Me tab: profile, preferences, daily plan, DLU and account. Advanced holds timezone and storage. */
 export default function SettingsScreen() {
   const offline = useOffline();
   useLanguage();
@@ -126,7 +126,7 @@ export default function SettingsScreen() {
       >
         <View className="flex-row items-center justify-between">
           <Text className="text-xl font-bold tracking-tight">
-            {t("Settings")}
+            {t("Me")}
           </Text>
           <OfflineIndicator dayKey="settings" />
         </View>
@@ -195,9 +195,6 @@ export default function SettingsScreen() {
         <OfflineLock>
           <TagsRow />
         </OfflineLock>
-        <OfflineLock>
-          <StorageSection />
-        </OfflineLock>
 
         <View
           onLayout={(e) => {
@@ -211,6 +208,8 @@ export default function SettingsScreen() {
             <DluAccountsSection />
           </OfflineLock>
         </View>
+
+        <AdvancedSection />
 
         <SettingsSectionLabel>{t("Account")}</SettingsSectionLabel>
         <View className="mb-[18px] overflow-hidden rounded-2xl border border-border bg-card">

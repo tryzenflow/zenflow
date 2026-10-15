@@ -1,4 +1,3 @@
-import { OfflineIndicator } from "@/components/offline-indicator";
 import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
@@ -35,7 +34,6 @@ import {
 } from "react";
 import { Pressable, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
   Easing,
   clamp,
@@ -248,7 +246,6 @@ function WeekHeaderImpl(
   const now = useNow();
   const { width } = useWindowDimensions();
   const chipWidth = (width - ROW_PADDING_X * 2 - CHIP_GAP * 6) / 7;
-  const insets = useSafeAreaInsets();
 
   // What the title / range / highlight read. The carousel and anchor logic
   // stay on `focusedDate` so they never re-derive mid-swipe.
@@ -440,8 +437,7 @@ function WeekHeaderImpl(
   return (
     <GestureDetector gesture={weekSwipe}>
       <View
-        className="overflow-hidden border-b border-border bg-background pb-2"
-        style={{ paddingTop: insets.top + 10 }}
+        className="overflow-hidden border-b border-border bg-background pb-2 pt-2.5"
       >
         <View className="px-4 pb-2">
           <Text className="text-xl font-bold tracking-tight">
@@ -450,13 +446,6 @@ function WeekHeaderImpl(
           <Text className="mt-px text-[11.5px] font-medium text-muted-foreground">
             {format(titleDays[0], "MMM d")} – {format(titleDays[6], "MMM d")}
           </Text>
-        </View>
-        {/* Sits left of the notification bell (36px at right-4). */}
-        <View
-          className="absolute right-[60px] z-10"
-          style={{ top: insets.top + 8 }}
-        >
-          <OfflineIndicator dayKey={`${focusedKey}`} />
         </View>
 
         <Animated.View

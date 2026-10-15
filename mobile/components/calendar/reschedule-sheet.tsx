@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { TimePickerInline } from "@/components/ui/time-picker";
 import { useToast } from "@/components/ui/toast";
-import { completeStep } from "@/hooks/use-checklist";
 import { showMovedToast } from "@/lib/move-toast";
 import { isPastDeadlineDrop } from "@/lib/overdue";
 import {
@@ -177,7 +176,6 @@ export const RescheduleSheet = forwardRef<
       );
       // Same confirmation a drag-and-drop move gets.
       showMovedToast(toast, {
-        first: completeStep("move-day"),
         to: zonedDate(pickedISO, tz),
         withTime: true,
       });

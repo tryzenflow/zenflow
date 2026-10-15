@@ -7,6 +7,8 @@
  * and the week grid (#240).
  */
 import { DAILY_HORIZON } from "@zenflow/core";
+import type { DaySegment } from "@zenflow/shared";
+import { toZonedTime } from "date-fns-tz";
 
 export const HOUR_HEIGHT_DEFAULT = 56;
 export const HOUR_HEIGHT_MIN = 36;
@@ -114,6 +116,18 @@ export function gridHeightFor(
     ((DAILY_HORIZON - foldedMin) / 60) * hourHeight +
     folded.length * FOLD_BAR_HEIGHT
   );
+}
+
+/** Minute span of a segment on the wall clock of `tz`, as the fold maths reads it. */
+export function minuteSpanOf(segment: DaySegment, tz: string): MinuteSpan {
+  const start = toZonedTime(new Date(segment.start), tz);
+  const end = toZonedTime(new Date(segment.end), tz);
+  const startMin = start.getHours() * 60 + start.getMinutes();
+  const rawEnd = end.getHours() * 60 + end.getMinutes();
+  return {
+    startMin,
+    endMin: segment.continues || rawEnd === 0 ? DAILY_HORIZON : rawEnd,
+  };
 }
 
 /** Band containing a minute of day (the band whose start is <= min < end). */

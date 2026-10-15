@@ -52,6 +52,17 @@ export interface UserPreferences {
  * off when the user does the thing (see `mobile/lib/checklist.ts`).
  */
 export const CHECKLIST_STEPS = [
+  "connect-dlu",
+  "add-task",
+  "finish-session",
+] as const;
+export type ChecklistStep = (typeof CHECKLIST_STEPS)[number];
+
+/**
+ * Retired checklist steps (the 7-step checklist before #245). Still valid
+ * `seenTips` values so progress stored on the server keeps validating.
+ */
+export const LEGACY_TIP_IDS = [
   "switch-day",
   "create-task",
   "move-task",
@@ -60,14 +71,17 @@ export const CHECKLIST_STEPS = [
   "open-day",
   "move-day",
 ] as const;
-export type ChecklistStep = (typeof CHECKLIST_STEPS)[number];
 
 /**
  * Everything stored in `User.seenTips`: the checklist steps the user has done,
  * plus `checklist-hidden` once they dismiss the checklist. Append-only, so it
  * follows the user across devices.
  */
-export const TIP_IDS = [...CHECKLIST_STEPS, "checklist-hidden"] as const;
+export const TIP_IDS = [
+  ...CHECKLIST_STEPS,
+  ...LEGACY_TIP_IDS,
+  "checklist-hidden",
+] as const;
 export type TipId = (typeof TIP_IDS)[number];
 
 export interface User extends UserPreferences {

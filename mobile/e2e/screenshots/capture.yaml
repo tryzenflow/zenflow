@@ -41,10 +41,10 @@ appId: com.zenflow.app
 - waitForAnimationToEnd
 - takeScreenshot: week
 - tapOn:
-    id: tab.month
+    id: view-switch.month
 - extendedWaitUntil:
     visible:
-      id: tab.month
+      id: view-switch.month
     timeout: 10000
 - waitForAnimationToEnd
 - takeScreenshot: month

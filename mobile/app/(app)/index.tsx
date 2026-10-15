@@ -30,7 +30,16 @@ import {
   BlockActionsSheet,
   type BlockActionsSheetHandle,
 } from "@/components/calendar/block-actions-sheet";
+import { CalendarHeader } from "@/components/calendar/calendar-header";
+import { MonthView } from "@/components/calendar/month-view";
+import {
+  SessionSearchSheet,
+  type SessionSearchSheetHandle,
+} from "@/components/calendar/session-search-sheet";
 import { TodayButton } from "@/components/calendar/today-button";
+import {
+  type CalendarView,
+} from "@/components/calendar/view-switch";
 import {
   WeekHeader,
   type WeekHeaderHandle,
@@ -39,12 +48,9 @@ import {
   WeekPager,
   type WeekPagerHandle,
 } from "@/components/calendar/week-pager";
-import { NotificationBell } from "@/components/notification-bell";
-import { GettingStarted } from "@/components/checklist/getting-started";
+import { WeekGrid } from "@/components/calendar/week-grid";
 import { useOffline } from "@/hooks/use-offline";
 import { CreateSessionFab } from "@/components/tasks/create-task-fab";
-import { completeStep } from "@/hooks/use-checklist";
-import { useCalendarJump } from "@/hooks/use-calendar-jump";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useWeekDayTypes } from "@/hooks/use-week-day-types";
 import {
@@ -57,7 +63,8 @@ import {
   type SlotPickResult,
   singleSitting,
 } from "@/lib/series-alternatives";
-import { dateKey } from "@/lib/week-date-math";
+import { dateKey, weekStart } from "@/lib/week-date-math";
+import { monthLabel } from "@/lib/month-date-math";
 import { zonedDate, zonedNow } from "@zenflow/core";
 import type { Session, SlotPickResponse, UpdateScope } from "@zenflow/shared";
 import { differenceInCalendarDays } from "date-fns";
@@ -72,49 +79,60 @@ import { View, useWindowDimensions } from "react-native";
 import { useSharedValue } from "react-native-reanimated";
 import { useToast } from "@/components/ui/toast";
 
+const VIEWS: readonly CalendarView[] = ["day", "week", "month"];
+
+function isCalendarView(value: string | undefined): value is CalendarView {
+  return value !== undefined && (VIEWS as readonly string[]).includes(value);
+}
+
 /**
- * Calendar screen (the app's home tab) — the week view. Day view was folded
- * into this in favour of one paginated day-at-a-time timeline with a sticky
- * 7-day chip strip; there is no separate Day route.
+ * Calendar screen (the app's home tab). One header switches between three
+ * views over the same focused date: Day (the paginated day timeline with its
+ * 7-day chip strip), Week (seven columns, see `week-grid.tsx`) and Month (see
+ * `month-view.tsx`). Switching views keeps the focused date.
  *
- * `focusedDate` is the committed focus — it drives the WeekHeader title/range
- * and highlights, and the pager aligns itself to it. Swipes that settle on an
- * edge day slide the whole week, and chip taps re-center the pager; both flow
- * back through this one state.
+ * `focusedDate` is the committed focus. Day view's header prints `visibleDate`,
+ * which tracks the finger during a swipe and reconciles to `focusedDate` on
+ * settle.
  */
-export default function WeekScreen() {
+export default function CalendarScreen() {
   useLanguage();
   const router = useRouter();
   const offline = useOffline();
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
   const { toast } = useToast();
-  const { date: dateParam, flash: flashParam } = useLocalSearchParams<{
+  const {
+    date: dateParam,
+    flash: flashParam,
+    view: viewParam,
+  } = useLocalSearchParams<{
     date?: string;
     flash?: string;
+    view?: string;
   }>();
 
+  const [view, setView] = useState<CalendarView>(() =>
+    isCalendarView(viewParam) ? viewParam : "day",
+  );
   // Seeds from the optional `date` query param (ISO instant) so another screen
   // can deep-link into a specific day. `zonedDate` keeps the user-tz wall clock
   // in the local fields, never a bare `new Date()`.
   const [focusedDate, setFocusedDate] = useState(() =>
     dateParam ? zonedDate(dateParam, tz) : zonedNow(tz),
   );
-  // What the header actually prints. Tracks the finger during a swipe (the
-  // pager reports the centred day per whole-page crossing via
-  // `onVisibleDateChange`), then reconciles to `focusedDate` on settle. Same
-  // split as Month View's `monthDate` / `visibleMonth`.
+  // What Day view's header prints. Tracks the finger during a swipe (the pager
+  // reports the centred day per whole-page crossing via `onVisibleDateChange`),
+  // then reconciles to `focusedDate` on settle.
   const [visibleDate, setVisibleDate] = useState(focusedDate);
   // A committed focus change (swipe settle, chip tap, deep link) moves both.
   const commitFocusedDate = useCallback((day: Date) => {
     setFocusedDate(day);
     setVisibleDate(day);
   }, []);
-  // The user picked a day (chip tap or swipe) — unlike `commitFocusedDate`
-  // alone, which a deep link / post-create teleport also calls.
+  // The user picked a day in the Day strip (chip tap or swipe).
   const handleUserSwitchDay = useCallback(
     (day: Date) => {
-      completeStep("switch-day");
       commitFocusedDate(day);
     },
     [commitFocusedDate],
@@ -122,15 +140,38 @@ export default function WeekScreen() {
   const handleVisibleDateChange = useCallback((day: Date) => {
     setVisibleDate((cur) => (dateKey(cur) === dateKey(day) ? cur : day));
   }, []);
+  const handleViewChange = useCallback(
+    (next: CalendarView) => {
+      setVisibleDate(focusedDate);
+      setView(next);
+    },
+    [focusedDate],
+  );
+  // Week and Month "open this day" (tap a Week header, double-tap a Month
+  // cell): Day view on that day.
+  const openDayView = useCallback(
+    (day: Date) => {
+      commitFocusedDate(day);
+      setView("day");
+    },
+    [commitFocusedDate],
+  );
+  // Month swipes and chevrons move the focus to the month they land on.
+  const handleMonthDateChange = useCallback(
+    (next: Date) => {
+      commitFocusedDate(next);
+    },
+    [commitFocusedDate],
+  );
   // Global refetch tick — bumped on every screen focus so *every* mounted day
   // re-syncs (a task created/edited on another screen shows up the moment we
-  // return, no manual pull-to-refresh). Same pattern as Month View.
+  // return, no manual pull-to-refresh).
   const [focusTick, setFocusTick] = useState(0);
-  // Load state of the focused page, reported up by the pager — gates the FAB.
+  // Load state of the focused Day page, reported up by the pager — gates the FAB.
   const [timelineState, setTimelineState] = useState<TimelineState>("loading");
   const [dayStatus, setDayStatus] = useState<DayStatus>({ kind: "none" });
   // Session id to pulse on the focused day — set by a create/edit teleport
-  // (`?flash=` param) or a cross-day drag drop, cleared after the entrance.
+  // (`?flash=` param) or a cross-day drop, cleared after the entrance.
   const [flashId, setFlashId] = useState<string | null>(null);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const armFlash = useCallback((id: string) => {
@@ -145,24 +186,11 @@ export default function WeekScreen() {
     [],
   );
 
-  // Getting-started "show me" (see `use-calendar-jump.ts`): publish the day we
-  // are on, and move to a day it picked that has a task to point at.
-  const weekJump = useCalendarJump((s) => s.weekJump);
-  useEffect(() => {
-    useCalendarJump.getState().setFocusedWeekDay(focusedDate);
-  }, [focusedDate]);
-  useEffect(() => {
-    if (!weekJump) return;
-    commitFocusedDate(weekJump);
-    useCalendarJump.getState().clearWeekJump();
-  }, [weekJump, commitFocusedDate]);
-
-
   // Per-day distinct session types for the visible week, for the header's
   // dot row — see `use-week-day-types.ts`.
   const dayTypes = useWeekDayTypes(visibleDate, tz, focusTick);
 
-  // Strip offsets shared by the header and the pager so their week transitions
+  // Strip offsets shared by the Day header and pager so their week transitions
   // move in lockstep. Rest = `-width` (focused page / middle week block
   // centered). Owned here — the nearest common parent.
   const { width } = useWindowDimensions();
@@ -174,6 +202,7 @@ export default function WeekScreen() {
   const updateScopeSheetRef = useRef<UpdateRecurringSheetHandle>(null);
   const blockActionsSheetRef = useRef<BlockActionsSheetHandle>(null);
   const seriesSlotPickSheetRef = useRef<SeriesSlotPickSheetHandle>(null);
+  const searchSheetRef = useRef<SessionSearchSheetHandle>(null);
 
   // Shared tail of a divergent pick (reschedule or create/edit hand-off):
   // re-seed onto the chosen slot's day, force every mounted day to revalidate
@@ -288,7 +317,7 @@ export default function WeekScreen() {
     [applySlotPickChoice, openSlotPickSheet, tz],
   );
 
-  // A divergent create/edit landed on the week view (`?date=`/`?flash=` params
+  // A divergent create/edit landed on the calendar (`?date=`/`?flash=` params
   // already focused it and pulsed the block) — present the same sheet over it.
   const handlePendingSlotPick = useCallback(
     (pending: Extract<PendingSlotPick, { kind: "single" }>) => {
@@ -314,7 +343,7 @@ export default function WeekScreen() {
     [applySlotPickChoice, openSlotPickSheet],
   );
 
-  // A `sessionCount > 1` create / redistribute landed on the week view with
+  // A `sessionCount > 1` create / redistribute landed on the calendar with
   // divergent sittings (#59). Show the dismissible prompt; opening it presents
   // ONLY those sittings, each with its already-applied primary pre-selected.
   const handlePendingSeriesSlotPick = useCallback(
@@ -361,7 +390,7 @@ export default function WeekScreen() {
       setFocusTick((t) => t + 1);
       // A divergent create/edit handed off its primary-vs-alternative pick
       // (`setPendingSlotPick` in task/new|edit) — consume it here so the
-      // sheet is presented over the week view, never the modal form.
+      // sheet is presented over the calendar, never the modal form.
       const pending = takePendingSlotPick();
       // A `sessionCount > 1` series (#59) carries its per-sitting divergence on
       // `sessions[]` and arrives here too, as a different shape.
@@ -378,6 +407,15 @@ export default function WeekScreen() {
       commitFocusedDate(zonedDate(dateParam, tz));
     }
   }, [dateParam, tz, commitFocusedDate]);
+
+  // A deep-link to a view (`view` param, e.g. the Today tab) switches to it.
+  const lastViewParamRef = useRef(viewParam);
+  useEffect(() => {
+    if (isCalendarView(viewParam) && viewParam !== lastViewParamRef.current) {
+      lastViewParamRef.current = viewParam;
+      setView(viewParam);
+    }
+  }, [viewParam]);
 
   // A create/edit teleport (`?flash=<sessionId>`): revalidate every mounted day
   // so the new/moved block is present, pulse it, then drop the param so it
@@ -410,7 +448,6 @@ export default function WeekScreen() {
   // Long-press a block → open its action menu (Move to… / Add study session
   // before this).
   const handleRequestBlockMenu = useCallback((session: Session) => {
-    completeStep("block-actions");
     blockActionsSheetRef.current?.open(session);
   }, []);
 
@@ -467,7 +504,7 @@ export default function WeekScreen() {
 
   // A drag/reschedule that targets a session belonging to a series routes
   // through this scope-confirmation sheet before the caller (`RescheduleSheet`
-  // or `WeekPager` → `DayTimeline`) commits.
+  // or `WeekPager` → `DayTimeline`, or `WeekGrid`) commits.
   const handleRequestScopedUpdate = useCallback(
     (
       session: Session,
@@ -500,57 +537,103 @@ export default function WeekScreen() {
     [tz, focusedDate, commitFocusedDate, armFlash],
   );
 
+  // Today: the day the Day view is on, the week Week view is on, or the month
+  // Month view is on. The button shows when that differs from now.
+  const now = zonedNow(tz);
+  const isAtToday =
+    view === "month"
+      ? monthLabel(focusedDate) === monthLabel(now)
+      : view === "week"
+        ? dateKey(weekStart(focusedDate)) === dateKey(weekStart(now))
+        : dateKey(visibleDate) === dateKey(now);
+
   return (
     <View className="flex-1 bg-background">
-      <NotificationBell />
-      <GettingStarted />
-      <WeekHeader
-        ref={headerRef}
-        focusedDate={focusedDate}
-        displayDate={visibleDate}
-        tz={tz}
-        onSelectDay={handleUserSwitchDay}
-        progressSV={progressSV}
-        headerStripSV={headerStripSV}
-        onWeekDragBegin={handleWeekDragBegin}
-        onWeekDragSettle={handleWeekDragSettle}
-        onWeekDragAbort={handleWeekDragAbort}
-        dayTypes={dayTypes}
+      <CalendarHeader
+        view={view}
+        onViewChange={handleViewChange}
+        offlineKey={`${view}:${dateKey(focusedDate)}`}
+        onSearch={() => searchSheetRef.current?.open()}
       />
 
-      <View className="flex-1">
-        <WeekPager
-          ref={pagerRef}
-          focusedDate={focusedDate}
-          onFocusedDateChange={handleUserSwitchDay}
-          onVisibleDateChange={handleVisibleDateChange}
+      {view === "day" ? (
+        <>
+          <WeekHeader
+            ref={headerRef}
+            focusedDate={focusedDate}
+            displayDate={visibleDate}
+            tz={tz}
+            onSelectDay={handleUserSwitchDay}
+            progressSV={progressSV}
+            headerStripSV={headerStripSV}
+            onWeekDragBegin={handleWeekDragBegin}
+            onWeekDragSettle={handleWeekDragSettle}
+            onWeekDragAbort={handleWeekDragAbort}
+            dayTypes={dayTypes}
+          />
+
+          <View className="flex-1">
+            <WeekPager
+              ref={pagerRef}
+              focusedDate={focusedDate}
+              onFocusedDateChange={handleUserSwitchDay}
+              onVisibleDateChange={handleVisibleDateChange}
+              focusTick={focusTick}
+              onSessionPress={handleSessionPress}
+              progressSV={progressSV}
+              headerStripSV={headerStripSV}
+              onWeekSlideStart={handleWeekSlideStart}
+              onWeekSlideEnd={handleWeekSlideEnd}
+              onActiveStateChange={setTimelineState}
+              onStatusChange={setDayStatus}
+              onRequestReschedule={handleRequestReschedule}
+              onRequestBlockMenu={handleRequestBlockMenu}
+              onRequestScopedUpdate={handleRequestScopedUpdate}
+              onRequestSlotPick={handleRequestSlotPick}
+              flashSessionId={flashId}
+            />
+            <NextUpPill
+              status={dayStatus}
+              tz={tz}
+              onOpenSession={handleSessionPress}
+            />
+          </View>
+        </>
+      ) : null}
+
+      {view === "week" ? (
+        <WeekGrid
+          anchor={focusedDate}
+          tz={tz}
           focusTick={focusTick}
+          onWeekChange={commitFocusedDate}
+          onDayPress={openDayView}
           onSessionPress={handleSessionPress}
-          progressSV={progressSV}
-          headerStripSV={headerStripSV}
-          onWeekSlideStart={handleWeekSlideStart}
-          onWeekSlideEnd={handleWeekSlideEnd}
-          onActiveStateChange={setTimelineState}
-          onStatusChange={setDayStatus}
           onRequestReschedule={handleRequestReschedule}
           onRequestBlockMenu={handleRequestBlockMenu}
           onRequestScopedUpdate={handleRequestScopedUpdate}
           onRequestSlotPick={handleRequestSlotPick}
-          flashSessionId={flashId}
         />
-        <NextUpPill
-          status={dayStatus}
+      ) : null}
+
+      {view === "month" ? (
+        <MonthView
+          date={focusedDate}
+          onDateChange={handleMonthDateChange}
           tz={tz}
-          onOpenSession={handleSessionPress}
+          reloadToken={focusTick}
+          onOpenDay={openDayView}
         />
-      </View>
+      ) : null}
 
       <TodayButton
-        visible={dateKey(visibleDate) !== dateKey(zonedNow(tz))}
+        visible={!isAtToday}
         onPress={() => commitFocusedDate(zonedNow(tz))}
       />
 
-      {timelineState === "ready" && !offline && <CreateSessionFab tz={tz} />}
+      {!offline && (view !== "day" || timelineState === "ready") && (
+        <CreateSessionFab tz={tz} />
+      )}
 
       <BlockActionsSheet
         ref={blockActionsSheetRef}
@@ -566,6 +649,7 @@ export default function WeekScreen() {
       />
       <UpdateRecurringSheet ref={updateScopeSheetRef} />
       <SeriesSlotPickSheet ref={seriesSlotPickSheetRef} tz={tz} />
+      <SessionSearchSheet ref={searchSheetRef} />
     </View>
   );
 }
