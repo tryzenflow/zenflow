@@ -43,7 +43,7 @@ def draw_reaction(
 
 
 def completes(utility: float, draws: ReactionDraws) -> bool:
-    """Whether the student checks the session off in its slot (ADR-0022).
+    """Whether the student checks the session off in its slot (ADR-0023).
 
     Modelled, not measured: the chance rises with the slot's hidden utility,
     clipped to ``[0.05, 0.95]``, so a well-timed slot is done more often.

@@ -44,7 +44,7 @@ type Settled = {
 
 /**
  * Half-hourly sweep that settles the outcome of an unmoved scheduled `TASK`
- * (ADR-0022). It is the only layer here that touches Prisma.
+ * (ADR-0023). It is the only layer here that touches Prisma.
  *
  * A row qualifies when it is a user-created `TASK` with a `scheduledStartTime`,
  * has never been moved (`lastMovedAt == null`) and is not yet settled

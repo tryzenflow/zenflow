@@ -12,7 +12,7 @@ PREFERENCE_RETAINED_WEIGHT = 0.25
 STABILITY_WEIGHT = 0.1
 STABILITY_SATURATION_HOURS = 4
 MOVE_REWARD_SCALE_MINUTES = 240
-# Completion reward (ADR-0022). An unmoved placement settles after its end plus
+# Completion reward (ADR-0023). An unmoved placement settles after its end plus
 # the grace; a placement with no check-off by end plus the cutoff is missed.
 COMPLETED_REWARD = 1.0
 MISSED_REWARD = -1.0

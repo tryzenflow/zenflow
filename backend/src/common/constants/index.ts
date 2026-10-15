@@ -6,13 +6,13 @@ export const TIME_GRANULARITY = 15;
 
 /**
  * Grace window (ms) after a scheduled TASK's end before the outcome sweep
- * settles a check-off or skip (ADR-0022). Default: 15 minutes.
+ * settles a check-off or skip (ADR-0023). Default: 15 minutes.
  */
 export const OUTCOME_GRACE_MS = 15 * 60 * 1000;
 
 /**
  * Cutoff (ms) after a scheduled TASK's end with no check-off, at which the
- * outcome sweep settles the placement as missed (ADR-0022). Default: 24 hours.
+ * outcome sweep settles the placement as missed (ADR-0023). Default: 24 hours.
  */
 export const OUTCOME_MISS_CUTOFF_MS = 24 * 60 * 60 * 1000;
 

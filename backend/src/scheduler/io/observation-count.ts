@@ -2,7 +2,7 @@ import { Prisma, SessionEventType } from "../../../generated/prisma";
 import type { PrismaService } from "../../prisma/prisma.service";
 
 /**
- * Events that carry a settled reward (ADR-0022): a graded `MOVE`, a `MISSED`,
+ * Events that carry a settled reward (ADR-0023): a graded `MOVE`, a `MISSED`,
  * a legacy `RETAINED`, and a `COMPLETE` or `SKIP` whose reward is set. An
  * unsettled check-off (`rewardScore` 0) and `SYSTEM_MOVE` carry no signal.
  */

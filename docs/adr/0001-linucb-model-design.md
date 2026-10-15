@@ -108,12 +108,12 @@ model BanditArmState {
 
 ## 7. Reward
 
-The reward is the move-or-keep signal, with the keep half settled by check-off ([ADR-0022](0022-completion-reward.md)). A resize is a `MOVE` with `dragDistanceMinutes == 0`.
+The reward is the move-or-keep signal, with the keep half settled by check-off ([ADR-0023](0023-completion-reward.md)). A resize is a `MOVE` with `dragDistanceMinutes == 0`.
 
 | Event                                       | Reward                                        |
 | ------------------------------------------- | --------------------------------------------- |
-| Unmoved, checked off in its slot            | `+1` ([ADR-0022](0022-completion-reward.md)) |
-| Unmoved, skipped or missed                  | `-1` ([ADR-0022](0022-completion-reward.md)) |
+| Unmoved, checked off in its slot            | `+1` ([ADR-0023](0023-completion-reward.md)) |
+| Unmoved, skipped or missed                  | `-1` ([ADR-0023](0023-completion-reward.md)) |
 | `MOVE`                                      | `−min(1, abs(dragDistanceMinutes) / D_SCALE)` |
 | `MOVE`, resize only (drag = 0)              | `0`                                           |
 | `CREATE`                                    | `0`: logged only, no update                   |

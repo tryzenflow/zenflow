@@ -71,8 +71,8 @@ class SimConfig:
     balanced: bool = True
     # weight of the preference matrix in the LinUCB slot score (0 = pure arm band)
     pref_weight: float = consts.LINUCB_PREF_WEIGHT
-    # "completion": kept and checked off +1, kept and missed -1 (ADR-0022).
-    # "retained": the pre-ADR-0022 rule, kept +1 whatever the outcome.
+    # "completion": kept and checked off +1, kept and missed -1 (ADR-0023).
+    # "retained": the pre-ADR-0023 rule, kept +1 whatever the outcome.
     reward: str = "completion"
 
     def __post_init__(self) -> None:

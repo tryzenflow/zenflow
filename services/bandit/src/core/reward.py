@@ -1,4 +1,4 @@
-"""Delayed rewards: graded MOVE (port of ``reward.ts``) and completion (ADR-0022)."""
+"""Delayed rewards: graded MOVE (port of ``reward.ts``) and completion (ADR-0023)."""
 
 from .constants import (
     CHECK_OFF_GRACE_MS,

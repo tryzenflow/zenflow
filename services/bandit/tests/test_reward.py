@@ -1,4 +1,4 @@
-"""Completion reward (ADR-0022) and the graded MOVE reward."""
+"""Completion reward (ADR-0023) and the graded MOVE reward."""
 
 import pytest
 

@@ -58,7 +58,7 @@ The scheduler places one `TASK` (or one series) into an empty slot and never mov
 | `PlaceRequest` builder, two-phase infeasible call | `scheduler/io/placement-gateway.service.ts` |
 | Timeout/retry/breaker HTTP client | `scheduler/io/placement-client.service.ts`, `common/circuit-breaker.ts` |
 | `TASK` series lifecycle | `sessions/series.service.ts` |
-| Delayed reward (first `MOVE` + outcome settlement) | `scheduler/io/scheduling-feedback.service.ts`, `session-outcome.service.ts` ([ADR-0022](../adr/0022-completion-reward.md)) |
+| Delayed reward (first `MOVE` + outcome settlement) | `scheduler/io/scheduling-feedback.service.ts`, `session-outcome.service.ts` ([ADR-0023](../adr/0023-completion-reward.md)) |
 | `primaryPolicy` 50/50, pairwise draw, `SlotProposal` write | `experiments/experiment.service.ts` |
 | Fallback tuning constants | `scheduler/constants.ts` |
 | Python's ranking core | `services/bandit/src/core/*` |

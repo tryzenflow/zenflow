@@ -225,9 +225,9 @@ model Session {
   // Stamped on every user move/resize of a scheduled TASK; the RETAINED sweep
   // treats `lastMovedAt == null` as "never moved".
   lastMovedAt DateTime?
-  // Settlement stamp of the outcome sweep (ADR-0022): set once an unmoved TASK's
+  // Settlement stamp of the outcome sweep (ADR-0023): set once an unmoved TASK's
   // outcome (completed, skipped or missed) is recorded, so a re-run is a no-op.
-  // The name predates ADR-0022; it is not a retained flag.
+  // The name predates ADR-0023; it is not a retained flag.
   retainedAt  DateTime?
 
   // Two-consecutive-run confirmation gate for ingested rows (materializer.service.ts).
@@ -512,11 +512,11 @@ model SlotProposal {
 enum SessionEventType {
   CREATE
   MOVE // user drag or resize of a scheduled TASK (negative signal)
-  RETAINED // legacy: session elapsed without ever being moved (+1); no longer written (ADR-0022)
+  RETAINED // legacy: session elapsed without ever being moved (+1); no longer written (ADR-0023)
   SYSTEM_MOVE // scheduler-initiated move (displacement / conflict reschedule): reward 0, no preference update
   COMPLETE // user checked the session off; removed on undo. rewardScore +1 once settled in its slot
   SKIP // user marked the session skipped; removed on undo. rewardScore -1 once settled
-  MISSED // unmoved session with no check-off by the cutoff (rewardScore -1), ADR-0022
+  MISSED // unmoved session with no check-off by the cutoff (rewardScore -1), ADR-0023
 }
 
 /// Range-partitioned by month on `occurredAt` (hand-written migration, ADR-0016); children are `SessionEvent_YYYY_MM`.
@@ -525,7 +525,7 @@ model SessionEvent {
   eventType           SessionEventType
   oldSnapshot         Json? // { scheduledStartTime, durationMinutes, tags[], type }; null on CREATE/RETAINED
   newSnapshot         Json
-  rewardScore         Float            @default(0.0) // CREATE 0 · MOVE graded ≤ 0 · COMPLETE +1 · SKIP / MISSED -1 (ADR-0022)
+  rewardScore         Float            @default(0.0) // CREATE 0 · MOVE graded ≤ 0 · COMPLETE +1 · SKIP / MISSED -1 (ADR-0023)
   dragDistanceMinutes Int? // signed (new − old start); null unless MOVE — for graded reward later
   policy              SchedulingModel? // attribution once a model is live
   // The `SessionSeries.id` shared by the N sittings placed in one

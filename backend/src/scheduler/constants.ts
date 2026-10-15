@@ -63,7 +63,7 @@ export const STABILITY_WEIGHT = 0.1;
 export const STABILITY_SATURATION_HOURS = 4;
 
 /**
- * Reward written on the `SessionEvent` for each outcome (ADR-0022). A user
+ * Reward written on the `SessionEvent` for each outcome (ADR-0023). A user
  * drag/resize of a scheduled TASK is graded by displacement (`MOVE`). An
  * unmoved TASK is positive when checked off in its slot and negative when
  * skipped or missed. `CREATE` events carry a neutral 0.

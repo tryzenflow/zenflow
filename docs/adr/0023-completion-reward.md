@@ -1,4 +1,4 @@
-# ADR-0022: Completion-based reward
+# ADR-0023: Completion-based reward
 
 **Status:** Accepted; supersedes the `RETAINED` reward of [ADR-0001](0001-linucb-model-design.md) §7 and the `RETAINED` sweep of [ADR-0002](0002-scheduling-simplification.md) §2
 **Date:** 2026-10-15

@@ -6,7 +6,7 @@ import {
 
 /**
  * Pure delayed-reward math for LinUCB-placed sessions (ADR-0001 §7/§9,
- * ADR-0022). No I/O, no clock.
+ * ADR-0023). No I/O, no clock.
  */
 
 /** Settled outcome of an unmoved placement, see {@link completionReward}. */

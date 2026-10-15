@@ -54,7 +54,7 @@ LinUCB reward to avoid misattributing credit and mixing signal scales.
 
 `preferenceMatrix` and LinUCB `(A, b)` are updated **only** by the move-or-keep signal
 (`MOVE` graded by drag distance, a checked-off placement `+1`, a skipped or missed one `-1`;
-[ADR-0001](../adr/0001-linucb-model-design.md) §7, [ADR-0022](../adr/0022-completion-reward.md),
+[ADR-0001](../adr/0001-linucb-model-design.md) §7, [ADR-0023](../adr/0023-completion-reward.md),
 [`services/bandit/README.md`](../../services/bandit/README.md)). Pairwise choices and
 👍/👎 are offline-analysis data, nothing more.
 
