@@ -6,11 +6,13 @@ import { PrismaService } from "../prisma/prisma.service";
 // `render` loads react-dom by dynamic import, which jest's CJS runtime rejects;
 // the rendered markup is checked in the preview run instead.
 jest.mock("@react-email/components", () => ({
-  render: async (props: object) => JSON.stringify(props),
+  render: (props: object) => Promise.resolve(JSON.stringify(props)),
 }));
 jest.mock("./templates/confirm-email", () => ({
   ConfirmEmail: (props: object) => props,
 }));
+
+const contains = (s: string): string => expect.stringContaining(s) as string;
 
 interface MailPayload {
   from?: string;
@@ -55,7 +57,7 @@ describe("MailService", () => {
       await service.sendLoginEmail("user@example.com", "123456");
       expect(sendMail.mock.calls[0][0]).toMatchObject({
         subject: "Xác nhận địa chỉ email của bạn",
-        html: expect.stringContaining("Xin chào,"),
+        html: contains("Xin chào,"),
       });
     });
     it("prefers the explicit language over the stored one, without a lookup", async () => {
@@ -68,7 +70,7 @@ describe("MailService", () => {
       expect(findUnique).not.toHaveBeenCalled();
       expect(sendMail.mock.calls[0][0]).toMatchObject({
         subject: "Xác nhận địa chỉ email của bạn",
-        html: expect.stringContaining('"language":"vi"'),
+        html: contains('"language":"vi"'),
       });
     });
     it("sends the rendered confirm email with the otp", async () => {
@@ -79,8 +81,8 @@ describe("MailService", () => {
       expect(payload).toMatchObject({
         to: "user@example.com",
         subject: "Confirm your email account",
-        html: expect.stringContaining("123456"),
-        text: expect.stringContaining("123456"),
+        html: contains("123456"),
+        text: contains("123456"),
       });
     });
 
@@ -92,7 +94,7 @@ describe("MailService", () => {
         expect.objectContaining({
           filename: "logo.png",
           cid: "logo",
-          path: expect.stringContaining("logo.png") as string,
+          path: contains("logo.png"),
         }),
       ]);
       // The CID attachment path must resolve into the templates/assets dir so
