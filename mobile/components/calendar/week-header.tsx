@@ -5,6 +5,8 @@ import { format, formatTitle } from "@/lib/i18n";
 import { Text } from "@/components/ui/text";
 import { useNow } from "@/hooks/use-now";
 import { SESSION_TYPE_META, SESSION_TYPE_ORDER } from "@zenflow/core";
+import { DayBarView } from "@/components/calendar/day-bar";
+import type { DayBar } from "@/lib/day-bar";
 import {
   dateKey,
   shiftWeek,
@@ -107,22 +109,23 @@ function ChipPill({ index, chipWidth }: { index: number; chipWidth: number }) {
   );
 }
 
-const NO_TYPES: SessionType[] = [];
+const NO_BAR: DayBar = { types: [], segments: [] };
 
 const WeekChip = memo(function WeekChip({
   day,
   isFocused,
   isToday,
-  types,
+  bar,
   onSelectDay,
 }: {
   day: Date;
   isFocused: boolean;
   isToday: boolean;
-  /** Already deduped and in canonical order, so dots never jitter. */
-  types: SessionType[];
+  /** The day's load bar (`lib/day-bar.ts`). */
+  bar: DayBar;
   onSelectDay: (day: Date) => void;
 }) {
+  const types = bar.types;
   return (
       <Pressable
         onPress={() => {
@@ -154,15 +157,10 @@ const WeekChip = memo(function WeekChip({
             {format(day, "d")}
           </Text>
         </View>
-        {/* Fixed-height row so a 0-dot day reserves the same space as a
-            5-dot day — the chip's height never jumps day to day. */}
-        <View className="h-[5px] flex-row items-center gap-[3px]">
-          {types.map((type) => (
-            <View
-              key={type}
-              className={`h-[4px] w-[4px] rounded-full ${SESSION_TYPE_META[type].dotClass}`}
-            />
-          ))}
+        {/* Fixed-height slot so an empty day reserves the same space as a busy
+            one: the chip's height never jumps day to day. */}
+        <View className="w-[22px]">
+          <DayBarView bar={bar} />
         </View>
       </Pressable>
   );
@@ -195,9 +193,9 @@ interface WeekHeaderProps {
    * collapses its window back with no focus change. */
   onWeekDragAbort: () => void;
   /** Distinct `SessionType`s scheduled on each day of the visible week,
-   * keyed by `dateKey` (`use-week-day-types.ts`) — drives the small dot row
+   * keyed by `dateKey` (`use-week-day-types.ts`) — drives the load bar
    * under each day-number circle. Absent/empty for a day renders no dots. */
-  dayTypes: Map<string, SessionType[]>;
+  dayTypes: Map<string, DayBar>;
 }
 
 /** Imperative surface the pager drives when a day-swipe crosses a week edge
@@ -403,23 +401,6 @@ function WeekHeaderImpl(
     [weekModeSV],
   );
 
-  // Sorted once per `dayTypes` change instead of per chip per render.
-  const sortedDayTypes = useMemo(() => {
-    const sorted = new Map<string, SessionType[]>();
-    for (const [k, v] of dayTypes) {
-      sorted.set(
-        k,
-        v
-          .slice()
-          .sort(
-            (a, b) =>
-              SESSION_TYPE_ORDER.indexOf(a) - SESSION_TYPE_ORDER.indexOf(b),
-          ),
-      );
-    }
-    return sorted;
-  }, [dayTypes]);
-
   const renderChip = (day: Date) => {
     const key = dateKey(day);
     return (
@@ -428,7 +409,7 @@ function WeekHeaderImpl(
         day={day}
         isFocused={key === focusedKey}
         isToday={key === todayKey}
-        types={sortedDayTypes.get(key) ?? NO_TYPES}
+        bar={dayTypes.get(key) ?? NO_BAR}
         onSelectDay={onSelectDay}
       />
     );

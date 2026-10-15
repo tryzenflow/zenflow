@@ -232,6 +232,8 @@ export default {
   View: "Xem",
   "View on calendar": "Xem trên lịch",
   Week: "Tuần",
+  List: "Danh sách",
+  "Open day": "Mở ngày",
   "What should we call you?": "Bạn muốn được gọi là gì?",
   "Where are you?": "Bạn đang ở đâu?",
   "You're all caught up": "Bạn đã xem hết thông báo",

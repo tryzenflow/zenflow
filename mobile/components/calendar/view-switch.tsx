@@ -1,15 +1,18 @@
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
+import { List } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { Pressable, View } from "react-native";
 
-export type CalendarView = "day" | "week" | "month";
+export type CalendarView = "day" | "week" | "month" | "list";
 
 const VIEWS: readonly { id: CalendarView; label: () => string }[] = [
   { id: "day", label: () => t("Day") },
   { id: "week", label: () => t("Week") },
   { id: "month", label: () => t("Month") },
+  // Icon only: a fourth word would crowd the header's actions.
+  { id: "list", label: () => t("List") },
 ];
 
 interface ViewSwitchProps {
@@ -17,7 +20,7 @@ interface ViewSwitchProps {
   onChange: (view: CalendarView) => void;
 }
 
-/** Segmented Day | Week | Month control in the calendar header. */
+/** Segmented Day | Week | Month | List control in the calendar header. */
 export function ViewSwitch({ value, onChange }: ViewSwitchProps) {
   useLanguage();
   return (
@@ -36,21 +39,31 @@ export function ViewSwitch({ value, onChange }: ViewSwitchProps) {
             accessibilityRole="tab"
             accessibilityState={{ selected }}
             aria-selected={selected}
+            accessibilityLabel={label()}
             testID={`view-switch.${id}`}
             hitSlop={6}
             className={cn(
-              "h-8 min-w-[52px] items-center justify-center rounded-full px-3",
+              "h-8 items-center justify-center rounded-full",
+              id === "list" ? "w-9" : "min-w-[52px] px-3",
               selected ? "bg-card" : "bg-transparent",
             )}
           >
-            <Text
-              className={cn(
-                "text-[13px] font-semibold",
-                selected ? "text-foreground" : "text-muted-foreground",
-              )}
-            >
-              {label()}
-            </Text>
+            {id === "list" ? (
+              <List
+                size={16}
+                accessibilityLabel={label()}
+                className={selected ? "text-foreground" : "text-muted-foreground"}
+              />
+            ) : (
+              <Text
+                className={cn(
+                  "text-[13px] font-semibold",
+                  selected ? "text-foreground" : "text-muted-foreground",
+                )}
+              >
+                {label()}
+              </Text>
+            )}
           </Pressable>
         );
       })}

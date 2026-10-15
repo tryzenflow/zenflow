@@ -28,6 +28,7 @@ import {
 } from "@/components/calendar/block-actions-sheet";
 import { CalendarHeader } from "@/components/calendar/calendar-header";
 import { MonthView } from "@/components/calendar/month-view";
+import { SessionAgenda } from "@/components/calendar/session-agenda";
 import { SessionSearchView } from "@/components/calendar/session-search-view";
 import { TodayButton } from "@/components/calendar/today-button";
 import {
@@ -63,7 +64,7 @@ import { View, useWindowDimensions } from "react-native";
 import { useSharedValue } from "react-native-reanimated";
 import { useToast } from "@/components/ui/toast";
 
-const VIEWS: readonly CalendarView[] = ["day", "week", "month"];
+const VIEWS: readonly CalendarView[] = ["day", "week", "month", "list"];
 
 function isCalendarView(value: string | undefined): value is CalendarView {
   return value !== undefined && (VIEWS as readonly string[]).includes(value);
@@ -461,12 +462,17 @@ export default function CalendarScreen() {
           tz={tz}
           reloadToken={focusTick}
           onOpenDay={openDayView}
+          onSessionPress={handleSessionPress}
         />
         ) : null}
       </View>
 
+      <View className="flex-1" style={slotStyle("list")}>
+        {everShown.current.has("list") ? <SessionAgenda term="" /> : null}
+      </View>
+
       <TodayButton
-        visible={!isAtToday}
+        visible={!isAtToday && view !== "list"}
         onPress={() => commitFocusedDate(zonedNow(tz))}
       />
 

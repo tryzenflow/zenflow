@@ -1,9 +1,8 @@
 import { listSessions } from "@/api/tasks";
 import { dateKey, weekStart } from "@/lib/week-date-math";
-import { sessionTypesByDay } from "@/lib/week-day-types";
-import type { SessionType } from "@zenflow/shared";
+import { type DayBar, dayBarsByDay } from "@/lib/day-bar";
 
-export type DayTypes = Map<string, SessionType[]>;
+export type DayTypes = Map<string, DayBar>;
 
 const cache = new Map<string, DayTypes>();
 
@@ -33,7 +32,7 @@ export function clearWeekTypesCache(): void {
 export async function warmWeekTypes(date: Date, tz: string): Promise<void> {
   try {
     const { sessions } = await listSessions("week", weekStart(date));
-    cache.set(weekTypesKey(date, tz), sessionTypesByDay(sessions, tz));
+    cache.set(weekTypesKey(date, tz), dayBarsByDay(sessions, tz));
   } catch {
     // The header fetches it itself.
   }

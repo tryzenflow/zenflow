@@ -21,11 +21,6 @@ vi.mock("@/components/calendar/month-pager", () => ({
   }) => <>{renderPage(monthDate)}</>,
 }));
 vi.mock("@/components/tasks/create-task-fab", () => ({ CreateSessionFab: () => null }));
-vi.mock("@/components/calendar/task-list-sheet", () => ({ SessionListSheet: () => null }));
-vi.mock("@/components/calendar/reschedule-sheet", () => ({ RescheduleSheet: () => null }));
-vi.mock("@/components/calendar/update-recurring-sheet", () => ({
-  UpdateRecurringSheet: () => null,
-}));
 vi.mock("@/lib/tab-bar-metrics", () => ({ useTabBarOverlayHeight: () => 0 }));
 
 const monthRequests: string[] = [];
@@ -57,14 +52,18 @@ afterEach(() => {
 });
 
 /** The Month view as the calendar screen hosts it. */
-function renderMonth(date = new Date("2026-10-15T05:00:00.000Z")) {
+function renderMonth(
+  date = new Date("2026-10-15T05:00:00.000Z"),
+  handlers: { onOpenDay?: (d: Date) => void; onSessionPress?: (id: string) => void } = {},
+) {
   return renderScreen(
     <MonthView
       date={date}
       onDateChange={() => {}}
       tz="UTC"
       reloadToken={0}
-      onOpenDay={() => {}}
+      onOpenDay={handlers.onOpenDay ?? (() => {})}
+      onSessionPress={handlers.onSessionPress ?? (() => {})}
     />,
   );
 }
@@ -76,15 +75,34 @@ describe("MonthView", () => {
     await waitFor(() => expect(monthRequests).toEqual(["month:2026-10-15"]));
   });
 
-  it("renders fetched sessions as pills on the grid", async () => {
+  it("lists the selected day's sessions under the grid", async () => {
     renderMonth();
     await waitFor(() => expect(screen.getByText("Final exam")).toBeTruthy());
     expect(screen.getByText("Algorithms lecture")).toBeTruthy();
   });
 
+  it("opens a session from its row", async () => {
+    const onSessionPress = vi.fn();
+    renderMonth(undefined, { onSessionPress });
+    await waitFor(() => expect(screen.getByText("Final exam")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("month.row.b"));
+    expect(onSessionPress).toHaveBeenCalledWith("b");
+  });
+
+  it("selects a tapped day and opens it on a second tap", async () => {
+    const onOpenDay = vi.fn();
+    renderMonth(undefined, { onOpenDay });
+    await waitFor(() => expect(screen.getByText("Final exam")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("month-cell.2026-10-20"));
+    await waitFor(() => expect(screen.queryByText("Final exam")).toBeNull());
+    expect(onOpenDay).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("month-cell.2026-10-20"));
+    expect(onOpenDay).toHaveBeenCalledTimes(1);
+  });
+
   it("lays out a Monday-first grid including adjacent-month days", async () => {
     renderMonth();
-    await waitFor(() => expect(screen.getByText("Final exam")).toBeTruthy());
+    await waitFor(() => expect(monthRequests).toHaveLength(1));
     // Oct 2026 starts on a Thursday: the grid opens on Mon 28 Sep.
     expect(screen.getAllByText("28").length).toBeGreaterThan(0);
     expect(screen.getAllByText("31").length).toBeGreaterThan(0);

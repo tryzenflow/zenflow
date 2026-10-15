@@ -1,340 +1,85 @@
-import { useLanguage } from "@/hooks/use-language";
-import { t } from "@/lib/i18n";
-import { AlertTriangle } from "@/components/Icons";
-import {
-  DragTargetProbe,
-  SpotlightAnchor,
-} from "@/components/checklist/spotlight-anchor";
-import { Skeleton } from "@/components/ui/skeleton";
+import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
+import { DayBarView } from "@/components/calendar/day-bar";
 import { Text } from "@/components/ui/text";
-import {
-  isContinuationEntry,
-  isOutsideMonth,
-  MONTH_CELL_VISIBILITY_WEIGHTS,
-  MONTH_PILL_CAP,
-  monthPillCap,
-  splitCellSessions,
-} from "@/lib/month-date-math";
-import { useCourseColourStore } from "@/hooks/use-course-colours";
-import { courseStyleFor } from "@/lib/course-colour";
-import { useColorScheme } from "@/lib/useColorScheme";
-import { isSessionPastDeadline } from "@/lib/overdue";
-import { SESSION_TYPE_META } from "@zenflow/core";
-import {
-  MONTH_PILL_CLASSES,
-  MONTH_PILL_LATE_CLASSES,
-  MONTH_PILL_TEXT_CLASSES,
-  deriveState,
-} from "@/lib/task-card";
+import { useSpotlight } from "@/hooks/use-spotlight";
+import type { DayBar } from "@/lib/day-bar";
 import { cn } from "@/lib/utils";
-import type { Session } from "@zenflow/shared";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo } from "react";
 import { Pressable, View } from "react-native";
-import { sessionTypeIcon } from "./session-type-badge";
 
-/** A week row's *preferred* height. Rows shrink below it (equally) when the
- * month doesn't fit between the header and the tab bar — small screens,
- * 6-week months — so the last week is never hidden under the bar. */
-export const CELL_HEIGHT = 96;
-
-/** Placeholder-pill widths while the month loads, picked per day so the
- * shimmer reads as varied task titles rather than one repeated bar (the
- * 44–80% spread is `mockups/month-view.html`'s Loading state). */
-const SKELETON_PILL_WIDTHS = [
-  "w-[62%]",
-  "w-[48%]",
-  "w-[70%]",
-  "w-[55%]",
-  "w-[78%]",
-  "w-[44%]",
-  "w-[66%]",
-  "w-[52%]",
-  "w-[74%]",
-  "w-[58%]",
-  "w-[80%]",
-];
+/** Row height of the compact month grid (points). */
+export const CELL_HEIGHT = 54;
 
 interface MonthCellProps {
   day: Date;
-  monthDate: Date;
-  sessions: Session[];
+  /** Falls outside the month on screen: dimmed. */
+  outside: boolean;
   isToday: boolean;
-  /** Carry the checklist's "Open a day" spotlight anchor. */
+  isSelected: boolean;
+  /** Load bar for the day; absent while loading or on an empty day. */
+  bar?: DayBar;
+  /** The checklist's "open a day" tip points here. */
   openDayTip: boolean;
-  /** Carry the "Move a task to another day" demo's drop-target probe. */
-  moveTargetTip: boolean;
-  /** True while this cell is the current drag drop target. */
-  isDropTarget: boolean;
-  /** True for a beat right after a drag drop landed here. */
-  isJustDropped: boolean;
-  /** The month is still loading: the day number stays, the pills are
-   * shimmering placeholders. */
-  loading: boolean;
-  /** The task id currently being dragged (any cell), so its origin pill can
-   * hide in place while the ghost overlay stands in for it. */
-  draggingSessionId: string | null;
-  /** Receives the day's tasks too — a single tap opens the detail sheet in
-   * place rather than navigating away. */
-  onPressDay: (day: Date, tasks: Session[]) => void;
-  /** A double tap on the cell jumps to the Week view with this day selected. */
-  onDoubleTapDay: (day: Date) => void;
-  onPressOverflow: (day: Date, tasks: Session[]) => void;
+  onPressDay: (day: Date) => void;
 }
 
-/** Max gap (ms) between two taps on a cell for the second to count as a
- * double tap → Week view. A single tap resolves after this delay. */
-const DOUBLE_TAP_MS = 240;
-
 /**
- * A single day cell in the Month grid — RN port of
- * `frontend/src/components/calendar/month-cell.tsx`. Leading/trailing days
- * from adjacent months ("outside") render on a dimmed ground with their pills
- * at reduced opacity — they're still real days in view (a daily recurring
- * block, say, shouldn't visually stop dead at the month boundary), so they
- * stay tappable and are valid drop targets: dragging a session out of the day
- * sheet onto a trailing/leading cell reschedules it across the month boundary
- * (`month-page.tsx`).
- *
- * Pills themselves are not draggable in the grid — reschedule-by-drag is only
- * offered from the day/overflow sheet (`task-list-sheet.tsx`). The grid still
- * hides a pill whose session is mid-drag (`draggingSessionId`) so the floating
- * ghost stands in for it.
- *
- * `React.memo`'d so that when `MonthGrid` re-renders on a `highlightedKey`
- * change mid-drag, only the two cells whose `isDropTarget` actually flipped
- * re-render — not all 35–42. Relies on `MonthGrid` passing a stable empty
- * `tasks` array (`NO_TASKS`) and a memoised `today`.
+ * One day of the month grid: the date, then a thin bar of that day's load
+ * (timetable blue, free time gray, task orange). Tap selects the day; its
+ * sessions list under the grid. The children never change shape, so the
+ * cell survives a view switch.
  */
 export const MonthCell = memo(function MonthCell({
   day,
-  monthDate,
-  sessions,
+  outside,
   isToday,
+  isSelected,
+  bar,
   openDayTip,
-  moveTargetTip,
-  isDropTarget,
-  isJustDropped,
-  loading,
-  draggingSessionId,
   onPressDay,
-  onDoubleTapDay,
-  onPressOverflow,
 }: MonthCellProps) {
-  useLanguage();
-  const outside = isOutsideMonth(day, monthDate);
-
-  // Single vs. double tap: a single tap opens the day sheet (deferred by
-  // `DOUBLE_TAP_MS` so a second tap can cancel it); a double tap jumps to
-  // Week view. `Pressable` has no native double-tap, so it's timed here.
-  const lastTapRef = useRef(0);
-  const singleTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (singleTapTimer.current) clearTimeout(singleTapTimer.current);
-    },
-    [],
-  );
-  const handlePress = () => {
-    const now = Date.now();
-    if (now - lastTapRef.current < DOUBLE_TAP_MS) {
-      lastTapRef.current = 0;
-      if (singleTapTimer.current) {
-        clearTimeout(singleTapTimer.current);
-        singleTapTimer.current = null;
-      }
-      onDoubleTapDay(day);
-      return;
-    }
-    lastTapRef.current = now;
-    if (singleTapTimer.current) clearTimeout(singleTapTimer.current);
-    singleTapTimer.current = setTimeout(() => {
-      singleTapTimer.current = null;
-      onPressDay(day, sessions);
-    }, DOUBLE_TAP_MS);
-  };
-
-  // `groupSessionsByDate` always hands us `sessions` in chronological order
-  // (the day sheet relies on that), so re-sort a copy by type severity here —
-  // this decides which `MONTH_PILL_CAP` sessions win the visible slots when a
-  // day overflows, not the render order of the day sheet itself.
-  const bySeverity = useMemo(
-    () =>
-      [...sessions].sort(
-        (a, b) =>
-          MONTH_CELL_VISIBILITY_WEIGHTS[b.type] -
-          MONTH_CELL_VISIBILITY_WEIGHTS[a.type],
-      ),
-    [sessions],
-  );
-  // Measured height decides how many pills fit; the fixed cap is only the
-  // first-frame fallback, and those pills stay invisible until measured so the
-  // count never visibly flips after layout.
-  const [cellHeight, setCellHeight] = useState<number | null>(null);
-  const { visible, overflowCount } = splitCellSessions(
-    bySeverity,
-    cellHeight == null
-      ? MONTH_PILL_CAP
-      : monthPillCap(cellHeight, bySeverity.length),
-  );
-  const seed = day.getDate() + day.getDay();
-
+  const tipActive = useSpotlight((s) => s.step === "open-day");
   return (
     <Pressable
-      onPress={handlePress}
-      onLayout={(e) => setCellHeight(e.nativeEvent.layout.height)}
-      style={{ width: `${100 / 7}%` }}
-      className={cn(
-        "overflow-hidden border-b border-r border-border p-[5px] pb-[6px]",
-        outside ? "bg-muted/40" : "bg-transparent",
-        isToday &&
-          "border-t-2 border-t-primary bg-primary/[0.08] dark:bg-primary/[0.14]",
-        (isDropTarget || isJustDropped) && "bg-primary/[0.14]",
-      )}
+      onPress={() => onPressDay(day)}
+      accessibilityRole="button"
+      accessibilityState={{ selected: isSelected }}
+      accessibilityLabel={`${day.getDate()}`}
+      testID={`month-cell.${day.getFullYear()}-${day.getMonth() + 1}-${day.getDate()}`}
+      style={{ width: `${100 / 7}%`, height: CELL_HEIGHT }}
+      className="items-center gap-1.5 pt-1"
     >
-      {/* Fixed slot: tips toggling must not shift sibling indexes (Fabric
-          crashes unmounting a child whose index moved). */}
+      {/* Fixed slot: the tip toggling must not shift sibling indexes. */}
       <View pointerEvents="box-none" className="absolute inset-0">
-        {openDayTip ? <SpotlightAnchor step="open-day" /> : null}
-        {moveTargetTip ? <DragTargetProbe /> : null}
+        {openDayTip && tipActive ? <SpotlightAnchor step="open-day" /> : null}
       </View>
-      <Text
-        className={cn(
-          "h-[23px] w-[23px] rounded-full text-center text-[12.5px] font-semibold leading-[23px]",
-          outside
-            ? "text-muted-foreground opacity-60"
-            : isToday
-              ? "bg-primary text-primary-foreground"
-              : "text-foreground",
-        )}
-      >
-        {day.getDate()}
-      </Text>
-
-      {/* One container for skeleton and pills: swapping element types here
-          crashed Fabric on the month switch. */}
       <View
-        style={!loading && cellHeight == null ? { opacity: 0 } : undefined}
-        className={cn("mt-1 gap-[3px]", outside && "opacity-60")}
-      >
-        {loading ? (
-          <>
-            <Skeleton
-              className={cn(
-                "h-[15px] rounded-[5px]",
-                SKELETON_PILL_WIDTHS[seed % SKELETON_PILL_WIDTHS.length],
-              )}
-            />
-            {seed % 3 === 0 && (
-              <Skeleton
-                className={cn(
-                  "h-[15px] rounded-[5px]",
-                  SKELETON_PILL_WIDTHS[
-                    (seed + 4) % SKELETON_PILL_WIDTHS.length
-                  ],
-                )}
-              />
-            )}
-          </>
-        ) : (
-          <>
-            {visible.map((task) => (
-              <MonthPill
-                key={task.id}
-                session={task}
-                hidden={draggingSessionId === task.id}
-              />
-            ))}
-            {overflowCount > 0 && (
-              <Pressable
-                onPress={() => onPressOverflow(day, sessions)}
-                hitSlop={6}
-                className="rounded-[5px] px-1 py-0.5"
-              >
-                <Text className="text-[9.5px] font-bold leading-tight text-muted-foreground">
-                  +{overflowCount}
-                </Text>
-              </Pressable>
-            )}
-          </>
+        className={cn(
+          "h-[30px] w-[30px] items-center justify-center rounded-full",
+          isToday
+            ? "bg-primary"
+            : isSelected
+              ? "bg-foreground/10"
+              : "bg-transparent",
+          isSelected && !isToday && "border border-foreground/30",
         )}
+      >
+        <Text
+          className={cn(
+            "text-[16px] font-semibold",
+            isToday
+              ? "text-primary-foreground"
+              : outside
+                ? "text-muted-foreground opacity-60"
+                : "text-foreground",
+          )}
+        >
+          {day.getDate()}
+        </Text>
+      </View>
+      <View className={cn("w-[70%]", outside && "opacity-50")}>
+        <DayBarView bar={bar} />
       </View>
     </Pressable>
-  );
-});
-
-interface MonthPillProps {
-  session: Session;
-  /** True while this session is being dragged (from the day sheet) — the pill
-   * hides in place so the floating ghost is the only copy on screen. */
-  hidden: boolean;
-}
-
-const MonthPill = memo(function MonthPill({ session, hidden }: MonthPillProps) {
-  useLanguage();
-  const state = deriveState(session);
-  const late = isSessionPastDeadline(session);
-  const Icon = sessionTypeIcon(session.type);
-  const continuation = isContinuationEntry(session);
-  const { isDarkColorScheme } = useColorScheme();
-  const overrides = useCourseColourStore((s) => s.overrides);
-  // Course colour wins over the type tone; late stays red.
-  const course =
-    late || !session.courseKey
-      ? null
-      : courseStyleFor(
-          session.courseKey,
-          overrides,
-          isDarkColorScheme ? "dark" : "light",
-        );
-
-  return (
-    <View
-      style={[
-        hidden ? { opacity: 0 } : undefined,
-        course
-          ? { backgroundColor: course.tint, borderLeftColor: course.stripe }
-          : undefined,
-      ]}
-      className={cn(
-        "flex-row items-center gap-1 rounded-[5px] border-l-2 px-1.5 py-0.5",
-        late
-          ? MONTH_PILL_LATE_CLASSES
-          : course
-            ? undefined
-            : MONTH_PILL_CLASSES[state],
-        continuation &&
-          "rounded-t-none border-t-[1.5px] border-t-muted-foreground/50 [border-top-style:dashed]",
-      )}
-    >
-      {late ? (
-        <AlertTriangle
-          size={9}
-          className="shrink-0 text-session-late-ink"
-        />
-      ) : continuation ? (
-        <Text className="shrink-0 text-[9px] leading-none text-muted-foreground">
-          ↳
-        </Text>
-      ) : (
-        <Icon
-          size={9}
-          className={cn("shrink-0", SESSION_TYPE_META[session.type].textClass)}
-        />
-      )}
-      <Text
-        numberOfLines={1}
-        style={course ? { color: course.ink } : undefined}
-        className={cn(
-          "flex-1 text-[9.5px] font-semibold leading-tight",
-          late
-            ? "text-session-late-ink"
-            : course
-              ? undefined
-              : MONTH_PILL_TEXT_CLASSES[state],
-        )}
-      >
-        {session.title}
-      </Text>
-    </View>
   );
 });

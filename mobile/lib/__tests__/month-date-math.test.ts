@@ -8,8 +8,6 @@ import {
   isOutsideMonth,
   isWeekendColumn,
   monthLabel,
-  monthPillCap,
-  splitCellSessions,
 } from "../month-date-math";
 
 describe("getMonthGridDays", () => {
@@ -90,37 +88,6 @@ describe("dateKey / monthLabel / addMonths", () => {
   });
 });
 
-describe("splitCellSessions", () => {
-  it("shows everything with no overflow when at or under the cap", () => {
-    expect(splitCellSessions(["a", "b"], 2)).toEqual({
-      visible: ["a", "b"],
-      overflowCount: 0,
-    });
-    expect(splitCellSessions(["a"], 2)).toEqual({
-      visible: ["a"],
-      overflowCount: 0,
-    });
-    expect(splitCellSessions([], 2)).toEqual({ visible: [], overflowCount: 0 });
-  });
-
-  it("caps at 2 and reports the correct overflow count on the 3rd+ task", () => {
-    expect(splitCellSessions(["a", "b", "c"], 2)).toEqual({
-      visible: ["a", "b"],
-      overflowCount: 1,
-    });
-    expect(splitCellSessions(["a", "b", "c", "d", "e"], 2)).toEqual({
-      visible: ["a", "b"],
-      overflowCount: 3,
-    });
-  });
-
-  it("defaults the cap to 4 (the fixed month-grid overflow cap)", () => {
-    expect(splitCellSessions(["a", "b", "c", "d", "e", "f"])).toEqual({
-      visible: ["a", "b", "c", "d"],
-      overflowCount: 2,
-    });
-  });
-});
 
 describe("groupSessionsByDate", () => {
   const tz = "UTC";
@@ -300,16 +267,5 @@ describe("groupSessionsByDate", () => {
       expect(grouped.has("2026-06-16")).toBe(true);
       expect(isContinuationEntry(grouped.get("2026-06-16")![0])).toBe(true);
     });
-  });
-});
-
-describe("monthPillCap", () => {
-  it("shows everything that fits and reserves a slot for +N otherwise", () => {
-    expect(monthPillCap(96, 2)).toBe(2);
-    expect(monthPillCap(96, 5)).toBe(2);
-  });
-  it("never exceeds the cap and always shows at least one", () => {
-    expect(monthPillCap(400, 9)).toBe(4);
-    expect(monthPillCap(40, 5)).toBe(1);
   });
 });
