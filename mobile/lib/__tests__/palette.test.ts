@@ -91,11 +91,13 @@ describe("palette tokens", () => {
     expect(vars.fg).toBe(UI[scheme].foreground.toLowerCase());
     expect(vars.muted).toBe(UI[scheme].mutedForeground.toLowerCase());
     expect(vars.card).toBe(UI[scheme].card.toLowerCase());
+    expect(vars.primary).toBe(UI[scheme].primary.toLowerCase());
   });
 
   it("landing theme matches the brand and session tones", () => {
-    expect(landingTheme["color-primary"]).toBe(BRAND.orange.toLowerCase());
+    expect(landingTheme["color-primary"]).toBe("var(--primary)");
     expect(landingTheme["color-accent"]).toBe(BRAND.yellow.toLowerCase());
+    expect(landingTheme["color-lime"]).toBe(BRAND.lime.toLowerCase());
     for (const tone of ["lecture", "exam", "assignment", "task", "done"] as const) {
       expect(landingTheme[`color-${tone}`], tone).toBe(
         SESSION_TONES[tone].base.toLowerCase(),
