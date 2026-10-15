@@ -14,6 +14,8 @@ function session(overrides: Partial<Session>): Session {
     deadline: null,
     late: false,
     completedAt: null,
+    anchor: "AUTO",
+    anchoredAt: null,
     skipped: false,
     type: "TASK",
     source: "USER",
