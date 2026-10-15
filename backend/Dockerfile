@@ -14,6 +14,7 @@ FROM base AS builder
 # Copy workspace manifests first so the (slow) install layer is cached across
 # source-only changes. Only the packages in the backend's dependency graph are needed.
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
+COPY patches ./patches
 COPY packages/shared/package.json ./packages/shared/
 COPY backend/package.json ./backend/
 
