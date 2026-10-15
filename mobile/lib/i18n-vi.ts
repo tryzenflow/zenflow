@@ -678,5 +678,11 @@ export default {
   "Moves freely": "Tự dời theo lịch",
   "Time set by you": "Giờ do bạn chọn",
   "Pinned in place": "Đã ghim cố định",
+  "Placed at {time}, you usually study then": "Đã xếp lúc {time}, bạn thường học vào giờ này",
+  "Placed at {time}, before the deadline": "Đã xếp lúc {time}, trước hạn nộp",
+  "Placed at {time}, the only free slot": "Đã xếp lúc {time}, là khung giờ trống duy nhất",
+  "Placed at {time}, next to another session": "Đã xếp lúc {time}, sát một buổi học khác",
+  "Placed at {time}, other sessions moved to fit it": "Đã xếp lúc {time}, các buổi khác đã dời để vừa lịch",
+  "Placed at {time}, the best time left": "Đã xếp lúc {time}, khung giờ trống tốt nhất còn lại",
   "Swipe up to read the note": "Vuốt lên để đọc ghi chú",
 } as Record<string, string>;

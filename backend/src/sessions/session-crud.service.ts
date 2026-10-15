@@ -213,7 +213,12 @@ export class SessionCrudService {
       },
     );
     return toCreateSessionResponse(
-      { ...created, scheduledStartTime: placement.scheduledStartTime },
+      {
+        ...created,
+        scheduledStartTime: placement.scheduledStartTime,
+        placementReason: placement.placementReason ?? null,
+        placementReasonStartAt: placement.scheduledStartTime,
+      },
       { ...slotProposalFieldsOf(placement), undoGroupId },
     );
   }

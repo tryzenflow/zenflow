@@ -11,9 +11,28 @@
  */
 import type { SchedulingArm } from "./bandit";
 
-export const PLACEMENT_CONTRACT_VERSION = 2;
+export const PLACEMENT_CONTRACT_VERSION = 3;
 
 export type PlacementPolicy = "HEURISTIC" | "LINUCB";
+
+/**
+ * Why Python chose a placed start (`services/bandit/src/core/reason.py`).
+ * `PREFERRED_HOUR`: the user usually works at that hour. `ONLY_FREE_SLOT`:
+ * the sole free start. `NEAR_CLASS`: next to another block.
+ * `BEFORE_DEADLINE`: the default for a clean pick. `MOVED_FOR_DEADLINE`:
+ * other sessions moved to fit it. `BEST_AVAILABLE`: an accepted conflict,
+ * late or last-resort start.
+ */
+export const PLACEMENT_REASONS = [
+  "PREFERRED_HOUR",
+  "BEFORE_DEADLINE",
+  "ONLY_FREE_SLOT",
+  "NEAR_CLASS",
+  "MOVED_FOR_DEADLINE",
+  "BEST_AVAILABLE",
+] as const;
+
+export type PlacementReason = (typeof PLACEMENT_REASONS)[number];
 
 /**
  * Per-type load already on a day. Value shape is `{ hours, count }` (the shape
@@ -188,6 +207,8 @@ export interface PlacedMember {
   late: boolean;
   /** `ACCEPTED_CONFLICTS`, or an `ACCEPTED_LAST_RESORT` start that overlaps. */
   conflicting: boolean;
+  /** Why `startMs` was chosen; `null` when there is no start. */
+  reason: PlacementReason | null;
 }
 
 export interface PlaceResponse {

@@ -48,6 +48,7 @@ import type {
 import { DisplacementService, type AppliedMove } from "./displacement.service";
 import { FallbackPlacer } from "./fallback-placer.service";
 import { PlacementGateway } from "./placement-gateway.service";
+import { placementData } from "./placement-write";
 import { selectSeriesAlternatives } from "./series-alternatives";
 import type { DegradedReason } from "./placement-mode";
 
@@ -287,10 +288,17 @@ export class PythonPlacer {
     const displaced: AppliedMove[] = r.moves.length
       ? await this.applyMoves(user.id, r.moves, groupId)
       : [];
+    // Python's reason describes Python's start only; a last resort it did not
+    // pick has none.
+    const placementReason =
+      start !== null && start === r.startMs ? (r.reason ?? null) : null;
     if (start !== null) {
       await this.prisma.session.update({
         where: { id: task.id },
-        data: { scheduledStartTime: new Date(start) },
+        data: placementData({
+          scheduledStartTime: new Date(start),
+          placementReason,
+        }),
       });
     }
 
@@ -360,6 +368,7 @@ export class PythonPlacer {
     });
     return {
       scheduledStartTime: start !== null ? new Date(start) : null,
+      placementReason,
       appliedPolicy: appliedPolicy === "NONE" ? "NONE" : appliedPolicy,
       slotProposalId,
       alternativeSlot:
@@ -572,6 +581,7 @@ export class PythonPlacer {
         id: m.id,
         scheduledStartTime:
           rawStarts[i] !== null ? new Date(rawStarts[i]) : null,
+        placementReason: rawStarts[i] !== null ? results[i].reason : null,
         ...(results[i].outcome === "ACCEPTED_LAST_RESORT" &&
         rawStarts[i] !== null
           ? { lastResort: true }

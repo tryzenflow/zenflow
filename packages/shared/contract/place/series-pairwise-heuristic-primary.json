@@ -6,7 +6,7 @@
     "timingsMs"
   ],
   "request": {
-    "contractVersion": 2,
+    "contractVersion": 3,
     "requestId": "00000000-0000-4000-8000-000000000002-3",
     "mode": "PLACE",
     "nowMs": 1789977600000,
@@ -701,9 +701,9 @@
     }
   },
   "response": {
-    "contractVersion": 2,
+    "contractVersion": 3,
     "requestId": "00000000-0000-4000-8000-000000000002-3",
-    "paramsVersion": "py-arms6-v3-09152c3b4a67",
+    "paramsVersion": "py-arms6-v3-ee353b63de78",
     "results": [
       {
         "id": "s0",
@@ -734,7 +734,8 @@
         "startMs": 1789977600000,
         "moves": [],
         "late": false,
-        "conflicting": false
+        "conflicting": false,
+        "reason": "PREFERRED_HOUR"
       },
       {
         "id": "s1",
@@ -765,7 +766,8 @@
         "startMs": 1790064000000,
         "moves": [],
         "late": false,
-        "conflicting": false
+        "conflicting": false,
+        "reason": "PREFERRED_HOUR"
       },
       {
         "id": "s2",
@@ -796,16 +798,17 @@
         "startMs": 1790150400000,
         "moves": [],
         "late": false,
-        "conflicting": false
+        "conflicting": false,
+        "reason": "PREFERRED_HOUR"
       }
     ],
     "timingsMs": {
-      "decode": 0.255,
-      "context": 0.028,
-      "predict": 0.142,
-      "scan": 0.726,
+      "decode": 0.207,
+      "context": 0.081,
+      "predict": 0.42,
+      "scan": 1.188,
       "displace": 0.0,
-      "total": 1.366
+      "total": 2.511
     }
   }
 }

@@ -66,6 +66,7 @@ Drag, resize and reschedule are all `PATCH /sessions/:id` (a `MOVE` signal).
 | DELETE | `/sessions/:id/skip` | Undo skip |
 
 - **Anchors (ADR-0022):** every `Session` carries `anchor` (`AUTO` | `CHOSEN` | `PINNED`) and `anchoredAt`. A drag, "move to" or time pick sets `CHOSEN` on a `TASK`. Pin sets `PINNED`; unpin sets `AUTO`.
+- **Placement reason (#254):** `placementReason` (`PREFERRED_HOUR` | `BEFORE_DEADLINE` | `ONLY_FREE_SLOT` | `NEAR_CLASS` | `MOVED_FOR_DEADLINE` | `BEST_AVAILABLE`, or `null`) says why the scheduler picked the start. It is `null` once the start has moved, or for a fallback placement. See [bandit placement](../bandit/placement.md#reason-codes).
 - **Confirmation:** a create or deadline change whose only plan moves a `CHOSEN` session is not applied.
   - `POST /sessions` answers `409` with `code: "NEEDS_CONFIRMATION"` and `data.plan` (`{ id, sessionId, start, moves[], expiresAt }`). Confirm with `POST /sessions/placement/confirm`.
   - A deadline `PATCH` answers `200` with `placementPlan` set. The session keeps its start; the deadline is saved.

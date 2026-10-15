@@ -43,6 +43,8 @@ function row(overrides: Partial<SessionRow> = {}): SessionRow {
     skipped: false,
     anchor: "AUTO",
     anchoredAt: null,
+    placementReason: null,
+    placementReasonStartAt: null,
     seriesId: null,
     sessionIndex: null,
     sessionTotal: null,

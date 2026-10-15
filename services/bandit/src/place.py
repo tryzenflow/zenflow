@@ -39,6 +39,13 @@ from src.core.displacement import (
     pick_min_conflict_slot,
     plan_displacement,
 )
+from src.core.preference import preference_score_at
+from src.core.reason import (
+    PlacementReason,
+    count_free_starts,
+    is_near_block,
+    placement_reason,
+)
 from src.core.series_spread import series_day_windows
 from src.core.slot import (
     Intervals,
@@ -319,6 +326,7 @@ class _Placer:
             moves=[],
             late=False,
             conflicting=False,
+            reason=None,
         )
         dur_ms = m.duration_minutes * consts.MS_PER_MINUTE
         if self.next15 + dur_ms > req.deadline_ms:
@@ -356,10 +364,62 @@ class _Placer:
                 "heuristic": heur,
                 "linucb": lin,
                 "start_ms": start_ms,
+                "reason": self._placed_reason(m, start_ms, days, extra),
+            }
+        )
+
+    def _free_starts(
+        self, m: PlacementMember, d: PlacementDay, extra: Intervals
+    ) -> int:
+        """Free on-grid starts of ``m`` on one candidate day (sibling-aware)."""
+        req = self.req
+        dur_ms = m.duration_minutes * consts.MS_PER_MINUTE
+        overhang = dur_ms - consts.SLOT_MS
+        return count_free_starts(
+            [*self.occ[d.day_str], *extra],
+            max(self.next15, d.day_start_ms),
+            min(req.deadline_ms, d.day_end_ms),
+            min(req.deadline_ms, d.day_end_ms + overhang),
+            dur_ms,
+        )
+
+    def _placed_reason(
+        self,
+        m: PlacementMember,
+        start_ms: int,
+        days: list[PlacementDay],
+        extra: Intervals,
+    ) -> PlacementReason:
+        dur_ms = m.duration_minutes * consts.MS_PER_MINUTE
+        free = sum(self._free_starts(m, d, extra) for d in days)
+        return placement_reason(
+            "PLACED",
+            free_starts=free,
+            preference=preference_score_at(self.matrix, start_ms, self.tz),
+            near_class=is_near_block(
+                self.occ.get(local_date_str(start_ms, self.tz), []), start_ms, dur_ms
+            ),
+        )
+
+    @staticmethod
+    def _outcome_reason(r: PlacedMember) -> PlacedMember:
+        """Reason for a start that did not come from the preference scan."""
+        if r.start_ms is None:
+            return r
+        return r.model_copy(
+            update={
+                "reason": placement_reason(
+                    r.outcome, free_starts=0, preference=0.0, near_class=False
+                )
             }
         )
 
     def _no_slot(
+        self, m: PlacementMember, base: PlacedMember, ledger: _Ledger
+    ) -> PlacedMember:
+        return self._outcome_reason(self._no_slot_outcome(m, base, ledger))
+
+    def _no_slot_outcome(
         self, m: PlacementMember, base: PlacedMember, ledger: _Ledger
     ) -> PlacedMember:
         req = self.req
@@ -531,8 +591,11 @@ class _Placer:
                 moves=[],
                 late=False,
                 conflicting=False,
+                reason=None,
             )
-            r = self._last_resort(m, base, [], ledger.siblings, late=False)
+            r = self._outcome_reason(
+                self._last_resort(m, base, [], ledger.siblings, late=False)
+            )
             if r.start_ms is not None:
                 ledger.siblings.append(
                     (r.start_ms, r.start_ms + m.duration_minutes * consts.MS_PER_MINUTE)

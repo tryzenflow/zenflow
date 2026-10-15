@@ -16,6 +16,7 @@ function session(overrides: Partial<Session>): Session {
     completedAt: null,
     anchor: "AUTO",
     anchoredAt: null,
+    placementReason: null,
     skipped: false,
     type: "TASK",
     source: "USER",

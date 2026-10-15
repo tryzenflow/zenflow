@@ -698,6 +698,8 @@ export class SessionUpdateService {
           ...updated,
           scheduledStartTime:
             placement.scheduledStartTime ?? updated.scheduledStartTime,
+          placementReason: placement.placementReason ?? null,
+          placementReasonStartAt: placement.scheduledStartTime,
         },
         slotProposalFieldsOf(placement),
       ),

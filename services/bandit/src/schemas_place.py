@@ -19,9 +19,10 @@ from src.core.constants import (
     PREFERENCE_MATRIX_LENGTH,
     TIME_GRANULARITY,
 )
+from src.core.reason import PlacementReason
 from src.schemas import ArmId, ArmState
 
-PLACEMENT_CONTRACT_VERSION = 2
+PLACEMENT_CONTRACT_VERSION = 3
 MAX_MEMBERS = 64
 
 PlacementPolicy = Literal["HEURISTIC", "LINUCB"]
@@ -209,6 +210,8 @@ class PlacedMember(_Resp):
     moves: list[Move]
     late: bool
     conflicting: bool
+    # Why the start was chosen; null only when there is no start.
+    reason: PlacementReason | None
 
 
 class Timings(_Resp):

@@ -32,6 +32,7 @@ const member = (over: Partial<PlacedMember> = {}): PlacedMember => ({
   moves: [],
   late: false,
   conflicting: false,
+  reason: null,
   ...over,
 });
 
@@ -113,6 +114,22 @@ const ok = (results: PlacedMember[]) => ({
 const down = (reason: string) => ({ ok: false as const, reason });
 
 describe("PythonPlacer.placeSingle (python answers)", () => {
+  it("stores Python's reason with the start it was chosen for (#254)", async () => {
+    const { placer, prisma } = await make({
+      place: ok([member({ outcome: "PLACED", reason: "PREFERRED_HOUR" })]),
+    });
+    const res = await placer.placeSingle(user, task, "create", now);
+    expect(res.placementReason).toBe("PREFERRED_HOUR");
+    expect(prisma.session.update).toHaveBeenCalledWith({
+      where: { id: "t1" },
+      data: {
+        scheduledStartTime: new Date(START),
+        placementReason: "PREFERRED_HOUR",
+        placementReasonStartAt: new Date(START),
+      },
+    });
+  });
+
   it("writes Python's start and records a PYTHON proposal stamped with paramsVersion", async () => {
     const { placer, prisma, experiment } = await make({
       place: ok([member()]),
@@ -123,7 +140,11 @@ describe("PythonPlacer.placeSingle (python answers)", () => {
     expect(res.appliedPolicy).toBe("HEURISTIC");
     expect(prisma.session.update).toHaveBeenCalledWith({
       where: { id: "t1" },
-      data: { scheduledStartTime: new Date(START) },
+      data: {
+        scheduledStartTime: new Date(START),
+        placementReason: null,
+        placementReasonStartAt: null,
+      },
     });
     expect(experiment.recordProposal).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -251,7 +272,11 @@ describe("PythonPlacer.placeSingle (python answers)", () => {
     expect(res.lastResort).toBe(true);
     expect(prisma.session.update).toHaveBeenCalledWith({
       where: { id: "t1" },
-      data: { scheduledStartTime: new Date(START) },
+      data: {
+        scheduledStartTime: new Date(START),
+        placementReason: null,
+        placementReasonStartAt: null,
+      },
     });
   });
 
@@ -268,7 +293,11 @@ describe("PythonPlacer.placeSingle (python answers)", () => {
     expect(res.lastResort).toBe(true);
     expect(prisma.session.update).toHaveBeenCalledWith({
       where: { id: "t1" },
-      data: { scheduledStartTime: PINNED },
+      data: {
+        scheduledStartTime: PINNED,
+        placementReason: null,
+        placementReasonStartAt: null,
+      },
     });
   });
 
@@ -506,6 +535,7 @@ describe("PythonPlacer series", () => {
       id: "b",
       scheduledStartTime: new Date(START + 7_200_000),
       lastResort: true,
+      placementReason: null,
       slotProposalId: "sp1",
       alternativeSlot: null,
       divergent: false,
