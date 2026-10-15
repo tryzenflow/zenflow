@@ -1,5 +1,5 @@
 /**
- * Vertical day grid: hour height, the folded night bands and the single
+ * Vertical day grid: hour height, the 24 hour band and the single
  * y <-> minute mapping every calendar gesture and layout uses.
  *
  * Pure. The mapping functions carry `'worklet'` so drag, resize and tap code on
@@ -13,28 +13,10 @@ import { toZonedTime } from "date-fns-tz";
 export const HOUR_HEIGHT_DEFAULT = 56;
 export const HOUR_HEIGHT_MIN = 36;
 export const HOUR_HEIGHT_MAX = 160;
-/** Height (px) of a folded night band. */
-export const FOLD_BAR_HEIGHT = 24;
-/** Night is 00:00 to 07:00 and 23:00 to 24:00. */
-export const NIGHT_EARLY_END_MIN = 7 * 60;
-export const NIGHT_LATE_START_MIN = 23 * 60;
 /** Px above a target minute the grid scrolls to, so it sits near the top. */
 const SCROLL_LEAD_PX = 120;
 /** Anchor for an empty day that is not today. */
 const DEFAULT_ANCHOR_MIN = 8 * 60;
-
-export type FoldId = "early" | "late";
-
-export interface FoldRange {
-  id: FoldId;
-  startMin: number;
-  endMin: number;
-}
-
-export const NIGHT_FOLDS: readonly FoldRange[] = [
-  { id: "early", startMin: 0, endMin: NIGHT_EARLY_END_MIN },
-  { id: "late", startMin: NIGHT_LATE_START_MIN, endMin: DAILY_HORIZON },
-];
 
 export interface MinuteSpan {
   startMin: number;
@@ -44,9 +26,6 @@ export interface MinuteSpan {
 export interface Band {
   startMin: number;
   endMin: number;
-  folded: boolean;
-  /** Set only on folded night bands. */
-  id?: FoldId;
   top: number;
   height: number;
 }
@@ -62,60 +41,20 @@ export function clampHourHeight(hourHeight: number): number {
   return Math.min(HOUR_HEIGHT_MAX, Math.max(HOUR_HEIGHT_MIN, hourHeight));
 }
 
-/**
- * The night folds that stay collapsed: not unfolded by the user and no span
- * (event) overlapping them. An overlapping event always unfolds its night.
- */
-export function foldedNightRanges(
-  spans: readonly MinuteSpan[],
-  unfolded: ReadonlySet<FoldId>,
-): FoldRange[] {
-  return NIGHT_FOLDS.filter(
-    (fold) =>
-      !unfolded.has(fold.id) &&
-      !spans.some((s) => s.startMin < fold.endMin && s.endMin > fold.startMin),
-  );
-}
-
-/** Lays out the day as unfolded hour bands and folded 24px bars, top to bottom. */
-export function buildDayGrid(
-  hourHeight: number,
-  folded: readonly FoldRange[],
-): DayGrid {
-  const bands: Band[] = [];
-  let y = 0;
-  const push = (startMin: number, endMin: number, id?: FoldId) => {
-    if (endMin <= startMin) return;
-    const isFolded = id !== undefined;
-    const height = isFolded
-      ? FOLD_BAR_HEIGHT
-      : ((endMin - startMin) / 60) * hourHeight;
-    bands.push({ startMin, endMin, folded: isFolded, id, top: y, height });
-    y += height;
+/** Lays out the whole day as one band of 24 hours at `hourHeight`. */
+export function buildDayGrid(hourHeight: number): DayGrid {
+  const height = (DAILY_HORIZON / 60) * hourHeight;
+  return {
+    hourHeight,
+    height,
+    bands: [{ startMin: 0, endMin: DAILY_HORIZON, top: 0, height }],
   };
-  let cursor = 0;
-  const sorted = [...folded].sort((a, b) => a.startMin - b.startMin);
-  for (const fold of sorted) {
-    push(cursor, fold.startMin);
-    push(fold.startMin, fold.endMin, fold.id);
-    cursor = fold.endMin;
-  }
-  push(cursor, DAILY_HORIZON);
-  return { hourHeight, height: y, bands };
 }
 
 /** Content height for a live hour height during a pinch, before the grid commits. */
-export function gridHeightFor(
-  hourHeight: number,
-  folded: readonly FoldRange[],
-): number {
+export function gridHeightFor(hourHeight: number): number {
   "worklet";
-  let foldedMin = 0;
-  for (const fold of folded) foldedMin += fold.endMin - fold.startMin;
-  return (
-    ((DAILY_HORIZON - foldedMin) / 60) * hourHeight +
-    folded.length * FOLD_BAR_HEIGHT
-  );
+  return (DAILY_HORIZON / 60) * hourHeight;
 }
 
 /** Minute span of a segment on the wall clock of `tz`, as the fold maths reads it. */
@@ -172,14 +111,10 @@ export function dragTargetMin(
   return yToMin(grid, minToY(grid, startMin) + dyPx);
 }
 
-/** Hour lines and gutter labels for hours that are not inside a folded band. */
+/** Minutes of every hour line and gutter label. */
 export function visibleHourMinutes(grid: DayGrid): number[] {
-  const hours: number[] = [];
-  for (let h = 0; h < 24; h++) {
-    const band = bandAt(grid, h * 60);
-    if (!band?.folded) hours.push(h * 60);
-  }
-  return hours;
+  void grid;
+  return Array.from({ length: 24 }, (_, h) => h * 60);
 }
 
 /** Content tier of a block by its pixel height. */

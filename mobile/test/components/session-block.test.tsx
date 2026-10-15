@@ -11,7 +11,7 @@ import { renderScreen } from "@/test/utils/render";
 
 // Tz is UTC so the wall clock in the fixtures reads the same as the ISO string.
 const TZ = "UTC";
-const GRID = buildDayGrid(56, []);
+const GRID = buildDayGrid(56);
 
 function segment(overrides: Partial<DaySegment> & { minutes: number }): DaySegment {
   const { minutes, ...rest } = overrides;

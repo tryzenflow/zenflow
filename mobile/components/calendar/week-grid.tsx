@@ -5,10 +5,7 @@ import { useLanguage } from "@/hooks/use-language";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import {
   type DayGrid,
-  type FoldId,
-  FOLD_BAR_HEIGHT,
   buildDayGrid,
-  foldedNightRanges,
   minToY,
   scrollAnchorMin,
   scrollYForMin,
@@ -41,7 +38,6 @@ import {
 import {
   columnBlockFrame,
   weekColumnWidth,
-  weekSpans,
 } from "@/lib/week-grid-math";
 import { dateKey, shiftWeek, weekDays, weekStart } from "@/lib/week-date-math";
 import {
@@ -220,7 +216,6 @@ function WeekPage({
   const [sessions, setSessions] = useState<Session[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [mutationTick, setMutationTick] = useState(0);
-  const [unfolded, setUnfolded] = useState<ReadonlySet<FoldId>>(new Set());
   const [settleKey, setSettleKey] = useState(0);
   // The block being dragged and the slot it currently previews (null when idle).
   const [dragging, setDragging] = useState<{
@@ -270,14 +265,7 @@ function WeekPage({
     return days.map((day) => eventsForDay(blocks, day, tz));
   }, [sessions, days, tz]);
 
-  const folded = useMemo(
-    () => foldedNightRanges(weekSpans(segmentsByDay, tz), unfolded),
-    [segmentsByDay, tz, unfolded],
-  );
-  const grid: DayGrid = useMemo(
-    () => buildDayGrid(hourHeight, folded),
-    [hourHeight, folded],
-  );
+  const grid: DayGrid = useMemo(() => buildDayGrid(hourHeight), [hourHeight]);
   const layouts = useMemo(
     () => segmentsByDay.map((segments) => getOverlapLayout(segments)),
     [segmentsByDay],
@@ -592,30 +580,6 @@ function WeekPage({
               </View>
             );
           })}
-
-          {grid.bands
-            .filter((band) => band.folded && band.id)
-            .map((band) => (
-              <Pressable
-                key={band.id}
-                onPress={() =>
-                  setUnfolded((cur) => new Set(cur).add(band.id as FoldId))
-                }
-                accessibilityRole="button"
-                accessibilityLabel={t("Show night hours")}
-                className="absolute items-center justify-center bg-muted/40 active:bg-muted"
-                style={{
-                  left: 0,
-                  right: 0,
-                  top: band.top,
-                  height: FOLD_BAR_HEIGHT,
-                }}
-              >
-                <Text className="text-[11px] font-medium text-muted-foreground">
-                  {t("Show night hours")}
-                </Text>
-              </Pressable>
-            ))}
         </View>
       </ScrollView>
     </View>

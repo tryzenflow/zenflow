@@ -15,7 +15,7 @@ interface TimeGutterProps {
   showEndLabel?: boolean;
 }
 
-/** Hour labels placed on the grid's bands; hours inside a folded night are skipped. */
+/** Hour labels placed on the grid's bands. */
 export function TimeGutter({
   grid,
   showZeroLabel = true,

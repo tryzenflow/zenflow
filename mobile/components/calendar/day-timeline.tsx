@@ -91,12 +91,9 @@ import { NowIndicator } from "./now-indicator";
 import { SessionBlock } from "./task-block";
 import {
   type DayGrid,
-  type FoldId,
-  FOLD_BAR_HEIGHT,
   HOUR_HEIGHT_MAX,
   HOUR_HEIGHT_MIN,
   buildDayGrid,
-  foldedNightRanges,
   gridHeightFor,
   minToY,
   minuteSpanOf,
@@ -316,11 +313,6 @@ export function DayTimeline({
   }, [propDate, liveDayKey, tz]);
   // The pinch level is shared by every open page and persisted (lib/hour-height).
   const [hourHeight, setHourHeightState] = useState(getHourHeight);
-  // Nights the user unfolded by tapping their bar. An event inside a night
-  // unfolds it regardless (see `foldedNightRanges`).
-  const [unfolded, setUnfolded] = useState<ReadonlySet<FoldId>>(
-    () => new Set(),
-  );
   useEffect(() => {
     void loadHourHeight();
     return subscribeHourHeight(() => setHourHeightState(getHourHeight()));
@@ -492,29 +484,11 @@ export function DayTimeline({
 
   const layout = useMemo(() => getOverlapLayout(segments), [segments]);
 
-  // The one y <-> time mapping for this day: hour height plus the night folds.
+  // The one y <-> time mapping for this day: all 24 hours at `hourHeight`.
   // Layout, drag, resize, the now line and the empty-day zone all read it.
-  const folded = useMemo(
-    () =>
-      foldedNightRanges(
-        segments.map((s) => minuteSpanOf(s, tz)),
-        unfolded,
-      ),
-    [segments, tz, unfolded],
-  );
-  const grid = useMemo<DayGrid>(
-    () => buildDayGrid(hourHeight, folded),
-    [hourHeight, folded],
-  );
+  const grid = useMemo<DayGrid>(() => buildDayGrid(hourHeight), [hourHeight]);
   const totalHeight = grid.height;
-  const foldedBands = useMemo(
-    () => grid.bands.filter((b) => b.folded),
-    [grid],
-  );
   const hourLineMins = useMemo(() => visibleHourMinutes(grid), [grid]);
-  const unfoldNight = useCallback((id: FoldId) => {
-    setUnfolded((prev) => new Set(prev).add(id));
-  }, []);
 
   // The block the checklist's "Move a task" / "Hold a task" spotlights point at:
   // the task the user just created when it's on this day, else the first whole
@@ -1104,9 +1078,9 @@ export function DayTimeline({
 
   const animatedContentStyle = useAnimatedStyle(
     () => ({
-      height: gridHeightFor(baseHourHeight.value, folded),
+      height: gridHeightFor(baseHourHeight.value),
     }),
-    [folded],
+    [],
   );
 
   // The drop-line's position — driven straight from the UI-thread
@@ -1290,7 +1264,7 @@ export function DayTimeline({
                   bottom: -bottomInset,
                 }}
               >
-                {/* Hour separator lines, skipping hours inside a folded night */}
+                {/* Hour separator lines */}
                 {hourLineMins.map((min) => (
                   <View
                     key={min}
@@ -1301,24 +1275,6 @@ export function DayTimeline({
                     }}
                   />
                 ))}
-
-                {/* Folded nights: one bar, tap to unfold */}
-                {foldedBands.map((band) =>
-                  band.id ? (
-                    <Pressable
-                      key={band.id}
-                      onPress={() => unfoldNight(band.id as FoldId)}
-                      accessibilityRole="button"
-                      accessibilityLabel={t("Show night hours")}
-                      className="absolute left-0 right-0 items-center justify-center bg-muted/40 active:bg-muted"
-                      style={{ top: band.top, height: FOLD_BAR_HEIGHT }}
-                    >
-                      <Text className="text-[11px] font-medium text-muted-foreground">
-                        {t("Show night hours")}
-                      </Text>
-                    </Pressable>
-                  ) : null,
-                )}
 
                 {segments.length === 0 && !loading && !offline && (
                   <Pressable

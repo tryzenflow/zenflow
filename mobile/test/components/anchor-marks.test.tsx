@@ -15,7 +15,7 @@ import { renderScreen } from "@/test/utils/render";
 import type { DaySegment, SessionAnchor } from "@zenflow/shared";
 
 const TZ = "UTC";
-const GRID = buildDayGrid(56, []);
+const GRID = buildDayGrid(56);
 const START = "2026-10-15T09:00:00.000Z";
 
 function segment(id: string): DaySegment {
