@@ -44,25 +44,24 @@ describe("buildDayBar", () => {
     expect(buildDayBar([], TZ)).toEqual({ types: [], segments: [] });
   });
 
-  it("draws timetable, gap, task in time order", () => {
+  it("places each session at its time of day", () => {
     const bar = buildDayBar(
       [session("14:00", 60, "TASK"), session("08:00", 120, "LECTURE")],
       TZ,
     );
     expect(bar.segments).toEqual([
-      { kind: "LECTURE", flex: 120 },
-      { kind: "gap", flex: 240 },
-      { kind: "TASK", flex: 60 },
+      { kind: "LECTURE", start: 480, end: 600 },
+      { kind: "TASK", start: 840, end: 900 },
     ]);
     expect(bar.types).toEqual(["LECTURE", "TASK"]);
   });
 
-  it("merges adjacent sessions of one type and skips short gaps", () => {
+  it("merges back to back sessions of one type", () => {
     const bar = buildDayBar(
-      [session("09:00", 60, "TASK"), session("10:10", 50, "TASK", "b")],
+      [session("09:00", 60, "TASK"), session("10:00", 50, "TASK", "b")],
       TZ,
     );
-    expect(bar.segments).toEqual([{ kind: "TASK", flex: 110 }]);
+    expect(bar.segments).toEqual([{ kind: "TASK", start: 540, end: 650 }]);
   });
 
   it("draws an overlap once", () => {
@@ -71,14 +70,14 @@ describe("buildDayBar", () => {
       TZ,
     );
     expect(bar.segments).toEqual([
-      { kind: "LECTURE", flex: 120 },
-      { kind: "TASK", flex: 60 },
+      { kind: "LECTURE", start: 540, end: 660 },
+      { kind: "TASK", start: 660, end: 720 },
     ]);
   });
 
   it("stops a session at midnight", () => {
     const bar = buildDayBar([session("23:00", 180, "TASK")], TZ);
-    expect(bar.segments).toEqual([{ kind: "TASK", flex: 60 }]);
+    expect(bar.segments).toEqual([{ kind: "TASK", start: 1380, end: 1440 }]);
   });
 });
 
@@ -86,5 +85,11 @@ describe("dayBarsByDay", () => {
   it("keys bars by day", () => {
     const bars = dayBarsByDay([session("09:00", 60, "TASK")], TZ);
     expect([...bars.keys()]).toHaveLength(1);
+  });
+
+  it("carries the part past midnight to the next day", () => {
+    const bars = dayBarsByDay([session("23:00", 180, "TASK")], TZ);
+    expect(bars.get("2026-10-15")?.segments).toEqual([{ kind: "TASK", start: 1380, end: 1440 }]);
+    expect(bars.get("2026-10-16")?.segments).toEqual([{ kind: "TASK", start: 0, end: 120 }]);
   });
 });

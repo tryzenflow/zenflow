@@ -20,6 +20,7 @@ import {
   viewSessionOnCalendar,
 } from "@/hooks/use-notifications";
 import { useUserStore } from "@/hooks/use-user-store";
+import { useColorScheme } from "@/lib/useColorScheme";
 import { notificationVisual } from "@/lib/notification-visual";
 import { cn } from "@/lib/utils";
 import { notificationCategory, type NotificationDto } from "@zenflow/shared";
@@ -261,6 +262,7 @@ export default function NotificationsScreen() {
             <GlassButton
               onPress={() => safeBack(router)}
               icon={ChevronLeft}
+              iconSize={24}
               accessibilityLabel={t("Back")}
             />
             <View className="flex-1 flex-row items-center gap-2">
@@ -412,7 +414,8 @@ function NotificationRowItem({
   useLanguage();
   const offline = useOffline();
   const swipeableRef = useRef<SwipeableMethods>(null);
-  const { Icon, tint, iconColor } = notificationVisual(n.eventName);
+  const { Icon, tint, ink } = notificationVisual(n.eventName);
+  const { isDarkColorScheme } = useColorScheme();
   const unread = !n.readAt;
   const relative = formatDistanceToNow(new Date(n.sentAt), {
     addSuffix: true,
@@ -483,11 +486,15 @@ function NotificationRowItem({
           <View className="relative shrink-0">
             <View
               className={cn(
-                "h-10 w-10 items-center justify-center rounded-2xl border",
+                "h-11 w-11 items-center justify-center rounded-2xl border",
                 tint,
               )}
             >
-              <Icon size={19} color={iconColor} />
+              <Icon
+                size={21}
+                color={isDarkColorScheme ? ink.dark : ink.light}
+                strokeWidth={2.3}
+              />
             </View>
             {unread && (
               <View className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-background bg-destructive" />

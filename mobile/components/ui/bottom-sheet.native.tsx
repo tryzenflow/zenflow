@@ -1,3 +1,4 @@
+import { scaleType } from "@/lib/type-scale";
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
 import type {
@@ -329,18 +330,22 @@ type BottomSheetTextInputProps = React.ComponentPropsWithoutRef<
 const BottomSheetTextInput = React.forwardRef<
   BottomSheetTextInputRef,
   BottomSheetTextInputProps
->(({ className, placeholderClassName, ...props }, ref) => {
+>(({ className, placeholderClassName, style, ...props }, ref) => {
   const { isDarkColorScheme } = useColorScheme();
   const caret = (isDarkColorScheme ? NAV_THEME.dark : NAV_THEME.light).primary;
+  const merged = cn(
+    "rounded-md border border-input bg-background px-3 text-[17px] h-12 leading-[1.25] text-foreground items-center  placeholder:text-muted-foreground disabled:opacity-50",
+    className,
+  );
+  // The type scale is applied as inline style (see `lib/type-scale.ts`), the
+  // same way `Input` does, so typed text and placeholder match the rest of the app.
+  const { fontSize } = scaleType(merged);
   return (
     <GBottomSheetTextInput
       ref={ref}
-      className={cn(
-        "rounded-md border border-input bg-background px-3 text-xl h-14 leading-[1.25] text-foreground items-center  placeholder:text-muted-foreground disabled:opacity-50",
-        className,
-      )}
+      className={merged}
       placeholderClassName={cn("text-muted-foreground", placeholderClassName)}
-      style={{ fontFamily: "Geist" }}
+      style={[{ fontFamily: "Geist", fontSize }, style]}
       selectionColor={caret}
       cursorColor={caret}
       {...props}

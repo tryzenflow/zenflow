@@ -45,6 +45,7 @@ function InnerHighlight({ dark, radius }: { dark: boolean; radius: number }) {
 export function GlassButton({
   accessibilityLabel,
   icon: Icon,
+  iconSize = 18,
   children,
   badge,
   onPress,
@@ -58,6 +59,8 @@ export function GlassButton({
   accessibilityLabel: string;
   /** Icon-only when `children` is omitted; otherwise shown beside the label. */
   icon?: GlassIcon;
+  /** Glyph size in px. Light glyphs like a chevron read better at 24. */
+  iconSize?: number;
   children?: ReactNode;
   /** Small dot or count pinned to the top-right corner of the glass. */
   badge?: ReactNode;
@@ -127,7 +130,7 @@ export function GlassButton({
                   }
             }
           >
-            {Icon ? <Icon size={18} color={theme.text} /> : null}
+            {Icon ? <Icon size={iconSize} color={theme.text} /> : null}
             {iconOnly ? null : typeof children === "string" ? (
               <Text className="text-[13px] font-semibold">{children}</Text>
             ) : (

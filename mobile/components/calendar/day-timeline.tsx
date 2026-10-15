@@ -125,19 +125,22 @@ const BLOCK_GUTTER = 2;
  * column's width, capped at {@link CASCADE_MAX_STEP} px. */
 const CASCADE_STEP_RATIO = 0.02;
 const CASCADE_MAX_STEP = 44;
-/** Room (px) a stacked block leaves above it so the title of the block
- * beneath stays visible, e.g. when both start at the same time. */
-const TITLE_PEEK = 22;
+/** Room (px) a stacked block leaves above it so the title and the check-off
+ * disc of the block beneath stay visible, e.g. when both start at the same time. */
+const TITLE_PEEK = 38;
 
 /**
  * Downward shift (px) per segment: a block drawn over an overlapping one whose
  * top is within {@link TITLE_PEEK} of its own moves below that block's title.
+ * `covered` lists the blocks that have another drawn over them: their check-off
+ * disc moves to the top, into the strip that stays visible.
  */
 function stackShifts(
   segments: readonly DaySegment[],
   layout: Map<string, BlockLayout>,
   topOf: (segment: DaySegment) => number,
-): Map<string, number> {
+): { shifts: Map<string, number>; covered: Set<string> } {
+  const covered = new Set<string>();
   const items = segments.map((s) => {
     const l = layout.get(s.segmentId);
     const startMs = new Date(s.start).getTime();
@@ -161,6 +164,7 @@ function stackShifts(
       )
       .sort((a, b) => a.top + a.shift - (b.top + b.shift));
     for (const p of beneath) {
+      covered.add(p.id);
       const pTop = p.top + p.shift;
       const top = item.top + item.shift;
       if (top >= pTop && top < pTop + TITLE_PEEK) {
@@ -169,7 +173,7 @@ function stackShifts(
     }
     shifts.set(item.id, item.shift);
   });
-  return shifts;
+  return { shifts, covered };
 }
 
 const GUTTER_WIDTH = TIME_GUTTER_WIDTH;
@@ -498,7 +502,7 @@ export function DayTimeline({
       null
     );
   }, [segments, lastCreatedId]);
-  const topShifts = useMemo(
+  const { shifts: topShifts, covered: coveredIds } = useMemo(
     () =>
       stackShifts(segments, layout, (s) =>
         minToY(grid, minuteSpanOf(s, tz).startMin),
@@ -1334,6 +1338,7 @@ export function DayTimeline({
                       grid={grid}
                       leftOffset={leftOffsetPx}
                       topShift={topShifts.get(segment.segmentId) ?? 0}
+                      checkAtTop={coveredIds.has(segment.segmentId)}
                       blockWidth={blockWidthPx}
                       deadline={deadlineBySession.get(segment.taskId) ?? null}
                       late={lateSessionIds.has(segment.taskId)}

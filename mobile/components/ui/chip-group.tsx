@@ -87,14 +87,14 @@ export function Chip({
       disabled={disabled}
       onPress={onPress}
       className={cn(
-        "min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-border bg-muted px-4",
+        "h-10 min-w-[44px] items-center justify-center rounded-full border border-border bg-muted px-5",
         active && "border-primary/50 bg-primary/15",
         disabled && "opacity-50",
       )}
     >
       <Text
         className={cn(
-          "text-[13.5px] font-semibold text-muted-foreground",
+          "text-[15px] font-semibold leading-5 text-muted-foreground",
           active && "text-primary",
         )}
       >

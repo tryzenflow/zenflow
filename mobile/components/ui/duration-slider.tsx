@@ -1,21 +1,16 @@
+import { StepperButton } from "@/components/ui/stepper-button";
 import { useLanguage } from "@/hooks/use-language";
-import { locale, t } from "@/lib/i18n";
+import { durationLabel } from "@/lib/duration-label";
+import { t } from "@/lib/i18n";
 import { snapToStep } from "@/lib/slider-math";
 import { cn } from "@/lib/utils";
-import { formatMinutes } from "@zenflow/core";
 import { SLOT_MINUTES } from "@zenflow/shared";
 import * as Haptics from "expo-haptics";
 import { Pressable, View } from "react-native";
 import { SnapTrack } from "./snap-track";
 import { Text } from "./text";
 
-/** Readout for a duration in minutes, in the app's language. */
-export function durationLabel(minutes: number): string {
-  if (locale() !== "vi-VN") return formatMinutes(minutes);
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return `${h ? `${h} giờ` : ""}${m ? ` ${m} phút` : ""}`.trim();
-}
+export { durationLabel } from "@/lib/duration-label";
 
 /**
  * Duration picker: a drag track with a tick per 15 minutes, a −/+ pair for
@@ -61,18 +56,13 @@ export function DurationSlider({
   return (
     <View testID={testID} className="gap-2">
       <View className="flex-row items-center gap-3">
-        <Pressable
+        <StepperButton
           testID={testID ? `${testID}.minus` : undefined}
+          glyph="−"
           disabled={!canDecrease}
           onPress={() => step_(-step)}
           accessibilityLabel={t("Decrease {field}", { field: t(label) })}
-          className={cn(
-            "size-11 items-center justify-center rounded-xl border border-glass-edge/35 bg-glass/70 dark:border-glass-edge/25 dark:bg-glass/[0.07]",
-            !canDecrease && "opacity-40",
-          )}
-        >
-          <Text className="text-2xl text-foreground">−</Text>
-        </Pressable>
+        />
         <View className="flex-1 items-center">
           <Text
             testID={testID ? `${testID}.value` : undefined}
@@ -82,18 +72,13 @@ export function DurationSlider({
             {readout}
           </Text>
         </View>
-        <Pressable
+        <StepperButton
           testID={testID ? `${testID}.plus` : undefined}
+          glyph="+"
           disabled={!canIncrease}
           onPress={() => step_(step)}
           accessibilityLabel={t("Increase {field}", { field: t(label) })}
-          className={cn(
-            "size-11 items-center justify-center rounded-xl border border-glass-edge/35 bg-glass/70 dark:border-glass-edge/25 dark:bg-glass/[0.07]",
-            !canIncrease && "opacity-40",
-          )}
-        >
-          <Text className="text-2xl text-foreground">+</Text>
-        </Pressable>
+        />
       </View>
       <SnapTrack
         testID={testID ? `${testID}.track` : undefined}

@@ -70,14 +70,13 @@ describe("resolveMoveScope", () => {
     expect(openTaskSheet).not.toHaveBeenCalled();
   });
 
-  it("hands a multi-sitting task to the sittings sheet", () => {
+  it("moves one sitting of a multi-sitting task alone, with no sheet", () => {
     const toast = vi.fn();
     const onResolve = vi.fn();
     const openTaskSheet = vi.fn();
-    const session = asSession(sitting);
-    resolveMoveScope(toast as never, session, pending, onResolve, openTaskSheet);
-    expect(openTaskSheet).toHaveBeenCalledWith(session, pending, onResolve);
-    expect(onResolve).not.toHaveBeenCalled();
+    resolveMoveScope(toast as never, asSession(sitting), pending, onResolve, openTaskSheet);
+    expect(onResolve).toHaveBeenCalledWith({ scope: "occurrence", skipConflicting: false });
+    expect(openTaskSheet).not.toHaveBeenCalled();
     expect(toast).not.toHaveBeenCalled();
   });
 

@@ -84,7 +84,7 @@ describe("SessionDetailSheet", () => {
     expect(screen.getByText("Room B201")).toBeTruthy();
     expect(screen.getByText("Algorithms")).toBeTruthy();
     expect(screen.getByText("Pinned in place")).toBeTruthy();
-    expect(screen.getByText("Edit")).toBeTruthy();
+    expect(screen.getByTestId("session-detail-edit")).toBeTruthy();
   });
 
   it("shows the localized reason for the placed start", async () => {
@@ -150,7 +150,7 @@ describe("SessionDetailSheet", () => {
         makeSession({ id, seriesId: "series1", rrule: "FREQ=WEEKLY" }),
       ),
     );
-    fireEvent.click(await screen.findByText("Edit"));
+    fireEvent.click(await screen.findByTestId("session-detail-edit"));
     await waitFor(() =>
       expect(router.push).toHaveBeenCalledWith(`/task/${encodeURIComponent(id)}/edit`),
     );
@@ -170,7 +170,7 @@ describe("SessionDetailSheet", () => {
       }),
     );
     const ref = renderSheet();
-    act(() => ref.current?.open(makeSession({ id: "a", title: "Algorithms lecture" })));
+    act(() => ref.current?.open(makeSession({ id: "a", title: "Algorithms lecture", type: "TASK" })));
     fireEvent.click(await screen.findByRole("checkbox", { name: "Mark Algorithms lecture done" }));
     await waitFor(() => expect(completed).toBe(true));
     expect(await screen.findByRole("checkbox", { name: "Mark Algorithms lecture not done" })).toBeTruthy();

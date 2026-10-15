@@ -1,6 +1,6 @@
+import { ExpandChevron } from "@/components/ui/expand-chevron";
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
-import { ChevronRight } from "@/components/Icons";
 import { OfflineLock } from "@/components/offline-lock";
 import { StorageSection } from "@/components/settings/storage-section";
 import { TimezoneRow } from "@/components/settings/preferences-section";
@@ -25,13 +25,10 @@ export function AdvancedSection() {
         testID="settings.advanced"
         className="mx-1 mb-2 mt-[22px] flex-row items-center gap-1.5 active:opacity-70"
       >
-        <ChevronRight
-          size={14}
-          className={open ? "rotate-90 text-muted-foreground" : "text-muted-foreground"}
-        />
         <Text className="text-[13px] font-semibold text-muted-foreground">
           {t("Advanced")}
         </Text>
+        <ExpandChevron open={open} size={14} />
       </Pressable>
       {open ? (
         <>

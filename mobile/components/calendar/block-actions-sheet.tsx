@@ -8,8 +8,10 @@ import {
   Lock,
   MinusCircle,
   Plus,
+  Trash2,
 } from "@/components/Icons";
-import { pinSession, unpinSession } from "@/api/tasks";
+import { pinSession, removeSession, unpinSession } from "@/api/tasks";
+import { UNDO_WINDOW_MS, deferCommit } from "@/lib/undo";
 import { useToast } from "@/components/ui/toast";
 import { showErrorToast } from "@/lib/task-toasts";
 import { checkStateOf } from "@/lib/today-summary";
@@ -81,6 +83,25 @@ export const BlockActionsSheet = forwardRef<
     void checkOff({ id: s.id, title: s.title }, kind, on);
   };
 
+  // One tap: a series member goes alone (this occurrence or sitting), and
+  // nothing is sent until the undo window closes.
+  const quickDelete = () => {
+    if (!session) return;
+    const s = session;
+    sheet.close();
+    const cancel = deferCommit(() => {
+      removeSession(s.id).catch((error: unknown) =>
+        showErrorToast(toast, error, t("Couldn't delete session"), "trash"),
+      );
+    }, UNDO_WINDOW_MS);
+    toast({
+      title: t("Session deleted"),
+      icon: "trash",
+      duration: UNDO_WINDOW_MS,
+      action: { label: t("Undo"), onPress: cancel },
+    });
+  };
+
   const togglePin = () => {
     if (!session) return;
     const s = session;
@@ -111,6 +132,8 @@ export const BlockActionsSheet = forwardRef<
             </Text>
           </View>
 
+          {session?.type === "TASK" ? (
+            <>
           <Pressable
             testID="block-action-done"
             onPress={() => toggleCheck("complete", state !== "done")}
@@ -132,6 +155,8 @@ export const BlockActionsSheet = forwardRef<
               {state === "skipped" ? t("Undo skip") : t("Skip this session")}
             </Text>
           </Pressable>
+            </>
+          ) : null}
 
           <Pressable
             onPress={() => run(onSessionBefore)}
@@ -166,6 +191,17 @@ export const BlockActionsSheet = forwardRef<
               {t("Move to…")}
             </Text>
             <ChevronRight size={16} className="text-muted-foreground" />
+          </Pressable>
+
+          <Pressable
+            testID="block-action-delete"
+            onPress={quickDelete}
+            className="flex-row items-center gap-3 rounded-xl px-3 py-3.5 active:opacity-70"
+          >
+            <Trash2 size={18} className="text-destructive" />
+            <Text className="flex-1 text-[14px] font-medium text-destructive">
+              {t("Delete")}
+            </Text>
           </Pressable>
         </BottomSheetView>
       </BottomSheetContent>

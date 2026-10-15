@@ -3,7 +3,10 @@ import { navigateOnce } from "@/lib/nav";
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { getSessionDetails, updateSession } from "@/api/tasks";
-import { findCachedSession } from "@/lib/session-cache";
+import { findCachedSession, notifySessionsMutated } from "@/lib/session-cache";
+import { showMovedToast } from "@/lib/move-toast";
+import { undoMove } from "@/lib/move-undo";
+import { isPastDeadlineDrop } from "@/lib/overdue";
 import { showErrorToast, showSkippedToast } from "@/lib/task-toasts";
 import {
   SessionDetailSheet,
@@ -16,6 +19,7 @@ import {
 } from "@/components/calendar/reschedule-sheet";
 import {
   type PendingSessionUpdate,
+  moveUndoable,
   resolveMoveScope,
 } from "@/lib/recurring-scope";
 import {
@@ -27,8 +31,8 @@ import {
   type BlockActionsSheetHandle,
 } from "@/components/calendar/block-actions-sheet";
 import { CalendarHeader } from "@/components/calendar/calendar-header";
+import { CalendarViewSkeleton } from "@/components/calendar/view-skeleton";
 import { MonthView } from "@/components/calendar/month-view";
-import { SessionAgenda } from "@/components/calendar/session-agenda";
 import { SessionSearchView } from "@/components/calendar/session-search-view";
 import { TodayButton } from "@/components/calendar/today-button";
 import {
@@ -49,7 +53,12 @@ import { useUserStore } from "@/hooks/use-user-store";
 import { useWeekDayTypes } from "@/hooks/use-week-day-types";
 import { dateKey, weekStart } from "@/lib/week-date-math";
 import { monthLabel } from "@/lib/month-date-math";
-import { zonedDate, zonedNow } from "@zenflow/core";
+import {
+  getSeriesKind,
+  zonedDate,
+  zonedNow,
+  zonedWallClockToUtc,
+} from "@zenflow/core";
 import type { Session, UpdateScope } from "@zenflow/shared";
 import { differenceInCalendarDays } from "date-fns";
 import {
@@ -58,13 +67,13 @@ import {
   useLocalSearchParams,
   useRouter,
 } from "expo-router";
-import { useTodayRequest } from "@/lib/today-request";
+import { useTodayLoader } from "@/hooks/use-today";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { View, useWindowDimensions } from "react-native";
 import { useSharedValue } from "react-native-reanimated";
 import { useToast } from "@/components/ui/toast";
 
-const VIEWS: readonly CalendarView[] = ["day", "week", "month", "list"];
+const VIEWS: readonly CalendarView[] = ["day", "week", "month"];
 
 function isCalendarView(value: string | undefined): value is CalendarView {
   return value !== undefined && (VIEWS as readonly string[]).includes(value);
@@ -86,7 +95,8 @@ export default function CalendarScreen() {
   const offline = useOffline();
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
-  const { toast } = useToast();
+  const { toast, confirm } = useToast();
+  useTodayLoader(tz);
   const {
     date: dateParam,
     flash: flashParam,
@@ -100,7 +110,17 @@ export default function CalendarScreen() {
   const [view, setView] = useState<CalendarView>(() =>
     isCalendarView(viewParam) ? viewParam : "day",
   );
-  const everShown = useRef(new Set<CalendarView>());
+  // Views that have mounted for real. A view's first visit paints a skeleton
+  // for a frame or two, then mounts the heavy content, so the tap never freezes.
+  // Week and Month mount in idle time after launch, so most visits are instant.
+  const [mounted, setMounted] = useState<ReadonlySet<CalendarView>>(
+    () => new Set<CalendarView>([isCalendarView(viewParam) ? viewParam : "day"]),
+  );
+  const markMounted = useCallback(
+    (id: CalendarView) =>
+      setMounted((prev) => (prev.has(id) ? prev : new Set(prev).add(id))),
+    [],
+  );
   // Seeds from the optional `date` query param (ISO instant) so another screen
   // can deep-link into a specific day. `zonedDate` keeps the user-tz wall clock
   // in the local fields, never a bare `new Date()`.
@@ -227,17 +247,7 @@ export default function CalendarScreen() {
     }
   }, [dateParam, tz, commitFocusedDate]);
 
-  // The Today tab: show today in Day view, from any view.
-  const todayNonce = useTodayRequest((s) => s.nonce);
-  const lastTodayNonce = useRef(todayNonce);
-  useEffect(() => {
-    if (todayNonce === lastTodayNonce.current) return;
-    lastTodayNonce.current = todayNonce;
-    commitFocusedDate(zonedNow(tz));
-    setView("day");
-  }, [todayNonce, tz, commitFocusedDate]);
-
-  // A deep-link to a view (`view` param, e.g. the Today tab) switches to it.
+  // A deep-link to a view (`view` param) switches to it.
   const lastViewParamRef = useRef(viewParam);
   useEffect(() => {
     if (isCalendarView(viewParam) && viewParam !== lastViewParamRef.current) {
@@ -370,6 +380,61 @@ export default function CalendarScreen() {
     [tz, focusedDate, commitFocusedDate, armFlash],
   );
 
+  // A session dragged from Month's list onto another day: same time of day,
+  // same confirmations as a drag in Day or Week view.
+  const handleMonthMove = useCallback(
+    (session: Session, day: Date) => {
+      if (!session.scheduledStartTime) return;
+      const wall = zonedDate(session.scheduledStartTime, tz);
+      if (dateKey(wall) === dateKey(day)) return;
+      wall.setFullYear(day.getFullYear(), day.getMonth(), day.getDate());
+      const startISO = zonedWallClockToUtc(wall, tz).toISOString();
+
+      const commit = async (scope?: UpdateScope, skipConflicting?: boolean) => {
+        try {
+          const updated = await updateSession(session.id, {
+            scheduledStartTime: startISO,
+            scope,
+            skipConflicting,
+          });
+          showSkippedToast(toast, updated.skippedSessionIds);
+          showMovedToast(toast, {
+            to: zonedDate(updated.scheduledStartTime ?? startISO, tz),
+            withTime: false,
+            onUndo: moveUndoable(session, scope)
+              ? () =>
+                  void undoMove(updated, session, scope, skipConflicting)
+                    .then(() => notifySessionsMutated())
+                    .catch((error) =>
+                      showErrorToast(toast, error, t("Couldn't move this session"), "calendar-x"),
+                    )
+              : undefined,
+          });
+        } catch (error) {
+          showErrorToast(toast, error, t("Couldn't move this session"), "calendar-x");
+        } finally {
+          setFocusTick((n) => n + 1);
+        }
+      };
+
+      // A drop names the one it moves: a series member moves alone, no prompt.
+      const kind = getSeriesKind(session);
+      const run = () =>
+        void commit(kind === "recurring" || kind === "task" ? "occurrence" : undefined);
+      if (isPastDeadlineDrop(startISO, session.deadline ?? null)) {
+        confirm(t("Past the deadline?"), {
+          description: t("This session will start past its due time."),
+          confirmLabel: t("Keep late"),
+          cancelLabel: t("Cancel"),
+          onConfirm: run,
+        });
+        return;
+      }
+      run();
+    },
+    [tz, toast, confirm],
+  );
+
   // Today: the day the Day view is on, the week Week view is on, or the month
   // Month view is on. The button shows when that differs from now.
   const now = zonedNow(tz);
@@ -383,7 +448,24 @@ export default function CalendarScreen() {
   // Every view keeps a fixed slot under the screen root and, once opened, stays
   // mounted (hidden with display none). Mounting or unmounting a whole view in
   // the same commit as its siblings shifts child indices and Fabric asserts.
-  everShown.current.add(view);
+  useEffect(() => {
+    if (mounted.has(view)) return;
+    let inner = 0;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => markMounted(view));
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      cancelAnimationFrame(inner);
+    };
+  }, [view, mounted, markMounted]);
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    // Idle time after the first paint, so the day view's own load is not slowed.
+    timers.push(setTimeout(() => markMounted("week"), 1200));
+    timers.push(setTimeout(() => markMounted("month"), 2200));
+    return () => timers.forEach(clearTimeout);
+  }, [markMounted]);
   const slotStyle = (id: CalendarView) =>
     view === id ? undefined : ({ display: "none" } as const);
 
@@ -397,7 +479,7 @@ export default function CalendarScreen() {
       />
 
       <View className="flex-1" style={slotStyle("day")}>
-        {everShown.current.has("day") ? (
+        {mounted.has("day") ? (
         <>
           <WeekHeader
             ref={headerRef}
@@ -413,9 +495,12 @@ export default function CalendarScreen() {
             dayTypes={dayTypes}
           />
 
-          <TodayCard tz={tz} onOpenSession={handleSessionPress} />
-
           <View className="flex-1">
+            <TodayCard
+              tz={tz}
+              visible={dateKey(visibleDate) === dateKey(zonedNow(tz))}
+              onOpenSession={handleSessionPress}
+            />
             <WeekPager
               ref={pagerRef}
               focusedDate={focusedDate}
@@ -439,7 +524,7 @@ export default function CalendarScreen() {
       </View>
 
       <View className="flex-1" style={slotStyle("week")}>
-        {everShown.current.has("week") ? (
+        {mounted.has("week") ? (
         <WeekGrid
           anchor={focusedDate}
           tz={tz}
@@ -451,11 +536,13 @@ export default function CalendarScreen() {
           onRequestBlockMenu={handleRequestBlockMenu}
           onRequestScopedUpdate={handleRequestScopedUpdate}
         />
+        ) : view === "week" ? (
+          <CalendarViewSkeleton variant="week" />
         ) : null}
       </View>
 
       <View className="flex-1" style={slotStyle("month")}>
-        {everShown.current.has("month") ? (
+        {mounted.has("month") ? (
         <MonthView
           date={focusedDate}
           onDateChange={handleMonthDateChange}
@@ -463,16 +550,15 @@ export default function CalendarScreen() {
           reloadToken={focusTick}
           onOpenDay={openDayView}
           onSessionPress={handleSessionPress}
+          onMoveSession={handleMonthMove}
         />
+        ) : view === "month" ? (
+          <CalendarViewSkeleton variant="month" />
         ) : null}
       </View>
 
-      <View className="flex-1" style={slotStyle("list")}>
-        {everShown.current.has("list") ? <SessionAgenda term="" /> : null}
-      </View>
-
       <TodayButton
-        visible={!isAtToday && view !== "list"}
+        visible={!isAtToday}
         onPress={() => commitFocusedDate(zonedNow(tz))}
       />
 

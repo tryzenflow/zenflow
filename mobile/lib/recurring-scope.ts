@@ -58,8 +58,8 @@ export function offerApplyToAll(
 
 /**
  * Scope choice for a drag, move or edit. A recurring session asks nothing:
- * it moves this occurrence and offers apply to all. A multi-sitting task
- * still asks through `openTaskSheet`. Anything else moves on its own.
+ * it moves this occurrence and offers apply to all. Anything else, a sitting
+ * of a multi-sitting task included, moves on its own.
  */
 export function resolveMoveScope(
   toast: Toast,
@@ -73,10 +73,8 @@ export function resolveMoveScope(
   ) => void,
 ): void {
   const kind = getSeriesKind(session);
-  if (kind === "task") {
-    openTaskSheet(session, pending, onResolve);
-    return;
-  }
+  // A dragged sitting of a multi-sitting task moves alone: the drop already
+  // says which one, so there is nothing to ask.
   if (kind !== "recurring") {
     onResolve({ scope: "occurrence", skipConflicting: false });
     return;

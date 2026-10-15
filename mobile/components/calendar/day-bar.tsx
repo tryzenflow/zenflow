@@ -3,9 +3,9 @@ import { View } from "react-native";
 import type { DayBar } from "@/lib/day-bar";
 
 /**
- * A day's load as one thin rounded bar: a stretch per session in time order,
- * tinted by type (timetable blue, task orange), gray for the free time between
- * them. A fixed-height slot, so an empty day reserves the same space.
+ * A day's load as one thin rounded bar on a fixed 24 hour track: gray for free
+ * time, a tinted stretch (by type) where a session sits. A fixed-height slot,
+ * so an empty day reserves the same space.
  */
 export function DayBarView({
   bar,
@@ -20,20 +20,20 @@ export function DayBarView({
     <View
       testID={testID}
       pointerEvents="none"
-      className="w-full flex-row overflow-hidden"
+      className="w-full overflow-hidden bg-muted-foreground/30"
       style={{ height, borderRadius: height / 2 }}
     >
-      {bar?.segments.map((segment, i) => (
+      {bar?.segments.map((segment) => (
         <View
-          key={i}
-          className={segment.kind === "gap" ? "bg-muted-foreground/25" : undefined}
+          key={`${segment.start}-${segment.kind}`}
           style={{
-            flex: segment.flex,
-            minWidth: 2,
-            backgroundColor:
-              segment.kind === "gap"
-                ? undefined
-                : SESSION_TONES[SESSION_TYPE_TONE[segment.kind]].base,
+            position: "absolute",
+            top: 0,
+            bottom: 0,
+            left: `${(segment.start / 1440) * 100}%`,
+            width: `${((segment.end - segment.start) / 1440) * 100}%`,
+            minWidth: 3,
+            backgroundColor: SESSION_TONES[SESSION_TYPE_TONE[segment.kind]].base,
           }}
         />
       ))}

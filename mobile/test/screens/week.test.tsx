@@ -56,7 +56,7 @@ describe("WeekScreen", () => {
   it("opens on today's week: month title, Monday-first range and a 'today' chip", async () => {
     renderScreen(<WeekScreen />);
     expect(screen.getByText("October 2026")).toBeTruthy();
-    expect(screen.getByText("Oct 12 – Oct 18")).toBeTruthy();
+    expect(screen.getByText("Oct 12 to Oct 18")).toBeTruthy();
     expect(screen.getByLabelText(/^Thursday, October 15, today/)).toBeTruthy();
     expect(screen.getByLabelText("Monday, October 12")).toBeTruthy();
     expect(screen.getByLabelText("Sunday, October 18")).toBeTruthy();
@@ -88,7 +88,7 @@ describe("WeekScreen", () => {
     renderScreen(<WeekScreen />);
     fireEvent.click(await block("a"));
     expect((await screen.findByTestId("session-detail-title")).textContent).toBe("Algorithms lecture");
-    expect(screen.getByText("Edit")).toBeTruthy();
+    expect(screen.getByTestId("session-detail-edit")).toBeTruthy();
     expect(router.push).not.toHaveBeenCalled();
   });
 
@@ -97,7 +97,7 @@ describe("WeekScreen", () => {
     sessions = [makeSession({ id, title: "Weekly lab", seriesId: "series1", rrule: "FREQ=WEEKLY" })];
     renderScreen(<WeekScreen />);
     fireEvent.click(await block(id));
-    fireEvent.click(await screen.findByText("Edit"));
+    fireEvent.click(await screen.findByTestId("session-detail-edit"));
     await waitFor(() =>
       expect(router.push).toHaveBeenCalledWith(`/task/${encodeURIComponent(id)}/edit`),
     );
@@ -132,7 +132,7 @@ describe("WeekScreen", () => {
     const { useLocalSearchParams } = await import("expo-router");
     vi.mocked(useLocalSearchParams).mockReturnValue({ date: "2026-10-22T05:00:00.000Z" } as never);
     renderScreen(<WeekScreen />);
-    expect(screen.getByText("Oct 19 – Oct 25")).toBeTruthy();
+    expect(screen.getByText("Oct 19 to Oct 25")).toBeTruthy();
     await waitFor(() => expect(requests).toContain("day:2026-10-22"));
     vi.mocked(useLocalSearchParams).mockReturnValue({} as never);
   });
@@ -140,7 +140,7 @@ describe("WeekScreen", () => {
   it("announces the next upcoming session", async () => {
     // 15:00 local, after 'now' (12:00): the pill points at it.
     sessions = [
-      makeSession({ id: "later", title: "Evening review", scheduledStartTime: "2026-10-15T08:00:00.000Z" }),
+      makeSession({ id: "later", type: "TASK", title: "Evening review", scheduledStartTime: "2026-10-15T08:00:00.000Z" }),
     ];
     renderScreen(<WeekScreen />);
     await block("later");

@@ -5,8 +5,8 @@ import type { DayBar } from "@/lib/day-bar";
 import { formatTitle } from "@/lib/i18n";
 import { dateKey, isOutsideMonth } from "@/lib/month-date-math";
 import { isSameDay } from "date-fns";
-import { memo } from "react";
-import { View } from "react-native";
+import { type RefObject, memo } from "react";
+import { type HostInstance, View } from "react-native";
 
 /** Rows of 7: `getMonthGridDays` always returns whole Monday-first weeks. */
 function chunkIntoWeeks(days: Date[]): Date[][] {
@@ -21,6 +21,10 @@ interface MonthGridProps {
   today: Date;
   selectedKey: string;
   bars: Map<string, DayBar>;
+  /** Wraps the rows of day cells, so a drag can find the cell under the finger. */
+  bodyRef?: RefObject<HostInstance | null>;
+  /** The day a dragged session is over. */
+  dropKey?: string | null;
   onPressDay: (day: Date) => void;
 }
 
@@ -34,6 +38,8 @@ export const MonthGrid = memo(function MonthGrid({
   today,
   selectedKey,
   bars,
+  bodyRef,
+  dropKey,
   onPressDay,
 }: MonthGridProps) {
   useLanguage();
@@ -53,6 +59,7 @@ export const MonthGrid = memo(function MonthGrid({
           </Text>
         ))}
       </View>
+      <View ref={bodyRef} collapsable={false}>
       {chunkIntoWeeks(days).map((week) => (
         <View key={dateKey(week[0])} className="flex-row">
           {week.map((day) => {
@@ -66,12 +73,14 @@ export const MonthGrid = memo(function MonthGrid({
                 isSelected={key === selectedKey}
                 bar={bars.get(key)}
                 openDayTip={key === openDayKey}
+                isDrop={key === dropKey}
                 onPressDay={onPressDay}
               />
             );
           })}
         </View>
       ))}
+      </View>
     </View>
   );
 });

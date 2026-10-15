@@ -14,8 +14,8 @@ import { courseStyleFor, overridesOf } from "../course-colour";
 const KEY = "lms:90001";
 
 describe("course swatches", () => {
-  it("has 12 distinct bases", () => {
-    expect(new Set(COURSE_SWATCHES.map((s) => s.base)).size).toBe(12);
+  it("has 6 distinct bases", () => {
+    expect(new Set(COURSE_SWATCHES.map((s) => s.base)).size).toBe(6);
   });
 
   it("keeps every ink at AA (4.5:1) on both tints of its scheme", () => {
@@ -37,7 +37,7 @@ describe("course swatches", () => {
 
 describe("courseSwatchIndex", () => {
   it("is the key's hash slot when there is no pick", () => {
-    expect(courseSwatchIndex(KEY, new Map())).toBe(courseKeyHash(KEY) % 12);
+    expect(courseSwatchIndex(KEY, new Map())).toBe(courseKeyHash(KEY) % 6);
   });
 
   it("is the same on every call for the same key", () => {
@@ -46,16 +46,16 @@ describe("courseSwatchIndex", () => {
     );
   });
 
-  it("stays in 0 to 11 for any key", () => {
+  it("stays in 0 to 5 for any key", () => {
     for (let i = 0; i < 200; i++) {
       const index = courseSwatchIndex(`portal:S${i}`, new Map());
       expect(index).toBeGreaterThanOrEqual(0);
-      expect(index).toBeLessThan(12);
+      expect(index).toBeLessThan(6);
     }
   });
 
   it("prefers the user's pick", () => {
-    expect(courseSwatchIndex(KEY, new Map([[KEY, 11]]))).toBe(11);
+    expect(courseSwatchIndex(KEY, new Map([[KEY, 5]]))).toBe(5);
   });
 });
 
@@ -70,11 +70,11 @@ describe("courseStyleFor", () => {
     const dark = courseStyleFor(KEY, overrides, "dark");
     const swatch = COURSE_SWATCHES[2];
     expect(light).toEqual({
-      tint: "rgba(46, 125, 122, 0.12)",
+      tint: "rgba(141, 182, 60, 0.12)",
       stripe: swatch.base,
       ink: swatch.ink.light,
     });
-    expect(dark?.tint).toBe("rgba(46, 125, 122, 0.22)");
+    expect(dark?.tint).toBe("rgba(141, 182, 60, 0.22)");
     expect(dark?.ink).toBe(swatch.ink.dark);
   });
 });

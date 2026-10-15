@@ -10,8 +10,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View, useWindowDimensions } from "react-native";
 import Animated, {
   Easing,
-  FadeIn,
-  FadeOut,
   interpolateColor,
   runOnJS,
   useAnimatedProps,
@@ -30,9 +28,10 @@ import Svg, {
 } from "react-native-svg";
 
 /** Shown for at least this long, so a fast launch doesn't flash and vanish. */
-const MIN_VISIBLE_MS = 1200;
+const MIN_VISIBLE_MS = 1800;
 const SLOW_AFTER_MS = 3000;
-const HINT_EVERY_MS = 3200;
+const HINT_EVERY_MS = 3400;
+const HINT_FADE_MS = 280;
 /** Logo is the splash image's mark: 560 of its 1024px, at `imageWidth` 160 (560/1024 of 160 is 88). */
 const LOGO_SIZE = 88;
 
@@ -56,18 +55,26 @@ function SunArc({ animate }: { animate: boolean }) {
     }
     p.value = 0;
     p.value = withRepeat(
-      withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.cubic) }),
+      withTiming(1, { duration: 2600, easing: Easing.inOut(Easing.sin) }),
       -1,
-      true,
+      false,
     );
   }, [animate, p]);
 
+  // Fades in over the first tenth and out over the last, so the loop restart
+  // is invisible instead of a jump back to the start.
+  const fade = (v: number) => {
+    "worklet";
+    return Math.min(1, v / 0.12, (1 - v) / 0.12);
+  };
   const trail = useAnimatedProps(() => ({
     strokeDashoffset: ARC_LEN * (1 - p.value),
+    opacity: fade(p.value),
   }));
   const sun = useAnimatedProps(() => {
     const a = Math.PI * p.value;
     return {
+      opacity: fade(p.value),
       cx: 60 - 50 * Math.cos(a),
       cy: 38 - 28 * Math.sin(a),
       fill: interpolateColor(
@@ -136,6 +143,7 @@ export function BootScreen({
   const [hintIndex, setHintIndex] = useState(() =>
     Math.floor(Math.random() * hints.length),
   );
+  const hintOpacity = useSharedValue(1);
 
   const intro = useSharedValue(0);
   const exit = useSharedValue(0);
@@ -176,14 +184,28 @@ export function BootScreen({
     );
   }, [onShown]);
 
+  // Fade out, swap the text while it is invisible, fade back in: one steady
+  // box, no remount, so the hint never flickers or jumps.
+  const swapHint = useCallback(
+    () => setHintIndex((i) => (i + 1) % hints.length),
+    [hints.length],
+  );
   useEffect(() => {
     if (slow) return;
-    const id = setInterval(
-      () => setHintIndex((i) => (i + 1) % hints.length),
-      HINT_EVERY_MS,
-    );
+    const id = setInterval(() => {
+      hintOpacity.value = withTiming(
+        0,
+        { duration: HINT_FADE_MS },
+        (finished) => {
+          if (!finished) return;
+          runOnJS(swapHint)();
+          hintOpacity.value = withTiming(1, { duration: HINT_FADE_MS * 1.4 });
+        },
+      );
+    }, HINT_EVERY_MS);
     return () => clearInterval(id);
-  }, [slow, hints.length]);
+  }, [slow, swapHint, hintOpacity]);
+  const hintStyle = useAnimatedStyle(() => ({ opacity: hintOpacity.value }));
 
   // Lift only once the app underneath has had two frames to paint, so the
   // fade reveals a drawn screen instead of a blank one.
@@ -264,12 +286,7 @@ export function BootScreen({
         </Text>
         <SunArc animate={!reduceMotion} />
         <View className="min-h-[63px] w-[300px] items-center">
-          <Animated.View
-            key={hint}
-            className="w-full"
-            entering={reduceMotion ? undefined : FadeIn.duration(DURATION.slow)}
-            exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.fast)}
-          >
+          <Animated.View className="w-full" style={hintStyle}>
             <Text className="text-center text-[15px] leading-[21px] text-foreground/80">
               {hint}
             </Text>

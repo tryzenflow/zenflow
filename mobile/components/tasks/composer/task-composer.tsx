@@ -1,5 +1,6 @@
 import { useLanguage } from "@/hooks/use-language";
-import { t } from "@/lib/i18n";
+import { format, t } from "@/lib/i18n";
+import { durationLabel } from "@/components/ui/duration-slider";
 import { type ParseResult, parseTask } from "@/lib/task-parser";
 import { DRAFT_NEW, useComposerStore } from "@/lib/composer-store";
 import { Trash2, X as CloseIcon } from "@/components/Icons";
@@ -63,6 +64,29 @@ export interface TaskComposerProps {
   editingInstance?: { scheduledStartTime: string | null; durationMinutes: number };
 }
 
+/** What the top line was read as: only the parts it named, as small pills. */
+function ParsedChips({ parsed }: { parsed: ParseResult }) {
+  const pills: string[] = [];
+  if (parsed.course) pills.push(parsed.course);
+  if (parsed.deadline) {
+    const [y, m, d] = parsed.deadline.date.split("-").map(Number);
+    pills.push(format(new Date(y, m - 1, d), "EEE, MMM d"));
+  }
+  if (parsed.startTime) pills.push(parsed.startTime);
+  if (parsed.durationMinutes) pills.push(durationLabel(parsed.durationMinutes));
+  if (parsed.kind === "EVENT") pills.push(t("Event"));
+  if (pills.length === 0) return null;
+  return (
+    <View className="-mt-2 flex-row flex-wrap gap-1.5" testID="task.parsed">
+      {pills.map((label) => (
+        <View key={label} className="rounded-full bg-primary/15 px-3 py-1">
+          <Text className="text-[13px] font-semibold text-primary">{label}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 /**
  * The task composer: one bottom sheet for creating or editing a task or an
  * event. In create mode the top line is the whole input. It is parsed as you
@@ -95,6 +119,7 @@ export function TaskComposer({
   const remember = useComposerStore((s) => s.rememberDuration);
   const [line, setLine] = useState(() => form.getValues("title") ?? "");
   const lastParse = useRef<ParseResult | null>(null);
+  const [parsed, setParsed] = useState<ParseResult | null>(null);
 
   useEffect(() => {
     sheet.open();
@@ -127,6 +152,7 @@ export function TaskComposer({
     }
     const r = parseTask(raw, { today: todayIn(tz), courses });
     lastParse.current = r;
+    setParsed(r);
     form.setValue("title", r.title, { shouldValidate: false });
 
     if (r.course) {
@@ -260,15 +286,16 @@ export function TaskComposer({
               onChangeText={applyLine}
               placeholder={
                 create
-                  ? t("e.g. OOP essay due fri 3h")
+                  ? t("Essay due Friday 3h")
                   : t("What needs doing?")
               }
               accessibilityLabel={t("What needs doing?")}
               returnKeyType="done"
               className={cn(
-                "h-[56px] rounded-2xl border border-primary/30 bg-glass/70 dark:bg-glass/[0.07] px-4 text-[17px] text-foreground dark:border-primary/25",
+                "h-14 rounded-2xl border border-primary/30 bg-glass/70 dark:bg-glass/[0.07] px-5 text-[18px] text-foreground dark:border-primary/25",
               )}
             />
+            {create && parsed ? <ParsedChips parsed={parsed} /> : null}
             {form.formState.errors.title?.message && (
               <Text className="-mt-3 text-[12.5px] font-medium text-destructive">
                 {t(form.formState.errors.title.message)}

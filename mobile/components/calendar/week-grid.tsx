@@ -1,5 +1,10 @@
 import { listSessions, updateSession } from "@/api/tasks";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
+import { useDelayedLoading } from "@/hooks/use-delayed-loading";
+import { dayBarsByDay } from "@/lib/day-bar";
+import { checkStateOf } from "@/lib/today-summary";
+import { monthLabel } from "@/lib/month-date-math";
 import { Text } from "@/components/ui/text";
 import { useLanguage } from "@/hooks/use-language";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
@@ -21,7 +26,11 @@ import { showMovedToast } from "@/lib/move-toast";
 import { undoMove } from "@/lib/move-undo";
 import { isPastDeadlineDrop } from "@/lib/overdue";
 import {
+  fetchDaySessions,
+  getCachedDaySessions,
+  isDayCacheFresh,
   notifySessionsMutated,
+  sameSessions,
   subscribeToSessionMutations,
 } from "@/lib/session-cache";
 import {
@@ -64,6 +73,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import { DayBarView } from "./day-bar";
 import { NowIndicator } from "./now-indicator";
 import {
   type PendingSessionUpdate,
@@ -74,6 +84,18 @@ import {
 import { rememberPlacement } from "@/lib/slot-alternatives";
 import { SessionBlock } from "./task-block";
 import { TIME_GUTTER_WIDTH, TimeGutter } from "./time-gutter";
+
+/** Placeholder blocks (column, start minute, length) shown while a week loads. */
+const SKELETON_BLOCKS = [
+  { col: 0, top: 9 * 60, len: 90 },
+  { col: 1, top: 13 * 60, len: 120 },
+  { col: 2, top: 8 * 60, len: 60 },
+  { col: 2, top: 15 * 60, len: 90 },
+  { col: 3, top: 10 * 60, len: 120 },
+  { col: 4, top: 14 * 60, len: 60 },
+  { col: 5, top: 9 * 60, len: 90 },
+  { col: 6, top: 16 * 60, len: 60 },
+] as const;
 
 /** Start-of-day anchor for a week with nothing to scroll to. */
 const DEFAULT_ANCHOR_MIN = 8 * 60;
@@ -112,8 +134,8 @@ function useHourHeight(): number {
  * Pages by week (three pages kept mounted, so a swipe slides one in), reuses
  * `TimeGutter` for the hour labels and `SessionBlock` (title-only) for the
  * blocks, laid out with the overlap helpers. Long-press a block and drag it
- * vertically to move it within its day; the same confirmations as Day view
- * apply. Hour height and night folds come from `lib/day-grid.ts`.
+ * to move it in time or to another day of the week; the same confirmations as
+ * Day view apply. Hour height and night folds come from `lib/day-grid.ts`.
  */
 export function WeekGrid({
   anchor,
@@ -149,6 +171,18 @@ export function WeekGrid({
   };
 
   return (
+    <View className="flex-1">
+      <View className="px-4 pb-1 pt-2.5">
+        <Text className="text-xl font-bold tracking-tight">
+          {monthLabel(anchor)}
+        </Text>
+        <Text className="mt-px text-sm font-medium text-muted-foreground">
+          {t("{start} to {end}", {
+            start: format(weekDays(anchor)[0], "MMM d"),
+            end: format(weekDays(anchor)[6], "MMM d"),
+          })}
+        </Text>
+      </View>
     <ScrollView
       ref={scrollRef}
       horizontal
@@ -180,6 +214,7 @@ export function WeekGrid({
         </View>
       ))}
     </ScrollView>
+    </View>
   );
 }
 
@@ -213,7 +248,10 @@ function WeekPage({
   const weekKey = dateKey(days[0]);
   const columnWidth = weekColumnWidth(width, TIME_GUTTER_WIDTH);
 
-  const [sessions, setSessions] = useState<Session[] | null>(null);
+  const cacheKey = `week:${weekKey}`;
+  const [sessions, setSessions] = useState<Session[] | null>(
+    () => getCachedDaySessions(cacheKey) ?? null,
+  );
   const [failed, setFailed] = useState(false);
   const [mutationTick, setMutationTick] = useState(0);
   const [settleKey, setSettleKey] = useState(0);
@@ -221,11 +259,18 @@ function WeekPage({
   const [dragging, setDragging] = useState<{
     taskId: string;
     startMin: number;
+    dayShift: number;
   } | null>(null);
   const handleDragState = useCallback(
-    (snap: { startMin: number; taskId?: string } | null) =>
+    (snap: { startMin: number; taskId?: string; dayShift?: number } | null) =>
       setDragging(
-        snap?.taskId ? { taskId: snap.taskId, startMin: snap.startMin } : null,
+        snap?.taskId
+          ? {
+              taskId: snap.taskId,
+              startMin: snap.startMin,
+              dayShift: snap.dayShift ?? 0,
+            }
+          : null,
       ),
     [],
   );
@@ -239,10 +284,22 @@ function WeekPage({
 
   useEffect(() => {
     let alive = true;
-    listSessions("week", days[0])
-      .then((res) => {
+    const apply = (next: Session[]) =>
+      setSessions((prev) =>
+        prev != null && sameSessions(prev, next) ? prev : next,
+      );
+    if (isDayCacheFresh(cacheKey)) {
+      const cached = getCachedDaySessions(cacheKey);
+      if (cached) apply(cached);
+      return;
+    }
+    fetchDaySessions(cacheKey, async () => {
+      const res = await listSessions("week", days[0]);
+      return res.sessions;
+    })
+      .then((next) => {
         if (!alive) return;
-        setSessions(res.sessions);
+        apply(next);
         setFailed(false);
       })
       .catch(() => {
@@ -255,8 +312,19 @@ function WeekPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekKey, focusTick, mutationTick]);
 
+  const loading = useDelayedLoading(sessions === null && !failed);
+  const barsByDay = useMemo(
+    () => dayBarsByDay(sessions ?? [], tz),
+    [sessions, tz],
+  );
+
   const sessionsById = useMemo(
     () => new Map((sessions ?? []).map((s) => [s.id, s])),
+    [sessions],
+  );
+
+  const checkStateById = useMemo(
+    () => new Map((sessions ?? []).map((s) => [s.id, checkStateOf(s)] as const)),
     [sessions],
   );
 
@@ -273,19 +341,25 @@ function WeekPage({
 
   // Ghosts for the dragged block's day: the blocks its drop would push, at the
   // slot it previews. A blocked drop shows none; it bounces back on release.
-  const dragGhosts = useMemo<{ dayIndex: number; ghosts: GhostShift[] } | null>(() => {
+  const dragGhosts = useMemo<{
+    dayIndex: number;
+    fromIndex: number;
+    ghosts: GhostShift[];
+  } | null>(() => {
     if (!dragging) return null;
     const dragged = sessionsById.get(dragging.taskId);
     if (!dragged?.scheduledStartTime) return null;
-    const dayKeyStr = dateKey(zonedDate(dragged.scheduledStartTime, tz));
-    const dayIndex = days.findIndex((d) => dateKey(d) === dayKeyStr);
-    if (dayIndex < 0) return null;
+    const fromKey = dateKey(zonedDate(dragged.scheduledStartTime, tz));
+    const fromIndex = days.findIndex((d) => dateKey(d) === fromKey);
+    const dayIndex = fromIndex + dragging.dayShift;
+    if (fromIndex < 0 || dayIndex < 0 || dayIndex > 6) return null;
+    const dayKeyStr = dateKey(days[dayIndex]);
     const preview = dropPreview(
       { id: dragged.id, durationMin: dragged.durationMinutes },
       dragging.startMin,
       blocksOnDay(sessions ?? [], dayKeyStr, tz),
     );
-    return { dayIndex, ghosts: preview.ghosts };
+    return { dayIndex, ghosts: preview.ghosts, fromIndex };
   }, [dragging, sessionsById, sessions, days, tz]);
 
   const now = zonedNow(tz);
@@ -334,6 +408,10 @@ function WeekPage({
           showSkippedToast(toast, updated.skippedSessionIds);
           showDisplacedToast(toast, updated.displacedSessions);
           rememberPlacement(updated);
+          // Show the new time at once; the refetch re-derives the neighbours.
+          setSessions((prev) =>
+            prev?.map((x) => (x.id === taskId ? { ...x, ...updated } : x)) ?? prev,
+          );
           showMovedToast(toast, {
             to: zonedDate(updated.scheduledStartTime ?? startISO, tz),
             withTime: true,
@@ -442,12 +520,6 @@ function WeekPage({
 
   return (
     <View className="flex-1">
-      <Text className="px-4 pb-1 pt-1 text-[11.5px] font-medium text-muted-foreground">
-        {t("{start} to {end}", {
-          start: format(days[0], "MMM d"),
-          end: format(days[6], "MMM d"),
-        })}
-      </Text>
       <View className="flex-row border-b border-border bg-background">
         <View style={{ width: TIME_GUTTER_WIDTH }} />
         {days.map((day) => {
@@ -481,6 +553,12 @@ function WeekPage({
                   {format(day, "d")}
                 </Text>
               </View>
+              <View className="w-full px-1.5 pt-0.5">
+                <DayBarView
+                  bar={barsByDay.get(dateKey(day))}
+                  testID={`week-bar.${dateKey(day)}`}
+                />
+              </View>
             </Pressable>
           );
         })}
@@ -500,6 +578,30 @@ function WeekPage({
       >
         <View style={{ height: grid.height }}>
           <TimeGutter grid={grid} />
+
+          {loading ? (
+            <View
+              testID="week-grid.skeleton"
+              pointerEvents="none"
+              className="absolute bottom-0 top-0"
+              style={{ left: columnsLeft, right: 0 }}
+            >
+              {SKELETON_BLOCKS.map((b) => (
+                <View
+                  key={`${b.col}-${b.top}`}
+                  className="absolute"
+                  style={{
+                    left: b.col * columnWidth + 3,
+                    width: columnWidth - 6,
+                    top: minToY(grid, b.top),
+                    height: minToY(grid, b.top + b.len) - minToY(grid, b.top),
+                  }}
+                >
+                  <Skeleton className="size-full rounded-lg" />
+                </View>
+              ))}
+            </View>
+          ) : null}
 
           {visibleHourMinutes(grid).map((min) => (
             <View
@@ -525,6 +627,7 @@ function WeekPage({
                 style={{
                   left: columnsLeft + dayIndex * columnWidth,
                   width: columnWidth,
+                  zIndex: dragGhosts?.fromIndex === dayIndex ? 20 : 0,
                 }}
               >
                 {isToday ? <NowIndicator top={minToY(grid, nowMin)} /> : null}
@@ -550,6 +653,11 @@ function WeekPage({
                       onDragStateChange={handleDragState}
                       onReschedule={handleReschedule}
                       settleKey={settleKey}
+                      checkState={checkStateById.get(segment.taskId)}
+                      showCheck={false}
+                      dayWidth={columnWidth}
+                      minDayShift={-dayIndex}
+                      maxDayShift={6 - dayIndex}
                       onPress={onSessionPress}
                       onRequestReschedule={handleLongPress}
                       onLongPressMenu={

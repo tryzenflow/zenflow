@@ -55,6 +55,7 @@ import {
 } from "@zenflow/shared";
 
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { sittingLength, variedSittings } from "@/lib/split-sittings";
 import { useMemo, useRef, useState } from "react";
 
 const DEFAULT_DURATION = 60;
@@ -65,6 +66,8 @@ const EMPTY_DEFAULTS: SessionFormValues = {
   title: "",
   duration: DEFAULT_DURATION,
   sessionCount: DEFAULT_SESSION_COUNT,
+  // `duration` is the whole task; the count splits it into equal sittings.
+  splitTotal: true,
   tags: [],
   note: "",
   location: "",
@@ -88,7 +91,20 @@ function toCreateInput(
     return {
       ...base,
       type: "TASK",
-      durationMinutes: values.duration ?? DEFAULT_DURATION,
+      // A split task sends the length of one sitting: the series is N of them.
+      durationMinutes: sittingLength(
+        values.duration ?? DEFAULT_DURATION,
+        values.splitTotal ? (values.sessionCount ?? 1) : 1,
+      ),
+      // The series sums to the total, each sitting a little different.
+      ...(values.splitTotal && (values.sessionCount ?? 1) > 1
+        ? {
+            sessionDurations: variedSittings(
+              values.duration ?? DEFAULT_DURATION,
+              values.sessionCount ?? 1,
+            ),
+          }
+        : {}),
       deadline: values.deadline as string,
       // Omitted/1 → one ordinary task; >1 → a series (issue #33) — see
       // SessionCountField.

@@ -1,7 +1,7 @@
 import type { SessionAnchor } from "@zenflow/shared";
 
 /** Snap points of the session detail sheet: peek, then full. */
-export const SESSION_DETAIL_SNAP_POINTS = ["46%", "92%"];
+export const SESSION_DETAIL_SNAP_POINTS = ["66%", "92%"];
 export const PEEK_SNAP_INDEX = 0;
 export const FULL_SNAP_INDEX = 1;
 

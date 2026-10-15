@@ -26,6 +26,7 @@ import {
   List,
   Notebook,
   ListOrdered,
+  ListChecks,
   type LucideIcon,
   Quote,
   Underline as UnderlineIcon,
@@ -68,6 +69,7 @@ import {
   OrderedListBridge,
   type RecursivePartial,
   RichText,
+  TaskListBridge,
   UnderlineBridge,
   useBridgeState,
   useEditorBridge,
@@ -94,6 +96,11 @@ import type { WebViewMessageEvent } from "react-native-webview";
 import { NoteSkeleton } from "../note-skeleton";
 import { AudioBridge, VideoBridge } from "./media-bridges";
 
+/** The app's own page background, so the editor has no seam under the header. */
+function editorBackground(isDark: boolean): string {
+  return isDark ? "rgb(15 13 10)" : "rgb(254 252 250)";
+}
+
 // A light tint of the sun accent (`--brand-orange`); note text on it stays
 // dark in both schemes (see `noteTypographyCss`).
 const HIGHLIGHT_COLOR = "#F3E1B5";
@@ -119,54 +126,104 @@ const EDITOR_EXTENSIONS = [
   AudioBridge,
   BulletListBridge,
   OrderedListBridge,
+  TaskListBridge,
   HistoryBridge,
 ];
 
+type TemplateSection = {
+  title: string;
+  /** Sample lines, replaced as the user types. */
+  items: string[];
+  checklist?: boolean;
+};
+
 /**
- * Starter outlines offered while the note is empty. Only uses what the
- * editor's schema supports (bold, lists, blockquote — no headings), so each
- * section title is a bold line over an empty bullet to type into.
+ * Starter notes offered while the note is empty. Each section is a bold line
+ * over sample text (or sample checklist items) to overwrite. Only uses what the
+ * editor's schema supports: bold, lists, checklists.
  */
 const TEMPLATES: {
   key: string;
   icon: LucideIcon;
   title: string;
   hint: string;
-  sections: string[];
+  sections: TemplateSection[];
 }[] = [
   {
     key: "study",
     icon: Notebook,
     title: "Study notes",
     hint: "Key ideas, questions, summary",
-    sections: ["Key ideas", "Questions", "Summary"],
+    sections: [
+      {
+        title: "Key ideas",
+        items: ["The main concept in one line", "An example that makes it click"],
+      },
+      { title: "Questions", items: ["What is still unclear?"] },
+      { title: "Summary", items: ["Three sentences in your own words"] },
+    ],
   },
   {
     key: "checklist",
     icon: CheckSquare,
     title: "Checklist",
     hint: "A simple to-do list",
-    sections: ["To do"],
+    sections: [
+      {
+        title: "To do",
+        items: ["Read the chapter", "Solve the practice problems", "Review mistakes"],
+        checklist: true,
+      },
+    ],
   },
   {
     key: "exam",
     icon: GraduationCap,
     title: "Exam prep",
     hint: "Topics, practice, formulas",
-    sections: ["Topics to review", "Practice", "Remember"],
+    sections: [
+      {
+        title: "Topics to review",
+        items: ["Chapter 1 summary", "Lecture slides", "Weak areas"],
+        checklist: true,
+      },
+      { title: "Practice", items: ["Past paper, timed"] },
+      { title: "Remember", items: ["A formula or date to memorize"] },
+    ],
   },
   {
     key: "assignment",
     icon: ClipboardList,
     title: "Assignment brief",
     hint: "Goal, requirements, resources",
-    sections: ["Goal", "Requirements", "Resources"],
+    sections: [
+      { title: "Goal", items: ["What this assignment should achieve"] },
+      {
+        title: "Requirements",
+        items: ["Word count or length", "Format and citations", "Submit by the deadline"],
+        checklist: true,
+      },
+      { title: "Resources", items: ["Textbook pages or links"] },
+    ],
   },
 ];
 
-function templateHtml(sections: string[]): string {
+function templateHtml(sections: TemplateSection[]): string {
   return sections
-    .map((s) => `<p><strong>${escapeHtml(t(s))}</strong></p><ul><li></li></ul>`)
+    .map((s) => {
+      const head = `<p><strong>${escapeHtml(t(s.title))}</strong></p>`;
+      if (s.checklist) {
+        const rows = s.items
+          .map(
+            (i) =>
+              `<li data-type="taskItem" data-checked="false"><label><input type="checkbox"><span></span></label><div><p>${escapeHtml(t(i))}</p></div></li>`,
+          )
+          .join("");
+        return `${head}<ul data-type="taskList">${rows}</ul>`;
+      }
+      const rows = s.items.map((i) => `<li><p>${escapeHtml(t(i))}</p></li>`).join("");
+      return `${head}<ul>${rows}</ul>`;
+    })
     .join("");
 }
 
@@ -274,7 +331,7 @@ export function DescriptionFieldEditor({
   // through `unknown` rather than asking TS to prove it structurally.
   const editorTheme = {
     webview: {
-      backgroundColor: isDarkColorScheme ? "rgb(31 48 58)" : "rgb(255 255 255)",
+      backgroundColor: editorBackground(isDarkColorScheme),
     },
   } as unknown as RecursivePartial<EditorTheme>;
 
@@ -293,7 +350,7 @@ export function DescriptionFieldEditor({
     },
   });
 
-  function applyTemplate(sections: string[]) {
+  function applyTemplate(sections: TemplateSection[]) {
     const html = templateHtml(sections);
     valueRef.current = html;
     setIsEmpty(false);
@@ -316,11 +373,12 @@ export function DescriptionFieldEditor({
   }, [initialValue]);
 
   function injectContentStyles() {
-    const { bg, fg } = noteColors(isDarkColorScheme);
+    const { fg } = noteColors(isDarkColorScheme);
+    const bg = editorBackground(isDarkColorScheme);
     const { fontFace, family } = noteFont(fontDataUri);
     editor.injectCSS(
       // Bottom padding keeps the last lines scrollable above the floating bar.
-      `${fontFace} html, body { margin: 0; padding: 0; background-color: ${bg}; } .ProseMirror { box-sizing: border-box; background-color: ${bg}; color: ${fg}; font-family: ${family}; font-size: 17px; padding: 20px 20px 120px; line-height: 1.5; min-height: 100vh; } .ProseMirror > :first-child { margin-top: 0; } ${noteTypographyCss(".ProseMirror", isDarkColorScheme)}`,
+      `${fontFace} html, body { margin: 0; padding: 0; background-color: ${bg}; } .ProseMirror { box-sizing: border-box; background-color: ${bg}; color: ${fg}; font-family: ${family}; font-size: 17px; padding: 20px 20px 120px; line-height: 1.5; min-height: 100vh; } .ProseMirror > :first-child { margin-top: 0; } .ProseMirror { caret-color: rgb(255 142 62); } .ProseMirror ::selection { background: rgba(255, 142, 62, 0.4); color: inherit; } ${noteTypographyCss(".ProseMirror", isDarkColorScheme)}`,
       "description-field-theme",
     );
   }
@@ -657,6 +715,7 @@ export function DescriptionFieldEditor({
           <View
             pointerEvents="box-none"
             className="absolute inset-x-5 top-16 gap-2.5"
+            style={{ zIndex: 10, elevation: 10 }}
           >
             <Text className="text-[13px] font-semibold text-muted-foreground">
               {t("Start with a template")}
@@ -835,14 +894,30 @@ export function DescriptionFieldEditor({
                 label={t("Bulleted list")}
                 active={!!state.isBulletListActive}
                 disabled={disabled}
-                onPress={() => editor.toggleBulletList()}
+                onPress={() => {
+                  setIsEmpty(false);
+                  editor.toggleBulletList();
+                }}
+              />
+              <ToolbarButton
+                icon={ListChecks}
+                label={t("Checklist")}
+                active={!!state.isTaskListActive}
+                disabled={disabled}
+                onPress={() => {
+                  setIsEmpty(false);
+                  editor.toggleTaskList();
+                }}
               />
               <ToolbarButton
                 icon={ListOrdered}
                 label={t("Numbered list")}
                 active={!!state.isOrderedListActive}
                 disabled={disabled}
-                onPress={() => editor.toggleOrderedList()}
+                onPress={() => {
+                  setIsEmpty(false);
+                  editor.toggleOrderedList();
+                }}
               />
               <View className="mx-1.5 h-5 w-px bg-black/10" />
               <ToolbarButton
@@ -900,13 +975,13 @@ function ToolbarButton({
         // here since the bar itself is now white. The fill is the same in
         // both schemes, so the icon below stays dark rather than following
         // the theme (near-white `text-foreground` in dark mode vanishes on it).
-        active && "bg-[#E4ECEF]",
+        active && "bg-primary/20",
         disabled && "opacity-40",
       )}
     >
       <Icon
         size={21}
-        className={active ? "text-[#22333D]" : "text-foreground/70"}
+        className={active ? "text-primary" : "text-foreground/70"}
       />
     </Pressable>
   );

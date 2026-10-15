@@ -38,10 +38,19 @@ export function noteFont(fontDataUri: string | null) {
   };
 }
 
+/** Circle checkboxes for checklists (tiptap task lists); done items fade and strike through. */
+export function noteChecklistCss(selector: string, muted: string) {
+  const done = "rgb(255 142 62)";
+  const tick = encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  );
+  return `${selector} ul[data-type="taskList"] { list-style: none; padding-left: 0; margin: 4px 0 8px; } ${selector} ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 6px; } ${selector} ul[data-type="taskList"] li > label { flex: none; margin-top: 2px; user-select: none; } ${selector} ul[data-type="taskList"] li > label input { -webkit-appearance: none; appearance: none; display: block; margin: 0; width: 22px; height: 22px; border-radius: 50%; border: 2px solid ${muted}; background: transparent center / 14px no-repeat; } ${selector} ul[data-type="taskList"] li > label input:checked { background-color: ${done}; border-color: ${done}; background-image: url("data:image/svg+xml,${tick}"); } ${selector} ul[data-type="taskList"] li > div { flex: 1; min-width: 0; } ${selector} ul[data-type="taskList"] li > div p { margin: 0; } ${selector} ul[data-type="taskList"] li[data-checked="true"] > div { color: ${muted}; text-decoration: line-through; }`;
+}
+
 /** Typography shared by the editor's `.ProseMirror` and the viewer's `body`. */
 export function noteTypographyCss(selector: string, isDark: boolean) {
   const { fg, muted, link } = noteColors(isDark);
-  return `${selector} blockquote { border-left: 3px solid ${link}; margin: 8px 0; padding-left: 12px; color: ${muted}; } ${selector} a { color: ${link}; text-decoration: underline; } ${selector} img, ${selector} video { max-width: 100%; max-height: 320px; width: auto; object-fit: contain; border-radius: 8px; } ${selector} audio { max-width: 100%; } ${selector} mark { border-radius: 3px; color: rgb(28 25 23) !important; } ${selector} mark * { color: inherit !important; } ${selector} ul, ${selector} ol { padding-left: 22px; } ${selector} p { margin: 0 0 8px; } ${selector} { color: ${fg}; }`;
+  return `${selector} blockquote { border-left: 3px solid ${link}; margin: 8px 0; padding-left: 12px; color: ${muted}; } ${selector} a { color: ${link}; text-decoration: underline; } ${selector} img, ${selector} video { max-width: 100%; max-height: 320px; width: auto; object-fit: contain; border-radius: 8px; } ${selector} audio { max-width: 100%; } ${selector} mark { border-radius: 3px; color: rgb(28 25 23) !important; } ${selector} mark * { color: inherit !important; } ${selector} ul, ${selector} ol { padding-left: 22px; } ${selector} p { margin: 0 0 8px; } ${selector} { color: ${fg}; } ${noteChecklistCss(selector, muted)}`;
 }
 
 /** Injected into a WebView: hands a tapped link's href back to RN. */

@@ -1,6 +1,6 @@
 import type { DaySegment } from "@zenflow/shared";
 import { describe, expect, it } from "vitest";
-import { COLUMN_GUTTER, columnBlockFrame, weekColumnWidth, weekSpans } from "../week-grid-math";
+import { CASCADE_STEP, COLUMN_GUTTER, columnBlockFrame, weekColumnWidth, weekSpans } from "../week-grid-math";
 
 function segment(start: string, end: string, continues = false): DaySegment {
   return {
@@ -23,23 +23,21 @@ function segment(start: string, end: string, continues = false): DaySegment {
 
 describe("columnBlockFrame", () => {
   it("gives a lone block the full column less the gutters", () => {
-    expect(columnBlockFrame({ column: 0, columns: 1 }, 50)).toEqual({
+    expect(columnBlockFrame({ column: 0 }, 50)).toEqual({
       left: COLUMN_GUTTER,
       width: 50 - COLUMN_GUTTER * 2,
     });
   });
 
-  it("splits overlapping blocks evenly, side by side", () => {
-    const usable = 60 - COLUMN_GUTTER * 2;
-    const a = columnBlockFrame({ column: 0, columns: 2 }, 60);
-    const b = columnBlockFrame({ column: 1, columns: 2 }, 60);
-    expect(a.width).toBe(usable / 2);
-    expect(b.width).toBe(usable / 2);
-    expect(b.left).toBe(a.left + a.width);
+  it("stacks overlapping blocks, each shifted right of the one under it", () => {
+    const a = columnBlockFrame({ column: 0 }, 60);
+    const b = columnBlockFrame({ column: 1 }, 60);
+    expect(b.left).toBe(a.left + CASCADE_STEP);
+    expect(b.left + b.width).toBe(a.left + a.width);
   });
 
-  it("never divides by zero", () => {
-    expect(columnBlockFrame({ column: 0, columns: 0 }, 40).width).toBe(40 - COLUMN_GUTTER * 2);
+  it("keeps a minimum width in a tiny column", () => {
+    expect(columnBlockFrame({ column: 4 }, 20).width).toBeGreaterThan(0);
   });
 });
 

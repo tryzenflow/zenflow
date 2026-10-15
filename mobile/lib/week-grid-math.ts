@@ -10,19 +10,25 @@ import type { BlockLayout } from "./overlap";
 /** Horizontal inset (px) each block keeps from its column's edges. */
 export const COLUMN_GUTTER = 2;
 
+/** How far (px) each overlapping block is shifted right of the one under it. */
+export const CASCADE_STEP = 7;
+const MAX_CASCADE = 4;
+
 /**
  * Left edge and width (px) of a block inside its day column. Overlapping
- * blocks split the column evenly, so a narrow week column still shows every
- * block side by side.
+ * blocks stack like Day view: each later one sits on top, shifted a little
+ * right, so a narrow week column keeps every block as wide as it can be.
  */
 export function columnBlockFrame(
-  layout: Pick<BlockLayout, "column" | "columns">,
+  layout: Pick<BlockLayout, "column">,
   columnWidth: number,
 ): { left: number; width: number } {
-  const columns = Math.max(1, layout.columns);
   const usable = Math.max(0, columnWidth - COLUMN_GUTTER * 2);
-  const width = usable / columns;
-  return { left: COLUMN_GUTTER + layout.column * width, width };
+  const shift = Math.min(layout.column, MAX_CASCADE) * CASCADE_STEP;
+  return {
+    left: COLUMN_GUTTER + shift,
+    width: Math.max(8, usable - shift),
+  };
 }
 
 /**

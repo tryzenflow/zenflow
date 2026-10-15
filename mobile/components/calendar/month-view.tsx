@@ -9,6 +9,7 @@ import {
   monthLabel,
 } from "@/lib/month-date-math";
 import { zonedNow } from "@zenflow/core";
+import type { Session } from "@zenflow/shared";
 import { isSameMonth, startOfMonth } from "date-fns";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
@@ -24,6 +25,8 @@ interface MonthViewProps {
   onOpenDay: (day: Date) => void;
   /** Open a session's detail sheet. */
   onSessionPress: (sessionId: string) => void;
+  /** A session from the list was dropped on a day of the grid. */
+  onMoveSession?: (session: Session, day: Date) => void;
 }
 
 /**
@@ -38,6 +41,7 @@ export function MonthView({
   reloadToken,
   onOpenDay,
   onSessionPress,
+  onMoveSession,
 }: MonthViewProps) {
   // `monthDate` is the committed month and drives which pages mount.
   // `visibleMonth` is what the header prints; it follows the finger.
@@ -134,6 +138,7 @@ export function MonthView({
               onSelectDay={selectDay}
               onOpenDay={onOpenDay}
               onSessionPress={onSessionPress}
+              onMoveSession={onMoveSession}
             />
           )}
         />

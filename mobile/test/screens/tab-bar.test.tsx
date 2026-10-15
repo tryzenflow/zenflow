@@ -7,10 +7,10 @@ import { renderScreen } from "@/test/utils/render";
 
 const routes = [
   { key: "index-k", name: "index" },
-  { key: "today-k", name: "today" },
+  { key: "list-k", name: "list" },
   { key: "settings-k", name: "settings" },
 ];
-const titles: Record<string, string> = { index: "Calendar", today: "Today", settings: "Me" };
+const titles: Record<string, string> = { index: "Calendar", list: "List", settings: "Me" };
 
 const emitter = { emit: vi.fn(() => ({ defaultPrevented: false })) };
 const navigateToTab = vi.fn();
@@ -38,7 +38,7 @@ describe("AppTabBar", () => {
   it("renders a labelled tab per route", () => {
     renderScreen(bar(1));
     for (const title of Object.values(titles)) expect(screen.getByLabelText(title)).toBeTruthy();
-    expect(screen.getByTestId("tab.today")).toBeTruthy();
+    expect(screen.getByTestId("tab.list")).toBeTruthy();
     expect(screen.queryByLabelText("Month")).toBeNull();
   });
 
@@ -62,7 +62,7 @@ describe("AppTabBar", () => {
   it("respects a screen that prevents the tab press", () => {
     emitter.emit.mockReturnValue({ defaultPrevented: true });
     renderScreen(bar(0));
-    fireEvent.click(screen.getByTestId("tab.today"));
+    fireEvent.click(screen.getByTestId("tab.list"));
     expect(navigateToTab).not.toHaveBeenCalled();
   });
 });

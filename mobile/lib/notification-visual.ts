@@ -39,53 +39,64 @@ export const CATEGORY_LABEL: Record<NotificationCategory, string> = {
 export function notificationVisual(eventName: string): {
   Icon: LucideIcon;
   label: string;
+  /** Translucent fill and rim: a glass badge in the category's colour. */
   tint: string;
-  iconColor: string;
+  /** Icon colour per scheme, strong enough to read on the glass. */
+  ink: { light: string; dark: string };
   accent: ToastAccent;
 } {
   const category = notificationCategory(eventName);
   if (notificationEventKind(eventName) === "CONFLICT") {
+    const ink = { light: "#b45309", dark: "#fbbf24" };
     return {
       Icon: AlertTriangle,
       label: t("{category} conflict", { category: CATEGORY_LABEL[category] }),
-      tint: SESSION_TONE_CLASSES.conflict.badge,
-      iconColor: SESSION_TONES.conflict.ink.light,
-      accent: SESSION_TONES.conflict.ink,
+      tint: "border-amber-500/50 bg-amber-500/20",
+      ink,
+      accent: ink,
     };
   }
   switch (category) {
-    case "ASSIGNMENT":
+    case "ASSIGNMENT": {
+      const ink = { light: "#0f766e", dark: "#2dd4bf" };
       return {
         Icon: ClipboardList,
         label: CATEGORY_LABEL.ASSIGNMENT,
-        tint: SESSION_TONE_CLASSES.assignment.badge,
-        iconColor: SESSION_TONES.assignment.ink.light,
-        accent: SESSION_TONES.assignment.ink,
+        tint: "border-teal-500/50 bg-teal-500/20",
+        ink,
+        accent: ink,
       };
-    case "EXAM":
+    }
+    case "EXAM": {
+      const ink = { light: "#be123c", dark: "#fb7185" };
       return {
         Icon: Notebook,
         label: CATEGORY_LABEL.EXAM,
-        tint: SESSION_TONE_CLASSES.exam.badge,
-        iconColor: SESSION_TONES.exam.ink.light,
-        accent: SESSION_TONES.exam.ink,
+        tint: "border-rose-500/50 bg-rose-500/20",
+        ink,
+        accent: ink,
       };
-    case "LECTURE":
+    }
+    case "LECTURE": {
+      const ink = { light: "#0369a1", dark: "#38bdf8" };
       return {
         Icon: GraduationCap,
         label: CATEGORY_LABEL.LECTURE,
-        tint: SESSION_TONE_CLASSES.lecture.badge,
-        iconColor: SESSION_TONES.lecture.ink.light,
-        accent: SESSION_TONES.lecture.ink,
+        tint: "border-sky-500/50 bg-sky-500/20",
+        ink,
+        accent: ink,
       };
-    default:
+    }
+    default: {
+      const ink = { light: "#c2410c", dark: "#fb923c" };
       return {
         Icon: Bell,
         label: CATEGORY_LABEL.REMINDER,
-        tint: SESSION_TONE_CLASSES.task.badge,
-        iconColor: SESSION_TONES.task.ink.light,
-        accent: SESSION_TONES.task.ink,
+        tint: "border-primary/50 bg-primary/20",
+        ink,
+        accent: ink,
       };
+    }
   }
 }
 

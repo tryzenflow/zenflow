@@ -289,10 +289,10 @@ export function TagAutocomplete({
               autoFocus
               value={query}
               onChangeText={setQuery}
-              placeholder={t("Search or create a tag…")}
+              placeholder={t("Add a tag")}
               returnKeyType="done"
               onSubmitEditing={() => add(query.trim())}
-              className="h-14 text-lg"
+              className="h-12"
             />
           </View>
 

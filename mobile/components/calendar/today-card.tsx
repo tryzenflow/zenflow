@@ -1,167 +1,114 @@
-import { Shield } from "@/components/Icons";
+import { Glass } from "@/components/ui/glass";
 import { Text } from "@/components/ui/text";
 import { useLanguage } from "@/hooks/use-language";
 import { useNow } from "@/hooks/use-now";
-import { useTodayLoader, useTodayStore } from "@/hooks/use-today";
-import { NAV_THEME } from "@/lib/constants";
+import { useTodayStore } from "@/hooks/use-today";
 import { format, t } from "@/lib/i18n";
-import {
-  formatHours,
-  greetingKey,
-  summarizeToday,
-} from "@/lib/today-summary";
+import { summarizeToday } from "@/lib/today-summary";
 import { useColorScheme } from "@/lib/useColorScheme";
-import { BRAND, zonedDate, zonedNow } from "@zenflow/core";
+import { zonedDate } from "@zenflow/core";
 import { Pressable, View } from "react-native";
-import Svg, { Circle } from "react-native-svg";
 
-const RING_SIZE = 52;
-const RING_STROKE = 5;
-
-const GREETINGS = {
-  morning: "Good morning",
-  afternoon: "Good afternoon",
-  evening: "Good evening",
-} as const;
-
-/** A track with a sun arc for the share of today's sessions that are done. */
-function ProgressRing({ done, total }: { done: number; total: number }) {
-  const { isDarkColorScheme } = useColorScheme();
-  const track = (isDarkColorScheme ? NAV_THEME.dark : NAV_THEME.light).border;
-  const radius = (RING_SIZE - RING_STROKE) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const fraction = total === 0 ? 0 : Math.min(done / total, 1);
-  return (
-    <View
-      style={{ width: RING_SIZE, height: RING_SIZE }}
-      className="items-center justify-center"
-    >
-      <Svg width={RING_SIZE} height={RING_SIZE} style={{ position: "absolute" }}>
-        <Circle
-          cx={RING_SIZE / 2}
-          cy={RING_SIZE / 2}
-          r={radius}
-          stroke={track}
-          strokeWidth={RING_STROKE}
-          fill="none"
-        />
-        <Circle
-          testID="today-ring-arc"
-          cx={RING_SIZE / 2}
-          cy={RING_SIZE / 2}
-          r={radius}
-          stroke={BRAND.orange}
-          strokeWidth={RING_STROKE}
-          strokeLinecap="round"
-          fill="none"
-          strokeDasharray={`${circumference * fraction} ${circumference}`}
-          transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
-        />
-      </Svg>
-      <Text className="text-[12px] font-bold">{`${done}/${total}`}</Text>
-    </View>
-  );
-}
+/** Minutes before a task when "in N min" is worth saying. */
+const SOON_MINUTES = 90;
 
 /**
- * Today at a glance, above the week timeline: greeting, date, sessions and
- * hours, the progress ring, the next session, and the streak with its freezes.
- * Replaces the floating next-up pill.
+ * Today's next task as a glass pill floating over the top of the timeline, so
+ * it takes no layout space: the task's title, when it starts and
+ * how soon. Reads "All done" or "Nothing planned" when there is no next task.
  */
 export function TodayCard({
   tz,
+  visible = true,
   onOpenSession,
 }: {
   tz: string;
+  /** Hide it away from today. */
+  visible?: boolean;
   onOpenSession: (taskId: string) => void;
 }) {
   useLanguage();
-  useTodayLoader(tz);
   const sessions = useTodayStore((s) => s.sessions);
-  const streak = useTodayStore((s) => s.streak);
   const now = useNow();
   const { isDarkColorScheme } = useColorScheme();
+  if (!visible || sessions === null) return null;
 
-  const wall = zonedNow(tz);
-  const summary = summarizeToday(sessions ?? [], now);
-  const streakDays = streak?.current ?? 0;
-  const freezes = streak?.freezesAvailable ?? 0;
+  const summary = summarizeToday(sessions, now);
+  const next = summary.nextUp;
+  const minutes = next
+    ? Math.round((new Date(next.startISO).getTime() - now.getTime()) / 60000)
+    : 0;
+  const soon = minutes >= 1 && minutes <= SOON_MINUTES;
 
-  let nextLine: string;
-  if (summary.total === 0) nextLine = t("Nothing planned today");
-  else if (summary.nextUp) {
-    nextLine = t("Next up: {title}, {time}", {
-      title: summary.nextUp.title,
-      time: format(zonedDate(summary.nextUp.startISO, tz), "h:mm a"),
+  let title: string;
+  let sub: string | null = null;
+  if (next) {
+    title = next.title;
+    sub = t("Next up at {time}", {
+      time: format(zonedDate(next.startISO, tz), "h:mm a"),
     });
-  } else {
-    nextLine =
-      summary.done === summary.total
-        ? t("All done for today")
-        : t("Nothing left today");
-  }
+  } else if (summary.total === 0) title = t("Nothing planned today");
+  else if (summary.done === summary.total) title = t("All done for today");
+  else title = t("Nothing left today");
+
+  const body = (
+    <View className="min-h-12 flex-row items-center gap-3 py-2 pl-4 pr-4">
+      <View className="min-w-0 shrink">
+        <Text numberOfLines={1} className="text-[15px] font-semibold">
+          {title}
+        </Text>
+        {sub ? (
+          <Text numberOfLines={1} className="text-[12px] text-muted-foreground">
+            {sub}
+          </Text>
+        ) : null}
+      </View>
+      {next && soon ? (
+        <View className="rounded-full bg-primary/15 px-2.5 py-1">
+          <Text className="text-[12px] font-semibold text-primary">
+            {t("in {count} min", { count: minutes })}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
 
   return (
     <View
       testID="today-card"
-      className="mx-4 mt-2 flex-row items-center gap-3 rounded-2xl bg-primary/10 px-3.5 py-2.5 dark:bg-primary/[0.14]"
+      pointerEvents="box-none"
+      style={{ position: "absolute", top: 8, left: 0, right: 0, zIndex: 10 }}
+      className="items-center px-4"
     >
-      <ProgressRing done={summary.done} total={summary.total} />
-      <View className="min-w-0 flex-1 gap-0.5">
-        <Text className="text-[16px] font-bold" numberOfLines={1}>
-          {t(GREETINGS[greetingKey(wall.getHours())])}
-        </Text>
-        <Text className="text-[12px] text-muted-foreground" numberOfLines={1}>
-          {format(wall, "EEE, MMM d")}
-        </Text>
-        <Text className="text-[12px] text-muted-foreground" numberOfLines={1}>
-          {t("{count} sessions, {hours} h", {
-            count: summary.total,
-            hours: formatHours(summary.plannedMinutes),
-          })}
-        </Text>
-        {summary.nextUp ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={nextLine}
-            onPress={() => onOpenSession(summary.nextUp?.id ?? "")}
-            hitSlop={6}
-          >
-            <Text className="text-[12px] font-semibold text-primary" numberOfLines={1}>
-              {nextLine}
-            </Text>
-          </Pressable>
-        ) : (
-          <Text className="text-[12px] font-semibold text-primary" numberOfLines={1}>
-            {nextLine}
-          </Text>
-        )}
-      </View>
-      <View className="items-end gap-1">
-        <View
-          className={streakDays > 0 ? "rounded-full bg-brand-yellow/30 px-2.5 py-1" : undefined}
-        >
-          <Text
-            className={
-              streakDays > 0
-                ? "text-[12px] font-bold text-foreground"
-                : "text-[12px] font-medium text-muted-foreground"
-            }
-            testID="today-streak"
-          >
-            {streakDays > 0
-              ? t("{count} day streak", { count: streakDays })
-              : t("No streak yet")}
-          </Text>
-        </View>
-        {freezes > 0 ? (
-          <View className="flex-row items-center gap-1 rounded-full bg-card px-2 py-0.5">
-            <Shield size={11} className="text-primary" />
-            <Text className="text-[11px] font-semibold text-primary">
-              {t("{count} freeze ready", { count: freezes })}
-            </Text>
-          </View>
-        ) : null}
+      {/* Outer view carries the shadow only; rounding and clipping live in `Glass`. */}
+      <View
+        style={{
+          maxWidth: "100%",
+          borderRadius: 9999,
+          shadowColor: "#000",
+          shadowOpacity: isDarkColorScheme ? 0.35 : 0.12,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: 6,
+        }}
+      >
+        <Glass radius={9999} clear intensity={40}>
+          {next ? (
+            <Pressable
+              onPress={() => onOpenSession(next.id)}
+              accessibilityRole="button"
+              accessibilityLabel={t("Next up: {title}, {time}", {
+                title: next.title,
+                time: format(zonedDate(next.startISO, tz), "h:mm a"),
+              })}
+              className="active:opacity-80"
+            >
+              {body}
+            </Pressable>
+          ) : (
+            body
+          )}
+        </Glass>
       </View>
     </View>
   );

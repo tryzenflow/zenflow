@@ -23,9 +23,6 @@ import {
 import type { DaySegment, SessionAnchor } from "@zenflow/shared";
 import { Hand, Lock } from "@/components/Icons";
 import { anchorMark } from "@/lib/anchor";
-import { useCourseColourStore } from "@/hooks/use-course-colours";
-import { courseStyleFor } from "@/lib/course-colour";
-import { sessionTypeIcon } from "./session-type-badge";
 import { toZonedTime } from "date-fns-tz";
 import * as Haptics from "expo-haptics";
 import { Fragment, memo, useCallback, useEffect, useState } from "react";
@@ -73,6 +70,9 @@ const CHECKABLE_MIN_HEIGHT = 40;
 /** Right gutter that keeps a block's title clear of the check-off disc. */
 const CHECK_GUTTER_PX = 40;
 
+/** Left stripe of a block that is done. */
+const DONE_GREEN = "#22C55E";
+
 /** Gap (px) between the DND hatch's diagonal lines. */
 const HATCH_SPACING = 7;
 
@@ -115,6 +115,13 @@ function fmt(iso: string, tz: string) {
 
 /** "9:00 AM" + "10:30 AM" → "9:00–10:30 AM". A mixed AM/PM span, or a 24h
  * locale (no meridiem token), falls back to the spaced full form. */
+/** A range for a session that crosses midnight: "11:00 PM – 1:00 AM (tomorrow)", or "11:00 PM (yesterday) – 1:00 AM" on the next day's part. */
+function crossRange(start: string, end: string, onNextDay: boolean) {
+  return onNextDay
+    ? `${start} (${t("yesterday")}) – ${end}`
+    : `${start} – ${end} (${t("tomorrow")})`;
+}
+
 function joinRange(start: string, end: string) {
   const sm = start.match(/\s([AP]M)$/i);
   const em = end.match(/\s([AP]M)$/i);
@@ -128,6 +135,8 @@ interface DragSnap {
   startMin: number;
   /** The dragged session, so a week drag can preview what its drop would shift. */
   taskId?: string;
+  /** Whole days the block is dragged sideways (week grid only). */
+  dayShift?: number;
 }
 
 interface SessionBlockProps {
@@ -195,6 +204,16 @@ interface SessionBlockProps {
   titleOnly?: boolean;
   /** The session's done or skipped state; `undefined` hides the check-off disc. */
   checkState?: CheckState;
+  /** Put the check-off disc at the top edge: another block covers the middle. */
+  checkAtTop?: boolean;
+  /** Draw the check-off disc. Off in the week grid, where a column is too narrow. */
+  showCheck?: boolean;
+  /** Width (px) of one day column. Set in the week grid, it lets a lifted block
+   * also move sideways, one whole day per column. */
+  dayWidth?: number;
+  /** How many columns the block can move left (negative) and right. */
+  minDayShift?: number;
+  maxDayShift?: number;
 }
 
 function SessionBlockImpl({
@@ -224,6 +243,11 @@ function SessionBlockImpl({
   settleKey = 0,
   titleOnly = false,
   checkState,
+  showCheck = true,
+  checkAtTop = false,
+  dayWidth = 0,
+  minDayShift = 0,
+  maxDayShift = 0,
 }: SessionBlockProps) {
   useLanguage();
   const checkOff = useCheckOff();
@@ -242,7 +266,6 @@ function SessionBlockImpl({
   }, [segment.taskId, toast, tz]);
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const { isDarkColorScheme } = useColorScheme();
-  const courseOverrides = useCourseColourStore((s) => s.overrides);
   const startMin = minutesOfDayLocal(segment.start, tz);
   const rawEndMin = minutesOfDayLocal(segment.end, tz);
   // A task spilling past midnight normally clamps its bottom to 24:00
@@ -277,10 +300,9 @@ function SessionBlockImpl({
   // Offline there is nothing to write: drag and long-press are off, tap still opens.
   const offline = useOffline();
   const isInteractive = !isSplit && !offline;
-  // …but every block (incl. a recurring lecture/exam/DND occurrence) is
-  // tappable, so it can open its edit screen — the surface for "delete just
-  // this occurrence".
-  const isTappable = !isSplit && !!onPress;
+  // …but every block is tappable, the carried-over tail of a session that
+  // crosses midnight included: it opens the same detail sheet as the head.
+  const isTappable = !!onPress;
   // Overdue = the server flagged it late (placed past its deadline) or it now
   // starts after its deadline (e.g. dragged there). Drives the tone only; the
   // block carries no badge (the detail view shows the deadline).
@@ -301,6 +323,7 @@ function SessionBlockImpl({
   // 1 → 0 over the entrance animation (see the `flash` effect). 0 at rest.
   const flashProgress = useSharedValue(0);
   const lastSnap = useSharedValue<number | null>(null);
+  const lastShift = useSharedValue(0);
   // The block's live vertical offset *snapped to the 15-min grid* while it is
   // being dragged (content-space px, relative to the resting slot). The card
   // renders here — not at the raw finger — so it always sits exactly in the
@@ -450,8 +473,8 @@ function SessionBlockImpl({
   });
 
   const reportSnap = useCallback(
-    (min: number) => {
-      onDragStateChange?.({ startMin: min, taskId: segment.taskId });
+    (min: number, dayShift: number) => {
+      onDragStateChange?.({ startMin: min, taskId: segment.taskId, dayShift });
     },
     [onDragStateChange, segment.taskId],
   );
@@ -471,11 +494,12 @@ function SessionBlockImpl({
     // `newStartMin` is the slot the *preview* last showed (`lastSnap`), so the
     // drop lands exactly where the dashed line / snapped card sat — never a
     // grid step off.
-    (newStartMin: number) => {
+    (newStartMin: number, dayShift: number) => {
       if (!isInteractive || !onReschedule) return;
-      if (newStartMin === startMin) return;
+      if (newStartMin === startMin && dayShift === 0) return;
 
       const newWall = zonedDate(segment.taskStart, tz);
+      newWall.setDate(newWall.getDate() + dayShift);
       newWall.setHours(Math.floor(newStartMin / 60), newStartMin % 60, 0, 0);
 
       const newStart = zonedWallClockToUtc(newWall, tz);
@@ -519,7 +543,7 @@ function SessionBlockImpl({
       dragPreviewMin.value = nsm;
       if (lastSnap.value !== nsm) {
         lastSnap.value = nsm;
-        runOnJS(reportSnap)(nsm);
+        runOnJS(reportSnap)(nsm, lastShift.value);
         runOnJS(snapHaptic)();
       }
     },
@@ -559,8 +583,14 @@ function SessionBlockImpl({
       // Grid scroll that happened under the finger counts toward the move.
       const effTY = e.translationY + autoScroll.value;
 
-      if (absY > absX) {
+      // In the week grid a lifted block follows the finger on both axes.
+      const shifting = dayWidth > 0;
+      if (shifting ? absX > 6 || absY > 6 || isDragging.value === 1 : absY > absX) {
         isDragging.value = 1;
+        const dayShift = shifting
+          ? clamp(Math.round(e.translationX / dayWidth), minDayShift, maxDayShift)
+          : 0;
+        translateX.value = dayShift * dayWidth;
 
         const deltaMinutes = dragTargetMin(grid, startMin, effTY) - startMin;
         const snappedMinutes =
@@ -576,9 +606,10 @@ function SessionBlockImpl({
         snapOffsetY.value = minToY(grid, newStartMin) - minToY(grid, startMin);
         dragPreviewMin.value = newStartMin;
 
-        if (lastSnap.value !== newStartMin) {
+        if (lastSnap.value !== newStartMin || lastShift.value !== dayShift) {
           lastSnap.value = newStartMin;
-          runOnJS(reportSnap)(newStartMin);
+          lastShift.value = dayShift;
+          runOnJS(reportSnap)(newStartMin, dayShift);
           runOnJS(snapHaptic)();
         }
 
@@ -598,16 +629,15 @@ function SessionBlockImpl({
           }
         }
       }
-      // The lifted block only moves on the vertical (time) axis now — moving a
-      // session to another day is the "Move to…" sheet's job (long-press),
-      // not a sideways drag, so `translateX` is never written mid-drag.
+      // Outside the week grid the lifted block only moves on the vertical
+      // (time) axis: another day is the "Move to…" sheet's job (long-press).
     })
     .onEnd((e) => {
       const absX = Math.abs(e.translationX);
       const absY = Math.abs(e.translationY);
       const effTY = e.translationY + autoScroll.value;
 
-      if (absY > absX || isDragging.value === 1) {
+      if (isDragging.value === 1 || (dayWidth === 0 && absY > absX)) {
         // Land on the slot the preview last showed (`lastSnap`), so drop ==
         // preview exactly. Fall back to a fresh compute if no snap was ever
         // reported (a drag that never crossed a grid line).
@@ -622,7 +652,8 @@ function SessionBlockImpl({
           DAILY_HORIZON - TIME_GRANULARITY,
         );
         const newStartMin = lastSnap.value ?? fallback;
-        const movedVertically = newStartMin !== startMin;
+        const dayShift = dayWidth > 0 ? lastShift.value : 0;
+        const movedVertically = newStartMin !== startMin || dayShift !== 0;
 
         // A lifted block is always re-anchored; `handleDragEnd` re-checks on
         // the JS thread whether the drop is a real move and no-ops otherwise.
@@ -634,8 +665,8 @@ function SessionBlockImpl({
           pinnedStartMin.value = newStartMin;
           snapOffsetY.value = 0;
           translateY.value = 0;
-          translateX.value = 0;
-          runOnJS(handleDragEnd)(newStartMin);
+          translateX.value = dayShift * dayWidth;
+          runOnJS(handleDragEnd)(newStartMin, dayShift);
           runOnJS(reportDragSnapEnd)(newStartMin);
         } else {
           // No real move — hand control back to `translateY` and spring home.
@@ -657,6 +688,7 @@ function SessionBlockImpl({
       isDragging.value = 0;
       snapOffsetY.value = 0;
       lastSnap.value = null;
+      lastShift.value = 0;
       fingerTYSV.value = 0;
       dragPreviewMin.value = -1;
       if (onDragVerticalEdge && vEdgeSV.value !== 0) {
@@ -678,12 +710,27 @@ function SessionBlockImpl({
       runOnJS(triggerPress)();
     });
 
-  const composedGesture = Gesture.Simultaneous(panGesture, tapGesture);
+  // The carried-over tail can't be dragged, but holding it still opens the
+  // same actions sheet as the head (it acts on the whole session).
+  const menuGesture = Gesture.LongPress()
+    .enabled(isSplit && !offline)
+    .minDuration(LIFT_HOLD_MS)
+    .onStart(() => {
+      runOnJS(liftHaptic)();
+      runOnJS(openMenu)();
+    });
+
+  const composedGesture = Gesture.Simultaneous(panGesture, tapGesture, menuGesture);
 
   // The check-off disc sits outside the drag gesture so a tap on it never
   // opens the session; it fades while the block is lifted for a move.
   const checkable =
-    !!checkState && isInteractive && !drawsThrough && height >= CHECKABLE_MIN_HEIGHT;
+    !!checkState &&
+    showCheck &&
+    segment.type === "TASK" &&
+    isInteractive &&
+    !drawsThrough &&
+    height >= CHECKABLE_MIN_HEIGHT;
   const checkFadeStyle = useAnimatedStyle(() => ({
     opacity: 1 - liftProgress.value,
   }));
@@ -705,31 +752,27 @@ function SessionBlockImpl({
   // One even 1px rim per tone; the 3px stripe is a separate rounded bar inset
   // inside the block, like Apple Calendar.
   const tone = sessionTone(state, overdue);
-  // A session with a course paints with its course colour; overdue stays red.
-  const courseColour = overdue
-    ? null
-    : courseStyleFor(
-        segment.courseKey ?? null,
-        courseOverrides,
-        isDarkColorScheme ? "dark" : "light",
-      );
-  const stateClasses = `${flashRing} ${courseColour ? "" : SESSION_TONE_CLASSES[tone].tint}`;
+  // The session kind owns the colour (see `SESSION_TONES`), not its course.
+  const stateClasses = `${flashRing} ${SESSION_TONE_CLASSES[tone].tint}`;
   // Solid single-colour rim, drawn as its own overlay ABOVE the blur: a border on
   // the blurred container itself came out jagged (the blur mask isn't anti-aliased).
+  const isDone = checkState === "done";
   const edgeColor = hexAlpha(
-    courseColour?.stripe ?? SESSION_TONES[tone].base,
+    SESSION_TONES[tone].base,
     isDarkColorScheme ? 0.45 : 0.55,
   );
+  // A done block shows a green left stripe and fades as a whole.
+  const doneBlockStyle = isDone ? ({ opacity: 0.62 } as const) : null;
   const topRadius = segment.continued ? 0 : 14;
   const bottomRadius = segment.continues && !drawsThrough ? 0 : 14;
 
-  const accentColor = courseColour?.stripe ?? SESSION_TONES[tone].base;
+  const accentColor = isDone
+    ? DONE_GREEN
+    : SESSION_TONES[tone].base;
   // Meta/time text: the tone's AA ink, or the course ink.
-  const timeClass = courseColour ? "" : SESSION_TONE_CLASSES[tone].text;
-  const courseInkStyle = courseColour ? { color: courseColour.ink } : undefined;
+  const timeClass = SESSION_TONE_CLASSES[tone].text;
   // The type icon wears the course ink on a course block, so the type stays
   // visible without a badge.
-  const TypeIcon = sessionTypeIcon(segment.type);
   // A hand on a time the user chose, a lock on a pinned one; none otherwise.
   const mark = anchorMark(anchor);
   const MarkIcon = mark === "hand" ? Hand : mark === "lock" ? Lock : null;
@@ -780,8 +823,8 @@ function SessionBlockImpl({
             tier !== "full"
               ? { paddingTop: Math.max(0, Math.min(5, (height - 14) / 2)) }
               : null,
-            courseColour ? { backgroundColor: courseColour.tint } : null,
             checkable ? { paddingRight: CHECK_GUTTER_PX } : null,
+            doneBlockStyle,
           ]}
           className={cn(
             "flex overflow-hidden rounded-[14px]",
@@ -845,6 +888,9 @@ function SessionBlockImpl({
               bottom: 0,
               left: 0,
               borderWidth: 1,
+              // The edge cut at midnight is drawn dashed below.
+              borderTopWidth: segment.continued ? 0 : 1,
+              borderBottomWidth: segment.continues && !drawsThrough ? 0 : 1,
               borderColor: edgeColor,
               borderTopLeftRadius: topRadius,
               borderTopRightRadius: topRadius,
@@ -852,6 +898,21 @@ function SessionBlockImpl({
               borderBottomRightRadius: bottomRadius,
             }}
           />
+          {segment.continued || (segment.continues && !drawsThrough) ? (
+            <View
+              pointerEvents="none"
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                [segment.continued ? "top" : "bottom"]: 0,
+                height: 0,
+                borderTopWidth: 1.5,
+                borderStyle: "dashed",
+                borderColor: edgeColor,
+              }}
+            />
+          ) : null}
           {state === "dnd" && (
             <View pointerEvents="none" className="absolute inset-0">
               <Svg width="100%" height="100%">
@@ -873,12 +934,9 @@ function SessionBlockImpl({
             >
               {/* Explicit px line heights: `leading-none` clipped the tops of
                   the glyphs on Android. */}
-              {courseColour && (
-                <TypeIcon size={11} color={courseColour.ink} />
-              )}
               <Text
                 className="min-w-0 flex-1 text-[11px] font-semibold leading-[14px]"
-                style={[COMPACT_TEXT_STYLE, courseInkStyle]}
+                style={COMPACT_TEXT_STYLE}
                 numberOfLines={1}
                 ellipsizeMode="tail"
               >
@@ -892,10 +950,10 @@ function SessionBlockImpl({
               {tier === "time" && (
                 <Text
                   className={cn("shrink-0 text-[11px] font-medium leading-[14px]", timeClass)}
-                  style={[COMPACT_TEXT_STYLE, courseInkStyle]}
+                  style={COMPACT_TEXT_STYLE}
                 >
                   {segment.continued
-                    ? t("ends {time}", { time: fmt(segment.taskEnd, tz) })
+                    ? fmt(segment.taskEnd, tz)
                     : fmt(segment.taskStart, tz)}
                 </Text>
               )}
@@ -903,13 +961,9 @@ function SessionBlockImpl({
           ) : (
             <Fragment key="full">
               <View className="w-full min-w-0 flex-row items-center gap-1.5">
-                {courseColour && (
-                  <TypeIcon size={12} color={courseColour.ink} />
-                )}
                 <Text
                   className="min-w-0 shrink text-[12px] font-semibold leading-4"
-                  style={courseInkStyle}
-                  numberOfLines={1}
+                                    numberOfLines={1}
                   ellipsizeMode="tail"
                 >
                   {segment.title}
@@ -922,19 +976,18 @@ function SessionBlockImpl({
               </View>
               <Text
                 className={cn("text-[12px] font-medium leading-[15px]", timeClass)}
-                style={courseInkStyle}
-                numberOfLines={1}
+                                numberOfLines={1}
               >
-                {segment.continued
-                  ? t("ends {time}", { time: fmt(segment.taskEnd, tz) })
-                  : segment.continues && !drawsThrough
-                    ? t("{time} → next day", {
-                        time: fmt(segment.taskStart, tz),
-                      })
-                    : joinRange(
-                        fmt(segment.taskStart, tz),
-                        fmt(segment.taskEnd, tz),
-                      )}
+{segment.continued || (segment.continues && !drawsThrough)
+                  ? crossRange(
+                      fmt(segment.taskStart, tz),
+                      fmt(segment.taskEnd, tz),
+                      Boolean(segment.continued),
+                    )
+                  : joinRange(
+                      fmt(segment.taskStart, tz),
+                      fmt(segment.taskEnd, tz),
+                    )}
               </Text>
               {!!segment.location && !segment.continued && (
                 <Text
@@ -971,7 +1024,11 @@ function SessionBlockImpl({
           pointerEvents="box-none"
           style={[
             checkFadeStyle,
-            { position: "absolute", right: 0, top: (height - 44) / 2 },
+            {
+              position: "absolute",
+              right: 0,
+              top: checkAtTop ? 0 : (height - 44) / 2,
+            },
           ]}
         >
           <CheckOffButton

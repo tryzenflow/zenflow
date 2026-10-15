@@ -11,22 +11,17 @@ export interface CourseSwatch {
 }
 
 /**
- * The 12 course colours, in picker order. Sand and slate family hues; no
- * violet, no blue-violet and no red (cherry is reserved for late work).
+ * The 6 course colours, in picker order. Each is far from the type tones that
+ * carry meaning: no orange (tasks), no grey (do not disturb), no red (late),
+ * no green (done).
  */
 export const COURSE_SWATCHES: readonly CourseSwatch[] = [
-  { base: "#2F6F85", ink: { light: "#2E6C81", dark: "#8DABB0" } },
-  { base: "#5B88A6", ink: { light: "#476B83", dark: "#99B1BD" } },
-  { base: "#2E7D7A", ink: { light: "#2A6F6E", dark: "#89B0A8" } },
-  { base: "#7DA886", ink: { light: "#516F5F", dark: "#A1BDA1" } },
-  { base: "#8C9A4E", ink: { light: "#606D41", dark: "#B0B680" } },
-  { base: "#D9A23E", ink: { light: "#7E6735", dark: "#DEB15E" } },
-  { base: "#E8895E", ink: { light: "#8E5D48", dark: "#EBA481" } },
-  { base: "#C0643F", ink: { light: "#98543A", dark: "#D59C81" } },
-  { base: "#E3A98A", ink: { light: "#7D665A", dark: "#E5B194" } },
-  { base: "#8A6A4F", ink: { light: "#7B614A", dark: "#B9A48F" } },
-  { base: "#8FA3AD", ink: { light: "#5B6C75", dark: "#ADB9BC" } },
-  { base: "#5E6E77", ink: { light: "#586770", dark: "#A3A8A7" } },
+  { base: "#3B82C4", ink: { light: "#245C94", dark: "#8FBDE8" } },
+  { base: "#14A09B", ink: { light: "#0E6F6B", dark: "#6FD3CD" } },
+  { base: "#8DB63C", ink: { light: "#4F6B14", dark: "#C7E27B" } },
+  { base: "#F2B33D", ink: { light: "#7A5A00", dark: "#F6C93C" } },
+  { base: "#E0567A", ink: { light: "#A12A4B", dark: "#F29BB2" } },
+  { base: "#6B7C8C", ink: { light: "#4A5865", dark: "#AEBBC7" } },
 ];
 
 export const COURSE_SWATCH_COUNT = COURSE_SWATCHES.length;
@@ -50,5 +45,8 @@ export function courseSwatchIndex(
   key: string,
   overrides: ReadonlyMap<string, number>,
 ): number {
-  return overrides.get(key) ?? courseKeyHash(key) % COURSE_SWATCH_COUNT;
+  // Picks saved when there were 12 swatches wrap into the 6 that remain.
+  return (
+    (overrides.get(key) ?? courseKeyHash(key)) % COURSE_SWATCH_COUNT
+  );
 }

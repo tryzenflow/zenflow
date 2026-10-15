@@ -1,76 +1,87 @@
-import { screen, waitFor } from "@testing-library/react";
-import { http, HttpResponse } from "msw";
+import { screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
+import { StreakBadge } from "@/components/calendar/streak-badge";
 import { TodayCard } from "@/components/calendar/today-card";
 import { useTodayStore } from "@/hooks/use-today";
-import { server } from "@/test/msw/server";
 import { renderScreen } from "@/test/utils/render";
 
-const API = "http://api.test";
 const TZ = "UTC";
 
 const inHours = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString();
 
-const session = (id: string, title: string, extra: Record<string, unknown>) => ({
-  id,
-  title,
-  note: null,
-  type: "TASK",
-  durationMinutes: 60,
-  scheduledStartTime: inHours(1),
-  completedAt: null,
-  skipped: false,
-  tags: [],
-  ...extra,
-});
+const session = (id: string, title: string, extra: Record<string, unknown>) =>
+  ({
+    id,
+    title,
+    note: null,
+    type: "TASK",
+    durationMinutes: 60,
+    scheduledStartTime: inHours(1),
+    completedAt: null,
+    skipped: false,
+    tags: [],
+    ...extra,
+  }) as never;
 
-function serve(sessions: unknown[], streak: Record<string, unknown>) {
-  server.use(
-    http.get(`${API}/sessions`, () => HttpResponse.json({ data: { sessions } })),
-    http.get(`${API}/users/me/streak`, () =>
-      HttpResponse.json({
-        data: {
-          current: 0,
-          longest: 0,
-          freezesAvailable: 0,
-          frozenDays: [],
-          lastActiveDay: null,
-          todayDone: false,
-          ...streak,
-        },
-      }),
-    ),
-  );
-}
+const streak = (extra: Record<string, unknown>) =>
+  ({
+    current: 0,
+    longest: 0,
+    freezesAvailable: 0,
+    frozenDays: [],
+    lastActiveDay: null,
+    todayDone: false,
+    ...extra,
+  }) as never;
 
 describe("TodayCard", () => {
   beforeEach(() => {
     useTodayStore.setState({ sessions: null, streak: null });
   });
 
-  it("shows the done count, hours, next session and streak", async () => {
-    serve(
-      [
-        session("a", "Calculus", { completedAt: inHours(-1), durationMinutes: 90, scheduledStartTime: inHours(-2) }),
-        session("b", "Physics", { durationMinutes: 60, scheduledStartTime: inHours(1) }),
-        session("c", "Skipped thing", { skipped: true, scheduledStartTime: inHours(2) }),
+  it("shows the next task and ignores classes", () => {
+    useTodayStore.setState({
+      sessions: [
+        session("a", "Calculus", { completedAt: inHours(-1), scheduledStartTime: inHours(-2) }),
+        session("b", "Physics", {}),
+        session("c", "Skipped thing", { skipped: true }),
+        session("d", "Lecture", { type: "LECTURE" }),
       ],
-      { current: 3, freezesAvailable: 1 },
-    );
+    });
     renderScreen(<TodayCard tz={TZ} onOpenSession={() => {}} />);
-
-    await waitFor(() => expect(screen.getByText("2 sessions, 2.5 h")).toBeTruthy());
-    expect(screen.getByText("1/2")).toBeTruthy();
-    expect(screen.getByText(/^Next up: Physics/)).toBeTruthy();
-    expect(screen.getByTestId("today-streak").textContent).toBe("3 day streak");
-    expect(screen.getByText("1 freeze ready")).toBeTruthy();
+    expect(screen.getByText("Physics")).toBeTruthy();
+    expect(screen.getByText(/^Next up at/)).toBeTruthy();
+    expect(screen.queryByTestId("today-streak")).toBeNull();
   });
 
-  it("reads the empty state when nothing is planned", async () => {
-    serve([], {});
+  it("reads the empty state when nothing is planned", () => {
+    useTodayStore.setState({ sessions: [] });
     renderScreen(<TodayCard tz={TZ} onOpenSession={() => {}} />);
-    await waitFor(() => expect(screen.getByText("Nothing planned today")).toBeTruthy());
-    expect(screen.getByTestId("today-streak").textContent).toBe("No streak yet");
-    expect(screen.queryByText(/freeze ready/)).toBeNull();
+    expect(screen.getByText("Nothing planned today")).toBeTruthy();
+  });
+});
+
+describe("StreakBadge", () => {
+  beforeEach(() => {
+    useTodayStore.setState({ sessions: null, streak: null });
+  });
+
+  it("shows the day count", () => {
+    useTodayStore.setState({ streak: streak({ current: 3 }) });
+    renderScreen(<StreakBadge />);
+    expect(screen.getByTestId("calendar-header.streak")).toBeTruthy();
+    expect(screen.getByText("3")).toBeTruthy();
+  });
+
+  it("stays visible at zero", () => {
+    useTodayStore.setState({ streak: streak({ current: 0 }) });
+    renderScreen(<StreakBadge />);
+    expect(screen.getByTestId("calendar-header.streak")).toBeTruthy();
+    expect(screen.getByText("0")).toBeTruthy();
+  });
+
+  it("shows before the streak loads", () => {
+    renderScreen(<StreakBadge />);
+    expect(screen.getByTestId("calendar-header.streak")).toBeTruthy();
   });
 });

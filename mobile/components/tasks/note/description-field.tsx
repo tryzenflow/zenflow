@@ -8,7 +8,12 @@ import { resolveNoteFileUrls } from "@/lib/file-link";
 import { noteSnippet } from "@/lib/note-html";
 import { cn } from "@/lib/utils";
 import { Suspense, lazy, useEffect, useState } from "react";
-import { Modal, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
+import {
+  BottomSheet,
+  BottomSheetContent,
+  useBottomSheet,
+} from "@/components/ui/bottom-sheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // The editor (tentap + tiptap + WebView) is the heaviest module in the form.
@@ -19,6 +24,46 @@ const DescriptionFieldEditor = lazy(() =>
     default: m.DescriptionFieldEditor,
   })),
 );
+
+/**
+ * Full-screen host for the editor: a sheet at full height, opened the same way
+ * as the tag sheet, so it stacks above the task sheet (a native `Modal` or a
+ * second overlay window got covered by it). Panning is off so the editor's own
+ * scrolling and selection are never taken by the sheet.
+ */
+function NoteScreen({
+  children,
+  onClose,
+}: {
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  const sheet = useBottomSheet();
+  useEffect(() => {
+    sheet.open();
+    // Opens once, when the editor is asked for.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <BottomSheet>
+      <BottomSheetContent
+        ref={sheet.ref}
+        snapPoints={["100%"]}
+        enableDynamicSizing={false}
+        enablePanDownToClose={false}
+        enableContentPanningGesture={false}
+        enableHandlePanningGesture={false}
+        handleComponent={null}
+        topInset={0}
+        keyboardBehavior="extend"
+        keyboardBlurBehavior="none"
+        onDismiss={onClose}
+      >
+        <View className="flex-1">{children}</View>
+      </BottomSheetContent>
+    </BottomSheet>
+  );
+}
 
 /**
  * Shown while the editor chunk loads. Same header as the editor (title +
@@ -71,6 +116,20 @@ export function DescriptionField({
     setValue(initialValue);
   }, [initialValue]);
   const snippet = noteSnippet(value);
+  const editor = (
+    <Suspense fallback={<EditorFallback onClose={() => setOpen(false)} />}>
+      <DescriptionFieldEditor
+        initialValue={value}
+        onChange={(html) => {
+          setValue(html);
+          onChange(html);
+        }}
+        onClose={() => setOpen(false)}
+        onUpload={onUpload}
+        disabled={disabled}
+      />
+    </Suspense>
+  );
 
   return (
     <>
@@ -95,25 +154,7 @@ export function DescriptionField({
         </Text>
         <Maximize2 size={16} className="mt-0.5 text-muted-foreground" />
       </Pressable>
-      <Modal
-        visible={open}
-        animationType="slide"
-        presentationStyle="fullScreen"
-        onRequestClose={() => setOpen(false)}
-      >
-        <Suspense fallback={<EditorFallback onClose={() => setOpen(false)} />}>
-          <DescriptionFieldEditor
-            initialValue={value}
-            onChange={(html) => {
-              setValue(html);
-              onChange(html);
-            }}
-            onClose={() => setOpen(false)}
-            onUpload={onUpload}
-            disabled={disabled}
-          />
-        </Suspense>
-      </Modal>
+      {open ? <NoteScreen onClose={() => setOpen(false)}>{editor}</NoteScreen> : null}
     </>
   );
 }

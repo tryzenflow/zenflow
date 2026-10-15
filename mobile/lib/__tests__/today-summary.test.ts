@@ -3,13 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
   checkStateOf,
   formatHours,
-  greetingKey,
   summarizeToday,
 } from "../today-summary";
 
 const session = (overrides: Partial<Session> & { id: string }): Session =>
   ({
     title: overrides.id,
+    type: "TASK",
     durationMinutes: 60,
     scheduledStartTime: "2026-10-15T02:00:00.000Z",
     completedAt: null,
@@ -31,6 +31,15 @@ describe("summarizeToday", () => {
       done: 1,
       plannedMinutes: 150,
     });
+  });
+
+  it("leaves classes and do-not-disturb out of the ring", () => {
+    const sessions = [
+      session({ id: "task" }),
+      session({ id: "lecture", type: "LECTURE" }),
+      session({ id: "dnd", type: "DND" }),
+    ];
+    expect(summarizeToday(sessions, NOW).total).toBe(1);
   });
 
   it("points at the first open session that has not started yet", () => {
@@ -69,16 +78,6 @@ describe("checkStateOf", () => {
     expect(checkStateOf({ completedAt: "2026-10-15T00:00:00.000Z", skipped: false })).toBe("done");
     expect(checkStateOf({ completedAt: null, skipped: true })).toBe("skipped");
     expect(checkStateOf({ completedAt: null, skipped: false })).toBe("open");
-  });
-});
-
-describe("greetingKey", () => {
-  it("switches at noon and at 18:00", () => {
-    expect(greetingKey(0)).toBe("morning");
-    expect(greetingKey(11)).toBe("morning");
-    expect(greetingKey(12)).toBe("afternoon");
-    expect(greetingKey(17)).toBe("afternoon");
-    expect(greetingKey(18)).toBe("evening");
   });
 });
 

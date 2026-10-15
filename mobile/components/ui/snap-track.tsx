@@ -1,7 +1,8 @@
 import { valueAtX, fractionOf } from "@/lib/slider-math";
 import * as Haptics from "expo-haptics";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { PanResponder, Pressable, View } from "react-native";
+import { View } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { cn } from "@/lib/utils";
 
 /**
@@ -32,14 +33,14 @@ export function SnapTrack({
 }) {
   const [width, setWidth] = useState(0);
   const last = useRef(value);
-  // Latest props for the gesture handlers, which PanResponder keeps once.
+  // Latest props for the gesture callbacks, which the gesture keeps once.
   const live = useRef({ width, min, max, step, onChange, disabled });
   useLayoutEffect(() => {
     last.current = value;
     live.current = { width, min, max, step, onChange, disabled };
   });
 
-  const pan = useMemo(() => {
+  const gesture = useMemo(() => {
     const apply = (x: number) => {
       const cfg = live.current;
       if (cfg.disabled) return;
@@ -49,60 +50,79 @@ export function SnapTrack({
       cfg.onChange(next);
       Haptics.selectionAsync().catch(() => {});
     };
-    return PanResponder.create({
-      onStartShouldSetPanResponder: () => !live.current.disabled,
-      onMoveShouldSetPanResponder: () => !live.current.disabled,
-      onPanResponderTerminationRequest: () => false,
-      onPanResponderGrant: (e) => apply(e.nativeEvent.locationX),
-      onPanResponderMove: (e) => apply(e.nativeEvent.locationX),
-    });
+    // Gesture handler (not PanResponder) so the drag negotiates with the
+    // sheet and scroll view around it: sideways drags are ours, vertical ones
+    // fall through to the scroll.
+    const pan = Gesture.Pan()
+      .minDistance(0)
+      .activeOffsetX([-4, 4])
+      .failOffsetY([-14, 14])
+      .runOnJS(true)
+      .onBegin((e) => apply(e.x))
+      .onUpdate((e) => apply(e.x));
+    const tap = Gesture.Tap()
+      .runOnJS(true)
+      .onEnd((e) => apply(e.x));
+    return Gesture.Race(pan, tap);
   }, []);
+
+  function nudge(dir: -1 | 1) {
+    if (disabled) return;
+    const next = Math.min(max, Math.max(min, value + dir * step));
+    if (next !== value) onChange(next);
+  }
 
   const thumbLeft = fractionOf(value, min, max) * width;
   const ticks = Math.floor((max - min) / step);
   const tickEvery = Math.max(1, Math.round(ticks / 16));
 
   return (
-    <Pressable
-      testID={testID}
-      accessibilityRole="adjustable"
-      accessibilityLabel={accessibilityLabel}
-      accessibilityValue={{
-        min,
-        max,
-        now: value,
-        text: accessibilityValueText,
-      }}
-      accessibilityState={{ disabled: !!disabled }}
-      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
-      className="h-11 justify-center"
-      {...pan.panHandlers}
-    >
+    <GestureDetector gesture={gesture}>
       <View
-        style={{ pointerEvents: "none" }}
-        className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+        testID={testID}
+        accessible
+        accessibilityRole="adjustable"
+        accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
+        onAccessibilityAction={(e) =>
+          nudge(e.nativeEvent.actionName === "increment" ? 1 : -1)
+        }
+        accessibilityLabel={accessibilityLabel}
+        accessibilityValue={{
+          min,
+          max,
+          now: value,
+          text: accessibilityValueText,
+        }}
+        accessibilityState={{ disabled: !!disabled }}
+        onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+        className="h-11 justify-center"
       >
         <View
-          className="h-full bg-primary/40"
-          style={{ width: thumbLeft }}
+          style={{ pointerEvents: "none" }}
+          className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+        >
+          <View className="h-full bg-primary/40" style={{ width: thumbLeft }} />
+        </View>
+        <View
+          style={{ pointerEvents: "none" }}
+          className="absolute inset-x-0 h-11 flex-row"
+        >
+          {Array.from({ length: ticks + 1 }, (_, i) => (
+            <View
+              key={i}
+              className={cn(
+                "absolute top-[18px] h-[10px] w-px bg-muted-foreground/40",
+                i % tickEvery !== 0 && "h-[5px] top-[20px]",
+              )}
+              style={{ left: width > 0 ? (i / ticks) * width : 0 }}
+            />
+          ))}
+        </View>
+        <View
+          className="absolute size-7 -ml-3.5 rounded-full border-2 border-primary bg-background shadow-sm"
+          style={{ left: thumbLeft, top: 8, pointerEvents: "none" }}
         />
       </View>
-      <View style={{ pointerEvents: "none" }} className="absolute inset-x-0 h-11 flex-row">
-        {Array.from({ length: ticks + 1 }, (_, i) => (
-          <View
-            key={i}
-            className={cn(
-              "absolute top-[18px] h-[10px] w-px bg-muted-foreground/40",
-              i % tickEvery !== 0 && "h-[5px] top-[20px]",
-            )}
-            style={{ left: width > 0 ? (i / ticks) * width : 0 }}
-          />
-        ))}
-      </View>
-      <View
-        className="absolute size-7 -ml-3.5 rounded-full border-2 border-primary bg-background shadow-sm"
-        style={{ left: thumbLeft, top: 8, pointerEvents: "none" }}
-      />
-    </Pressable>
+    </GestureDetector>
   );
 }

@@ -21,7 +21,7 @@ export const BRAND = {
   /** Dark background and ink. */
   ink: "#0F0D0A",
   /** Soft grey. Dnd and quiet strokes. */
-  grey: "#B8B0A4",
+  grey: "#A8A29E",
 } as const;
 
 export type Scheme = "light" | "dark";

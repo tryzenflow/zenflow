@@ -3,7 +3,7 @@ import DateTimePicker, {
 } from "@react-native-community/datetimepicker";
 import type { DailyPushKind, DailyPushSettings } from "@zenflow/shared";
 import { useEffect, useState } from "react";
-import { Pressable, View } from "react-native";
+import { Platform, Pressable, View } from "react-native";
 import { getDailyPush, updateDailyPush } from "@/api/daily-push";
 import { useToast } from "@/components/ui/toast";
 import { Switch } from "@/components/ui/switch";
@@ -27,13 +27,13 @@ const ROWS: Row[] = [
     kind: "morning",
     field: "morningBriefTime",
     title: "Morning brief",
-    body: "Today's classes and study blocks.",
+    body: "Classes and tasks today.",
   },
   {
     kind: "evening",
     field: "eveningCheckinTime",
     title: "Evening check-in",
-    body: "Mark today's sessions done or missed.",
+    body: "Mark today done or missed.",
   },
 ];
 
@@ -82,11 +82,20 @@ export function DailyPushSection() {
                 <Text className="mt-0.5 text-[13px] text-muted-foreground">
                   {t(body)}
                 </Text>
-                <Text className="mt-0.5 text-[12px] text-muted-foreground">
-                  {t("Skipped on do-not-disturb days.")}
-                </Text>
               </View>
-              {time ? (
+              {time && Platform.OS === "ios" ? (
+                <DateTimePicker
+                  value={timeToDate(time)}
+                  mode="time"
+                  display="compact"
+                  locale="en_GB"
+                  onChange={(event: DateTimePickerEvent, selected?: Date) => {
+                    if (event.type === "set" && selected) {
+                      void save({ ...settings, [field]: dateToTime(selected) });
+                    }
+                  }}
+                />
+              ) : time ? (
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => setPicking(kind)}
@@ -107,7 +116,7 @@ export function DailyPushSection() {
                 }
               />
             </View>
-            {picking === kind && time ? (
+            {Platform.OS !== "ios" && picking === kind && time ? (
               <DateTimePicker
                 value={timeToDate(time)}
                 mode="time"

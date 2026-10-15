@@ -12,7 +12,6 @@ import {
   BAR_RADIUS,
 } from "@/lib/tab-bar-metrics";
 import { scaleType } from "@/lib/type-scale";
-import { useTodayRequest } from "@/lib/today-request";
 import { useColorScheme } from "@/lib/useColorScheme";
 // `expo-router` (bumped for SDK 58) vendors its own bottom-tabs
 // implementation now and no longer depends on `@react-navigation/bottom-tabs`
@@ -189,16 +188,6 @@ export function AppTabBar({
     // pair -- mirrors the emit/navigate pattern from expo-router's own
     // `BottomTabBar` reference implementation.
     function onPress() {
-      if (route.name === "today") {
-        // Never focused: the pill stays on Calendar and the calendar jumps.
-        Haptics.selectionAsync().catch(() => {});
-        const calendar = state.routes.find((r) => r.name === "index");
-        if (calendar && state.routes[state.index]?.key !== calendar.key) {
-          navigateToTab(calendar.key);
-        }
-        useTodayRequest.getState().request();
-        return;
-      }
       const event = emitter.emit({
         type: "tabPress",
         target: route.key,

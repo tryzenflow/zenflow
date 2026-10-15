@@ -46,7 +46,7 @@ describe("PreferencesSection", () => {
   it("saves a new default reminder", async () => {
     renderScreen(<PreferencesSection />);
     await screen.findByText("10 min before");
-    fireEvent.click(screen.getByText("Default reminder", { selector: "div" }));
+    fireEvent.click(screen.getByText("Reminder", { selector: "div" }));
     fireEvent.click(await screen.findByText("5 min before"));
     await waitFor(() => expect(patches).toEqual([{ defaultReminderMinutes: 5 }]));
     await waitFor(() => expect(screen.getAllByText("5 min before").length).toBeGreaterThan(0));
@@ -64,7 +64,7 @@ describe("PreferencesSection", () => {
     server.use(http.patch(BASIC_INFO, () => HttpResponse.json({ message: "no" }, { status: 500 })));
     renderScreen(<PreferencesSection />);
     await screen.findByText("10 min before");
-    fireEvent.click(screen.getByText("Default reminder", { selector: "div" }));
+    fireEvent.click(screen.getByText("Reminder", { selector: "div" }));
     fireEvent.click(await screen.findByText("5 min before"));
     await waitFor(() =>
       expect(screen.getAllByText("Couldn't save preference").length).toBeGreaterThan(0),

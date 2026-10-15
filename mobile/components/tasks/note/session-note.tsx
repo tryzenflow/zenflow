@@ -23,7 +23,7 @@ export function sessionNoteDocument(
 ): string {
   const { bg, fg } = noteColors(isDark);
   const { fontFace, family } = noteFont(fontDataUri);
-  return `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>${fontFace} html, body { margin: 0; padding: 0; background-color: ${bg}; } body { box-sizing: border-box; padding: 4px 0 40px; color: ${fg}; font-family: ${family}; font-size: 16px; line-height: 1.5; } ${noteTypographyCss("body", isDark)}</style></head><body>${resolveNoteFileUrls(html, baseURL)}</body></html>`;
+  return `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>${fontFace} html, body { margin: 0; padding: 0; background-color: ${bg}; } body { box-sizing: border-box; padding: 4px 0 40px; color: ${fg}; font-family: ${family}; font-size: 16px; line-height: 1.5; } ${noteTypographyCss("body", isDark)} body ul[data-type="taskList"] input { pointer-events: none; }</style></head><body>${resolveNoteFileUrls(html, baseURL)}</body></html>`;
 }
 
 /**

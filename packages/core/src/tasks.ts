@@ -83,6 +83,11 @@ export const sessionSchema = z
      * actual enforcement, for a direct API call bypassing the form.
      */
     sessionCount: z.int().min(1, { error: "At least 1 session" }).optional(),
+    /**
+     * Mobile's composer: `duration` is the whole task and `sessionCount` splits
+     * it into equal sittings. Unset, `duration` is the length of each sitting.
+     */
+    splitTotal: z.boolean().optional(),
 
     /**
      * Minutes-before-start reminders (max `MAX_REMINDERS_PER_SESSION`). Omitted
@@ -127,7 +132,8 @@ export const sessionSchema = z
       // `"\n"` splits toast title from description (`splitToastMessage`).
       if (durationOk && deadlineOk) {
         const sessionCount = Math.max(1, Math.trunc(v.sessionCount ?? 1));
-        const neededMs = (v.duration as number) * sessionCount * 60_000;
+        const neededMs =
+          (v.duration as number) * (v.splitTotal ? 1 : sessionCount) * 60_000;
         if (Date.now() + neededMs > Date.parse(v.deadline as string)) {
           ctx.addIssue({
             code: "custom",

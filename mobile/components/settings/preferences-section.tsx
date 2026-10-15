@@ -90,7 +90,7 @@ export function TimezoneRow() {
   const device = deviceTimezone();
   const tzSearch = useMemo(
     () => ({
-      placeholder: t("Search all timezones"),
+      placeholder: t("Search"),
       results: (query: string) => {
         const hits = filterTimezones(allTimezones(), query, Infinity, device);
         const options = hits
@@ -165,7 +165,7 @@ export function PreferencesSection() {
         <View className="h-px bg-border" />
         <Row
           Icon={AlarmClockIcon}
-          title={t("Default reminder")}
+          title={t("Reminder")}
           value={
             REMINDERS.find((r) => r.value === prefs.defaultReminder)?.label ??
             ""
@@ -201,7 +201,7 @@ export function PreferencesSection() {
       />
       <OptionSheet
         ref={reminderSheet}
-        title={t("Default reminder")}
+        title={t("Reminder")}
         options={REMINDERS}
         value={prefs.defaultReminder}
         onSelect={(defaultReminder) => save({ defaultReminder })}

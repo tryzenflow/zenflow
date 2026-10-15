@@ -1,6 +1,6 @@
+import { ExpandChevron } from "@/components/ui/expand-chevron";
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
-import { ChevronDown } from "@/components/Icons";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { BottomSheetTextInput } from "@/components/ui/bottom-sheet";
 import { ChipGroup } from "@/components/ui/chip-group";
@@ -9,7 +9,6 @@ import { SentenceRepeat } from "@/components/ui/sentence-repeat";
 import { Text } from "@/components/ui/text";
 import { DescriptionField } from "@/components/tasks/note/description-field";
 import { TagAutocomplete } from "@/components/tasks/tag-autocomplete";
-import { cn } from "@/lib/utils";
 import {
   type SessionFormType,
   type SessionFormValues,
@@ -65,10 +64,7 @@ export function MoreOptions({
         <Text className="text-[14px] font-semibold text-foreground">
           {t("More options")}
         </Text>
-        <ChevronDown
-          size={18}
-          className={cn("text-muted-foreground", open && "rotate-180")}
-        />
+        <ExpandChevron open={open} />
       </Pressable>
 
       {open && (
@@ -133,11 +129,11 @@ export function MoreOptions({
                   editable={!disabled}
                   value={field.value ?? ""}
                   onChangeText={field.onChange}
-                  placeholder={t("Room, building, or link (optional)")}
+                  placeholder={t("Location")}
                   accessibilityLabel={t("Location")}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  className="h-[50px] rounded-xl border border-glass-edge/35 bg-glass/70 dark:bg-glass/[0.07] px-4 text-base text-foreground dark:border-glass-edge/25"
+                  className="h-12 rounded-xl border border-glass-edge/35 bg-glass/70 dark:bg-glass/[0.07] px-5 text-[17px] text-foreground dark:border-glass-edge/25"
                 />
               )}
             />

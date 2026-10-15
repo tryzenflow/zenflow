@@ -1,3 +1,4 @@
+import { GlassButton } from "@/components/ui/glass-button";
 import { CheckOffButton } from "@/components/calendar/check-off-button";
 import { SessionTypeBadge } from "@/components/calendar/session-type-badge";
 import { localizedReminderLabel } from "@/components/tasks/composer/reminder-field";
@@ -10,7 +11,10 @@ import {
   Lock,
   type LucideIcon,
   MapPin,
+  Pin,
+  PinOff,
   Pencil,
+  Sparkles,
   Tag,
 } from "@/components/Icons";
 import { pinSession, unpinSession } from "@/api/tasks";
@@ -27,11 +31,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useCheckOff } from "@/hooks/use-check-off";
-import { useCourseColourStore } from "@/hooks/use-course-colours";
 import { useLanguage } from "@/hooks/use-language";
-import { courseStyleFor } from "@/lib/course-colour";
 import { placementReasonLine } from "@/lib/placement-reason";
-import { format, formatTitle, localizedDeadlineShort, t } from "@/lib/i18n";
+import { format, formatTitle, localizedDeadlineExact, t } from "@/lib/i18n";
 import { navigateOnce } from "@/lib/nav";
 import {
   ANCHOR_HINT_KEYS,
@@ -43,7 +45,8 @@ import {
 import { isNoteEmpty } from "@/lib/note-html";
 import { type CheckState, checkStateOf } from "@/lib/today-summary";
 import { useColorScheme } from "@/lib/useColorScheme";
-import { zonedDate } from "@zenflow/core";
+import { SESSION_TONES, SESSION_TYPE_TONE, zonedDate } from "@zenflow/core";
+import { differenceInCalendarDays } from "date-fns";
 import type { Session } from "@zenflow/shared";
 import { type Href, useRouter } from "expo-router";
 import {
@@ -77,15 +80,19 @@ function timeRangeLabel(start: string, durationMinutes: number, tz: string): str
   const end = new Date(new Date(start).getTime() + durationMinutes * 60_000);
   return t("{start} to {end}", {
     start: format(zonedDate(start, tz), "h:mm a"),
-    end: format(zonedDate(end.toISOString(), tz), "h:mm a"),
+    end:
+      format(zonedDate(end.toISOString(), tz), "h:mm a") +
+      (differenceInCalendarDays(zonedDate(end.toISOString(), tz), zonedDate(start, tz)) > 0
+        ? ` (${t("tomorrow")})`
+        : ""),
   });
 }
 
 function DetailRow({ icon: Icon, children }: { icon: LucideIcon; children: ReactNode }) {
   return (
     <View className="flex-row items-start gap-3">
-      <View className="w-5 pt-0.5">
-        <Icon size={16} className="text-muted-foreground" />
+      <View className="w-6 pt-0.5">
+        <Icon size={20} className="text-muted-foreground" />
       </View>
       <View className="min-w-0 flex-1 gap-0.5">{children}</View>
     </View>
@@ -105,7 +112,6 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
     const checkOff = useCheckOff();
     const { isDarkColorScheme } = useColorScheme();
     const { toast } = useToast();
-    const courseOverrides = useCourseColourStore((s) => s.overrides);
     const [session, setSession] = useState<Session | null>(null);
     const [checked, setChecked] = useState<CheckState | null>(null);
     const [noteMounted, setNoteMounted] = useState(false);
@@ -162,9 +168,7 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
     };
 
     const state: CheckState = session ? (checked ?? checkStateOf(session)) : "open";
-    const stripe = session?.courseKey
-      ? courseStyleFor(session.courseKey, courseOverrides, isDarkColorScheme ? "dark" : "light")?.stripe
-      : undefined;
+    const stripe = session ? SESSION_TONES[SESSION_TYPE_TONE[session.type]].base : undefined;
     const hasNote = !!session?.note && !isNoteEmpty(session.note);
     const reasonLine =
       session?.scheduledStartTime && session.placementReason
@@ -181,8 +185,10 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
         >
           {session && (
             <>
-              <BottomSheetHeader className="items-start gap-3 border-b-0 pb-2">
-                <CheckOffButton state={state} title={session.title} onToggle={onToggle} />
+              <BottomSheetHeader className="items-start gap-3 border-b-0 px-5 pb-2">
+                {session.type === "TASK" ? (
+                  <CheckOffButton state={state} title={session.title} onToggle={onToggle} />
+                ) : null}
                 <View className="min-w-0 flex-1 gap-1.5">
                   {stripe && (
                     <View
@@ -202,10 +208,17 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
                     {session.title}
                   </Text>
                 </View>
+                <GlassButton
+                  icon={Pencil}
+                  onPress={edit}
+                  accessibilityLabel={t("Edit")}
+                  testID="session-detail-edit"
+                  style={{ alignSelf: "flex-start" }}
+                />
               </BottomSheetHeader>
 
               <BottomSheetScrollView>
-                <BottomSheetView className="gap-4 pb-4 pt-2">
+                <BottomSheetView className="gap-4 px-5 pb-4 pt-2">
                   <DetailRow icon={Clock}>
                     {session.scheduledStartTime ? (
                       <>
@@ -233,26 +246,35 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
                           ? Lock
                           : session.anchor === "CHOSEN"
                             ? Hand
-                            : Clock
+                            : Sparkles
                       }
                     >
-                      <Text testID="session-detail-anchor" className="text-[15px] font-medium">
-                        {t(ANCHOR_LABEL_KEYS[session.anchor])}
-                      </Text>
-                      <Text className="text-[13px] text-muted-foreground">
-                        {t(ANCHOR_HINT_KEYS[session.anchor])}
-                      </Text>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        testID="session-detail-pin"
-                        onPress={togglePin}
-                        className="mt-2 self-start"
-                      >
-                        <Text className="text-[13px] font-semibold text-foreground">
-                          {session.anchor === "PINNED" ? t("Unpin") : t("Pin in place")}
-                        </Text>
-                      </Button>
+                      <View className="flex-row items-center justify-between gap-3">
+                        <View className="min-w-0 flex-1">
+                          <Text testID="session-detail-anchor" className="text-[15px] font-medium">
+                            {t(ANCHOR_LABEL_KEYS[session.anchor])}
+                          </Text>
+                          <Text className="text-[14px] text-muted-foreground">
+                            {t(ANCHOR_HINT_KEYS[session.anchor])}
+                          </Text>
+                        </View>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          testID="session-detail-pin"
+                          onPress={togglePin}
+                          className="flex-row gap-1.5"
+                        >
+                          {session.anchor === "PINNED" ? (
+                            <PinOff size={17} className="text-foreground" />
+                          ) : (
+                            <Pin size={17} className="text-foreground" />
+                          )}
+                          <Text className="text-[13px] font-semibold text-foreground">
+                            {session.anchor === "PINNED" ? t("Unpin") : t("Pin in place")}
+                          </Text>
+                        </Button>
+                      </View>
                     </DetailRow>
                   )}
 
@@ -260,7 +282,7 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
                     <DetailRow icon={CalendarClock}>
                       <Text className="text-[15px]">
                         {t("Due {date}", {
-                          date: localizedDeadlineShort(session.deadline, tz, new Date()),
+                          date: localizedDeadlineExact(session.deadline, tz, new Date()),
                         })}
                       </Text>
                     </DetailRow>
@@ -311,13 +333,6 @@ export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDe
                   )}
                 </BottomSheetView>
               </BottomSheetScrollView>
-
-              <BottomSheetView className="pb-4 pt-1">
-                <Button onPress={edit} className="w-full">
-                  <Pencil size={16} className="text-primary-foreground" />
-                  <Text className="text-[15px] font-semibold text-primary-foreground">{t("Edit")}</Text>
-                </Button>
-              </BottomSheetView>
             </>
           )}
         </BottomSheetContent>

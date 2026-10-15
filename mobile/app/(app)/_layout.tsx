@@ -4,8 +4,8 @@ import { useCourseColourSync } from "@/hooks/use-course-colours";
 import { useLanguage } from "@/hooks/use-language";
 import { AppTabBar } from "@/components/tab-bar";
 import {
+  ListTabIcon,
   MeTabIcon,
-  TodayTabIcon,
   WeekTabIcon,
 } from "@/components/tab-icons";
 import { Tabs } from "expo-router";
@@ -35,13 +35,13 @@ export default function AppTabsLayout() {
           ),
         }}
       />
-      {/* Opens the calendar on today's Day view (`today.tsx`). */}
+      {/* Every session in order (`list.tsx`). */}
       <Tabs.Screen
-        name="today"
+        name="list"
         options={{
-          title: t("Today"),
+          title: t("List"),
           tabBarIcon: ({ color, size }) => (
-            <TodayTabIcon color={color} size={size} />
+            <ListTabIcon color={color} size={size} />
           ),
         }}
       />

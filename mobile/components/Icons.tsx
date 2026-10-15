@@ -66,6 +66,7 @@ import {
   Maximize2,
   Redo2,
   Undo2,
+  Flame,
   Pencil,
   Repeat,
   KeyRound,
@@ -79,6 +80,8 @@ import {
   type LucideIcon,
   Mail,
   MapPin,
+  Pin,
+  PinOff,
   MenuSquare,
   MessageCircleQuestion,
   MessageSquare,
@@ -87,6 +90,7 @@ import {
   Moon,
   MoonStar,
   MousePointer2,
+  ListChecks,
   Notebook,
   Palette,
   Plus,
@@ -181,6 +185,8 @@ interopIcon(LifeBuoy);
 interopIcon(LogOut);
 interopIcon(Mail);
 interopIcon(MapPin);
+interopIcon(Pin);
+interopIcon(PinOff);
 interopIcon(MessageSquare);
 interopIcon(Monitor);
 interopIcon(Plus);
@@ -234,10 +240,12 @@ interopIcon(CalendarClock);
 interopIcon(ClipboardList);
 interopIcon(GraduationCap);
 interopIcon(Hand);
+interopIcon(ListChecks);
 interopIcon(Notebook);
 interopIcon(Maximize2);
 interopIcon(Redo2);
 interopIcon(Undo2);
+interopIcon(Flame);
 interopIcon(Pencil);
 interopIcon(Repeat);
 
@@ -304,6 +312,7 @@ export {
   Maximize2,
   Redo2,
   Undo2,
+  Flame,
   Pencil,
   Repeat,
   KeyRound,
@@ -316,6 +325,8 @@ export {
   LogOut,
   Settings,
   Mail,
+  Pin,
+  PinOff,
   MapPin,
   MenuSquare,
   MessageCircleQuestion,
@@ -324,6 +335,7 @@ export {
   Monitor,
   MoonStar,
   MousePointer2,
+  ListChecks,
   Notebook,
   Plus,
   PlusCircle,

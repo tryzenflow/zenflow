@@ -20,6 +20,8 @@ interface MonthCellProps {
   bar?: DayBar;
   /** The checklist's "open a day" tip points here. */
   openDayTip: boolean;
+  /** A session is being dragged over this day. */
+  isDrop?: boolean;
   onPressDay: (day: Date) => void;
 }
 
@@ -36,6 +38,7 @@ export const MonthCell = memo(function MonthCell({
   isSelected,
   bar,
   openDayTip,
+  isDrop = false,
   onPressDay,
 }: MonthCellProps) {
   const tipActive = useSpotlight((s) => s.step === "open-day");
@@ -62,6 +65,7 @@ export const MonthCell = memo(function MonthCell({
               ? "bg-foreground/10"
               : "bg-transparent",
           isSelected && !isToday && "border border-foreground/30",
+          isDrop && "border-2 border-primary bg-primary/20",
         )}
       >
         <Text

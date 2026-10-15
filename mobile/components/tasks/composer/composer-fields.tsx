@@ -1,8 +1,9 @@
+import { StepperButton } from "@/components/ui/stepper-button";
 import { getDeadlineOptions } from "@/api/tasks";
 import { useLanguage } from "@/hooks/use-language";
 import { useComposerStore } from "@/lib/composer-store";
 import { t } from "@/lib/i18n";
-import { sittingMinutes } from "@/lib/split-sittings";
+import { sittingLength, snapCount, splitCounts, variedSittings } from "@/lib/split-sittings";
 import { clockLabel } from "@/lib/slider-math";
 import { BottomSheetTextInput } from "@/components/ui/bottom-sheet";
 import { ChipGroup } from "@/components/ui/chip-group";
@@ -21,8 +22,10 @@ import {
   zonedWallClockToUtc,
 } from "@zenflow/core";
 import type { DeadlineOptionsResponse } from "@zenflow/shared";
-import { format, isSameDay } from "date-fns";
-import { useEffect, useState } from "react";
+import { isSameDay } from "date-fns";
+import { format as dateFnsFormat } from "date-fns";
+import { format as localFormat } from "@/lib/i18n";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 import type { UseFormReturn } from "react-hook-form";
 
@@ -46,7 +49,7 @@ export function isoAt(date: string, minutes: number, tz: string, seconds = 0): s
 
 /** The user's calendar day for `tz`, as `YYYY-MM-DD`. */
 export function todayIn(tz: string): string {
-  return format(zonedNow(tz), "yyyy-MM-dd");
+  return dateFnsFormat(zonedNow(tz), "yyyy-MM-dd");
 }
 
 type DeadlineChipId = "today" | "tomorrow" | "thisWeek" | "nextWeek" | "noRush";
@@ -124,7 +127,7 @@ export function DeadlineField({
   }
 
   const due = value ? zonedDate(value, tz) : null;
-  const customDate = due ? format(due, "yyyy-MM-dd") : todayIn(tz);
+  const customDate = due ? dateFnsFormat(due, "yyyy-MM-dd") : todayIn(tz);
   const customMinutes = due ? due.getHours() * 60 + due.getMinutes() : END_OF_DAY;
 
   return (
@@ -138,6 +141,11 @@ export function DeadlineField({
         customActive={customActive}
         options={DEADLINE_CHIPS}
       />
+      {due ? (
+        <Text testID="task.deadline.readout" className="text-[15px] font-medium text-foreground">
+          {t("Due {when}", { when: localFormat(due, "EEE MMM d, HH:mm") })}
+        </Text>
+      ) : null}
       {customActive && (
         <View className="gap-4">
           <WeekStripDatePicker
@@ -209,8 +217,10 @@ export function DurationField({
 }
 
 /**
- * How many sittings the task splits into, with a strip that shows each sitting
- * at its length. Sittings are capped at what fits before the deadline.
+ * How many sittings the task splits into. When creating, the duration above is
+ * the whole task and it splits into equal sittings (so only counts that divide
+ * it evenly are offered); when editing, each sitting keeps its length and the
+ * count grows or shrinks the series.
  */
 export function SplitField({
   form,
@@ -223,77 +233,83 @@ export function SplitField({
   from?: Date;
 }) {
   useLanguage();
+  const splitTotal = form.watch("splitTotal") ?? false;
   const count = form.watch("sessionCount") ?? 1;
   const duration = form.watch("duration") ?? 60;
   const deadline = form.watch("deadline") || undefined;
-  const feasible = Math.min(
-    MAX_SPLIT_CHOICES,
-    maxFeasibleSessionCount(deadline, duration, from),
-  );
-  const tooMany = count > feasible;
-  const parts = sittingMinutes(duration, count);
 
-  function set(next: number) {
-    const bounded = Math.max(1, Math.min(next, Math.max(1, feasible)));
-    form.setValue("sessionCount", bounded, { shouldValidate: true });
+  // Creating: the divisors of the total. Editing: every count that fits.
+  const counts = useMemo(() => {
+    if (splitTotal) return splitCounts(duration, MAX_SPLIT_CHOICES);
+    const feasible = Math.min(
+      MAX_SPLIT_CHOICES,
+      Math.max(1, maxFeasibleSessionCount(deadline, duration, from)),
+    );
+    return Array.from({ length: feasible }, (_, i) => i + 1);
+  }, [splitTotal, duration, deadline, from]);
+
+  // A shorter total can leave the count invalid: step down to one that divides.
+  useEffect(() => {
+    if (!counts.includes(count)) {
+      form.setValue("sessionCount", snapCount(counts, count), { shouldValidate: true });
+    }
+  }, [counts, count, form]);
+
+  const each = splitTotal ? sittingLength(duration, count) : duration;
+  const parts = splitTotal
+    ? variedSittings(duration, count)
+    : Array.from({ length: count }, () => each);
+  const index = Math.max(0, counts.indexOf(count));
+
+  function step(dir: -1 | 1) {
+    const next = counts[index + dir];
+    if (next != null) form.setValue("sessionCount", next, { shouldValidate: true });
   }
 
   return (
     <FieldCard
       label="Split into sittings"
-      hint="One sitting per day at most, each one placed on its own."
-      error={
-        tooMany
-          ? t("Only {count} sittings fit before the deadline.", { count: feasible })
-          : undefined
-      }
+      hint={splitTotal ? "Splits the total into sittings of about the same length, at most one a day." : undefined}
       testID="task.split"
       trailing={
         <View className="flex-row items-center gap-3">
-          <Pressable
+          <StepperButton
             testID="task.split.minus"
-            disabled={disabled || count <= 1}
-            onPress={() => set(count - 1)}
+            glyph="−"
+            disabled={disabled || index <= 0}
+            onPress={() => step(-1)}
             accessibilityLabel={t("Fewer sittings")}
-            className={cn(
-              "size-11 items-center justify-center rounded-xl border border-glass-edge/35 bg-glass/70",
-              (disabled || count <= 1) && "opacity-40",
-            )}
-          >
-            <Text className="text-2xl text-foreground">−</Text>
-          </Pressable>
+          />
           <Text
             testID="task.split.count"
             className="min-w-[24px] text-center text-[17px] font-semibold tabular-nums text-foreground"
           >
             {count}
           </Text>
-          <Pressable
+          <StepperButton
             testID="task.split.plus"
-            disabled={disabled || count >= feasible}
-            onPress={() => set(count + 1)}
+            glyph="+"
+            disabled={disabled || index >= counts.length - 1}
+            onPress={() => step(1)}
             accessibilityLabel={t("More sittings")}
-            className={cn(
-              "size-11 items-center justify-center rounded-xl border border-glass-edge/35 bg-glass/70",
-              (disabled || count >= feasible) && "opacity-40",
-            )}
-          >
-            <Text className="text-2xl text-foreground">+</Text>
-          </Pressable>
+          />
         </View>
       }
     >
+      <Text testID="task.split.summary" className="text-[15px] font-medium text-foreground">
+        {count === 1
+          ? durationLabel(duration)
+          : splitTotal
+            ? t("{count} sittings of about {duration}", { count, duration: durationLabel(each) })
+            : t("{count} sittings of {duration}", { count, duration: durationLabel(each) })}
+      </Text>
       <View testID="task.split.strip" className="flex-row gap-1.5">
         {parts.map((minutes, i) => (
           <View
             key={i}
-            className="h-11 flex-1 items-center justify-center rounded-lg border border-primary/35 bg-primary/15"
+            className="h-9 flex-1 rounded-lg border border-primary/35 bg-primary/15"
             style={{ flexGrow: minutes }}
-          >
-            <Text className="text-[11px] font-semibold tabular-nums text-primary">
-              {durationLabel(minutes)}
-            </Text>
-          </View>
+          />
         ))}
       </View>
     </FieldCard>
@@ -416,7 +432,7 @@ export function CourseField({
           returnKeyType="done"
           placeholder={t("Course name")}
           accessibilityLabel={t("Course name")}
-          className="h-[50px] rounded-xl border border-glass-edge/35 bg-glass/70 dark:bg-glass/[0.07] px-4 text-base text-foreground dark:border-glass-edge/25"
+          className="h-12 rounded-xl border border-glass-edge/35 bg-glass/70 dark:bg-glass/[0.07] px-5 text-[17px] text-foreground dark:border-glass-edge/25"
         />
       )}
     </FieldCard>

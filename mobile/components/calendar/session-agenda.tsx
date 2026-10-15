@@ -17,6 +17,7 @@ import {
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { deriveState, SESSION_TONES, sessionTone } from "@zenflow/core";
 import type { Session, SessionSearchDirection } from "@zenflow/shared";
+import { SunriseIcon } from "@/components/brand/icons";
 import { type Href, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, View } from "react-native";
@@ -132,7 +133,8 @@ export function SessionAgenda({
   );
 
   const showSkeleton = useDelayedLoading(status === "loading", {
-    delayMs: SKELETON_DELAY_MS,
+    // A search shows its skeleton at once; the plain list waits.
+    delayMs: term.length > 0 ? 0 : SKELETON_DELAY_MS,
   });
 
   const openSession = (session: Session) => {
@@ -197,9 +199,12 @@ export function SessionAgenda({
 
   const empty =
     status === "ready" ? (
-      <Text className="px-4 py-4 text-[13px] text-muted-foreground">
-        {hasQuery ? t("No sessions match") : t("No sessions yet")}
-      </Text>
+      <View className="items-center gap-3 px-8 pt-24">
+        <SunriseIcon size={56} color="#FF8E3E" />
+        <Text className="text-center text-[15px] text-muted-foreground">
+          {hasQuery ? t("No sessions match") : t("No sessions yet")}
+        </Text>
+      </View>
     ) : null;
 
   return (

@@ -21,14 +21,17 @@ export interface TodaySummary {
   nextUp: { id: string; title: string; startISO: string } | null;
 }
 
-/** Counts for the Today card. Skipped sessions drop out of both totals. */
+/**
+ * Counts for the Today card. Only tasks count (they are what the streak counts);
+ * skipped ones drop out of both totals.
+ */
 export function summarizeToday(sessions: Session[], now: Date): TodaySummary {
   let total = 0;
   let done = 0;
   let plannedMinutes = 0;
   let nextUp: TodaySummary["nextUp"] = null;
   const counted = sessions
-    .filter((s) => !s.skipped)
+    .filter((s) => s.type === "TASK" && !s.skipped)
     .sort((a, b) =>
       (a.scheduledStartTime ?? "").localeCompare(b.scheduledStartTime ?? ""),
     );
@@ -50,11 +53,4 @@ export function summarizeToday(sessions: Session[], now: Date): TodaySummary {
 /** Planned hours with one decimal at most: 270 becomes "4.5", 120 becomes "2". */
 export function formatHours(minutes: number): string {
   return String(Math.round((minutes / 60) * 10) / 10);
-}
-
-/** Which greeting fits the hour of day (0 to 23, user timezone). */
-export function greetingKey(hour: number): "morning" | "afternoon" | "evening" {
-  if (hour < 12) return "morning";
-  if (hour < 18) return "afternoon";
-  return "evening";
 }

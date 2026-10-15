@@ -44,6 +44,7 @@ export function SessionSearchView({ onClose }: { onClose: () => void }) {
       <View className="flex-row items-center gap-2 px-4 pb-2 pt-2">
         <GlassButton
           icon={ChevronLeft}
+              iconSize={24}
           accessibilityLabel={t("Back")}
           onPress={onClose}
           haptic={false}
@@ -53,7 +54,7 @@ export function SessionSearchView({ onClose }: { onClose: () => void }) {
           className="flex-1"
           value={query}
           onChangeText={setQuery}
-          placeholder={t("Search title, note or location")}
+          placeholder={t("Search")}
           autoFocus
           autoCapitalize="none"
           autoCorrect={false}

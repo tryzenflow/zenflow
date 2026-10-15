@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { TimePickerInline } from "@/components/ui/time-picker";
 import { useToast } from "@/components/ui/toast";
-import { showMovedToast } from "@/lib/move-toast";
+import { showMovedToast, showResizedToast } from "@/lib/move-toast";
 import { restoreSessionTime } from "@/lib/move-undo";
 import { isPastDeadlineDrop } from "@/lib/overdue";
 import { showErrorToast } from "@/lib/task-toasts";
@@ -178,22 +178,31 @@ export const RescheduleSheet = forwardRef<
         skipConflicting,
       );
       // Same confirmation a drag-and-drop move gets, with the same undo.
-      showMovedToast(toast, {
-        to: zonedDate(pickedISO, tz),
-        withTime: true,
-        onUndo: moveUndoable(before, scope)
-          ? () =>
-              void restoreSessionTime(before, scope, skipConflicting).catch(
-                (error) =>
-                  showErrorToast(
-                    toast,
-                    error,
-                    t("Couldn't move this session"),
-                    "calendar-x",
-                  ),
-              )
-          : undefined,
-      });
+      const onUndo = moveUndoable(before, scope)
+        ? () =>
+            void restoreSessionTime(before, scope, skipConflicting).catch(
+              (error) =>
+                showErrorToast(
+                  toast,
+                  error,
+                  t("Couldn't move this session"),
+                  "calendar-x",
+                ),
+            )
+        : undefined;
+      // Only the length changed: say that, not "Moved to".
+      if (
+        before.scheduledStartTime === pickedISO &&
+        before.durationMinutes !== durationMinutes
+      ) {
+        showResizedToast(toast, { minutes: durationMinutes, onUndo });
+      } else {
+        showMovedToast(toast, {
+          to: zonedDate(pickedISO, tz),
+          withTime: true,
+          onUndo,
+        });
+      }
       onMoved?.(session, pickedISO);
       sheet.close();
     } finally {
@@ -302,7 +311,7 @@ export const RescheduleSheet = forwardRef<
                         fontWeight: "800",
                       }}
                     >
-                      +1
+                      {t("tomorrow")}
                     </Text>
                   </View>
                 )}

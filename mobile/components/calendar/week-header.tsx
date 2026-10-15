@@ -1,3 +1,4 @@
+import { GettingStarted } from "@/components/checklist/getting-started";
 import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
@@ -420,13 +421,19 @@ function WeekHeaderImpl(
       <View
         className="overflow-hidden border-b border-border bg-background pb-2 pt-2.5"
       >
-        <View className="px-4 pb-2">
-          <Text className="text-xl font-bold tracking-tight">
-            {monthLabel(shownDate)}
-          </Text>
-          <Text className="mt-px text-[11.5px] font-medium text-muted-foreground">
-            {format(titleDays[0], "MMM d")} – {format(titleDays[6], "MMM d")}
-          </Text>
+        <View className="flex-row items-center justify-between gap-3 px-4 pb-2">
+          <View className="min-w-0 flex-1">
+            <Text className="text-xl font-bold tracking-tight">
+              {monthLabel(shownDate)}
+            </Text>
+            <Text className="mt-px text-sm font-medium text-muted-foreground">
+              {t("{start} to {end}", {
+                start: format(titleDays[0], "MMM d"),
+                end: format(titleDays[6], "MMM d"),
+              })}
+            </Text>
+          </View>
+          <GettingStarted />
         </View>
 
         <Animated.View
