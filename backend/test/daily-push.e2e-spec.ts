@@ -126,7 +126,9 @@ describe("evening check-in action path", () => {
     const res = await student.agent
       .post(`${SESSIONS}/${encodeURIComponent(s.id)}/complete`)
       .expect(201);
-    expect(data<SessionCheckOffResponse>(res).session.completedAt).not.toBeNull();
+    expect(
+      data<SessionCheckOffResponse>(res).session.completedAt,
+    ).not.toBeNull();
   });
 
   it("marks a session missed through the skip endpoint", async () => {
