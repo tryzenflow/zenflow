@@ -1,0 +1,77 @@
+---
+import QRCode from "qrcode";
+import { APK_URL, type Lang } from "../config";
+import { COPY } from "../content/copy";
+import DownloadButton from "./DownloadButton.astro";
+
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const c = COPY[lang];
+
+/** Built once at build time: no script, no request. */
+const qr = await QRCode.toString(APK_URL, {
+  type: "svg",
+  margin: 0,
+  errorCorrectionLevel: "M",
+  color: { dark: "#1d1e2cff", light: "#ffffffff" },
+});
+---
+
+<section class="px-4 py-24 sm:px-6">
+  <div
+    class="relative mx-auto max-w-6xl overflow-hidden rounded-[2.5rem] bg-[#1d1e2c] px-6 py-14 text-white sm:px-12 sm:py-20"
+  >
+    <div aria-hidden="true" class="pointer-events-none absolute inset-0">
+      <div class="absolute -top-32 -left-24 size-[30rem] animate-drift rounded-full bg-primary/45 blur-3xl"></div>
+      <div class="absolute -right-24 -bottom-40 size-[26rem] animate-drift rounded-full bg-accent/30 blur-3xl [animation-delay:-5s]"></div>
+    </div>
+    <div class="relative grid items-center gap-12 lg:grid-cols-[1.4fr_1fr]">
+      <div>
+        <h2 class="text-[clamp(2.25rem,6vw,4rem)] leading-[1.02] font-extrabold tracking-[-0.03em] text-balance">{c.finalTitle}</h2>
+        <p class="mt-4 text-xl text-white/75">{c.finalBody}</p>
+        <div class="mt-8"><DownloadButton label={c.download} /></div>
+        <h3 class="mt-12 font-semibold">{c.stepsLabel}</h3>
+        <ol class="mt-3 space-y-2 text-white/80">
+          {
+            c.steps.map((s, i) => (
+              <li class="flex gap-3">
+                <span class="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-extrabold text-[#3a2a00]">
+                  {i + 1}
+                </span>
+                {s}
+              </li>
+            ))
+          }
+        </ol>
+        <p class="mt-4 max-w-lg text-sm text-white/60">{c.installNote}</p>
+      </div>
+      <figure class="mx-auto w-full max-w-[16rem] text-center">
+        <a href={APK_URL} rel="noopener" class="block rounded-3xl bg-white p-5 shadow-2xl" aria-label={c.download}>
+          <Fragment set:html={qr} />
+        </a>
+        <figcaption class="mt-4 text-sm text-white/75">{c.qrLabel}</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="mx-auto max-w-3xl px-4 pb-24 sm:px-6">
+  <h2 class="text-3xl font-extrabold tracking-tight">{c.faqLabel}</h2>
+  <div class="mt-6 divide-y divide-rule border-y border-rule">
+    {
+      c.faq.map((f) => (
+        <details class="group py-4">
+          <summary class="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold">
+            {f.q}
+            <span aria-hidden="true" class="text-xl text-muted transition-transform group-open:rotate-45">
+              +
+            </span>
+          </summary>
+          <p class="mt-2 text-muted">{f.a}</p>
+        </details>
+      ))
+    }
+  </div>
+</section>
