@@ -35,6 +35,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { useIntegrationStore } from "@/hooks/use-integration-store";
+import { useUserStore } from "@/hooks/use-user-store";
+import { studentIdOf } from "@/lib/login-id";
 import { cn } from "@/lib/utils";
 import type { IntegrationProvider, IntegrationStatus } from "@zenflow/shared";
 import { isAxiosError } from "axios";
@@ -221,8 +223,11 @@ function syncErrorToast(
 function errorMessageFor(
   error: unknown,
   provider: IntegrationProvider,
+  ownId: string,
 ): string {
   if (isAxiosError(error)) {
+    if (error.response?.data?.code === "STUDENT_ID_MISMATCH")
+      return t("Use your own student ID ({id}) to connect.", { id: ownId });
     if (error.code === "ERR_CANCELED")
       return t("{provider} is taking too long. Try again in a bit.", {
         provider: PROVIDER_LABEL[provider],
@@ -245,6 +250,8 @@ export function DluAccountsSection({
   useLanguage();
   const { toast } = useToast();
   const { integrations, updateIntegration, loading } = useIntegrationStore();
+  // The server only accepts the student's own ID, so a new connection starts with it.
+  const ownId = studentIdOf(useUserStore((s) => s.user?.email));
   const [selectedProvider, setSelectedProvider] =
     useState<IntegrationProvider | null>(null);
   const [mode, setMode] = useState<SheetMode>("connect");
@@ -278,7 +285,7 @@ export function DluAccountsSection({
     setSelectedProvider(provider);
     setMode(next);
     setError(null);
-    setStudentId("");
+    setStudentId(next === "connect" ? ownId : "");
     setPassword("");
     setShowPassword(false);
     signInSheet.open();
@@ -336,7 +343,7 @@ export function DluAccountsSection({
       );
       closeSignInSheet();
     } catch (err) {
-      setError(errorMessageFor(err, selectedProvider));
+      setError(errorMessageFor(err, selectedProvider, ownId));
     } finally {
       clearTimeout(timeoutId);
       setIsSubmitting(false);

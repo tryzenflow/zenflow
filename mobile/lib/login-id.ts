@@ -29,6 +29,11 @@ export function switchLoginMode(value: string, to: LoginMode): string {
   return to === "id" ? (STUDENT_EMAIL.exec(value)?.[1] ?? "") : "";
 }
 
+/** The student ID in a student address; empty for any other address. */
+export function studentIdOf(email: string | undefined): string {
+  return STUDENT_EMAIL.exec(email ?? "")?.[1] ?? "";
+}
+
 export function studentEmail(id: string): string {
   return `${id}@${STUDENT_EMAIL_DOMAIN}`;
 }
