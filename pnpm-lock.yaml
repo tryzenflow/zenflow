@@ -698,6 +698,9 @@ importers:
       expo-system-ui:
         specifier: ~58.0.3
         version: 58.0.3(expo@58.0.0-preview.8)(react-native-web@0.21.3(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-native@0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))
+      expo-task-manager:
+        specifier: ~58.0.11
+        version: 58.0.11(expo@58.0.0-preview.8)(react-native@0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))
       expo-web-browser:
         specifier: ~58.0.2
         version: 58.0.2(expo@58.0.0-preview.8)(react-native@0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))
@@ -8058,6 +8061,12 @@ packages:
       react-native-web:
         optional: true
 
+  expo-task-manager@58.0.11:
+    resolution: {integrity: sha512-ummXCHlVuQrWhnhwxBwIdWnao6bXneSgf1dzPTlMcPaflPlXr+wuiX30VMZNvA6mP9d2jVPlg+IRihj7udqbSQ==}
+    peerDependencies:
+      expo: '*'
+      react-native: '*'
+
   expo-updates-interface@58.0.0:
     resolution: {integrity: sha512-zFh/g/UJIN1NzGQZeH7WAuM3pJ86teBXAU3V234oBjsIEJT4ckcis/IIhHjkWswQ2Li7kOBeRCdCxEYDPAcHbA==}
     peerDependencies:
@@ -12206,6 +12215,9 @@ packages:
   unicode-property-aliases-ecmascript@2.2.0:
     resolution: {integrity: sha512-hpbDzxUY9BFwX+UeBnxv3Sh1q7HFxj48DTmXchNgRa46lO8uj3/1iEn3MiNUYTg1g9ctIqXCCERn8gYZhHC5lQ==}
     engines: {node: '>=4'}
+
+  unimodules-app-loader@58.0.2:
+    resolution: {integrity: sha512-d7vZN9/awIwPCqzfw1qR/geJEzv3ElW0VdwXFnPw29QZYoAZI0jqXGKPZVG1vQCfhEiWJtBX/nVm1XI8wshrDg==}
 
   unique-string@2.0.0:
     resolution: {integrity: sha512-uNaeirEPvpZWSgzwsPGtU2zVSTrn/8L5q/IexZmH0eH6SA73CmAA5U4GwORTxQAZs95TAXLNqeLoPPNO5gZfWg==}
@@ -20908,6 +20920,12 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  expo-task-manager@58.0.11(expo@58.0.0-preview.8)(react-native@0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0)):
+    dependencies:
+      expo: 58.0.0-preview.8(@babel/core@7.29.7)(@expo/dom-webview@58.0.1)(@expo/metro-runtime@58.0.8)(expo-router@58.0.9)(react-dom@19.3.0(react@19.3.0))(react-native-web@0.21.3(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-native-webview@14.0.1(react-native@0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react-native-worklets@0.13.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(react-native@0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react-native@0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
+      react-native: 0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0)
+      unimodules-app-loader: 58.0.2
+
   expo-updates-interface@58.0.0(expo@58.0.0-preview.8):
     dependencies:
       expo: 58.0.0-preview.8(@babel/core@7.29.7)(@expo/dom-webview@58.0.1)(@expo/metro-runtime@58.0.8)(expo-router@58.0.9)(react-dom@19.3.0(react@19.3.0))(react-native-web@0.21.3(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-native-webview@14.0.1(react-native@0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react-native-worklets@0.13.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(react-native@0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react-native@0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
@@ -26307,6 +26325,8 @@ snapshots:
   unicode-match-property-value-ecmascript@2.2.1: {}
 
   unicode-property-aliases-ecmascript@2.2.0: {}
+
+  unimodules-app-loader@58.0.2: {}
 
   unique-string@2.0.0:
     dependencies:

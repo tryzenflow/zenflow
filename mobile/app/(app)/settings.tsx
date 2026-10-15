@@ -3,6 +3,7 @@ import { useLanguage } from "@/hooks/use-language";
 import { logout as logoutRequest } from "@/api/auth";
 import { listIntegrations } from "@/api/integrations";
 import { LogOut, Moon } from "@/components/Icons";
+import { DailyPushSection } from "@/components/settings/daily-push-section";
 import { DluAccountsSection } from "@/components/settings/dlu-accounts-section";
 import { FinishSetupCard } from "@/components/settings/finish-setup-card";
 import { TagsRow } from "@/components/settings/tags-row";
@@ -187,6 +188,10 @@ export default function SettingsScreen() {
         </View>
 
         <PreferencesSection />
+        <SettingsSectionLabel>{t("Daily plan")}</SettingsSectionLabel>
+        <OfflineLock>
+          <DailyPushSection />
+        </OfflineLock>
         <OfflineLock>
           <TagsRow />
         </OfflineLock>
