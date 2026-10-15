@@ -544,7 +544,7 @@ const jobModules = [
     PortalAPIModule,
     TagsModule,
     FilesModule,
-    // Background cron providers (MatrixDecayService, RetainedSessionsService)
+    // Background cron providers (MatrixDecayService, SessionOutcomeService)
     // plus HeuristicScheduleService / BanditScheduleService, the single-session
     // placers SessionsService calls on create / deadline-edit. No day repack —
     // an existing session is never moved; see scheduler.module.ts.

@@ -7,58 +7,61 @@ import {
   SessionType,
 } from "../../../generated/prisma";
 import { PrismaService } from "../../prisma/prisma.service";
-import { RETAINED_BATCH_SIZE, RETAINED_GRACE_MS } from "../../common/constants";
+import { OUTCOME_BATCH_SIZE } from "../../common/constants";
 import {
   PREFERENCE_RETAINED_WEIGHT,
-  SESSION_RETAINED_REWARD,
+  SESSION_COMPLETED_REWARD,
+  SESSION_MISSED_REWARD,
 } from "../constants";
+import { completionReward, type CompletionOutcome } from "../core/reward";
 import { SchedulingFeedbackService } from "./scheduling-feedback.service";
 import { runCronJob } from "../../observability/cron";
 import { schedulerSessionEvents } from "../../observability/metrics";
 
-type RetainedCandidate = Prisma.SessionGetPayload<{
+type OutcomeCandidate = Prisma.SessionGetPayload<{
   select: {
     id: true;
     userId: true;
     type: true;
     scheduledStartTime: true;
     durationMinutes: true;
+    completedAt: true;
+    skipped: true;
     tags: { select: { name: true } };
     user: { select: { timezone: true } };
   };
 }>;
 
-type RewardedSession = {
+type Settled = {
   sessionId: string;
   userId: string;
   eventId: bigint;
+  outcome: CompletionOutcome;
+  reward: number;
   scheduledStartMs: number;
   timezone: string;
 };
 
 /**
- * Half-hourly sweep that turns "a scheduled TASK elapsed and the user never
- * moved it" into a positive `RETAINED` reward signal — the "keep" half of the
- * move-or-keep model that replaced task completion/abandonment.
+ * Half-hourly sweep that settles the outcome of an unmoved scheduled `TASK`
+ * (ADR-0022). It is the only layer here that touches Prisma.
  *
- * The ONLY layer here that touches Prisma. A row qualifies when it is a
- * user-created `TASK`, has a `scheduledStartTime`, its end plus
- * {@link RETAINED_GRACE_MS} is in the past, and it has never been moved
- * (`lastMovedAt == null`). `retainedAt` is stamped once so a re-run is a no-op.
+ * A row qualifies when it is a user-created `TASK` with a `scheduledStartTime`,
+ * has never been moved (`lastMovedAt == null`) and is not yet settled
+ * (`retainedAt == null`; the column stamps the settlement). The pure
+ * {@link completionReward} decides the outcome:
  *
- * When the elapsed session was placed by a LinUCB `SlotProposal`, the sweep
- * also delivers the delayed `+1` reward to that arm via
- * {@link SchedulingFeedbackService.applyDelayedReward} — the same shared path
- * the first-`MOVE` signal uses (ADR-0001 §9). Independently of that gate, the
- * sweep ALSO reinforces the user's shared preference matrix (Item 3B3) via
- * {@link SchedulingFeedbackService.reinforcePreferenceMatrix} — weighted
- * `PREFERENCE_RETAINED_WEIGHT` on the hour bucket containing the session's
- * kept start — regardless of whether the
- * placement was heuristic or LinUCB.
+ * - checked off inside the slot: `COMPLETED`, `+1`, settled at `end + grace`;
+ * - skipped: `SKIPPED`, `-1`, settled at `end + grace`;
+ * - no check-off by `end + cutoff`: `MISSED`, `-1`. A `MISSED` event is written.
+ *
+ * The settled reward is delivered to the LinUCB arm behind the placement via
+ * {@link SchedulingFeedbackService.applyDelayedReward}. A completion also
+ * reinforces the user's preference matrix at the kept hour.
  */
 @Injectable()
-export class RetainedSessionsService {
-  private readonly logger = new Logger(RetainedSessionsService.name);
+export class SessionOutcomeService {
+  private readonly logger = new Logger(SessionOutcomeService.name);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -68,10 +71,10 @@ export class RetainedSessionsService {
   /** Every 30 minutes. `now` is injectable for tests. */
   @Cron(CronExpression.EVERY_30_MINUTES)
   async handleCron(): Promise<void> {
-    await runCronJob("retained-sessions", async () => {
+    await runCronJob("session-outcomes", async () => {
       const count = await this.sweep();
       if (count > 0) {
-        this.logger.log(`Marked ${count} session(s) RETAINED`);
+        this.logger.log(`Settled ${count} session outcome(s)`);
       }
     });
   }
@@ -81,28 +84,27 @@ export class RetainedSessionsService {
     let cursor: string | undefined;
 
     for (;;) {
-      const candidates = await this.findCandidateBatch(now, userId, cursor);
+      const candidates = await this.findCandidateBatch(userId, cursor);
       if (candidates.length === 0) break;
       cursor = candidates[candidates.length - 1].id;
 
-      const elapsed = this.filterElapsed(candidates, now);
-      if (elapsed.length > 0) {
-        const rewarded = await this.markRetainedBatch(elapsed, now);
-        total += rewarded.length;
-        await this.applyDelayedRewards(rewarded);
+      const outcomes = this.decideOutcomes(candidates, now);
+      if (outcomes.length > 0) {
+        const settled = await this.settleBatch(outcomes, now);
+        total += settled.length;
+        await this.applyDelayedRewards(settled);
       }
 
-      if (candidates.length < RETAINED_BATCH_SIZE) break;
+      if (candidates.length < OUTCOME_BATCH_SIZE) break;
     }
 
     return total;
   }
 
   private findCandidateBatch(
-    now: Date,
     userId: string | undefined,
     cursor: string | undefined,
-  ): Promise<RetainedCandidate[]> {
+  ): Promise<OutcomeCandidate[]> {
     return this.prisma.session.findMany({
       where: {
         type: SessionType.TASK,
@@ -110,7 +112,7 @@ export class RetainedSessionsService {
         retainedAt: null,
         lastMovedAt: null,
         deleted: false,
-        scheduledStartTime: { not: null, lte: now },
+        scheduledStartTime: { not: null },
         ...(userId ? { userId } : {}),
       },
       select: {
@@ -119,34 +121,44 @@ export class RetainedSessionsService {
         type: true,
         scheduledStartTime: true,
         durationMinutes: true,
+        completedAt: true,
+        skipped: true,
         tags: { select: { name: true } },
         user: { select: { timezone: true } },
       },
       orderBy: { id: "asc" },
-      take: RETAINED_BATCH_SIZE,
+      take: OUTCOME_BATCH_SIZE,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
     });
   }
 
-  /** Rows whose interval (plus grace) has fully elapsed. Rows that haven't
-   * yet are left untouched and stepped over by the cursor. */
-  private filterElapsed(
-    candidates: RetainedCandidate[],
+  /** Candidates whose outcome is settled at `now`; the rest are stepped over. */
+  private decideOutcomes(
+    candidates: OutcomeCandidate[],
     now: Date,
-  ): RetainedCandidate[] {
-    return candidates.filter((s) => {
-      const end = s.scheduledStartTime!.getTime() + s.durationMinutes * 60_000;
-      return end + RETAINED_GRACE_MS <= now.getTime();
-    });
+  ): { session: OutcomeCandidate; outcome: CompletionOutcome }[] {
+    const out: { session: OutcomeCandidate; outcome: CompletionOutcome }[] = [];
+    for (const session of candidates) {
+      const start = session.scheduledStartTime!.getTime();
+      const outcome = completionReward(
+        start,
+        start + session.durationMinutes * 60_000,
+        session.completedAt ? session.completedAt.getTime() : null,
+        session.skipped,
+        now.getTime(),
+      );
+      if (outcome) out.push({ session, outcome });
+    }
+    return out;
   }
 
-  private async markRetainedBatch(
-    elapsed: RetainedCandidate[],
+  private async settleBatch(
+    outcomes: { session: OutcomeCandidate; outcome: CompletionOutcome }[],
     now: Date,
-  ): Promise<RewardedSession[]> {
-    const rewarded: RewardedSession[] = [];
+  ): Promise<Settled[]> {
+    const settled: Settled[] = [];
     await this.prisma.$transaction(async (tx) => {
-      for (const session of elapsed) {
+      for (const { session, outcome } of outcomes) {
         // Claim: an overlapping sweep (two workers during a deploy) loses the
         // race here and must not double-record the event or reward.
         const claimed = await tx.session.updateMany({
@@ -154,58 +166,106 @@ export class RetainedSessionsService {
           data: { retainedAt: now },
         });
         if (claimed.count === 0) continue;
-        const event = await tx.sessionEvent.create({
-          data: {
-            sessionId: session.id,
-            userId: session.userId,
-            eventType: SessionEventType.RETAINED,
-            oldSnapshot: Prisma.JsonNull,
-            newSnapshot: this.snapshot(session),
-            rewardScore: SESSION_RETAINED_REWARD,
-          },
-          select: { id: true },
-        });
-        schedulerSessionEvents.add(1, { type: SessionEventType.RETAINED });
-        rewarded.push({
+        const eventId = await this.writeOutcomeEvent(tx, session, outcome);
+        settled.push({
           sessionId: session.id,
           userId: session.userId,
-          eventId: event.id,
+          eventId,
+          outcome,
+          reward:
+            outcome === "COMPLETED"
+              ? SESSION_COMPLETED_REWARD
+              : SESSION_MISSED_REWARD,
           scheduledStartMs: session.scheduledStartTime!.getTime(),
           timezone: session.user.timezone,
         });
       }
     });
-    return rewarded;
+    return settled;
   }
 
-  /** Delayed LinUCB reward + preference-matrix reinforcement — best-effort,
-   * outside the transaction. `null` modification type: a RETAINED session
-   * confirms the placement, it isn't a modification, so the acceptance
-   * columns are left untouched. The preference-matrix reinforcement
-   * (Item 3B3) runs unconditionally, regardless of which policy placed the
-   * session — unlike the LinUCB reward, which only applies when a matching
-   * `SlotProposal` exists. */
-  private async applyDelayedRewards(
-    rewarded: RewardedSession[],
-  ): Promise<void> {
-    for (const r of rewarded) {
+  /**
+   * Sets the reward on the check-off `SessionEvent` the user wrote (`COMPLETE`
+   * or `SKIP`), or writes a `MISSED` event when there is none. Returns the id
+   * of the event that carries the reward.
+   */
+  private async writeOutcomeEvent(
+    tx: Prisma.TransactionClient,
+    session: OutcomeCandidate,
+    outcome: CompletionOutcome,
+  ): Promise<bigint> {
+    const checkOff =
+      outcome === "COMPLETED"
+        ? SessionEventType.COMPLETE
+        : outcome === "SKIPPED"
+          ? SessionEventType.SKIP
+          : null;
+    const reward =
+      outcome === "COMPLETED"
+        ? SESSION_COMPLETED_REWARD
+        : SESSION_MISSED_REWARD;
+
+    if (checkOff) {
+      const existing = await tx.sessionEvent.findFirst({
+        where: {
+          sessionId: session.id,
+          userId: session.userId,
+          eventType: checkOff,
+        },
+        orderBy: { occurredAt: "desc" },
+        select: { id: true },
+      });
+      if (existing) {
+        await tx.sessionEvent.updateMany({
+          where: { id: existing.id },
+          data: { rewardScore: reward },
+        });
+        return existing.id;
+      }
+    }
+
+    const event = await tx.sessionEvent.create({
+      data: {
+        sessionId: session.id,
+        userId: session.userId,
+        eventType: checkOff ?? SessionEventType.MISSED,
+        oldSnapshot: Prisma.JsonNull,
+        newSnapshot: this.snapshot(session),
+        rewardScore: reward,
+      },
+      select: { id: true },
+    });
+    schedulerSessionEvents.add(1, {
+      type: checkOff ?? SessionEventType.MISSED,
+    });
+    return event.id;
+  }
+
+  /** Delayed LinUCB reward and, for a completion, preference-matrix
+   * reinforcement. Best-effort, outside the transaction. A placement that
+   * was not chosen by LinUCB gets no bandit update; the matrix is updated
+   * for either policy. */
+  private async applyDelayedRewards(settled: Settled[]): Promise<void> {
+    for (const s of settled) {
       await this.schedulingFeedback.applyDelayedReward(
-        r.userId,
-        r.sessionId,
-        r.eventId,
-        SESSION_RETAINED_REWARD,
+        s.userId,
+        s.sessionId,
+        s.eventId,
+        s.reward,
         null,
       );
-      await this.schedulingFeedback.reinforcePreferenceMatrix(
-        r.userId,
-        r.scheduledStartMs,
-        r.timezone,
-        PREFERENCE_RETAINED_WEIGHT,
-      );
+      if (s.outcome === "COMPLETED") {
+        await this.schedulingFeedback.reinforcePreferenceMatrix(
+          s.userId,
+          s.scheduledStartMs,
+          s.timezone,
+          PREFERENCE_RETAINED_WEIGHT,
+        );
+      }
     }
   }
 
-  private snapshot(session: RetainedCandidate): Prisma.InputJsonValue {
+  private snapshot(session: OutcomeCandidate): Prisma.InputJsonValue {
     return {
       scheduledStartTime: session.scheduledStartTime
         ? session.scheduledStartTime.toISOString()

@@ -33,9 +33,9 @@ type LinucbProposal = {
  * `acceptedWithoutModification`) that first modification stamps. Every step
  * is best-effort — a bandit failure never breaks the session update.
  *
- * The `RETAINED` half of the same reward loop lives in
- * {@link RetainedSessionsService}, which calls {@link applyDelayedReward}
- * directly — both paths share the same "find the LinUCB proposal, fold the
+ * The settled completion and missed outcomes of an unmoved session live in
+ * {@link SessionOutcomeService}, which calls {@link applyDelayedReward}
+ * directly; both paths share the same "find the LinUCB proposal, fold the
  * reward in, link the event back" logic.
  */
 @Injectable()
@@ -83,7 +83,7 @@ export class SchedulingFeedbackService {
     reward: number,
     modificationType: SessionEventType | null,
   ): Promise<void> {
-    const source = modificationType ? "move" : "retained";
+    const source = modificationType ? "move" : "outcome";
     const count = (result: string): void =>
       schedulerRewardUpdates.add(1, { source, result });
     try {

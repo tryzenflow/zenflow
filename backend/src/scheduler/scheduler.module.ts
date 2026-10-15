@@ -23,7 +23,7 @@ import { SchedulingFeedbackService } from "./io/scheduling-feedback.service";
  *             `POST /v1/place`), `FallbackPlacer` (Python-down degraded
  *             driver, built on `HeuristicPlacer`), `day-load`, the delayed-
  *             reward feedback. The two crons (MatrixDecayService,
- *             RetainedSessionsService) live in `SchedulerWorkerModule`.
+ *             SessionOutcomeService) live in `SchedulerWorkerModule`.
  *
  * `SessionsModule` consumes only {@link TaskPlacementService} (place a TASK /
  * series and persist it) and {@link SchedulingFeedbackService} (first-move
