@@ -27,6 +27,15 @@ The scheduler places one `TASK` (or one series) into an empty slot and never mov
 - **Golden fixtures** cover only the frozen fallback: `pnpm --filter backend golden:export` writes `test/golden/scheduler-core.golden.json`, asserted by `services/bandit/tests/test_golden_ts.py`.
   - A fallback bug fix updates both sides. Behaviour changes go in `services/bandit` only.
 
+## Anchors and confirmation (ADR-0022)
+
+- Each flexible `TASK` has an anchor: `AUTO` (moved freely), `CHOSEN` (set by a drag, "move to" or time pick; moved only after confirmation), `PINNED` (never moved).
+- Nest sends `anchor` and `completed` (done or skipped) on each flexible item of the infeasible context, with `chosenMoves: ASK`.
+- A plan that moves a `CHOSEN` session comes back as `NEEDS_CONFIRMATION`. Nothing is applied: `PythonPlacer` returns it raw, `TaskPlacementService` stores it as a `PlacementPlan` row (30 min TTL).
+- `PlacementPlanService.confirm` checks each moved session still sits at its planned start and every target is free, then applies the plan in one transaction.
+- Every write one request makes shares a `SessionEvent.groupId`. `PlacementPlanService.undo` reverts a group, newest first.
+- Sync conflicts ("reschedule them all"): `PINNED` tasks are never moved and stay in `failedSessionIds`. Placements use `chosenMoves: FORBID`, so a `CHOSEN` task is never displaced by another.
+
 ## Notes
 
 - **Slot scoring** (`core/slot-score.ts`, fallback only): overlap-weighted preference sum. `bestFreeSlot` picks the top free slot. LinUCB scoring is Python's (`services/bandit/src/core/linucb_best_slot.py`).
@@ -58,6 +67,8 @@ The scheduler places one `TASK` (or one series) into an empty slot and never mov
 | `PlaceRequest` builder, two-phase infeasible call | `scheduler/io/placement-gateway.service.ts` |
 | Timeout/retry/breaker HTTP client | `scheduler/io/placement-client.service.ts`, `common/circuit-breaker.ts` |
 | `TASK` series lifecycle | `sessions/series.service.ts` |
+| Plan storage, confirm, undo | `scheduler/io/task-placement.service.ts` (stores), `sessions/placement-plan.service.ts` |
+| Pin and unpin | `sessions/session-anchor.service.ts` |
 | Delayed reward (first `MOVE` + outcome settlement) | `scheduler/io/scheduling-feedback.service.ts`, `session-outcome.service.ts` ([ADR-0023](../adr/0023-completion-reward.md)) |
 | `primaryPolicy` 50/50, pairwise draw, `SlotProposal` write | `experiments/experiment.service.ts` |
 | Fallback tuning constants | `scheduler/constants.ts` |
