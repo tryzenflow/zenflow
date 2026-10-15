@@ -1,5 +1,6 @@
 import { zonedDate } from "@zenflow/core";
 import { format } from "date-fns";
+import type { FocusBand } from "@zenflow/shared";
 import { describe, expect, it } from "vitest";
 import {
   addCustomTag,
@@ -194,14 +195,14 @@ describe("default routines", () => {
     const [sleep, lunch, dinner] = dndRoutinePayloads(HCM, at10);
     expect(sleep.scheduledStartTime).toBe("2026-10-15T16:00:00.000Z"); // 23:00 HCM
     expect(lunch.scheduledStartTime).toBe("2026-10-15T04:30:00.000Z"); // 11:30 HCM
-    expect(dinner.scheduledStartTime).toBe("2026-10-15T10:00:00.000Z"); // 17:00 HCM
+    expect(dinner.scheduledStartTime).toBe("2026-10-15T11:00:00.000Z"); // 18:00 HCM
   });
 
   it("moves a routine whose start has passed to tomorrow", () => {
     const [sleep, lunch, dinner] = dndRoutinePayloads(HCM, at21);
     expect(sleep.scheduledStartTime).toBe("2026-10-15T16:00:00.000Z");
     expect(lunch.scheduledStartTime).toBe("2026-10-16T04:30:00.000Z");
-    expect(dinner.scheduledStartTime).toBe("2026-10-16T10:00:00.000Z");
+    expect(dinner.scheduledStartTime).toBe("2026-10-16T11:00:00.000Z");
   });
 
   it("anchors the wall clock in the user's zone, not UTC", () => {
@@ -221,6 +222,34 @@ describe("default routines", () => {
       format(zonedDate(d.toISOString(), HCM), "yyyy-MM-dd HH:mm");
     expect(wall(start)).toBe("2026-10-15 23:00");
     expect(wall(end)).toBe("2026-10-16 06:00");
+  });
+
+  it("moves sleep and meals out of a late night focus band", () => {
+    const [sleep, lunch, dinner] = dndRoutinePayloads(HCM, at10, "LATE_NIGHT");
+    const start = new Date(sleep.scheduledStartTime);
+    const end = new Date(start.getTime() + sleep.durationMinutes * 60_000);
+    const wall = (d: Date) => format(zonedDate(d.toISOString(), HCM), "HH:mm");
+    expect([wall(start), wall(end)]).toEqual(["02:30", "10:00"]);
+    expect(wall(new Date(lunch.scheduledStartTime))).toBe("12:30");
+    expect(wall(new Date(dinner.scheduledStartTime))).toBe("19:00");
+  });
+
+  it("keeps every routine outside each focus band", () => {
+    const bandHours = {
+      MORNING: [8, 12],
+      AFTERNOON: [12, 17],
+      EVENING: [17, 21],
+      LATE_NIGHT: [21, 26],
+    } as const;
+    for (const [band, [from, to]] of Object.entries(bandHours)) {
+      for (const p of dndRoutinePayloads(HCM, at10, band as FocusBand)) {
+        const local = zonedDate(p.scheduledStartTime, HCM);
+        let start = local.getHours() * 60 + local.getMinutes();
+        if (start < 12 * 60 && to > 24) start += 24 * 60;
+        const end = start + p.durationMinutes;
+        expect(end <= from * 60 || start >= to * 60).toBe(true);
+      }
+    }
   });
 
   it("skips routines already stored as DND series, ignoring case", () => {

@@ -3,6 +3,7 @@ import { combineToUtc, zonedDate } from "@zenflow/core";
 import {
   BULK_TAGS_MAX,
   type CreateDndInput,
+  type FocusBand,
   type Session,
   TAG_NAME_MAX,
 } from "@zenflow/shared";
@@ -181,12 +182,50 @@ export function tagsForBulk(selected: readonly string[]): string[] {
   return out.slice(0, BULK_TAGS_MAX);
 }
 
+interface Routine {
+  title: string;
+  start: string;
+  durationMinutes: number;
+}
+
 /** Daily do-not-disturb routines created at finish (start in user tz, minutes). */
-export const DEFAULT_ROUTINES = [
+export const DEFAULT_ROUTINES: readonly Routine[] = [
   { title: "Sleep", start: "23:00", durationMinutes: 420 },
   { title: "Lunch break", start: "11:30", durationMinutes: 60 },
-  { title: "Dinner", start: "17:00", durationMinutes: 60 },
-] as const;
+  { title: "Dinner", start: "18:00", durationMinutes: 60 },
+];
+
+/**
+ * Routines shifted around the onboarding focus band, so sleep and meals never
+ * cover the hours the user said they focus best. No band keeps the defaults.
+ */
+const BAND_ROUTINES: Record<FocusBand, readonly Routine[]> = {
+  MORNING: [
+    { title: "Sleep", start: "22:30", durationMinutes: 450 },
+    { title: "Lunch break", start: "12:00", durationMinutes: 60 },
+    { title: "Dinner", start: "18:00", durationMinutes: 60 },
+  ],
+  AFTERNOON: [
+    { title: "Sleep", start: "23:00", durationMinutes: 420 },
+    { title: "Lunch break", start: "11:00", durationMinutes: 60 },
+    { title: "Dinner", start: "18:00", durationMinutes: 60 },
+  ],
+  EVENING: [
+    { title: "Sleep", start: "23:30", durationMinutes: 420 },
+    { title: "Lunch break", start: "11:30", durationMinutes: 60 },
+    { title: "Dinner", start: "16:00", durationMinutes: 60 },
+  ],
+  LATE_NIGHT: [
+    { title: "Sleep", start: "02:30", durationMinutes: 450 },
+    { title: "Lunch break", start: "12:30", durationMinutes: 60 },
+    { title: "Dinner", start: "19:00", durationMinutes: 60 },
+  ],
+};
+
+/** The routines for a focus band, or the defaults when none was chosen. */
+export function routinesFor(band: FocusBand | null): readonly Routine[] {
+  return band ? BAND_ROUTINES[band] : DEFAULT_ROUTINES;
+}
 
 export const DAILY_RRULE = "FREQ=DAILY";
 
@@ -213,8 +252,12 @@ export function firstRoutineStart(
 }
 
 /** POST /sessions bodies for the default routines, in the user's timezone. */
-export function dndRoutinePayloads(tz: string, now: Date): CreateDndInput[] {
-  return DEFAULT_ROUTINES.map(
+export function dndRoutinePayloads(
+  tz: string,
+  now: Date,
+  band: FocusBand | null = null,
+): CreateDndInput[] {
+  return routinesFor(band).map(
     (r): CreateDndInput => ({
       type: "DND",
       title: t(r.title),

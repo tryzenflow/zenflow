@@ -16,6 +16,9 @@ export const FOCUS_BAND_HOURS: Record<FocusBand, { from: string; to: string }> =
     LATE_NIGHT: { from: "21:00", to: "02:00" },
   };
 
+/** Preselected in onboarding so the step is one tap. */
+export const DEFAULT_FOCUS_BAND: FocusBand = "MORNING";
+
 const LABEL: Record<FocusBand, string> = {
   MORNING: "Morning",
   AFTERNOON: "Afternoon",

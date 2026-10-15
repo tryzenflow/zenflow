@@ -10,8 +10,12 @@ import {
   Check,
   ChevronLeft,
   GraduationCap,
+  type LucideIcon,
+  MoonStar,
   Sliders,
   Sun,
+  Sunrise,
+  Sunset,
   User,
 } from "@/components/Icons";
 import { ImportedTimetable } from "@/components/onboarding/imported-timetable";
@@ -25,7 +29,7 @@ import { useNotificationToggle } from "@/hooks/use-notification-toggle";
 import { usePushStatusStore } from "@/hooks/use-push-status-store";
 import { useUserStore } from "@/hooks/use-user-store";
 import { DEFAULT_USER_NAME, type FocusBand } from "@zenflow/shared";
-import { focusBandOptions } from "@/lib/focus-band";
+import { DEFAULT_FOCUS_BAND, focusBandOptions } from "@/lib/focus-band";
 import {
   FIRST_STEP,
   type OnboardingStep,
@@ -178,6 +182,33 @@ const STEP_ICON: Partial<Record<OnboardingStep, typeof User>> = {
 };
 
 /** Rounded card whose children are separated by hairlines. */
+/** Glyph and glass tint per focus band, warm at dawn to cool at night. */
+const BAND_VISUAL: Record<
+  FocusBand,
+  { Icon: LucideIcon; tint: string; ink: string }
+> = {
+  MORNING: {
+    Icon: Sunrise,
+    tint: "border-amber-500/40 bg-amber-500/15",
+    ink: "text-amber-600 dark:text-amber-400",
+  },
+  AFTERNOON: {
+    Icon: Sun,
+    tint: "border-orange-500/40 bg-orange-500/15",
+    ink: "text-orange-600 dark:text-orange-400",
+  },
+  EVENING: {
+    Icon: Sunset,
+    tint: "border-rose-500/40 bg-rose-500/15",
+    ink: "text-rose-600 dark:text-rose-400",
+  },
+  LATE_NIGHT: {
+    Icon: MoonStar,
+    tint: "border-indigo-500/40 bg-indigo-500/15",
+    ink: "text-indigo-600 dark:text-indigo-400",
+  },
+};
+
 function Group({ children }: { children: React.ReactNode }) {
   useLanguage();
   const items = (Array.isArray(children) ? children : [children]).flat();
@@ -217,8 +248,9 @@ export default function OnboardingScreen() {
     user?.name && user.name !== DEFAULT_USER_NAME ? user.name : "",
   );
   const [blocked, setBlocked] = useState(false);
-  const [focusBand, setFocusBand] = useState<FocusBand | null>(
-    user?.focusBand ?? null,
+  // Morning is preselected so the step is one tap.
+  const [focusBand, setFocusBand] = useState<FocusBand>(
+    user?.focusBand ?? DEFAULT_FOCUS_BAND,
   );
 
   useEffect(() => {
@@ -280,7 +312,7 @@ export default function OnboardingScreen() {
 
   const saveFocus = () =>
     run(async () => {
-      if (!focusBand || focusBand === user?.focusBand) return;
+      if (focusBand === user?.focusBand) return;
       updateUser(await updateBasicInfo({ focusBand }));
     });
 
@@ -361,7 +393,12 @@ export default function OnboardingScreen() {
   async function seedDefaultRoutines() {
     try {
       const now = new Date();
-      const payloads = dndRoutinePayloads(user?.timezone || "UTC", now);
+      const saved = useUserStore.getState().user;
+      const payloads = dndRoutinePayloads(
+        saved?.timezone || "UTC",
+        now,
+        saved?.focusBand ?? null,
+      );
       const found = await Promise.all(
         payloads.map((p) =>
           searchSessions({ q: p.title, anchor: now.toISOString(), limit: 50 }),
@@ -452,6 +489,7 @@ export default function OnboardingScreen() {
         <Group>
           {focusBandOptions().map((option) => {
             const on = focusBand === option.band;
+            const { Icon, tint, ink } = BAND_VISUAL[option.band];
             return (
               <Pressable
                 key={option.band}
@@ -460,8 +498,19 @@ export default function OnboardingScreen() {
                 disabled={busy}
                 role="radio"
                 aria-checked={on}
-                className="flex-row items-center gap-3 px-4 py-3.5"
+                className={cn(
+                  "flex-row items-center gap-3 px-4 py-3",
+                  on && "bg-primary/[0.06]",
+                )}
               >
+                <View
+                  className={cn(
+                    "h-10 w-10 items-center justify-center rounded-xl border",
+                    tint,
+                  )}
+                >
+                  <Icon size={20} className={ink} />
+                </View>
                 <View className="min-w-0 flex-1">
                   <Text
                     className={cn(
@@ -483,7 +532,7 @@ export default function OnboardingScreen() {
       );
       footer = (
         <>
-          {primary(COPY.continue, saveFocus, !focusBand)}
+          {primary(COPY.continue, saveFocus)}
           {ghost(COPY.skipForNow, advance)}
         </>
       );

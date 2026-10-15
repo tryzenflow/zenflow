@@ -108,6 +108,8 @@ import {
   Sparkles,
   Star,
   Sun,
+  Sunrise,
+  Sunset,
   Table,
   Tag,
   Terminal,
@@ -133,6 +135,8 @@ function interopIcon(icon: LucideIcon) {
 }
 interopIcon(Settings);
 interopIcon(Sun);
+interopIcon(Sunrise);
+interopIcon(Sunset);
 interopIcon(MoonStar);
 interopIcon(AlignJustify);
 interopIcon(Activity);
@@ -344,6 +348,8 @@ export {
   Search,
   Sparkles,
   Sun,
+  Sunrise,
+  Sunset,
   Table,
   Tag,
   Terminal,
