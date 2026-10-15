@@ -9,10 +9,10 @@ export const APK_URL =
 export const CONTACT_EMAIL = "privacy@usezenflow.com";
 
 export type Lang = "en" | "vi";
-export const LANGS: Lang[] = ["en", "vi"];
+export const LANGS: Lang[] = ["vi", "en"];
 
-/** Page path for a language: `/` and `/vi/`. */
-export const pathFor = (lang: Lang): string => (lang === "en" ? "/" : "/vi/");
+/** Page path for a language: Vietnamese at `/`, English at `/en/`. */
+export const pathFor = (lang: Lang): string => (lang === "vi" ? "/" : "/en/");
 
 export const legalUrl = (page: "privacy" | "terms", lang: Lang): string =>
   `${SITE_URL}/${page}${lang === "vi" ? "?lang=vi" : ""}`;

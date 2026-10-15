@@ -1,6 +1,6 @@
 # Landing
 
-Public site at `usezenflow.com`: Astro static pages with React islands for the motion demos. EN at `/`, VI at `/vi/`.
+Public site at `usezenflow.com`: Astro static pages with React islands for the motion demos. VI at `/`, EN at `/en/`.
 
 ## Run
 
@@ -23,4 +23,4 @@ pnpm --filter landing check      # typecheck, lint, unit tests
 - `src/content/copy.ts`: EN and VI copy, ported from `backend/src/landing/landing.content.ts`.
 - `src/islands/`: React islands, all `client:visible`. Each wraps itself in `LazyMotion` so motion features load separately.
 - `src/og/card.ts`: share cards, built to `/og/en.png` and `/og/vi.png`.
-- Reduced motion: `prefers-reduced-motion` disables the CSS animations and the JS motion, and the counter shows its final value.
+- Reduced motion: `prefers-reduced-motion` disables the CSS animations and the JS motion.

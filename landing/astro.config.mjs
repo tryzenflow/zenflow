@@ -5,6 +5,8 @@ import { defineConfig } from "astro/config";
 export default defineConfig({
   site: process.env.PUBLIC_SITE_URL || "https://usezenflow.com",
   integrations: [react()],
+  // Vietnamese moved from /vi/ to /.
+  redirects: { "/vi": "/" },
   build: { inlineStylesheets: "always" },
   vite: {
     plugins: [tailwindcss()],

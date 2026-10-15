@@ -1,7 +1,6 @@
 ---
 import type { Lang } from "../config";
 import { COPY } from "../content/copy";
-import Counter from "../islands/Counter";
 import Icon from "./Icon.astro";
 
 interface Props {
@@ -10,34 +9,22 @@ interface Props {
 const { lang } = Astro.props;
 const c = COPY[lang];
 
-/** Seven features on a three column bento: wide, narrow / three narrow / narrow, wide. */
-const SPAN = ["md:col-span-2", "", "", "", "", "", "md:col-span-2"];
-const TINT = [
-  "var(--color-primary)",
-  "var(--color-accent)",
-  "var(--color-lime)",
-  "var(--color-primary)",
-  "var(--color-accent)",
-  "var(--color-lime)",
-  "var(--color-primary)",
-];
+/** Six features on a two by three grid. */
+const TINT = ["var(--color-primary)", "var(--color-accent)", "var(--color-lime)"];
 ---
 
 <section class="mx-auto max-w-6xl px-4 py-24 sm:px-6">
   <h2 data-reveal class="max-w-2xl text-[clamp(2rem,5vw,3.25rem)] leading-tight font-extrabold tracking-tight text-balance">
     {c.featuresLabel}
   </h2>
-  <ul class="mt-12 grid gap-4 md:grid-cols-3">
+  <ul class="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
     {
       c.features.map((f, i) => (
         <li
           data-reveal
           data-spotlight
-          class:list={[
-            "card-spotlight group overflow-hidden rounded-3xl border border-rule bg-card p-6 transition-transform duration-300 hover:-translate-y-1",
-            SPAN[i],
-          ]}
-          style={`--t:${TINT[i]};--i:${i % 3}`}
+          class="card-spotlight group overflow-hidden rounded-3xl border border-rule bg-card p-6 transition-transform duration-300 hover:-translate-y-1"
+          style={`--t:${TINT[(i + Math.floor(i / 3)) % 3]};--i:${i % 3}`}
         >
           <div
             aria-hidden="true"
@@ -52,16 +39,4 @@ const TINT = [
       ))
     }
   </ul>
-  <dl class="mt-4 grid gap-4 sm:grid-cols-2">
-    {
-      c.counters.map((n, i) => (
-        <div data-reveal data-spotlight class="card-spotlight overflow-hidden rounded-3xl border border-rule bg-soft p-8" style={`--i:${i}`}>
-          <dt class="text-muted">{n.label}</dt>
-          <dd class="text-sunrise mt-1 text-6xl font-extrabold tracking-tight">
-            <Counter client:visible={{ rootMargin: "300px" }} value={n.value} />
-          </dd>
-        </div>
-      ))
-    }
-  </dl>
 </section>

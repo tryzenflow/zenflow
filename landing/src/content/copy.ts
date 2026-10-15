@@ -7,7 +7,6 @@ export type IconName =
   | "sliders"
   | "dial"
   | "cloud-off"
-  | "globe"
   | "lock"
   | "download"
   | "check";
@@ -61,7 +60,6 @@ export interface Copy {
   blipsBody: string;
   featuresLabel: string;
   features: { icon: IconName; title: string; body: string }[];
-  counters: { value: number; label: string }[];
   finalTitle: string;
   finalBody: string;
   qrLabel: string;
@@ -79,27 +77,168 @@ export interface Copy {
 /** Minutes after midnight, on the 15 minute grid. */
 const t = (h: number, m = 0) => h * 60 + m;
 
-/** EN and VI copy. Ported from `backend/src/landing/landing.content.ts`; keep both languages in step. */
+/** VI and EN copy: casual, the way DLU students talk. Keep both languages in step. */
 export const COPY: Record<Lang, Copy> = {
+  vi: {
+    htmlLang: "vi",
+    ogLocale: "vi_VN",
+    title: "Zenflow: lên lịch học auto, khỏi lo deadline",
+    description:
+      "Zenflow lấy thời khóa biểu DLU rồi tự xếp task vào giờ trống, trước deadline. App Android cho sinh viên DLU.",
+    shareTitle: "Lên lịch học auto, khỏi lo deadline",
+    shareAlt: "Zenflow, lên lịch học auto, khỏi lo deadline",
+    languageName: "Tiếng Việt",
+    languageShort: "VI",
+    skip: "Tới nội dung chính",
+    badge: "Dành riêng cho sinh viên DLU",
+    headline: "Cứ quăng task vào.",
+    accent: "Zenflow lo phần giờ giấc.",
+    lead: "Lịch học, lịch thi, bài tập gom hết về một chỗ. Thêm task kèm deadline là Zenflow tự nhét vào giờ trống, né giờ học.",
+    download: "Tải cho Android",
+    downloadShort: "Tải app",
+    howLink: "Xem nó chạy sao",
+    downloadNote: "Free. Đăng nhập bằng mail @dlu.edu.vn là xong.",
+    syncsFrom: "Đồng bộ từ",
+    sources: ["LMS DLU", "Cổng sinh viên"],
+    demo: {
+      day: "T3 14",
+      today: "Hôm nay",
+      hint: "Chạm vào task để xếp lịch",
+      reset: "Làm lại",
+      placed: "Xếp xong rồi nè",
+      allPlaced: "Xong hết trước deadline",
+      minutes: "phút",
+      due: "Deadline T6",
+      beforeExam: "trước giờ thi",
+      beforeDeadline: "trước deadline",
+      label: "Ngày mẫu có giờ học, một buổi thi và mấy task đang chờ xếp",
+      fixed: [
+        { title: "Giải tích 2", kind: "lecture", start: t(8), end: t(9, 30) },
+        { title: "Thực hành CSDL", kind: "lecture", start: t(10), end: t(11, 30) },
+        { title: "Thi giữa kỳ Vật lý", kind: "exam", start: t(13, 30), end: t(15) },
+        { title: "Deadline báo cáo", kind: "assignment", start: t(17), end: t(17, 30) },
+      ],
+      tasks: [
+        { id: "physics", title: "Ôn Vật lý", minutes: 45, deadline: t(13, 30), reason: "exam" },
+        { id: "report", title: "Viết báo cáo thực hành", minutes: 60, deadline: t(17), reason: "deadline" },
+        { id: "essay", title: "Viết tiểu luận", minutes: 90, deadline: t(21), reason: "deadline" },
+      ],
+    },
+    shotsLabel: "Nhìn thử nè",
+    shotsTitle: "Cả tuần gọn trong một màn hình",
+    week: {
+      days: ["T2", "T3", "T4", "T5", "T6", "T7", "CN"],
+      label: "Lịch tuần Zenflow có giờ học, một buổi thi và các task đã xếp",
+    },
+    howLabel: "Từ thời khóa biểu tới kế hoạch, ba bước là xong",
+    how: [
+      {
+        title: "Kết nối một lần",
+        body: "Link LMS với cổng sinh viên. Lịch học, lịch thi, bài tập tự nhảy vào.",
+      },
+      {
+        title: "Thêm task",
+        body: "Gõ tên task, chọn deadline. Vậy thôi.",
+      },
+      {
+        title: "Zenflow tìm giờ",
+        body: "Tự chọn giờ trống, né giờ học với task khác, tới giờ thì nhắc bạn.",
+      },
+    ],
+    blipsLabel: "Sắp có",
+    blipsTitle: "Gặp hội Blip",
+    blipsBody: "Làm xong task để ấp một bé Blip.",
+    featuresLabel: "Làm ra cho đúng kiểu sinh viên xoay xở",
+    features: [
+      {
+        icon: "sunrise",
+        title: "Xếp lịch xịn",
+        body: "Task vào đúng giờ trống trước deadline, không bao giờ đè lên giờ học hay giờ thi.",
+      },
+      {
+        icon: "calendar",
+        title: "Luôn mới nhất",
+        body: "Đổi lịch học hay dời lịch thi, lịch và lời nhắc đổi theo liền.",
+      },
+      {
+        icon: "sliders",
+        title: "Hiểu nhịp của bạn",
+        body: "Kéo task sang giờ khác, Zenflow nhớ luôn khung giờ bạn thích.",
+      },
+      {
+        icon: "dial",
+        title: "Nhắc đúng lúc",
+        body: "Ping trước mỗi buổi, và khi có gì thay đổi.",
+      },
+      {
+        icon: "cloud-off",
+        title: "Rớt mạng vẫn xem được",
+        body: "Mấy ngày đã tải vẫn mở được khi mất sóng.",
+      },
+      {
+        icon: "lock",
+        title: "Riêng tư",
+        body: "Mật khẩu được mã hóa. Ngắt kết nối là xóa sạch.",
+      },
+    ],
+    finalTitle: "Hết cảnh chạy deadline sấp mặt.",
+    finalBody: "Để Zenflow tìm giờ giùm bạn.",
+    qrLabel: "Quét mã để tải về máy",
+    stepsLabel: "Cài trong 3 bước",
+    steps: [
+      "Bấm Tải cho Android.",
+      "Mở file và cho phép cài từ nguồn này.",
+      "Đăng nhập bằng mail @dlu.edu.vn.",
+    ],
+    installNote:
+      "Android có thể hỏi cho phép cài từ trình duyệt hay app quản lý file. Bình thường thôi, vì app chưa lên Google Play.",
+    faqLabel: "Hỏi nhanh đáp gọn",
+    faq: [
+      {
+        q: "Ai xài được Zenflow?",
+        a: "Sinh viên có mail @dlu.edu.vn. Đăng nhập bằng mã gửi về mail đó.",
+      },
+      {
+        q: "Sao phải nhập mật khẩu LMS với cổng sinh viên?",
+        a: "Để đọc lịch học, lịch thi và bài tập giùm bạn. Mật khẩu được mã hóa, ngắt kết nối là xóa. Chỉ kết nối được đúng mã sinh viên của bạn.",
+      },
+      {
+        q: "Có bản iPhone không?",
+        a: "Chưa có nha. Giờ Zenflow mới có trên Android.",
+      },
+      {
+        q: "Sao không có trên Google Play?",
+        a: "Zenflow đang dùng thử nên bạn cài thẳng từ file. Có bản mới là app báo liền.",
+      },
+      {
+        q: "Mất mạng có xài được không?",
+        a: "Xem được mấy ngày đã tải. Thêm hay dời task thì cần có mạng.",
+      },
+    ],
+    privacyLink: "Chính sách riêng tư",
+    termsLink: "Điều khoản sử dụng",
+    contact: "Liên hệ",
+    rightsReserved: "Bảo lưu mọi quyền.",
+  },
   en: {
     htmlLang: "en",
     ogLocale: "en_US",
-    title: "Zenflow: the study planner that finds the time",
+    title: "Zenflow: drop your tasks, it finds the time",
     description:
-      "Zenflow imports your DLU timetable and places your tasks around classes and deadlines. Android app for DLU students.",
-    shareTitle: "The study planner that finds the time",
-    shareAlt: "Zenflow, the study planner that finds the time",
+      "Zenflow pulls in your DLU timetable and slots your tasks around classes and deadlines. Android app for DLU students.",
+    shareTitle: "Drop your tasks. Zenflow finds the time.",
+    shareAlt: "Zenflow, drop your tasks and it finds the time",
     languageName: "English",
     languageShort: "EN",
     skip: "Skip to content",
     badge: "Made for DLU students",
-    headline: "Tell Zenflow what needs doing.",
-    accent: "It finds the time.",
-    lead: "Your lectures, exams and assignments land on one calendar. Add a task with a deadline and Zenflow slots it in around your classes.",
-    download: "Download for Android",
-    downloadShort: "Download",
+    headline: "Drop your tasks in.",
+    accent: "Zenflow finds the time.",
+    lead: "Classes, exams and assignments on one calendar. Add a task with a deadline and Zenflow squeezes it in around your classes.",
+    download: "Get it for Android",
+    downloadShort: "Get the app",
     howLink: "See how it works",
-    downloadNote: "Free. Sign in with your @dlu.edu.vn email.",
+    downloadNote: "Free. Just sign in with your @dlu.edu.vn email.",
     syncsFrom: "Syncs from",
     sources: ["DLU LMS", "Student portal"],
     demo: {
@@ -107,8 +246,8 @@ export const COPY: Record<Lang, Copy> = {
       today: "Today",
       hint: "Tap a task to place it",
       reset: "Start over",
-      placed: "Placed for you",
-      allPlaced: "All set before the deadlines",
+      placed: "Sorted",
+      allPlaced: "All done before the deadlines",
       minutes: "min",
       due: "Due Fri",
       beforeExam: "before the exam",
@@ -126,92 +265,83 @@ export const COPY: Record<Lang, Copy> = {
         { id: "essay", title: "Write essay", minutes: 90, deadline: t(21), reason: "deadline" },
       ],
     },
-    shotsLabel: "A look inside",
+    shotsLabel: "Sneak peek",
     shotsTitle: "Your whole week, sorted",
     week: {
       days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-      label: "Zenflow week view with lectures, an exam and placed tasks",
+      label: "Zenflow week view with classes, an exam and placed tasks",
     },
-    howLabel: "From timetable to plan in three steps",
+    howLabel: "Timetable to plan in three steps",
     how: [
       {
         title: "Connect once",
-        body: "Link your LMS and student portal. Your timetable, exams and assignments appear on their own.",
+        body: "Link your LMS and student portal. Classes, exams and assignments just show up.",
       },
       {
-        title: "Add what you need to do",
-        body: "Type a task and pick a deadline. That is all Zenflow needs.",
+        title: "Add a task",
+        body: "Type it and pick a deadline. That's it.",
       },
       {
         title: "Zenflow finds the time",
-        body: "It picks a free slot that avoids classes and other tasks, then reminds you.",
+        body: "It grabs a free slot that dodges classes and other tasks, then pings you.",
       },
     ],
     blipsLabel: "Coming soon",
     blipsTitle: "Meet the Blips",
-    blipsBody: "Check off tasks to hatch one.",
-    featuresLabel: "Built around how students plan",
+    blipsBody: "Finish tasks to hatch one.",
+    featuresLabel: "Built for how students actually plan",
     features: [
       {
         icon: "sunrise",
-        title: "Smart placement",
-        body: "Tasks land in free slots before the deadline, never on top of a lecture or an exam.",
+        title: "Smart slots",
+        body: "Tasks land in free time before the deadline, never on top of a class or an exam.",
       },
       {
         icon: "calendar",
-        title: "Always current",
-        body: "When your timetable or an exam changes, your calendar and reminders change with it.",
+        title: "Always up to date",
+        body: "Timetable changed or exam moved? Your calendar and reminders follow.",
       },
       {
         icon: "sliders",
-        title: "Learns your rhythm",
-        body: "Move a task and Zenflow remembers the hours you prefer.",
+        title: "Gets your rhythm",
+        body: "Move a task and Zenflow remembers the hours you like.",
       },
       {
         icon: "dial",
-        title: "Reminders that matter",
+        title: "Pings that matter",
         body: "A nudge before each session, and when something moves.",
       },
       {
         icon: "cloud-off",
         title: "Works offline",
-        body: "Your saved days stay readable without signal.",
-      },
-      {
-        icon: "globe",
-        title: "Vietnamese and English",
-        body: "Switch language any time.",
+        body: "Days you've loaded stay readable with no signal.",
       },
       {
         icon: "lock",
-        title: "Private by design",
-        body: "Your password is stored encrypted. Disconnect and it is deleted.",
+        title: "Private by default",
+        body: "Your password is encrypted. Disconnect and it's gone.",
       },
     ],
-    counters: [
-      { value: 96, label: "Slots checked every day" },
-      { value: 15, label: "Minutes per slot" },
-    ],
-    finalTitle: "Stop juggling deadlines.",
+    finalTitle: "No more deadline panic.",
     finalBody: "Let Zenflow find the time.",
-    qrLabel: "Scan to download on your phone",
+    qrLabel: "Scan to grab it on your phone",
     stepsLabel: "Install in 3 steps",
     steps: [
-      "Tap Download for Android.",
+      "Tap Get it for Android.",
       "Open the file and allow installs from this source.",
       "Sign in with your @dlu.edu.vn email.",
     ],
     installNote:
-      "Android may ask you to allow installs from your browser or files app. That is normal for apps outside Google Play.",
-    faqLabel: "Questions",
+      "Android might ask you to allow installs from your browser or files app. Totally normal for apps outside Google Play.",
+    faqLabel: "Quick questions",
     faq: [
       {
         q: "Who can use Zenflow?",
-        a: "Students with a @dlu.edu.vn email. Sign in with a code we send to it.",
+        a: "Students with a @dlu.edu.vn email. Sign in with a code we send there.",
       },
       {
-        q: "Why does it ask for my LMS and portal password?",
-        a: "To read your timetable, exams and assignments for you. The password is stored encrypted, and disconnecting an account deletes it.",
+        q: "Why does it want my LMS and portal password?",
+        a: "To read your timetable, exams and assignments for you. It's encrypted, and disconnecting deletes it. You can only connect your own student ID.",
       },
       {
         q: "Is there an iPhone version?",
@@ -219,166 +349,16 @@ export const COPY: Record<Lang, Copy> = {
       },
       {
         q: "Why isn't it on Google Play?",
-        a: "Zenflow is in early access, so you install the file directly. New versions are offered inside the app.",
+        a: "Zenflow is in early access, so you install the file directly. The app tells you when there's a new version.",
       },
       {
         q: "Does it work offline?",
-        a: "You can read days you have already loaded. Adding or moving tasks needs a connection.",
+        a: "You can read days you've already loaded. Adding or moving tasks needs a connection.",
       },
     ],
     privacyLink: "Privacy policy",
     termsLink: "Terms of service",
     contact: "Contact",
     rightsReserved: "All rights reserved.",
-  },
-  vi: {
-    htmlLang: "vi",
-    ogLocale: "vi_VN",
-    title: "Zenflow: lịch học tự tìm giờ cho bạn",
-    description:
-      "Zenflow lấy thời khóa biểu DLU và xếp việc của bạn quanh giờ học và hạn nộp. Ứng dụng Android cho sinh viên DLU.",
-    shareTitle: "Lịch học tự tìm giờ cho bạn",
-    shareAlt: "Zenflow, lịch học tự tìm giờ cho bạn",
-    languageName: "Tiếng Việt",
-    languageShort: "VI",
-    skip: "Đến nội dung chính",
-    badge: "Dành cho sinh viên DLU",
-    headline: "Cứ nói việc cần làm.",
-    accent: "Zenflow tìm giờ cho bạn.",
-    lead: "Lịch học, lịch thi và bài tập nằm trên một lịch. Thêm việc kèm hạn nộp, Zenflow sẽ xếp vào chỗ trống quanh giờ học.",
-    download: "Tải cho Android",
-    downloadShort: "Tải về",
-    howLink: "Xem cách hoạt động",
-    downloadNote: "Miễn phí. Đăng nhập bằng email @dlu.edu.vn.",
-    syncsFrom: "Đồng bộ từ",
-    sources: ["LMS DLU", "Cổng sinh viên"],
-    demo: {
-      day: "T3 14",
-      today: "Hôm nay",
-      hint: "Chạm vào một việc để xếp lịch",
-      reset: "Làm lại",
-      placed: "Đã xếp cho bạn",
-      allPlaced: "Đã xếp xong trước hạn",
-      minutes: "phút",
-      due: "Hạn T6",
-      beforeExam: "trước giờ thi",
-      beforeDeadline: "trước hạn nộp",
-      label: "Ngày mẫu có giờ học, một buổi thi và các việc chờ xếp lịch",
-      fixed: [
-        { title: "Giải tích 2", kind: "lecture", start: t(8), end: t(9, 30) },
-        { title: "Thực hành CSDL", kind: "lecture", start: t(10), end: t(11, 30) },
-        { title: "Thi giữa kỳ Vật lý", kind: "exam", start: t(13, 30), end: t(15) },
-        { title: "Hạn nộp báo cáo", kind: "assignment", start: t(17), end: t(17, 30) },
-      ],
-      tasks: [
-        { id: "physics", title: "Ôn Vật lý", minutes: 45, deadline: t(13, 30), reason: "exam" },
-        { id: "report", title: "Viết báo cáo thực hành", minutes: 60, deadline: t(17), reason: "deadline" },
-        { id: "essay", title: "Viết tiểu luận", minutes: 90, deadline: t(21), reason: "deadline" },
-      ],
-    },
-    shotsLabel: "Xem thử",
-    shotsTitle: "Cả tuần của bạn, gọn gàng",
-    week: {
-      days: ["T2", "T3", "T4", "T5", "T6", "T7", "CN"],
-      label: "Lịch tuần Zenflow có giờ học, một buổi thi và các việc đã xếp",
-    },
-    howLabel: "Từ thời khóa biểu đến kế hoạch trong ba bước",
-    how: [
-      {
-        title: "Kết nối một lần",
-        body: "Liên kết LMS và cổng sinh viên. Lịch học, lịch thi và bài tập tự hiện lên.",
-      },
-      {
-        title: "Thêm việc cần làm",
-        body: "Gõ tên việc và chọn hạn nộp. Zenflow chỉ cần vậy.",
-      },
-      {
-        title: "Zenflow tìm giờ",
-        body: "Nó chọn khung giờ trống, tránh giờ học và việc khác, rồi nhắc bạn.",
-      },
-    ],
-    blipsLabel: "Sắp ra mắt",
-    blipsTitle: "Làm quen với Blip",
-    blipsBody: "Xong việc để ấp một Blip.",
-    featuresLabel: "Làm ra cho cách sinh viên lên kế hoạch",
-    features: [
-      {
-        icon: "sunrise",
-        title: "Xếp lịch thông minh",
-        body: "Việc được xếp vào giờ trống trước hạn nộp, không bao giờ đè lên giờ học hay giờ thi.",
-      },
-      {
-        icon: "calendar",
-        title: "Luôn cập nhật",
-        body: "Khi thời khóa biểu hoặc lịch thi đổi, lịch và lời nhắc đổi theo.",
-      },
-      {
-        icon: "sliders",
-        title: "Học theo thói quen",
-        body: "Kéo một việc sang giờ khác, Zenflow nhớ khung giờ bạn thích.",
-      },
-      {
-        icon: "dial",
-        title: "Nhắc đúng lúc",
-        body: "Nhắc trước mỗi buổi và khi có gì thay đổi.",
-      },
-      {
-        icon: "cloud-off",
-        title: "Dùng được khi mất mạng",
-        body: "Những ngày đã tải vẫn xem được khi không có sóng.",
-      },
-      {
-        icon: "globe",
-        title: "Tiếng Việt và tiếng Anh",
-        body: "Đổi ngôn ngữ bất cứ lúc nào.",
-      },
-      {
-        icon: "lock",
-        title: "Riêng tư từ thiết kế",
-        body: "Mật khẩu được lưu mã hóa. Ngắt kết nối là xóa.",
-      },
-    ],
-    counters: [
-      { value: 96, label: "Khung giờ được xét mỗi ngày" },
-      { value: 15, label: "Phút mỗi khung giờ" },
-    ],
-    finalTitle: "Đừng tự xoay xở với hạn nộp nữa.",
-    finalBody: "Để Zenflow tìm giờ cho bạn.",
-    qrLabel: "Quét mã để tải về điện thoại",
-    stepsLabel: "Cài đặt trong 3 bước",
-    steps: [
-      "Nhấn Tải cho Android.",
-      "Mở tệp và cho phép cài từ nguồn này.",
-      "Đăng nhập bằng email @dlu.edu.vn.",
-    ],
-    installNote:
-      "Android có thể hỏi cho phép cài từ trình duyệt hoặc ứng dụng tệp. Đây là chuyện bình thường với ứng dụng ngoài Google Play.",
-    faqLabel: "Câu hỏi thường gặp",
-    faq: [
-      {
-        q: "Ai dùng được Zenflow?",
-        a: "Sinh viên có email @dlu.edu.vn. Đăng nhập bằng mã chúng tôi gửi đến email đó.",
-      },
-      {
-        q: "Vì sao cần mật khẩu LMS và cổng sinh viên?",
-        a: "Để đọc thời khóa biểu, lịch thi và bài tập giúp bạn. Mật khẩu được lưu mã hóa, và ngắt kết nối tài khoản sẽ xóa nó.",
-      },
-      {
-        q: "Có bản cho iPhone không?",
-        a: "Chưa có. Hiện Zenflow chỉ có cho Android.",
-      },
-      {
-        q: "Vì sao không có trên Google Play?",
-        a: "Zenflow đang trong giai đoạn dùng thử sớm nên bạn cài trực tiếp từ tệp. Bản mới sẽ được báo ngay trong ứng dụng.",
-      },
-      {
-        q: "Có dùng được khi mất mạng không?",
-        a: "Bạn xem được những ngày đã tải. Thêm hoặc dời việc cần có kết nối.",
-      },
-    ],
-    privacyLink: "Chính sách riêng tư",
-    termsLink: "Điều khoản sử dụng",
-    contact: "Liên hệ",
-    rightsReserved: "Bảo lưu mọi quyền.",
   },
 };
