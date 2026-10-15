@@ -2,6 +2,7 @@ import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { listIntegrations } from "@/api/integrations";
 import { createTagsBulk, listTags } from "@/api/tags";
+import { createSession, searchSessions } from "@/api/tasks";
 import { updateBasicInfo } from "@/api/users";
 import {
   AlertCircle,
@@ -9,9 +10,15 @@ import {
   Check,
   ChevronLeft,
   GraduationCap,
+  type LucideIcon,
+  MoonStar,
   Sliders,
+  Sun,
+  Sunrise,
+  Sunset,
   User,
 } from "@/components/Icons";
+import { ImportedTimetable } from "@/components/onboarding/imported-timetable";
 import { DluAccountsSection } from "@/components/settings/dlu-accounts-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,12 +28,15 @@ import { useIntegrationStore } from "@/hooks/use-integration-store";
 import { useNotificationToggle } from "@/hooks/use-notification-toggle";
 import { usePushStatusStore } from "@/hooks/use-push-status-store";
 import { useUserStore } from "@/hooks/use-user-store";
-import { DEFAULT_USER_NAME } from "@zenflow/shared";
+import { DEFAULT_USER_NAME, type FocusBand } from "@zenflow/shared";
+import { DEFAULT_FOCUS_BAND, focusBandOptions } from "@/lib/focus-band";
 import {
   FIRST_STEP,
   type OnboardingStep,
   canGoBack,
+  dndRoutinePayloads,
   initialTagSelection,
+  missingRoutines,
   newTagsForBulk,
   nextStep,
   prevStep,
@@ -35,8 +45,8 @@ import {
 import { LANGUAGES } from "@/lib/preferences";
 import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
+import { Spinner } from "@/components/ui/spinner";
 import {
-  ActivityIndicator,
   AppState,
   KeyboardAvoidingView,
   Linking,
@@ -75,6 +85,14 @@ const COPY = {
     },
     get label() {
       return t("Display name");
+    },
+  },
+  focus: {
+    get title() {
+      return t("When do you focus best?");
+    },
+    get body() {
+      return t("We'll try this part of the day first when we place your sessions.");
     },
   },
   dlu: {
@@ -158,11 +176,39 @@ const COPY = {
 
 const STEP_ICON: Partial<Record<OnboardingStep, typeof User>> = {
   name: User,
+  focus: Sun,
   dlu: GraduationCap,
   notifications: Bell,
 };
 
 /** Rounded card whose children are separated by hairlines. */
+/** Glyph and glass tint per focus band, warm at dawn to cool at night. */
+const BAND_VISUAL: Record<
+  FocusBand,
+  { Icon: LucideIcon; tint: string; ink: string }
+> = {
+  MORNING: {
+    Icon: Sunrise,
+    tint: "border-amber-500/40 bg-amber-500/15",
+    ink: "text-amber-600 dark:text-amber-400",
+  },
+  AFTERNOON: {
+    Icon: Sun,
+    tint: "border-orange-500/40 bg-orange-500/15",
+    ink: "text-orange-600 dark:text-orange-400",
+  },
+  EVENING: {
+    Icon: Sunset,
+    tint: "border-rose-500/40 bg-rose-500/15",
+    ink: "text-rose-600 dark:text-rose-400",
+  },
+  LATE_NIGHT: {
+    Icon: MoonStar,
+    tint: "border-indigo-500/40 bg-indigo-500/15",
+    ink: "text-indigo-600 dark:text-indigo-400",
+  },
+};
+
 function Group({ children }: { children: React.ReactNode }) {
   useLanguage();
   const items = (Array.isArray(children) ? children : [children]).flat();
@@ -202,6 +248,10 @@ export default function OnboardingScreen() {
     user?.name && user.name !== DEFAULT_USER_NAME ? user.name : "",
   );
   const [blocked, setBlocked] = useState(false);
+  // Morning is preselected so the step is one tap.
+  const [focusBand, setFocusBand] = useState<FocusBand>(
+    user?.focusBand ?? DEFAULT_FOCUS_BAND,
+  );
 
   useEffect(() => {
     listIntegrations()
@@ -258,6 +308,12 @@ export default function OnboardingScreen() {
       const trimmed = name.trim();
       if (!trimmed || trimmed === user?.name) return;
       updateUser(await updateBasicInfo({ name: trimmed }));
+    });
+
+  const saveFocus = () =>
+    run(async () => {
+      if (focusBand === user?.focusBand) return;
+      updateUser(await updateBasicInfo({ focusBand }));
     });
 
   /**
@@ -318,7 +374,7 @@ export default function OnboardingScreen() {
     go();
   }
 
-  /** The tag picker step is gone: everyone starts with the suggested defaults (best effort, tags are editable in Settings). */
+  /** Best effort: the four suggested tags; never blocks onboarding. */
   async function seedDefaultTags() {
     try {
       const existing = (await listTags()).map((tag) => tag.name);
@@ -329,10 +385,39 @@ export default function OnboardingScreen() {
     }
   }
 
+  /**
+   * Best effort: the daily Sleep, Lunch break and Dinner DND series in the
+   * user's timezone. Series already present by title are skipped. A failed
+   * lookup creates nothing, so a retry can't duplicate them.
+   */
+  async function seedDefaultRoutines() {
+    try {
+      const now = new Date();
+      const saved = useUserStore.getState().user;
+      const payloads = dndRoutinePayloads(
+        saved?.timezone || "UTC",
+        now,
+        saved?.focusBand ?? null,
+      );
+      const found = await Promise.all(
+        payloads.map((p) =>
+          searchSessions({ q: p.title, anchor: now.toISOString(), limit: 50 }),
+        ),
+      );
+      const existing = found.flatMap((r) => r.sessions);
+      for (const payload of missingRoutines(payloads, existing)) {
+        await createSession(payload).catch(() => {});
+      }
+    } catch {
+      // Not worth blocking the first run on.
+    }
+  }
+
   async function finish() {
     setBusy(true);
     try {
       await seedDefaultTags();
+      await seedDefaultRoutines();
       // Idempotent; the root AuthGate then routes to the app.
       updateUser(await updateBasicInfo({ onboarded: true }));
     } catch {
@@ -351,7 +436,7 @@ export default function OnboardingScreen() {
       onPress={onPress}
     >
       {busy ? (
-        <ActivityIndicator testID="onboarding.busy" />
+        <Spinner testID="onboarding.busy" tone="onPrimary" />
       ) : (
         <Text className="font-semibold text-primary-foreground">{label}</Text>
       )}
@@ -398,11 +483,66 @@ export default function OnboardingScreen() {
         </>
       );
       break;
+    case "focus":
+      ({ title, body } = COPY.focus);
+      content = (
+        <Group>
+          {focusBandOptions().map((option) => {
+            const on = focusBand === option.band;
+            const { Icon, tint, ink } = BAND_VISUAL[option.band];
+            return (
+              <Pressable
+                key={option.band}
+                testID={`onboarding.focus.${option.band}`}
+                onPress={() => setFocusBand(option.band)}
+                disabled={busy}
+                role="radio"
+                aria-checked={on}
+                className={cn(
+                  "flex-row items-center gap-3 px-4 py-3",
+                  on && "bg-primary/[0.06]",
+                )}
+              >
+                <View
+                  className={cn(
+                    "h-10 w-10 items-center justify-center rounded-xl border",
+                    tint,
+                  )}
+                >
+                  <Icon size={20} className={ink} />
+                </View>
+                <View className="min-w-0 flex-1">
+                  <Text
+                    className={cn(
+                      "text-[15px]",
+                      on ? "font-semibold" : "font-medium",
+                    )}
+                  >
+                    {option.label}
+                  </Text>
+                  <Text className="mt-0.5 text-[13px] text-muted-foreground">
+                    {option.hours}
+                  </Text>
+                </View>
+                {on && <Check size={18} className="text-primary" />}
+              </Pressable>
+            );
+          })}
+        </Group>
+      );
+      footer = (
+        <>
+          {primary(COPY.continue, saveFocus)}
+          {ghost(COPY.skipForNow, advance)}
+        </>
+      );
+      break;
     case "dlu":
       ({ title, body } = COPY.dlu);
       content = (
         <View>
           <DluAccountsSection hideLabel />
+          {dluConnected && <ImportedTimetable />}
           <Text className="mt-3.5 px-1 text-[12px] leading-snug text-muted-foreground">
             {COPY.dlu.trust}
           </Text>
@@ -634,7 +774,7 @@ export default function OnboardingScreen() {
           className={cn("px-6 pt-3", step === "done" && "items-center pt-8")}
         >
           {step === "done" ? (
-            <View className="mb-5 size-16 items-center justify-center rounded-full bg-brand-orange">
+            <View className="mb-5 size-16 items-center justify-center rounded-full bg-primary">
               <Check size={30} className="text-primary-foreground" />
             </View>
           ) : Hero ? (

@@ -15,7 +15,7 @@ import {
   TextInput as RNTextInput,
   View,
 } from "react-native";
-import { Button } from "./button";
+import { GlassButton } from "./glass-button";
 import { Input } from "./input";
 
 // !IMPORTANT: This file is only for web.
@@ -93,6 +93,8 @@ type BottomSheetContentProps = Omit<
    * this reimplementation has no mounted-but-closed state to preserve. */
   enableDismissOnClose?: boolean;
   snapPoints?: Array<string | number>;
+  /** Accepted for API parity with `bottom-sheet.native.tsx`, and ignored: this sheet does not snap, so it never reports a snap index. */
+  onChange?: (index: number) => void;
   enableDynamicSizing?: boolean;
   /** Accepted for API parity with `bottom-sheet.native.tsx`, and ignored — the
    * web sheet sizes itself with CSS. Destructured out so it can't leak onto
@@ -112,6 +114,7 @@ const BottomSheetContent = React.forwardRef<
       backdropProps: _backdropProps,
       enableDismissOnClose: _enableDismissOnClose,
       snapPoints: _snapPoints,
+      onChange: _onChange,
       enableDynamicSizing: _enableDynamicSizing,
       maxDynamicContentSize: _maxDynamicContentSize,
       ...props
@@ -349,15 +352,12 @@ const BottomSheetHeader = React.forwardRef<
       {...props}
     >
       {children}
-      {/* Bare X (no circle), same as the other sheets' close buttons. */}
-      <Button
+      <GlassButton
         onPress={close}
-        variant="ghost"
+        icon={X}
         accessibilityLabel={t("Close")}
-        className="h-8 w-8 self-start p-0"
-      >
-        <X className="text-muted-foreground" size={16} />
-      </Button>
+        style={{ alignSelf: "flex-start", marginRight: -6 }}
+      />
     </View>
   );
 });
@@ -391,6 +391,11 @@ function useBottomSheet() {
   return { ref, open, close };
 }
 
+/** Native hosts sheets in the modal screen; web has no overlay window to avoid. */
+function ScreenSheetProvider({ children }: React.PropsWithChildren) {
+  return <>{children}</>;
+}
+
 export {
   BottomSheet,
   BottomSheetCloseTrigger,
@@ -403,5 +408,6 @@ export {
   BottomSheetScrollView,
   BottomSheetTextInput,
   BottomSheetView,
+  ScreenSheetProvider,
   useBottomSheet,
 };

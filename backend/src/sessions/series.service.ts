@@ -65,8 +65,8 @@ export class SeriesService {
    * no `rrule`) plus `count` linked `Session` rows, then hand the batch to
    * {@link TaskPlacementService.placeSeriesOnCreate} — each member is spread
    * across `now … deadline` from ONE series-level 50/50 heuristic-or-LinUCB
-   * roll (#58), `MAX_SERIES_PER_DAY` per calendar day, no member overlapping
-   * another and no existing session moved. Each `sessions[]` entry carries its
+   * roll (#58), `MAX_SERIES_PER_DAY` per calendar day, members at least
+   * `SERIES_GAP_MINUTES` apart and no existing session moved. Each `sessions[]` entry carries its
    * sitting's `SeriesSittingProposal` fields (≤5 alternatives when sampled).
    */
   async createTaskSeries(
@@ -96,7 +96,7 @@ export class SeriesService {
             title: dto.title,
             note: dto.note ?? null,
             location: dto.location ?? null,
-            durationMinutes: dto.durationMinutes,
+            durationMinutes: dto.sessionDurations?.[i] ?? dto.durationMinutes,
             deadline,
             seriesId: series.id,
             sessionIndex: i + 1,
@@ -467,6 +467,49 @@ export class SeriesService {
       });
     }
     return { id: occurrenceId(seriesId, new Date(canonical)) };
+  }
+
+  /**
+   * "This occurrence only" move of a recurring fixed series: the occurrence is
+   * excluded from the series (see {@link excludeOccurrence}) and created again
+   * as a one-off at its new start. The rest of the series keeps its time.
+   */
+  async detachOccurrence(
+    seriesId: string,
+    occurrenceStartISO: string,
+    change: { scheduledStartTime: string; durationMinutes: number },
+    user: User,
+  ): Promise<SharedSession> {
+    const rep = await this.prisma.session.findFirst({
+      where: { seriesId, userId: user.id, deleted: false },
+      orderBy: { createdAt: "asc" },
+      include: WITH_TAGS_AND_SERIES,
+    });
+    if (!rep)
+      throw new NotFoundException(`Cannot find recurring series ${seriesId}`);
+
+    await this.excludeOccurrence(seriesId, occurrenceStartISO, user);
+    const created = await this.prisma.$transaction(async (tx) => {
+      const s = await tx.session.create({
+        data: {
+          type: rep.type,
+          source: rep.source,
+          title: rep.title,
+          note: rep.note,
+          location: rep.location,
+          durationMinutes: change.durationMinutes,
+          deadline: null,
+          scheduledStartTime: new Date(change.scheduledStartTime),
+          tags: { connect: rep.tags.map((t) => ({ id: t.id })) },
+          userId: user.id,
+        },
+        include: WITH_TAGS_AND_SERIES,
+      });
+      await tx.sessionEvent.create({ data: createEventData(s, user.id) });
+      recordCreateEvent();
+      return s;
+    });
+    return toSessionDto(created);
   }
 
   /**

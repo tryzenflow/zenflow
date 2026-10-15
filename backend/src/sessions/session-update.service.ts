@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { randomUUID } from "crypto";
 import type { InfeasiblePolicy, UpdateSessionResponse } from "@zenflow/shared";
 import { Prisma, type User } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
@@ -63,6 +64,8 @@ interface FieldDiffResult {
   updated: SessionRow;
   firstMove: FirstMove | null;
   newDeadline: Date | null;
+  /** Undo group of the `MOVE` this PATCH wrote, or `null` when it moved nothing. */
+  undoGroupId: string | null;
 }
 
 /**
@@ -106,6 +109,9 @@ export class SessionUpdateService {
       );
       if (followingSplit) return followingSplit;
 
+      const detached = await this.handleOccurrenceDetach(id, occ, dto, user);
+      if (detached) return detached;
+
       id = await this.resolveOccurrenceTarget(id, occ, dto, user);
 
       const siblingScope = occ
@@ -115,7 +121,7 @@ export class SessionUpdateService {
 
       if (!occ) await this.guardDeadlineEdit(id, dto, user, now);
 
-      const { updated, firstMove, newDeadline } =
+      const { updated, firstMove, newDeadline, undoGroupId } =
         await this.runFieldDiffTransaction(id, dto, user, now);
 
       if (firstMove) {
@@ -159,7 +165,11 @@ export class SessionUpdateService {
         user,
       );
 
-      return { ...toUpdateSessionResponse(updated), skippedSessionIds };
+      return {
+        ...toUpdateSessionResponse(updated),
+        skippedSessionIds,
+        ...(undoGroupId ? { undoGroupId } : {}),
+      };
     } catch (error) {
       mapSessionPrismaError(error, id, "update");
     }
@@ -245,6 +255,48 @@ export class SessionUpdateService {
         ? skippedSessionIds
         : undefined,
     };
+  }
+
+  /**
+   * A recurring occurrence ref with `scope: "occurrence"` and a reschedule
+   * moves just that occurrence: the series keeps its time and the occurrence
+   * reappears as a one-off. A PATCH that also changes the rrule is a series
+   * change and falls through. `null` otherwise.
+   */
+  private async handleOccurrenceDetach(
+    id: string,
+    occ: OccurrenceRef | null,
+    dto: UpdateSessionDto,
+    user: User,
+  ): Promise<UpdateSessionResponse | null> {
+    if (
+      !(
+        occ &&
+        dto.scope === "occurrence" &&
+        isRescheduleChange(dto) &&
+        dto.rrule === undefined
+      )
+    ) {
+      return null;
+    }
+    const rep = await this.prisma.session.findFirst({
+      where: { seriesId: occ.seriesId, userId: user.id, deleted: false },
+      select: { scheduledStartTime: true, durationMinutes: true },
+    });
+    if (!rep || !rep.scheduledStartTime)
+      throw new NotFoundException(`Cannot find session with id ${id}`);
+
+    const session = await this.series.detachOccurrence(
+      occ.seriesId,
+      occ.startISO,
+      {
+        scheduledStartTime:
+          dto.scheduledStartTime ?? rep.scheduledStartTime.toISOString(),
+        durationMinutes: dto.durationMinutes ?? rep.durationMinutes,
+      },
+      user,
+    );
+    return { ...session, ...NO_SLOT_PROPOSAL };
   }
 
   /**
@@ -423,20 +475,32 @@ export class SessionUpdateService {
         // back to its upstream (LMS/portal) position on their next sync.
         data.lastMovedAt = now;
       }
+      if (startChanged && existing.type === "TASK") {
+        // A drag, "move to" or time pick fixes the slot: the scheduler may
+        // only move it again after the user confirms (ADR-0022).
+        data.anchor = "CHOSEN";
+        data.anchoredAt = now;
+      }
 
       const move = this.buildMoveEventData(existing, nextStart, startChanged);
       let firstMove: FirstMove | null = null;
+      let undoGroupId: string | null = null;
       if (move) {
+        undoGroupId = randomUUID();
         const event = await tx.sessionEvent.create({
-          data: moveEventData({
-            sessionId: id,
-            userId: user.id,
-            oldStart: existing.scheduledStartTime as Date,
-            oldDurationMinutes: existing.durationMinutes,
-            newStart: move.movedTo,
-            newDurationMinutes: dto.durationMinutes ?? existing.durationMinutes,
-            dragDistanceMinutes: move.dragDistanceMinutes,
-          }),
+          data: {
+            ...moveEventData({
+              sessionId: id,
+              userId: user.id,
+              oldStart: existing.scheduledStartTime as Date,
+              oldDurationMinutes: existing.durationMinutes,
+              newStart: move.movedTo,
+              newDurationMinutes:
+                dto.durationMinutes ?? existing.durationMinutes,
+              dragDistanceMinutes: move.dragDistanceMinutes,
+            }),
+            groupId: undoGroupId,
+          },
           select: { id: true },
         });
         recordUserMove(move.dragDistanceMinutes);
@@ -460,7 +524,7 @@ export class SessionUpdateService {
         await tx.sessionSeries.delete({ where: { id: orphanedSeriesId } });
       }
 
-      return { updated: row, newDeadline, firstMove };
+      return { updated: row, newDeadline, firstMove, undoGroupId };
     });
   }
 
@@ -628,14 +692,21 @@ export class SessionUpdateService {
       now,
       infeasiblePolicy,
     });
-    return toUpdateSessionResponse(
-      {
-        ...updated,
-        scheduledStartTime:
-          placement.scheduledStartTime ?? updated.scheduledStartTime,
-      },
-      slotProposalFieldsOf(placement),
-    );
+    return {
+      ...toUpdateSessionResponse(
+        {
+          ...updated,
+          scheduledStartTime:
+            placement.scheduledStartTime ?? updated.scheduledStartTime,
+          placementReason: placement.placementReason ?? null,
+          placementReasonStartAt: placement.scheduledStartTime,
+        },
+        slotProposalFieldsOf(placement),
+      ),
+      ...(placement.pendingPlan
+        ? { placementPlan: placement.pendingPlan }
+        : {}),
+    };
   }
 
   /**

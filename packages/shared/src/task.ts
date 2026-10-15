@@ -1,3 +1,5 @@
+import type { PlacementReason } from "./placement";
+
 /**
  * What kind of session this is.
  *
@@ -17,6 +19,14 @@ export type SessionType = "TASK" | "ASSIGNMENT" | "EXAM" | "LECTURE" | "DND";
 
 /** Where a session came from. */
 export type SessionSource = "USER" | "LMS" | "PORTAL";
+
+/**
+ * How firmly the scheduler may move a flexible `TASK` (ADR-0022). `AUTO`:
+ * displaced freely. `CHOSEN`: set by a drag, "move to" or time pick; moved
+ * only after the user confirms a plan. `PINNED`: never moved by the scheduler.
+ * Fixed types are always `AUTO` and never move.
+ */
+export type SessionAnchor = "AUTO" | "CHOSEN" | "PINNED";
 
 export interface Session {
   id: string;
@@ -65,6 +75,12 @@ export interface Session {
    * instead).
    */
   timetableGroupId: string | null;
+  /**
+   * The course this session belongs to, or `null`: `lms:<Moodle course id>`
+   * for an LMS item, `portal:<ScheduleStudyUnitID>` for a portal meeting or
+   * exam. The key a {@link CourseColour} is stored under.
+   */
+  courseKey: string | null;
   /** 1-based position within a `TASK` series (`null` outside a session-count series). */
   sessionIndex: number | null;
   /** Total session count of this session's `TASK` series (`null` otherwise). */
@@ -78,6 +94,23 @@ export interface Session {
    * for unscheduled tasks.
    */
   late: boolean;
+  /**
+   * ISO-8601 instant the user checked the session off, or `null`. Set by
+   * `POST /sessions/:id/complete`, cleared by `DELETE /sessions/:id/complete`
+   * or a skip. Per occurrence for a recurring series.
+   */
+  completedAt: string | null;
+  /** The user marked the session skipped (missed). Never `true` with `completedAt`. */
+  skipped: boolean;
+  /** How firmly the scheduler may move it (see {@link SessionAnchor}). */
+  anchor: SessionAnchor;
+  /** ISO-8601 instant the anchor was last set by the user, or `null` while `AUTO`. */
+  anchoredAt: string | null;
+  /**
+   * Why the scheduler picked the current start. `null` when unscheduled, when
+   * the start was set by the user or a move since, or for a fallback placement.
+   */
+  placementReason: PlacementReason | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -110,6 +143,92 @@ export interface ScheduleInfeasibleError {
   message: string;
   code: typeof SCHEDULE_INFEASIBLE_CODE;
   options: InfeasiblePolicy[];
+}
+
+/** One session a {@link PlacementPlan} moves. */
+export interface PlacementPlanMove {
+  id: string;
+  /** ISO-8601 current start. */
+  from: string;
+  /** ISO-8601 planned start. */
+  to: string;
+  /** `AUTO` or `CHOSEN` (a `CHOSEN` move is why the plan needs confirming). */
+  anchor: "AUTO" | "CHOSEN";
+  /** Scheduler cost of the move (higher is worse). */
+  cost: number;
+}
+
+/**
+ * A placement the scheduler found but did not apply because it moves a
+ * `CHOSEN` session. `sessionId` is the session being placed, or `null` for a
+ * create (the session is inserted on confirm). Valid until `expiresAt`.
+ */
+export interface PlacementPlan {
+  id: string;
+  sessionId: string | null;
+  /** ISO-8601 planned start of `sessionId`. */
+  start: string;
+  moves: PlacementPlanMove[];
+  /** ISO-8601 instant after which the plan must be made again. */
+  expiresAt: string;
+}
+
+/** `code` of the 409 {@link PlacementNeedsConfirmationError} a create answers with. */
+export const PLACEMENT_NEEDS_CONFIRMATION_CODE = "NEEDS_CONFIRMATION";
+
+/**
+ * 409 body of `POST /sessions` when the only plan moves a `CHOSEN` session.
+ * Nothing was persisted. Show `data.plan.moves` and confirm with
+ * `POST /sessions/placement/confirm { planId }`.
+ */
+export interface PlacementNeedsConfirmationError {
+  success: false;
+  statusCode: 409;
+  message: string;
+  code: typeof PLACEMENT_NEEDS_CONFIRMATION_CODE;
+  data: { plan: PlacementPlan };
+}
+
+/** `POST /sessions/placement/confirm` body. */
+export interface ConfirmPlacementRequest {
+  planId: string;
+}
+
+/**
+ * `POST /sessions/placement/confirm` result: the placed session (the created
+ * one for a create) and the moves applied, all under `undoGroupId`.
+ */
+export interface ConfirmPlacementResponse {
+  session: Session;
+  displacedSessions: DisplacedSession[];
+  undoGroupId: string;
+}
+
+/**
+ * `POST /sessions/undo/:groupId` result. `restored` are the sessions put back
+ * on their previous start; `removedSessionIds` were created by the group and
+ * are removed; `skippedSessionIds` changed again since, so they are left as they are.
+ */
+export interface UndoPlacementResponse {
+  undoGroupId: string;
+  restored: DisplacedSession[];
+  removedSessionIds: string[];
+  skippedSessionIds: string[];
+}
+
+/** `code` of the 409 {@link PlacementStaleError} confirm answers with. */
+export const PLACEMENT_STALE_CODE = "PLACEMENT_STALE";
+
+/**
+ * 409 body of `POST /sessions/placement/confirm` when the plan no longer
+ * holds (a session it moves changed, a slot is taken, or it expired). Nothing
+ * was applied; the plan is discarded.
+ */
+export interface PlacementStaleError {
+  success: false;
+  statusCode: 409;
+  message: string;
+  code: typeof PLACEMENT_STALE_CODE;
 }
 
 /** `code` of the 409 {@link SlotTakenError} `POST /sessions/:id/slot-pick` answers with. */
@@ -178,6 +297,12 @@ export interface CreateTaskInput {
    * `now … deadline` (see `services/bandit/README.md`).
    */
   sessionCount?: number;
+  /**
+   * Minutes of each session when a series splits one total unevenly. Length
+   * equals `sessionCount`, each a multiple of 15; `durationMinutes` is then the
+   * first one. Omitted → every session is `durationMinutes`.
+   */
+  sessionDurations?: number[];
   tags?: string[];
   /**
    * Minutes-before-start reminders (max MAX_REMINDERS_PER_SESSION, each an
@@ -350,6 +475,12 @@ export interface SlotProposalFields {
    * when placement ran normally.
    */
   schedulingDegraded?: boolean;
+  /**
+   * Undo handle for the moves this request made (`POST /sessions/undo/:groupId`).
+   * Set when the request moved the session itself or displaced others; `null`
+   * or absent otherwise.
+   */
+  undoGroupId?: string | null;
 }
 
 /**
@@ -392,6 +523,12 @@ export interface CreateSessionResponse extends Session, SlotProposalFields {
 export interface UpdateSessionResponse extends Session, SlotProposalFields {
   /** Present only when a `TASK` series was redistributed — its members in `sessionIndex` order. */
   sessions?: SeriesSession[];
+  /**
+   * Set when a deadline change needs the user's go-ahead: the session keeps
+   * its current start and nothing else moved. Confirm with
+   * `POST /sessions/placement/confirm`. Absent otherwise.
+   */
+  placementPlan?: PlacementPlan;
   /** Ids left untouched by a `skipConflicting` update because their new landing slot conflicted. */
   skippedSessionIds?: string[];
   /**
@@ -420,6 +557,8 @@ export interface SlotPickResponse {
   session: Session;
   /** Echoes what was actually recorded — `null` if the proposal had no pick to record. */
   chosenByUser: "primary" | "alternative" | null;
+  /** Undo handle for the move an `"alternative"` pick applied (absent otherwise). */
+  undoGroupId?: string;
 }
 
 /**

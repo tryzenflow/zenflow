@@ -10,7 +10,7 @@
 
 ## Decision
 Replace the `caddy` service with `nginx` in `backend/compose.prod.yml` and `compose.staging.yml`; add `backend/nginx/nginx.{prod,staging}.conf`.
-- Keep `X-Forwarded-For/Proto/Host`: the app relies on `trust proxy 1` and Secure cookies.
+- Keep `X-Forwarded-For/Proto/Host`: the app relies on `trust proxy 2` (Cloudflare and nginx) and Secure cookies.
 - SSE on `/notifications/stream`: no proxy buffering, long read timeout, HTTP/1.1, empty `Connection`.
 - HTTP/2, gzip, upstream `keepalive`; the upstream list comes from an included file that the deploy script rewrites, followed by `nginx -s reload` (graceful; `worker_shutdown_timeout` drains SSE).
 - TLS: certbot (renew loop) or an origin certificate; issued outside the request path.

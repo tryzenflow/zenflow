@@ -17,7 +17,7 @@ import { View } from "react-native";
 
 const BAR: Record<StorageLevel, string> = {
   ok: "bg-primary",
-  warn: "bg-amber-500",
+  warn: "bg-session-conflict",
   full: "bg-destructive",
 };
 
@@ -27,12 +27,12 @@ const CALLOUT: Record<
   { card: string; text: string }
 > = {
   warn: {
-    card: "border-amber-500/30 bg-amber-500/15",
-    text: "text-amber-800 dark:text-amber-300",
+    card: "border-session-conflict/40 bg-session-conflict/20",
+    text: "text-session-conflict-ink",
   },
   full: {
     card: "border-destructive/30 bg-destructive/10",
-    text: "text-red-800 dark:text-red-300",
+    text: "text-destructive",
   },
 };
 

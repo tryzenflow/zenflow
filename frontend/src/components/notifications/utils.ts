@@ -17,6 +17,7 @@ const CATEGORY_TYPE: Record<NotificationCategory, SessionType | null> = {
   EXAM: "EXAM",
   LECTURE: "LECTURE",
   REMINDER: null,
+  MARKS: null,
 };
 
 /**

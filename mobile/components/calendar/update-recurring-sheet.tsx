@@ -1,4 +1,5 @@
 import { t } from "@/lib/i18n";
+import { GlassButton } from "@/components/ui/glass-button";
 import { useLanguage } from "@/hooks/use-language";
 import {
   CalendarClock,
@@ -28,13 +29,12 @@ import {
 } from "react";
 import { Pressable, View } from "react-native";
 
-/** Which slice of a series a reschedule/resize should hit. */
-export type UpdateRecurringScope = "occurrence" | "following" | "series";
+import type {
+  PendingSessionUpdate,
+  UpdateRecurringScope,
+} from "@/lib/recurring-scope";
 
-export interface PendingSessionUpdate {
-  scheduledStartTime: string;
-  durationMinutes: number;
-}
+export type { PendingSessionUpdate, UpdateRecurringScope };
 
 export interface UpdateRecurringSheetHandle {
   /** Open the scope chooser for `session`, which is about to be moved/resized
@@ -244,13 +244,12 @@ export const UpdateRecurringSheet = forwardRef<
                 {t("Choose which occurrences pick up the new time.")}
               </Text>
             </View>
-            <Pressable
+            <GlassButton
               onPress={sheet.close}
+              icon={X}
               accessibilityLabel={t("Cancel")}
-              className="h-8 w-8 items-center justify-center"
-            >
-              <X size={16} className="text-muted-foreground" />
-            </Pressable>
+              style={{ marginRight: -6 }}
+            />
           </View>
 
           <View className="gap-2.5">

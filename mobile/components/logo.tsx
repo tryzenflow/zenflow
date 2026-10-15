@@ -1,3 +1,4 @@
+import { CurveSwirl, type SwirlLayer } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { useReducedMotion } from "@/lib/motion";
@@ -18,6 +19,20 @@ import Svg, {
   Stop,
 } from "react-native-svg";
 
+const CURVE =
+  "M220.5 51.5C220.5 51.5 172.668 65.7587 147.635 89.6235C122.602 113.488 136.249 158.201 104.912 183.517C80.2542 203.436 32.9999 199.5 32.9999 199.5";
+const CURVE_INK = "#FFF085";
+
+/** The mark's own stroke (24) leads; trails thin and fade behind it. */
+const SPIN_LAYERS: readonly SwirlLayer[] = [
+  { lag: 0, opacity: 1, width: 24 },
+  { lag: 0.022, opacity: 0.55, width: 22 },
+  { lag: 0.044, opacity: 0.4, width: 20 },
+  { lag: 0.066, opacity: 0.28, width: 18 },
+  { lag: 0.088, opacity: 0.18, width: 16 },
+  { lag: 0.11, opacity: 0.1, width: 14 },
+];
+
 const GLOW = {
   borderRadius: 999,
   backgroundColor: "#F0B100",
@@ -30,18 +45,21 @@ const GLOW = {
 
 /**
  * Zenflow sunrise mark — ported from frontend/src/components/logo.tsx (react-native-svg
- * instead of inline <svg>; no CSS hover/breathe animation on native, static mark).
+ * instead of inline <svg>; no CSS hover animation on native).
  */
 export function Logo({
   className,
   glow = false,
   breathe = false,
+  spin = false,
 }: {
   className?: string;
   /** Orange drop shadow, as in mockups/login.html (`shadow-lg shadow-brand-orange/30`). */
   glow?: boolean;
   /** Slowly swell the glow (needs `glow`). Static under Reduce Motion. */
   breathe?: boolean;
+  /** Turn the curve with fading trails, as a loader. Static under Reduce Motion. */
+  spin?: boolean;
 }) {
   const reduceMotion = useReducedMotion();
   const swell = useSharedValue(1);
@@ -73,12 +91,9 @@ export function Logo({
       )}
       <Svg viewBox="0 0 260 260" width="100%" height="100%" fill="none">
         <Circle cx={130} cy={130} r={130} fill="url(#zenflow-sunrise)" />
-        <Path
-          d="M220.5 51.5C220.5 51.5 172.668 65.7587 147.635 89.6235C122.602 113.488 136.249 158.201 104.912 183.517C80.2542 203.436 32.9999 199.5 32.9999 199.5"
-          stroke="#FFF085"
-          strokeWidth={24}
-          strokeLinecap="round"
-        />
+        {!spin && (
+          <Path d={CURVE} stroke={CURVE_INK} strokeWidth={24} strokeLinecap="round" />
+        )}
         <Defs>
           <LinearGradient
             id="zenflow-sunrise"
@@ -94,6 +109,9 @@ export function Logo({
           </LinearGradient>
         </Defs>
       </Svg>
+      {spin && (
+        <CurveSwirl color={CURVE_INK} layers={SPIN_LAYERS} animate={!reduceMotion} />
+      )}
     </View>
   );
 }

@@ -1,6 +1,7 @@
 import type { Prisma } from "../../generated/prisma";
 import type {
   CreateSessionResponse,
+  PlacementReason,
   SeriesSession,
   SeriesSittingProposal,
   Session as SharedSession,
@@ -28,6 +29,38 @@ export function isLate(row: SessionRow): boolean {
   );
 }
 
+/**
+ * The course a row belongs to: `lms:<Moodle course id>` for an LMS item,
+ * `portal:<ScheduleStudyUnitID>` for a portal meeting or exam, else null.
+ */
+export function courseKeyOf(row: {
+  lmsCourseId: number | null;
+  scheduleStudyUnitId: string | null;
+}): string | null {
+  if (row.lmsCourseId !== null) return `lms:${row.lmsCourseId}`;
+  if (row.scheduleStudyUnitId) return `portal:${row.scheduleStudyUnitId}`;
+  return null;
+}
+
+/**
+ * The reason for the row's current start, or null. A reason whose stamped start
+ * differs from `scheduledStartTime` was for an earlier start: the session has
+ * been moved (by the user, a displacement or a reschedule) since.
+ */
+export function placementReasonOf(
+  row: Pick<
+    SessionRow,
+    "placementReason" | "placementReasonStartAt" | "scheduledStartTime"
+  >,
+): PlacementReason | null {
+  if (!row.placementReason || !row.placementReasonStartAt) return null;
+  if (!row.scheduledStartTime) return null;
+  return row.placementReasonStartAt.getTime() ===
+    row.scheduledStartTime.getTime()
+    ? row.placementReason
+    : null;
+}
+
 /** Map a Prisma `Session` row to the `@zenflow/shared` API shape (dates → ISO). */
 export function toSessionDto(row: SessionRow): SharedSession {
   return {
@@ -46,12 +79,18 @@ export function toSessionDto(row: SessionRow): SharedSession {
     seriesId: row.seriesId,
     rrule: row.series?.rrule ?? null,
     timetableGroupId: row.scheduleStudyUnitId,
+    courseKey: courseKeyOf(row),
     sessionIndex: row.sessionIndex,
     sessionTotal: row.sessionTotal,
     reminders: (row.reminders ?? [])
       .map((r) => r.remindBeforeMinutes)
       .sort((a, b) => b - a),
     late: isLate(row),
+    completedAt: row.completedAt ? row.completedAt.toISOString() : null,
+    skipped: row.skipped,
+    anchor: row.anchor,
+    anchoredAt: row.anchoredAt ? row.anchoredAt.toISOString() : null,
+    placementReason: placementReasonOf(row),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -82,6 +121,7 @@ export function slotProposalFieldsOf(
       to: d.to.toISOString(),
     })),
     ...(placement.degraded ? { schedulingDegraded: true } : {}),
+    ...(placement.undoGroupId ? { undoGroupId: placement.undoGroupId } : {}),
   };
 }
 

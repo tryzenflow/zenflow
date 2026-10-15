@@ -108,14 +108,15 @@ model BanditArmState {
 
 ## 7. Reward
 
-The reward is the ADR-0002 move-or-keep signal. A resize is a `MOVE` with `dragDistanceMinutes == 0`.
+The reward is the move-or-keep signal, with the keep half settled by check-off ([ADR-0023](0023-completion-reward.md)). A resize is a `MOVE` with `dragDistanceMinutes == 0`.
 
-| Event                          | Reward                                        |
-| ------------------------------ | --------------------------------------------- |
-| `RETAINED`                     | `+1`: elapsed and never moved                 |
-| `MOVE`                         | `−min(1, abs(dragDistanceMinutes) / D_SCALE)` |
-| `MOVE`, resize only (drag = 0) | `0`                                           |
-| `CREATE`                       | `0`: logged only, no update                   |
+| Event                                       | Reward                                        |
+| ------------------------------------------- | --------------------------------------------- |
+| Unmoved, checked off in its slot            | `+1` ([ADR-0023](0023-completion-reward.md)) |
+| Unmoved, skipped or missed                  | `-1` ([ADR-0023](0023-completion-reward.md)) |
+| `MOVE`                                      | `−min(1, abs(dragDistanceMinutes) / D_SCALE)` |
+| `MOVE`, resize only (drag = 0)              | `0`                                           |
+| `CREATE`                                    | `0`: logged only, no update                   |
 
 - The `MOVE` penalty ramps linearly from `0` to `−1` at a displacement of 4 h or more.
 - Displacement is measured from the originally proposed start (`SlotProposal.proposedStartTime`).

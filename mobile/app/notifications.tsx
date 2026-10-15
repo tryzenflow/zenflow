@@ -1,3 +1,7 @@
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
+import { useAfterPaint } from "@/hooks/use-after-paint";
+import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import { t } from "@/lib/i18n";
 import { safeBack } from "@/lib/nav";
 import { useLanguage } from "@/hooks/use-language";
@@ -10,6 +14,7 @@ import {
   Trash2,
   X,
 } from "@/components/Icons";
+import { GlassButton } from "@/components/ui/glass-button";
 import { Text } from "@/components/ui/text";
 import { rescheduleWithToast } from "@/lib/reschedule-toast";
 import { useToast } from "@/components/ui/toast";
@@ -18,6 +23,7 @@ import {
   viewSessionOnCalendar,
 } from "@/hooks/use-notifications";
 import { useUserStore } from "@/hooks/use-user-store";
+import { useColorScheme } from "@/lib/useColorScheme";
 import { notificationVisual } from "@/lib/notification-visual";
 import { cn } from "@/lib/utils";
 import { notificationCategory, type NotificationDto } from "@zenflow/shared";
@@ -27,7 +33,6 @@ import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   Modal,
   Pressable,
@@ -83,6 +88,8 @@ export default function NotificationsScreen() {
   const items = useNotificationsStore((s) => s.items);
   const unreadCount = useNotificationsStore((s) => s.unreadCount);
   const loading = useNotificationsStore((s) => s.loading);
+  const painted = useAfterPaint();
+  const showSkeleton = useDelayedLoading(loading || !painted);
   const refreshing = useNotificationsStore((s) => s.refreshing);
   const fetchNotifications = useNotificationsStore((s) => s.fetchNotifications);
   const dismiss = useNotificationsStore((s) => s.dismiss);
@@ -112,6 +119,8 @@ export default function NotificationsScreen() {
       // Opens the session on the calendar; removed-item rows just mark read.
       if (n.sessionId) {
         void viewSessionOnCalendar(n.sessionId, router, toast, n.id);
+      } else if (notificationCategory(n.eventName) === "MARKS") {
+        router.push("/(app)/settings");
       }
     },
     [isSelecting, markRead, toggleSelect, router, toast],
@@ -221,14 +230,11 @@ export default function NotificationsScreen() {
       <View className="h-14 flex-row items-center gap-2 border-b border-border/70 bg-background px-3">
         {isSelecting ? (
           <>
-            <Pressable
+            <GlassButton
               onPress={exitSelecting}
+              icon={X}
               accessibilityLabel={t("Cancel selection")}
-              hitSlop={8}
-              className="size-9 items-center justify-center rounded-full active:bg-muted"
-            >
-              <X size={20} className="text-foreground" />
-            </Pressable>
+            />
             <Text className="flex-1 text-[17px] font-semibold text-foreground">
               {selectedIds.size} {t("selected")}
             </Text>
@@ -260,14 +266,12 @@ export default function NotificationsScreen() {
           </>
         ) : (
           <>
-            <Pressable
+            <GlassButton
               onPress={() => safeBack(router)}
+              icon={ChevronLeft}
+              iconSize={24}
               accessibilityLabel={t("Back")}
-              hitSlop={8}
-              className="size-9 items-center justify-center rounded-full active:bg-muted"
-            >
-              <ChevronLeft size={22} className="text-foreground" />
-            </Pressable>
+            />
             <View className="flex-1 flex-row items-center gap-2">
               <Text className="text-xl font-bold tracking-tight text-foreground">
                 {t("Inbox")}
@@ -300,10 +304,8 @@ export default function NotificationsScreen() {
       </View>
 
       {/* Body */}
-      {loading ? (
-        <View className="flex-1 items-center justify-center py-20">
-          <ActivityIndicator />
-        </View>
+      {showSkeleton ? (
+        <NotificationsSkeleton />
       ) : (
         <FlatList
           data={items}
@@ -395,6 +397,28 @@ export default function NotificationsScreen() {
   );
 }
 
+const SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
+
+/** Rows shaped like `NotificationRowItem`: icon badge, title, meta line. */
+function NotificationsSkeleton() {
+  return (
+    <View testID="notifications.skeleton">
+      {SKELETON_ROWS.map((i) => (
+        <View
+          key={i}
+          className="flex-row items-center gap-3.5 border-b border-border/70 px-4 py-3.5"
+        >
+          <Skeleton className="h-11 w-11 rounded-2xl" />
+          <View className="flex-1 gap-2">
+            <Skeleton className={i % 2 ? "h-4 w-3/5" : "h-4 w-4/5"} />
+            <Skeleton className="h-3 w-2/5" />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 function NotificationRowItem({
   n,
   tz,
@@ -417,7 +441,8 @@ function NotificationRowItem({
   useLanguage();
   const offline = useOffline();
   const swipeableRef = useRef<SwipeableMethods>(null);
-  const { Icon, tint, iconColor } = notificationVisual(n.eventName);
+  const { Icon, tint, ink } = notificationVisual(n.eventName);
+  const { isDarkColorScheme } = useColorScheme();
   const unread = !n.readAt;
   const relative = formatDistanceToNow(new Date(n.sentAt), {
     addSuffix: true,
@@ -488,11 +513,15 @@ function NotificationRowItem({
           <View className="relative shrink-0">
             <View
               className={cn(
-                "h-10 w-10 items-center justify-center rounded-2xl border",
+                "h-11 w-11 items-center justify-center rounded-2xl border",
                 tint,
               )}
             >
-              <Icon size={19} color={iconColor} />
+              <Icon
+                size={21}
+                color={isDarkColorScheme ? ink.dark : ink.light}
+                strokeWidth={2.3}
+              />
             </View>
             {unread && (
               <View className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-background bg-destructive" />
@@ -552,10 +581,10 @@ function NotificationRowItem({
                 onPress={onRescheduleAll}
                 disabled={rescheduling}
                 hitSlop={6}
-                className="mt-2 flex-row items-center gap-1.5 self-start rounded-full bg-amber-600 px-3 py-1 active:opacity-80"
+                className="mt-2 flex-row items-center gap-1.5 self-start rounded-full bg-primary px-3 py-1 active:opacity-80"
               >
                 {rescheduling ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
+                  <Spinner size={14} color="#ffffff" />
                 ) : (
                   <RefreshCw size={12} color="#ffffff" />
                 )}

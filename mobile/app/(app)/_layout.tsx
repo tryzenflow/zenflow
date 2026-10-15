@@ -1,9 +1,13 @@
 import { t } from "@/lib/i18n";
 import { useAppUpdate } from "@/hooks/use-app-update";
+import { useCourseColourSync } from "@/hooks/use-course-colours";
 import { useLanguage } from "@/hooks/use-language";
-import { SettingsIcon } from "@/components/brand/icons";
 import { AppTabBar } from "@/components/tab-bar";
-import { MonthTabIcon, WeekTabIcon } from "@/components/tab-icons";
+import {
+  ListTabIcon,
+  MeTabIcon,
+  WeekTabIcon,
+} from "@/components/tab-icons";
 import { Tabs } from "expo-router";
 
 export const unstable_settings = {
@@ -13,6 +17,7 @@ export const unstable_settings = {
 export default function AppTabsLayout() {
   useLanguage();
   useAppUpdate();
+  useCourseColourSync();
   return (
     // Fully custom bar (`components/tab-bar.tsx`): a floating glassmorphic
     // pill — the default edge-to-edge bar's rectangular `shadow*`/`elevation`
@@ -24,27 +29,28 @@ export default function AppTabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: t("Week"),
+          title: t("Calendar"),
           tabBarIcon: ({ color, size }) => (
             <WeekTabIcon color={color} size={size} />
           ),
         }}
       />
+      {/* Every session in order (`list.tsx`). */}
       <Tabs.Screen
-        name="month"
+        name="list"
         options={{
-          title: t("Month"),
+          title: t("List"),
           tabBarIcon: ({ color, size }) => (
-            <MonthTabIcon color={color} size={size} />
+            <ListTabIcon color={color} size={size} />
           ),
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
-          title: t("Settings"),
+          title: t("Me"),
           tabBarIcon: ({ color, size }) => (
-            <SettingsIcon color={color} size={size} />
+            <MeTabIcon color={color} size={size} />
           ),
         }}
       />

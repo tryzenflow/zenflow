@@ -3,7 +3,6 @@ import { useLanguage } from "@/hooks/use-language";
 import { NAV_THEME } from "@/lib/constants";
 import type { DayStatus } from "@/lib/day-status";
 import { fetchDaySessions, isDayCacheFresh } from "@/lib/session-cache";
-import type { PeekBlock } from "@/lib/peek";
 import { useColorScheme } from "@/lib/useColorScheme";
 import {
   centeredDays,
@@ -57,9 +56,8 @@ import { DayTimeline, type TimelineState } from "./day-timeline";
 import type {
   PendingSessionUpdate,
   UpdateRecurringScope,
-} from "./update-recurring-sheet";
+} from "@/lib/recurring-scope";
 import { type DragEdge, PagerPage, type PagerWindow } from "./week-pager-page";
-import { PEEK_STRIP_W, PeekStrip } from "./week-peek-strip";
 
 /** `withTiming` config for every settle snap (and snap-back) after a swipe
  * ends — `SETTLE_MS` is shared with the Week header so the two land together. */
@@ -77,12 +75,8 @@ const SETTLE = {
  * sheet — long-press a block). */
 const NAV_EDGE_ZONE = 56;
 const NAV_HOLD_MS = 340;
-const BRAND_ORANGE_LIGHT = "255, 142, 62";
-const BRAND_ORANGE_DARK = "255, 122, 36";
+const SLATE_RGB = "15, 13, 10";
 
-/** Stable empty peek list — a fresh `[]` each render would re-run the strip's
- * memo for nothing. */
-const EMPTY_PEEK: PeekBlock[] = [];
 
 /** A window of days as the UI thread's `windowSV` holds it. */
 function windowOf(days: Date[]): PagerWindow {
@@ -142,14 +136,6 @@ interface WeekPagerProps {
         skipConflicting: boolean;
       } | null,
     ) => void,
-  ) => void;
-  /** Divergent slot pick callback — forwarded to the active `DayTimeline`. */
-  onRequestSlotPick?: (
-    session: Session,
-    primarySlot: string,
-    alternativeSlot: string,
-    slotProposalId: string,
-    onPick: (chose: "primary" | "alternative") => Promise<void>,
   ) => void;
   /** Session id to pulse on the focused day — a teleport target. Forwarded to
    * the active `DayTimeline` only. */
@@ -213,7 +199,6 @@ function WeekPagerImpl(
     onRequestReschedule,
     onRequestBlockMenu,
     onRequestScopedUpdate,
-    onRequestSlotPick,
     flashSessionId = null,
   }: WeekPagerProps,
   ref: ForwardedRef<WeekPagerHandle>,
@@ -224,7 +209,7 @@ function WeekPagerImpl(
   const borderColor = isDarkColorScheme
     ? NAV_THEME.dark.border
     : NAV_THEME.light.border;
-  const orangeRgb = isDarkColorScheme ? BRAND_ORANGE_DARK : BRAND_ORANGE_LIGHT;
+
 
   // The live window: always the focused day centered between its two
   // neighbors. The focused page is therefore ALWAYS index 1 — rest is
@@ -332,21 +317,6 @@ function WeekPagerImpl(
   // `disarmNavEdge` / `endNavHold` below.
   const armedEdgeSV = useSharedValue<DragEdge | null>(null);
 
-  // Each mounted day reports its blocks as mini-day slivers (`DayTimeline`'s
-  // `onPeekChange`); the focused page's right-edge peel shows the *next* day's,
-  // keyed by that day's `dateKey`. Only ever holds ~4 entries (the 3-day window
-  // + its next day), so no pruning needed.
-  const [peekByDay, setPeekByDay] = useState<Record<string, PeekBlock[]>>({});
-  const handlePeekChange = useCallback((blocks: PeekBlock[], key: string) => {
-    setPeekByDay((prev) =>
-      prev[key] === blocks ? prev : { ...prev, [key]: blocks },
-    );
-  }, []);
-  const nextDayKey = useMemo(
-    () => dateKey(shiftDays(focusedDate, 1)),
-    [focusedDate],
-  );
-  const peekBlocks = peekByDay[nextDayKey] ?? EMPTY_PEEK;
 
   // ── Day-navigation edge-hold ───────────────────────────────────────────────
   // Set true once a nav drag's edge-hold has advanced the day at least once,
@@ -1060,16 +1030,6 @@ function WeekPagerImpl(
     }),
   }));
 
-  // Next-day peek sliver: shown only when the strip is at rest on the focused
-  // day (a swipe / week slide / task drag hides it, since the day it previews
-  // is mid-change).
-  const peekStripStyle = useAnimatedStyle(() => {
-    const atRest = Math.abs(progress.value + width) < 2;
-    const headerDragging = Math.abs(headerStripSV.value + width) > 1;
-    const idle = atRest && !dragActiveSV.value && !headerDragging;
-    return { opacity: withTiming(idle ? 1 : 0, { duration: 120 }) };
-  });
-
   // Seam shadow strip: an explicit gradient drawn at the incoming page's
   // leading edge, over the outgoing page. Lives in this overlay (outside the
   // `overflow-hidden` strip container, above every page) so it can never be
@@ -1136,9 +1096,6 @@ function WeekPagerImpl(
                   onRequestReschedule={onRequestReschedule}
                   onRequestBlockMenu={onRequestBlockMenu}
                   onRequestScopedUpdate={onRequestScopedUpdate}
-                  onRequestSlotPick={onRequestSlotPick}
-                  onPeekChange={handlePeekChange}
-                  rightInset={PEEK_STRIP_W}
                   onStateChange={active ? onActiveStateChange : undefined}
                   onStatusChange={active ? onStatusChange : undefined}
                   flashSessionId={active ? flashSessionId : null}
@@ -1148,26 +1105,6 @@ function WeekPagerImpl(
           })}
         </View>
       </GestureDetector>
-
-      {/* Next-day peek sliver on the focused page's right edge (mockup:
-          "a sliver of the next day at the right edge signalling the swipe
-          gesture"). Sits under the swipe shadow/glow overlay (z-30). */}
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          {
-            position: "absolute",
-            top: 0,
-            bottom: 0,
-            right: 0,
-            width: PEEK_STRIP_W,
-            zIndex: 6,
-          },
-          peekStripStyle,
-        ]}
-      >
-        <PeekStrip blocks={peekBlocks} />
-      </Animated.View>
 
       <View pointerEvents="none" className="absolute inset-0 z-30">
         {/* Day-navigation edge glows — lit while an edge-hold advance is armed
@@ -1179,7 +1116,7 @@ function WeekPagerImpl(
           ]}
         >
           <LinearGradient
-            colors={[`rgba(${orangeRgb}, 0.34)`, `rgba(${orangeRgb}, 0)`]}
+            colors={[`rgba(${SLATE_RGB}, 0.34)`, `rgba(${SLATE_RGB}, 0)`]}
             start={{ x: 0, y: 0.5 }}
             end={{ x: 1, y: 0.5 }}
             style={StyleSheet.absoluteFill}
@@ -1192,7 +1129,7 @@ function WeekPagerImpl(
           ]}
         >
           <LinearGradient
-            colors={[`rgba(${orangeRgb}, 0)`, `rgba(${orangeRgb}, 0.34)`]}
+            colors={[`rgba(${SLATE_RGB}, 0)`, `rgba(${SLATE_RGB}, 0.34)`]}
             start={{ x: 0, y: 0.5 }}
             end={{ x: 1, y: 0.5 }}
             style={StyleSheet.absoluteFill}

@@ -68,6 +68,6 @@ describe("mobile language", () => {
         "Not enough time for 5 sessions before this deadline\nChoose a later deadline or fewer sessions.",
       ),
     ).toContain("5 buổi");
-    expect(t("Session name is required")).toBe("Vui lòng nhập tiêu đề");
+    expect(t("Session name is required")).toBe("Nhập tiêu đề đã nha");
   });
 });

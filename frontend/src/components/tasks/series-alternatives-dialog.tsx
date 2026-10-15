@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { isAxiosError } from "axios";
-import { Check, Loader2 } from "lucide-react";
+import { Check } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Dialog,
   DialogContent,
@@ -247,7 +248,7 @@ function SlotCard({
       >
         {selected && <Check className="size-2.5" strokeWidth={3} />}
         {loading && (
-          <Loader2 className="size-3 animate-spin text-muted-foreground" />
+          <Spinner className="size-3 text-muted-foreground" />
         )}
       </span>
       <span className="min-w-0 flex-1">

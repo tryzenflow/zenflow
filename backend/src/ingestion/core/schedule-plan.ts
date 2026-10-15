@@ -19,17 +19,14 @@
  */
 
 /**
- * How often the ticker fires. Must stay in step with the `@Cron` on
- * `IngestionTickerService`, which is why both read this constant's value from
- * one place rather than each spelling out a minute.
+ * How often the watcher fires. Must stay in step with the `@Interval` on
+ * `IngestionTickerService`, which reads this constant.
  *
- * One minute is a floor, not a cadence: the actual refresh rate of any kind is
- * `targetPeriodMs`, and the heartbeat only sets how finely the work is diced.
- * It is also exactly what the recorded measurement baseline was taken at
- * (`scripts/fixtures/dlu/README.md`), so a measurement run can reproduce the
- * old burst shape purely by config.
+ * Five seconds is granularity, not cadence: the refresh rate of any kind is
+ * `targetPeriodMs`, and the heartbeat only sets how finely the work is diced
+ * (a batch is `ceil(population / ticksPerPeriod)`, at least one student).
  */
-export const TICK_INTERVAL_MS = 60_000;
+export const TICK_INTERVAL_MS = 5_000;
 
 /**
  * The five independently-scheduled kinds of sync work.

@@ -9,8 +9,8 @@ import { API, testUser } from "@/test/msw/handlers";
 import { server } from "@/test/msw/server";
 import { renderScreen } from "@/test/utils/render";
 
-// Rich-text editor / viewer (WebView) — has its own coverage/ownership.
-vi.mock("@/components/tasks/form/description-field", () => ({ DescriptionField: () => null }));
+// Rich-text editor (WebView) — has its own coverage/ownership.
+vi.mock("@/components/tasks/note/description-field", () => ({ DescriptionField: () => null }));
 
 vi.mock("@/lib/geist-webview-font", () => ({ loadGeistWebviewFontDataUri: async () => "" }));
 
@@ -25,6 +25,13 @@ const task = (over = {}) =>
     reminders: [60],
     ...over,
   });
+
+// Deletes wait out the undo window before they are sent; shorten it so the
+// tests run in real time.
+vi.mock("@/lib/undo", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/undo")>()),
+  UNDO_WINDOW_MS: 300,
+}));
 
 const toastShown = (text: string | RegExp) =>
   waitFor(() => expect(screen.getAllByText(text).length).toBeGreaterThan(0));
@@ -48,17 +55,15 @@ function serve(session: ReturnType<typeof makeSession>) {
   );
 }
 
+/** Renders the screen and waits until the composer shows the saved values. */
 async function open(session = task()) {
   serve(session);
   vi.mocked(useLocalSearchParams).mockReturnValue({ id: session.id } as never);
   renderScreen(<EditSessionScreen />);
-  await screen.findByText("Session details");
-  await screen.findByText(session.title);
-}
-
-async function startEditing() {
-  fireEvent.click(screen.getByTestId("task.mode.edit"));
-  await screen.findByText("Edit session");
+  await screen.findByTestId("task.save");
+  await waitFor(() =>
+    expect((screen.getByTestId("task.title") as HTMLInputElement).value).toBe(session.title),
+  );
 }
 
 beforeEach(() => {
@@ -73,11 +78,12 @@ afterEach(() => {
   vi.mocked(useLocalSearchParams).mockReturnValue({} as never);
 });
 
-describe("EditSessionScreen — viewing", () => {
-  it("opens read-only with the session's details", async () => {
+describe("EditSessionScreen — opening", () => {
+  it("opens in edit mode with the saved values", async () => {
     await open();
-    expect(screen.getByText("Revise graphs")).toBeTruthy();
-    expect(screen.queryByTestId("task.save")).toBeNull();
+    expect(screen.getByText("Edit session")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("task.more"));
+    expect(await screen.findByText("1 hour before")).toBeTruthy();
   });
 
   it("closes with a toast when the session can't be loaded", async () => {
@@ -95,13 +101,10 @@ describe("EditSessionScreen — viewing", () => {
   });
 });
 
-describe("EditSessionScreen — editing", () => {
-  it("prefills the form and saves changes, then jumps to the block", async () => {
+describe("EditSessionScreen — saving", () => {
+  it("saves changes, then jumps to the block", async () => {
     await open();
-    await startEditing();
-    const title = screen.getByTestId("task.title") as HTMLInputElement;
-    expect(title.value).toBe("Revise graphs");
-    fireEvent.change(title, { target: { value: "Revise trees" } });
+    fireEvent.change(screen.getByTestId("task.title"), { target: { value: "Revise trees" } });
     fireEvent.click(screen.getByTestId("task.save"));
     await waitFor(() => expect(requests.filter((r) => r.method === "PATCH")).toHaveLength(1));
     const patch = requests.find((r) => r.method === "PATCH");
@@ -118,7 +121,6 @@ describe("EditSessionScreen — editing", () => {
 
   it("refuses an empty title", async () => {
     await open();
-    await startEditing();
     fireEvent.change(screen.getByTestId("task.title"), { target: { value: "" } });
     fireEvent.click(screen.getByTestId("task.save"));
     await toastShown("Session name is required");
@@ -148,7 +150,6 @@ describe("EditSessionScreen — editing", () => {
         return HttpResponse.json({ data: { ...current, ...body } });
       }),
     );
-    await startEditing();
     fireEvent.change(screen.getByTestId("task.title"), { target: { value: "Revise trees" } });
     fireEvent.click(screen.getByTestId("task.save"));
     await toastShown("Accept conflicts");
@@ -159,7 +160,6 @@ describe("EditSessionScreen — editing", () => {
 
   it("shows an error and stays when the update fails", async () => {
     await open();
-    await startEditing();
     server.use(http.patch(`${API}/sessions/:id`, () => HttpResponse.json({ message: "Conflict with exam" }, { status: 400 })));
     fireEvent.change(screen.getByTestId("task.title"), { target: { value: "Revise trees" } });
     fireEvent.click(screen.getByTestId("task.save"));
@@ -169,21 +169,28 @@ describe("EditSessionScreen — editing", () => {
 });
 
 describe("EditSessionScreen — deleting", () => {
-  it("deletes a one-off session straight away", async () => {
+  it("deletes a one-off session once the undo window closes", async () => {
     await open();
     fireEvent.click(screen.getByTestId("task.delete"));
     await toastShown("Session deleted");
-    expect(requests).toEqual([expect.objectContaining({ method: "DELETE" })]);
-    expect(requests[0].url.pathname).toBe("/sessions/t1");
     expect(router.back).toHaveBeenCalled();
+    await waitFor(() => expect(requests).toEqual([expect.objectContaining({ method: "DELETE" })]));
+    expect(requests[0].url.pathname).toBe("/sessions/t1");
   });
 
-  it("reports a failed delete and stays", async () => {
+  it("cancels the delete when Undo is pressed", async () => {
+    await open();
+    fireEvent.click(screen.getByTestId("task.delete"));
+    fireEvent.click(await screen.findByText("Undo"));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(requests).toEqual([]);
+  });
+
+  it("reports a failed delete on the root toast", async () => {
     await open();
     server.use(http.delete(/\/sessions\/.*/, () => HttpResponse.json({ message: "Locked" }, { status: 400 })));
     fireEvent.click(screen.getByTestId("task.delete"));
     await toastShown(/Locked|Couldn't delete session/);
-    expect(router.back).not.toHaveBeenCalled();
   });
 
   describe("recurring fixed session", () => {
@@ -205,7 +212,7 @@ describe("EditSessionScreen — deleting", () => {
       expect(requests).toEqual([]);
       fireEvent.click(screen.getByText("This occurrence"));
       await toastShown("Session deleted");
-      expect(requests).toHaveLength(1);
+      await waitFor(() => expect(requests).toHaveLength(1));
       expect(decodeURIComponent(requests[0].url.pathname)).toBe(`/sessions/${occurrenceId}`);
     });
 
@@ -214,6 +221,7 @@ describe("EditSessionScreen — deleting", () => {
       fireEvent.click(screen.getByTestId("task.delete"));
       fireEvent.click(await screen.findByText("This and all following"));
       await toastShown("This and later occurrences removed");
+      await waitFor(() => expect(requests).toHaveLength(1));
       expect(requests[0].url.pathname).toBe("/sessions/series/ser1/truncate");
       expect(requests[0].url.searchParams.get("from")).toBe("2026-10-15T03:00:00.000Z");
     });
@@ -223,6 +231,7 @@ describe("EditSessionScreen — deleting", () => {
       fireEvent.click(screen.getByTestId("task.delete"));
       fireEvent.click(await screen.findByText("All occurrences"));
       await toastShown("Series deleted");
+      await waitFor(() => expect(requests).toHaveLength(1));
       expect(requests[0].url.pathname).toBe("/sessions/series/ser1");
       expect(router.back).toHaveBeenCalled();
     });
@@ -234,6 +243,56 @@ describe("EditSessionScreen — deleting", () => {
     expect(await screen.findByText("Delete session", { selector: "div" })).toBeTruthy();
     fireEvent.click(screen.getByText("This and all later sittings"));
     await toastShown("This and later sittings removed");
+    await waitFor(() => expect(requests).toHaveLength(1));
     expect(requests[0].url.pathname).toBe("/sessions/series/ser2/from/t1");
+  });
+});
+
+describe("EditSessionScreen — moving a recurring session", () => {
+  const occurrenceId = "ser1::2026-10-15T03:00:00.000Z";
+  const weekly = () =>
+    makeSession({
+      id: occurrenceId,
+      title: "Weekly lab",
+      type: "LECTURE",
+      seriesId: "ser1",
+      rrule: "FREQ=WEEKLY",
+      scheduledStartTime: "2026-10-15T03:00:00.000Z",
+    });
+
+  /** Steps the start time one notch later, then saves. */
+  function moveLater() {
+    fireEvent.click(screen.getByTestId("task.when.start.later"));
+    fireEvent.click(screen.getByTestId("task.save"));
+  }
+
+  it("asks nothing and moves just this occurrence once the undo window closes", async () => {
+    await open(weekly());
+    moveLater();
+    expect(screen.queryByText("Update recurring session")).toBeNull();
+    await toastShown("Moved this occurrence");
+    expect(requests).toEqual([]);
+    // Metadata first (series-wide, unscoped), then the time, scoped.
+    await waitFor(() => expect(requests).toHaveLength(2));
+    expect(requests[0].body).not.toHaveProperty("scope");
+    expect(requests[1].body).toMatchObject({ scope: "occurrence", durationMinutes: 60 });
+    expect(requests[1].body).not.toHaveProperty("rrule");
+    expect(decodeURIComponent(requests[1].url.pathname)).toBe(`/sessions/${occurrenceId}`);
+  });
+
+  it("Apply to all moves the whole series at once", async () => {
+    await open(weekly());
+    moveLater();
+    fireEvent.click(await screen.findByText("Apply to all"));
+    await waitFor(() => expect(requests).toHaveLength(2));
+    expect(requests[1].body).toMatchObject({ scope: "series" });
+  });
+
+  it("Undo cancels the move", async () => {
+    await open(weekly());
+    moveLater();
+    fireEvent.click(await screen.findByText("Undo"));
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(requests).toEqual([]);
   });
 });

@@ -1,8 +1,9 @@
 import { X } from "@/components/Icons";
+import { GlassButton } from "@/components/ui/glass-button";
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
 import type { OpenMedia } from "@/lib/note-media";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
+import { Modal, StyleSheet, View } from "react-native";
 import {
   Gesture,
   GestureDetector,
@@ -52,15 +53,12 @@ export function MediaViewer({
             }}
           />
         )}
-        <Pressable
+        <GlassButton
           onPress={onClose}
-          hitSlop={12}
-          accessibilityRole="button"
+          icon={X}
           accessibilityLabel={t("Close")}
-          style={[styles.close, { top: insets.top + 12 }]}
-        >
-          <X size={20} color="#ffffff" />
-        </Pressable>
+          style={[styles.close, { top: insets.top + 8 }]}
+        />
       </GestureHandlerRootView>
     </Modal>
   );
@@ -140,12 +138,6 @@ const styles = StyleSheet.create({
   image: { width: "100%", height: "100%" },
   close: {
     position: "absolute",
-    right: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.55)",
+    right: 12,
   },
 });

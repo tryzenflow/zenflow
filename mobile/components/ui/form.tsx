@@ -1,6 +1,8 @@
 import { scaleType } from "@/lib/type-scale";
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
+import { useColorScheme } from "@/lib/useColorScheme";
+import { SESSION_TONES } from "@zenflow/core";
 // This project uses code from shadcn/ui.
 // The code is licensed under the MIT License.
 // https://github.com/shadcn-ui/ui
@@ -150,6 +152,7 @@ const FormMessage = React.forwardRef<
 >(({ className, children, style, ...props }, ref) => {
   const { error, formMessageNativeID } = useFormField();
   useLanguage();
+  const { isDarkColorScheme } = useColorScheme();
   const body = error ? t(String(error?.message)) : children;
 
   if (!body) {
@@ -160,13 +163,18 @@ const FormMessage = React.forwardRef<
   // the app's <Text> component, so it never picks up the Geist font family —
   // resolve it the same way <Text> does and apply it explicitly.
   const mergedClassName = cn(
-    "text-sm font-sans font-medium text-destructive ml-2",
+    "flex-1 text-sm font-sans font-medium text-destructive",
     className,
   );
 
   return (
-    <View className="flex flex-row items-center mt-2">
-      <AlertCircle className="text-destructive" size={16} />
+    <View className="mt-2 flex-row items-start gap-2">
+      <View className="h-[21px] justify-center">
+        <AlertCircle
+          size={16}
+          color={SESSION_TONES.late.ink[isDarkColorScheme ? "dark" : "light"]}
+        />
+      </View>
       <Animated.Text
         entering={FadeInDown}
         exiting={FadeOut.duration(275)}

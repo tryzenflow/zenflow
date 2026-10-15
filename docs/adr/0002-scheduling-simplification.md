@@ -1,7 +1,7 @@
 # ADR-0002: Scheduling & Session-Model Simplification
 
-**Status:** Accepted
-**Date:** 2026-08-30 · **Last updated:** 2026-09-07
+**Status:** Accepted; the `RETAINED` sweep is superseded by [ADR-0023](0023-completion-reward.md)
+**Date:** 2026-08-30 · **Last updated:** 2026-10-15
 **Supersedes:** the completion/abandonment lifecycle and the manual "Optimize" surface.
 
 ## 1. Context

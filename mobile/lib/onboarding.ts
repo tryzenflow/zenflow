@@ -1,5 +1,13 @@
 import { t } from "./i18n";
-import { BULK_TAGS_MAX, TAG_NAME_MAX } from "@zenflow/shared";
+import { combineToUtc, zonedDate } from "@zenflow/core";
+import {
+  BULK_TAGS_MAX,
+  type CreateDndInput,
+  type FocusBand,
+  type Session,
+  TAG_NAME_MAX,
+} from "@zenflow/shared";
+import { format } from "date-fns";
 
 /**
  * Pure routing + step-state logic for first-run onboarding (issue #88).
@@ -8,6 +16,7 @@ import { BULK_TAGS_MAX, TAG_NAME_MAX } from "@zenflow/shared";
 
 export const ONBOARDING_STEPS = [
   "name",
+  "focus",
   "dlu",
   "notifications",
   "done",
@@ -171,6 +180,108 @@ export function tagsForBulk(selected: readonly string[]): string[] {
     if (name && !out.some((o) => sameTag(o, name))) out.push(name);
   }
   return out.slice(0, BULK_TAGS_MAX);
+}
+
+interface Routine {
+  title: string;
+  start: string;
+  durationMinutes: number;
+}
+
+/** Daily do-not-disturb routines created at finish (start in user tz, minutes). */
+export const DEFAULT_ROUTINES: readonly Routine[] = [
+  { title: "Sleep", start: "23:00", durationMinutes: 420 },
+  { title: "Lunch break", start: "11:30", durationMinutes: 60 },
+  { title: "Dinner", start: "18:00", durationMinutes: 60 },
+];
+
+/**
+ * Routines shifted around the onboarding focus band, so sleep and meals never
+ * cover the hours the user said they focus best. No band keeps the defaults.
+ */
+const BAND_ROUTINES: Record<FocusBand, readonly Routine[]> = {
+  MORNING: [
+    { title: "Sleep", start: "22:30", durationMinutes: 450 },
+    { title: "Lunch break", start: "12:00", durationMinutes: 60 },
+    { title: "Dinner", start: "18:00", durationMinutes: 60 },
+  ],
+  AFTERNOON: [
+    { title: "Sleep", start: "23:00", durationMinutes: 420 },
+    { title: "Lunch break", start: "11:00", durationMinutes: 60 },
+    { title: "Dinner", start: "18:00", durationMinutes: 60 },
+  ],
+  EVENING: [
+    { title: "Sleep", start: "23:30", durationMinutes: 420 },
+    { title: "Lunch break", start: "11:30", durationMinutes: 60 },
+    { title: "Dinner", start: "16:00", durationMinutes: 60 },
+  ],
+  LATE_NIGHT: [
+    { title: "Sleep", start: "02:30", durationMinutes: 450 },
+    { title: "Lunch break", start: "12:30", durationMinutes: 60 },
+    { title: "Dinner", start: "19:00", durationMinutes: 60 },
+  ],
+};
+
+/** The routines for a focus band, or the defaults when none was chosen. */
+export function routinesFor(band: FocusBand | null): readonly Routine[] {
+  return band ? BAND_ROUTINES[band] : DEFAULT_ROUTINES;
+}
+
+export const DAILY_RRULE = "FREQ=DAILY";
+
+/** `yyyy-MM-dd` shifted by whole calendar days. */
+function addDays(date: string, days: number): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+/**
+ * First occurrence of a daily routine as a UTC instant: today in `tz` when its
+ * start is still ahead of `now`, otherwise tomorrow.
+ */
+export function firstRoutineStart(
+  startHhmm: string,
+  tz: string,
+  now: Date,
+): string {
+  const today = format(zonedDate(now.toISOString(), tz), "yyyy-MM-dd");
+  const todayStart = combineToUtc(today, startHhmm, tz);
+  return Date.parse(todayStart) > now.getTime()
+    ? todayStart
+    : combineToUtc(addDays(today, 1), startHhmm, tz);
+}
+
+/** POST /sessions bodies for the default routines, in the user's timezone. */
+export function dndRoutinePayloads(
+  tz: string,
+  now: Date,
+  band: FocusBand | null = null,
+): CreateDndInput[] {
+  return routinesFor(band).map(
+    (r): CreateDndInput => ({
+      type: "DND",
+      title: t(r.title),
+      durationMinutes: r.durationMinutes,
+      scheduledStartTime: firstRoutineStart(r.start, tz, now),
+      rrule: DAILY_RRULE,
+    }),
+  );
+}
+
+/**
+ * Payloads whose title is not already a recurring DND series in `existing`,
+ * so a retry or re-run doesn't duplicate them.
+ */
+export function missingRoutines(
+  payloads: readonly CreateDndInput[],
+  existing: readonly Pick<Session, "type" | "title" | "rrule">[],
+): CreateDndInput[] {
+  return payloads.filter(
+    (p) =>
+      !existing.some(
+        (s) => s.type === "DND" && s.rrule != null && sameTag(s.title, p.title),
+      ),
+  );
 }
 
 export type SetupItem = "notifications" | "dlu";

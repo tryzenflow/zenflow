@@ -11,3 +11,5 @@ export * from "./session-time";
 export * from "./session-type";
 export * from "./reminders";
 export * from "./location";
+export * from "./palette";
+export * from "./course-colour";

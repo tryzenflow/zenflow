@@ -3,6 +3,14 @@
 appId: com.zenflow.app
 ---
 - runScript: ../scripts/new-user.js
+# A cold start after clearState outlasts tapOn's default wait on the CI emulator.
+- extendedWaitUntil:
+    visible:
+      id: login.use-email
+    timeout: 120000
+# Test accounts are full addresses, not student IDs.
+- tapOn:
+    id: login.use-email
 - tapOn:
     id: login.email
 - inputText: ${output.email}

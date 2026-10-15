@@ -19,7 +19,7 @@ import { IngestionFetchService } from "./ingestion-fetch.service";
  */
 export function defaultFetchLimiter(
   config: ConfigService,
-  def: QueueDefinition<FetchJobData>,
+  def: Pick<QueueDefinition<unknown>, "name">,
 ): { max: number; duration: number } | undefined {
   if (Number(config.get(`QUEUE_${queueEnvKey(def.name)}_RATE_MAX`)) > 0) {
     return undefined; // explicit env wins (applied by QueueWorkers)

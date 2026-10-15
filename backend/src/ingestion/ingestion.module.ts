@@ -12,11 +12,18 @@ import { IngestionFetchService } from "./ingestion-fetch.service";
 import { IngestionJobsService } from "./ingestion-jobs.service";
 import { IngestionScheduleService } from "./ingestion-schedule.service";
 import { IngestionSyncService } from "./ingestion-sync.service";
+import { IngestionDispatchService } from "./ingestion-dispatch.service";
+import { LmsMonthService } from "./lms-month.service";
 import { LmsWatcherService } from "./lms-watcher.service";
 import { MaterializerService } from "./materializer.service";
 import { OccurrenceCacheService } from "./occurrence-cache.service";
 import { OccurrenceFanoutService } from "./occurrence-fanout.service";
+import { PortalSessionService } from "./portal-session.service";
+import { SplitJobsService } from "./split-jobs.service";
+import { StudentSyncService } from "./student-sync.service";
 import { SyncConflictsService } from "./sync-conflicts.service";
+import { SyncRunService } from "./sync-run.service";
+import { TimetableWeekService } from "./timetable-week.service";
 import { TimetableWatcherService } from "./timetable-watcher.service";
 
 /**
@@ -65,6 +72,13 @@ import { TimetableWatcherService } from "./timetable-watcher.service";
     EnrollmentDiscoveryService,
     OccurrenceCacheService,
     OccurrenceFanoutService,
+    PortalSessionService,
+    SyncRunService,
+    TimetableWeekService,
+    LmsMonthService,
+    StudentSyncService,
+    IngestionDispatchService,
+    SplitJobsService,
   ],
   // The watchers and discovery are exported for IngestionWorkerModule's ticker.
   exports: [
@@ -75,6 +89,10 @@ import { TimetableWatcherService } from "./timetable-watcher.service";
     ExamWatcherService,
     LmsWatcherService,
     EnrollmentDiscoveryService,
+    IngestionDispatchService,
+    SyncRunService,
+    StudentSyncService,
+    SplitJobsService,
   ],
 })
 export class IngestionModule {}

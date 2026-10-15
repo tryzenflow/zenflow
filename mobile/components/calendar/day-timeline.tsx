@@ -6,27 +6,33 @@ import { useLanguage } from "@/hooks/use-language";
 import { locale } from "@/lib/i18n";
 import { format, formatTitle } from "@/lib/i18n";
 import { listSessions, updateSession } from "@/api/tasks";
+import { checkStateOf } from "@/lib/today-summary";
+import { undoMove } from "@/lib/move-undo";
+import { dropOnDay } from "@/lib/anchor";
 import {
-  AlertTriangle,
   GraduationCap,
   Plus,
   RefreshCcw,
   RotateCw,
 } from "@/components/Icons";
 import { useDluConnected } from "@/hooks/use-dlu-connected";
+import { ErrorMark } from "@/components/brand/state-marks";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
-import { completeStep } from "@/hooks/use-checklist";
 import { useLastCreated } from "@/hooks/use-last-created";
 import { type DayStatus, deriveDayStatus } from "@/lib/day-status";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import { useNow } from "@/hooks/use-now";
 import { useUserStore } from "@/hooks/use-user-store";
+import { focusBandStartMin } from "@/lib/focus-band";
 import { isPastDeadlineDrop } from "@/lib/overdue";
-import { showErrorToast, showSkippedToast } from "@/lib/task-toasts";
-import { type PeekBlock, peekBlocksFromSegments } from "@/lib/peek";
+import {
+  showDisplacedToast,
+  showErrorToast,
+  showSkippedToast,
+} from "@/lib/task-toasts";
 import { useSpotlight } from "@/hooks/use-spotlight";
 import { showMovedToast } from "@/lib/move-toast";
 import {
@@ -45,7 +51,6 @@ import {
   subscribeTimelineScroll,
 } from "@/lib/timeline-scroll";
 import {
-  DAILY_HORIZON,
   eventsForDay,
   getOverlapLayout,
   getSeriesKind,
@@ -65,6 +70,8 @@ import type {
 import { useRouter, type Href } from "expo-router";
 import { toZonedTime } from "date-fns-tz";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useHiddenVersion } from "@/hooks/use-hidden-version";
+import { filterHidden } from "@/lib/hidden-sessions";
 import {
   type LayoutChangeEvent,
   type NativeScrollEvent,
@@ -77,7 +84,6 @@ import {
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
-  FadeIn,
   useAnimatedStyle,
   useSharedValue,
   clamp,
@@ -85,15 +91,34 @@ import Animated, {
 } from "react-native-reanimated";
 import { NowIndicator } from "./now-indicator";
 import { SessionBlock } from "./task-block";
+import {
+  type DayGrid,
+  HOUR_HEIGHT_MAX,
+  HOUR_HEIGHT_MIN,
+  buildDayGrid,
+  gridHeightFor,
+  minToY,
+  minuteSpanOf,
+  scrollAnchorMin,
+  scrollYForMin,
+  visibleHourMinutes,
+} from "@/lib/day-grid";
+import {
+  getHourHeight,
+  loadHourHeight,
+  setHourHeight,
+  subscribeHourHeight,
+} from "@/lib/hour-height";
 import { useOffline } from "@/hooks/use-offline";
 import { TIME_GUTTER_WIDTH, TimeGutter } from "./time-gutter";
 import type {
   PendingSessionUpdate,
   UpdateRecurringScope,
-} from "./update-recurring-sheet";
+} from "@/lib/recurring-scope";
+import { moveUndoable } from "@/lib/recurring-scope";
+import { rememberPlacement } from "@/lib/slot-alternatives";
 
-/** The empty-day "add a task" zone spans 8:00–10:00. */
-const EMPTY_ZONE_START_MIN = 8 * 60;
+/** The empty-day "add a task" zone spans two hours from the focus band's start. */
 const EMPTY_ZONE_MINUTES = 120;
 
 /** Inset (px) of every block from the day column's edges. */
@@ -102,19 +127,22 @@ const BLOCK_GUTTER = 2;
  * column's width, capped at {@link CASCADE_MAX_STEP} px. */
 const CASCADE_STEP_RATIO = 0.02;
 const CASCADE_MAX_STEP = 44;
-/** Room (px) a stacked block leaves above it so the title of the block
- * beneath stays visible, e.g. when both start at the same time. */
-const TITLE_PEEK = 22;
+/** Room (px) a stacked block leaves above it so the title and the check-off
+ * disc of the block beneath stay visible, e.g. when both start at the same time. */
+const TITLE_PEEK = 38;
 
 /**
  * Downward shift (px) per segment: a block drawn over an overlapping one whose
  * top is within {@link TITLE_PEEK} of its own moves below that block's title.
+ * `covered` lists the blocks that have another drawn over them: their check-off
+ * disc moves to the top, into the strip that stays visible.
  */
 function stackShifts(
   segments: readonly DaySegment[],
   layout: Map<string, BlockLayout>,
-  pxPerMs: number,
-): Map<string, number> {
+  topOf: (segment: DaySegment) => number,
+): { shifts: Map<string, number>; covered: Set<string> } {
+  const covered = new Set<string>();
   const items = segments.map((s) => {
     const l = layout.get(s.segmentId);
     const startMs = new Date(s.start).getTime();
@@ -122,7 +150,7 @@ function stackShifts(
       id: s.segmentId,
       startMs,
       endMs: new Date(s.end).getTime(),
-      top: startMs * pxPerMs,
+      top: topOf(s),
       // Paint order: cascade columns left to right, nested blocks on top.
       z: (l?.nested ? 1000 : 0) + (l?.column ?? 0) * 10 + (l?.nestIndex ?? 0),
       shift: 0,
@@ -138,6 +166,7 @@ function stackShifts(
       )
       .sort((a, b) => a.top + a.shift - (b.top + b.shift));
     for (const p of beneath) {
+      covered.add(p.id);
       const pTop = p.top + p.shift;
       const top = item.top + item.shift;
       if (top >= pTop && top < pTop + TITLE_PEEK) {
@@ -146,14 +175,10 @@ function stackShifts(
     }
     shifts.set(item.id, item.shift);
   });
-  return shifts;
+  return { shifts, covered };
 }
 
 const GUTTER_WIDTH = TIME_GUTTER_WIDTH;
-const HOUR_HEIGHT_DEFAULT = 132;
-const HOUR_HEIGHT_MIN = 80;
-const HOUR_HEIGHT_MAX = 200;
-const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 const LOADING_PLACEHOLDERS = [
   { startMin: 8 * 60 + 15, duration: 60 },
@@ -165,13 +190,10 @@ const LOADING_PLACEHOLDERS = [
 /** How long a teleport target waits for its day to load and come into view. */
 const PENDING_FLASH_TTL_MS = 5000;
 
-function scrollToNowOffset(totalHeight: number, tz: string): number {
-  // Wall clock in the user's tz — matches `NowIndicator` (which uses
-  // `toZonedTime(now, tz)`); a bare `new Date()` here read the device zone and
-  // scrolled to the wrong hour when the two differed.
+/** Wall-clock minute of day in the user's tz, the same clock `NowIndicator` reads. */
+function wallMinuteNow(tz: string): number {
   const now = zonedNow(tz);
-  const mins = now.getHours() * 60 + now.getMinutes();
-  return Math.max(0, (mins / DAILY_HORIZON) * totalHeight - 120);
+  return now.getHours() * 60 + now.getMinutes();
 }
 
 export type TimelineState = "loading" | "error" | "ready";
@@ -222,24 +244,6 @@ interface DayTimelineProps {
       } | null,
     ) => void,
   ) => void;
-  /** When a drag-drop results in a divergent placement (heuristic vs LinUCB),
-   * shows the slot picker for the user to choose between primary and alternative.
-   * The callback receives the session, primary slot, alternative slot, proposal ID,
-   * and a resolve function to call with the user's choice. */
-  onRequestSlotPick?: (
-    session: Session,
-    primarySlot: string,
-    alternativeSlot: string,
-    slotProposalId: string,
-    onPick: (chose: "primary" | "alternative") => Promise<void>,
-  ) => void;
-  /** Reports this day's sessions as mini-day blocks so a parent week pager
-   * can render its next-day peek strip from real data. */
-  onPeekChange?: (blocks: PeekBlock[], dayKey: string) => void;
-  /** Right padding (px) reserved on the grid for a parent's next-day peek
-   * sliver, so blocks/lines stop short of it instead of running under it.
-   * Default 0. */
-  rightInset?: number;
   /** True when this is the page the pager is focused on. Only the active page
    * is the source of truth for the shared scroll position (`syncScroll`) and
    * only it should drive a parent's header/slice callbacks. Default `true` for
@@ -271,9 +275,6 @@ export function DayTimeline({
   onRequestReschedule,
   onRequestBlockMenu,
   onRequestScopedUpdate,
-  onRequestSlotPick,
-  onPeekChange,
-  rightInset = 0,
   isActive = true,
   syncScroll = false,
   flashSessionId = null,
@@ -281,6 +282,8 @@ export function DayTimeline({
   useLanguage();
   const offline = useOffline();
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
+  const focusBand = useUserStore((s) => s.user?.focusBand);
+  const emptyZoneStartMin = focusBandStartMin(focusBand);
   const { confirm, toast } = useToast();
   // Bumped whenever a drop settles, so a block whose start didn't change
   // (save failed, sheet cancelled) releases its drop pin and snaps back.
@@ -315,9 +318,13 @@ export function DayTimeline({
     return sameDay ? liveWall : propDate;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [propDate, liveDayKey, tz]);
-  const [hourHeight, setHourHeight] = useState(HOUR_HEIGHT_DEFAULT);
-  const totalHeight = hourHeight * 24;
-  const contentWidth = screenWidth - GUTTER_WIDTH - rightInset;
+  // The pinch level is shared by every open page and persisted (lib/hour-height).
+  const [hourHeight, setHourHeightState] = useState(getHourHeight);
+  useEffect(() => {
+    void loadHourHeight();
+    return subscribeHourHeight(() => setHourHeightState(getHourHeight()));
+  }, []);
+  const contentWidth = screenWidth - GUTTER_WIDTH;
 
   const dayKey = format(date, "yyyy-MM-dd");
 
@@ -350,14 +357,18 @@ export function DayTimeline({
   // plays the "just landed" flash — a within-day drag drop no longer flashes
   // the moved block in place.
 
-  const baseHourHeight = useSharedValue(HOUR_HEIGHT_DEFAULT);
+  const baseHourHeight = useSharedValue(hourHeight);
+  const pinchStartHourHeight = useSharedValue(hourHeight);
+  useEffect(() => {
+    baseHourHeight.value = hourHeight;
+  }, [hourHeight, baseHourHeight]);
   // Px the grid has auto-scrolled since the current block drag began (0 when
   // idle). Shared with every `SessionBlock` so a dragged block stays under the
   // finger while the grid scrolls and its drop slot accounts for the travel.
   const autoScrollDeltaSV = useSharedValue(0);
   // Live drop-preview slot (minutes of day), written directly on the UI
   // thread by whichever block is being dragged (see `task-block.tsx`'s pan
-  // gesture) — the orange drop-line below reads this instead of `dragSnap`
+  // gesture) — the drop-line below reads this instead of `dragSnap`
   // state so its position never lags the finger. Sentinel `-1` = hidden.
   const dragPreviewMinSV = useSharedValue(-1);
   const scrollYRef = useRef(0);
@@ -436,12 +447,10 @@ export function DayTimeline({
   }, [loading, error, onStateChange]);
 
   // A cold day shows the skeleton straight away and keeps it up for a moment
-  // (`useDelayedLoading`), then fades the real grid in — never blank → data.
-  // Warm days aren't `loading`, so they stay instant (no fade either: a page
-  // swiped in must look like it was always there).
+  // (`useDelayedLoading`), then swaps in the real grid — never blank → data.
+  // Warm days aren't `loading`, so they stay instant (a page swiped in must
+  // look like it was always there).
   const showSkeleton = useDelayedLoading(loading);
-  const hadSkeletonRef = useRef(showSkeleton);
-  if (showSkeleton) hadSkeletonRef.current = true;
 
   const refetch = useCallback(async () => {
     try {
@@ -462,10 +471,12 @@ export function DayTimeline({
     }
   }, [date]);
 
+  const hiddenVersion = useHiddenVersion();
   const segments = useMemo(() => {
-    const blocks = tasksToBlocks(tasks);
+    const blocks = tasksToBlocks(filterHidden(tasks));
     return eventsForDay(blocks, date, tz);
-  }, [tasks, date, tz]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, date, tz, hiddenVersion]);
 
   // Saved tasks for this day (prefetched offline) beat the error screen; an
   // empty day we can't refresh (offline, or its last refresh failed) gets it.
@@ -480,6 +491,12 @@ export function DayTimeline({
 
   const layout = useMemo(() => getOverlapLayout(segments), [segments]);
 
+  // The one y <-> time mapping for this day: all 24 hours at `hourHeight`.
+  // Layout, drag, resize, the now line and the empty-day zone all read it.
+  const grid = useMemo<DayGrid>(() => buildDayGrid(hourHeight), [hourHeight]);
+  const totalHeight = grid.height;
+  const hourLineMins = useMemo(() => visibleHourMinutes(grid), [grid]);
+
   // The block the checklist's "Move a task" / "Hold a task" spotlights point at:
   // the task the user just created when it's on this day, else the first whole
   // one. Only plain tasks: timetable lectures, exams etc. aren't the ones to demo.
@@ -491,9 +508,12 @@ export function DayTimeline({
       null
     );
   }, [segments, lastCreatedId]);
-  const topShifts = useMemo(
-    () => stackShifts(segments, layout, totalHeight / (DAILY_HORIZON * 60_000)),
-    [segments, layout, totalHeight],
+  const { shifts: topShifts, covered: coveredIds } = useMemo(
+    () =>
+      stackShifts(segments, layout, (s) =>
+        minToY(grid, minuteSpanOf(s, tz).startMin),
+      ),
+    [segments, layout, grid, tz],
   );
 
   // A task clamped at the midnight line (its flat bottom edge + "→ next day"
@@ -513,17 +533,6 @@ export function DayTimeline({
   const bottomInset = contentBottomInset ?? (showHeader ? tabBarOverlay : 0);
   contentHeightRef.current = totalHeight + bottomInset;
 
-  // Report this day's blocks so a parent Week pager can draw its next-day
-  // peek strip from real data.
-  const peekBlocks = useMemo(
-    () => peekBlocksFromSegments(segments, date, tz),
-    [segments, date, tz],
-  );
-
-  useEffect(() => {
-    onPeekChange?.(peekBlocks, dayKey);
-  }, [peekBlocks, dayKey, onPeekChange]);
-
   const deadlineBySession = useMemo(() => {
     const map = new Map<string, string>();
     for (const t of tasks) {
@@ -538,14 +547,45 @@ export function DayTimeline({
     return set;
   }, [tasks]);
 
-  const scrollToNow = useCallback(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTo({
-        y: scrollToNowOffset(totalHeight, tz),
-        animated: false,
-      });
-    }
-  }, [totalHeight, tz]);
+  const checkStateById = useMemo(
+    () => new Map(tasks.map((t) => [t.id, checkStateOf(t)] as const)),
+    [tasks],
+  );
+
+  const isToday = useMemo(() => {
+    const live = toZonedTime(now, tz);
+    return (
+      live.getFullYear() === date.getFullYear() &&
+      live.getMonth() === date.getMonth() &&
+      live.getDate() === date.getDate()
+    );
+  }, [date, now, tz]);
+
+  // Open on now (today) or the first event (any other day).
+  const firstEventMin = useMemo(
+    () =>
+      segments.length
+        ? Math.min(...segments.map((s) => minuteSpanOf(s, tz).startMin))
+        : null,
+    [segments, tz],
+  );
+  const anchorScrollY = useCallback(
+    () =>
+      scrollYForMin(
+        grid,
+        scrollAnchorMin({
+          isToday,
+          nowMin: wallMinuteNow(tz),
+          firstEventMin,
+          emptyMin: emptyZoneStartMin,
+        }),
+      ),
+    [grid, isToday, firstEventMin, tz, emptyZoneStartMin],
+  );
+
+  const scrollToAnchor = useCallback(() => {
+    scrollRef.current?.scrollTo({ y: anchorScrollY(), animated: false });
+  }, [anchorScrollY]);
 
   // Read inside subscription / scroll callbacks that must not re-fire on every
   // active/zoom change.
@@ -584,25 +624,21 @@ export function DayTimeline({
     if (loading) {
       if (positionedRef.current !== "none") return;
       positionedRef.current = "pending";
-      const loadingOffset = ((8 * 60) / DAILY_HORIZON) * totalHeight - 120;
       scrollRef.current?.scrollTo({
-        y: Math.max(0, loadingOffset),
+        y: scrollYForMin(grid, emptyZoneStartMin),
         animated: false,
       });
       return;
     }
     if (positionedRef.current === "resolved") return;
     positionedRef.current = "resolved";
-    scrollToNow();
+    scrollToAnchor();
     if (syncScroll) {
       // Seed without notifying — no other page needs to move for the cold
       // open, and a notify here would fight the neighbours' own positioning.
-      setTimelineScrollFraction(
-        scrollToNowOffset(totalHeight, tz) / totalHeight,
-        false,
-      );
+      setTimelineScrollFraction(anchorScrollY() / totalHeight, false);
     }
-  }, [loading, error, totalHeight, scrollToNow, syncScroll, tz]);
+  }, [loading, error, totalHeight, grid, scrollToAnchor, anchorScrollY, syncScroll, tz, emptyZoneStartMin]);
 
   useEffect(() => {
     positionScroll();
@@ -631,8 +667,8 @@ export function DayTimeline({
       15,
       (end.getTime() - start.getTime()) / 60_000,
     );
-    const top = (startMin / DAILY_HORIZON) * totalHeight;
-    const height = (durationMin / DAILY_HORIZON) * totalHeight;
+    const top = minToY(grid, startMin);
+    const height = minToY(grid, startMin + durationMin) - top;
     const viewport = viewportHRef.current || 500;
     const y =
       height >= viewport - 48 ? top - 24 : top - (viewport - height) / 2;
@@ -642,7 +678,7 @@ export function DayTimeline({
       60,
     );
     return () => clearTimeout(timer);
-  }, [tipStep, isActive, loading, error, tipSegmentId, totalHeight, tz]);
+  }, [tipStep, isActive, loading, error, tipSegmentId, grid, tz]);
 
   // Teleport to a session (`flashSessionId` — notification tap, create/edit,
   // cross-day move): once this day has it loaded and is the visible page,
@@ -676,8 +712,8 @@ export function DayTimeline({
       15,
       (end.getTime() - start.getTime()) / 60_000,
     );
-    const top = (startMin / DAILY_HORIZON) * totalHeight;
-    const height = (durationMin / DAILY_HORIZON) * totalHeight;
+    const top = minToY(grid, startMin);
+    const height = minToY(grid, startMin + durationMin) - top;
     const viewport = viewportHRef.current;
     const y =
       height >= viewport - 48 ? top - 24 : top - (viewport - height) / 2;
@@ -690,7 +726,7 @@ export function DayTimeline({
       setTimeout(() => setFlashTarget(pending.id), 350),
       setTimeout(() => setFlashTarget(null), 1300),
     ];
-  }, [flashSessionId, segments, loading, error, isActive, totalHeight, tz]);
+  }, [flashSessionId, segments, loading, error, isActive, grid, tz]);
   useEffect(
     () => () => {
       for (const t of flashTimersRef.current) clearTimeout(t);
@@ -784,15 +820,6 @@ export function DayTimeline({
     [],
   );
 
-  const isToday = useMemo(() => {
-    const live = toZonedTime(now, tz);
-    return (
-      live.getFullYear() === date.getFullYear() &&
-      live.getMonth() === date.getMonth() &&
-      live.getDate() === date.getDate()
-    );
-  }, [date, now, tz]);
-
   const dayStatus = useMemo<DayStatus>(
     () =>
       isToday && !loading && !error
@@ -825,7 +852,7 @@ export function DayTimeline({
     [router],
   );
   const openNewTaskForm = useCallback(() => {
-    let startMin = EMPTY_ZONE_START_MIN;
+    let startMin = emptyZoneStartMin;
     if (isToday) {
       const wall = zonedNow(tz);
       startMin = Math.max(
@@ -844,51 +871,39 @@ export function DayTimeline({
         params: { start: zonedWallClockToUtc(start, tz).toISOString() },
       } as Href),
     );
-  }, [date, isToday, router, tz]);
+  }, [date, isToday, router, tz, emptyZoneStartMin]);
 
   const handleReschedule = useCallback(
     async (taskId: string, startISO: string) => {
+      // A drop onto a pinned or fixed session bounces back (ADR-0022).
+      const dragged = tasks.find((t) => t.id === taskId);
+      if (dragged && dropOnDay(dragged, startISO, tasks, tz).blocked) {
+        toast({
+          title: t("Can't move here"),
+          description: t("A pinned or fixed session is in the way."),
+          variant: "warning",
+          icon: "calendar-x",
+        });
+        setSettleKey((k) => k + 1);
+        return;
+      }
+
       const commit = async (
         scope?: UpdateRecurringScope,
         skipConflicting?: boolean,
       ) => {
+        const before = tasks.find((t) => t.id === taskId);
         try {
           const updated = await updateSession(taskId, {
             scheduledStartTime: startISO,
             scope,
             skipConflicting,
           });
-          const firstMove = completeStep("move-task");
           showSkippedToast(toast, updated.skippedSessionIds);
+          showDisplacedToast(toast, updated.displacedSessions);
 
-          // Handle divergent response — show picker for primary vs alternative slot
-          if (
-            updated.divergent &&
-            updated.slotProposalId &&
-            updated.primarySlot &&
-            updated.alternativeSlot &&
-            onRequestSlotPick
-          ) {
-            const session = tasks.find((t) => t.id === taskId);
-            if (session) {
-              onRequestSlotPick(
-                session,
-                updated.primarySlot,
-                updated.alternativeSlot,
-                updated.slotProposalId,
-                async () => {
-                  // The POST belongs to `app/(app)/index.tsx`, which wraps this
-                  // callback in its own `slotPick` call and then invokes it.
-                  // Doing it here as well fired every drag-reschedule pick
-                  // twice; harmless (slot-pick is idempotent) but wasteful and
-                  // confusing to debug. All that is left here is a refetch for
-                  // the authoritative state.
-                  await refetch();
-                },
-              );
-              return;
-            }
-          }
+          // The block keeps the applied primary and offers "Other time".
+          rememberPlacement(updated);
 
           // Patch the dragged task from the authoritative response so its new
           // time shows immediately; the refetch below re-derives every card's
@@ -897,9 +912,22 @@ export function DayTimeline({
             prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)),
           );
           showMovedToast(toast, {
-            first: firstMove,
             to: zonedDate(updated.scheduledStartTime ?? startISO, tz),
             withTime: true,
+            onUndo:
+              before && moveUndoable(before, scope)
+                ? () =>
+                  void undoMove(updated, before, scope, skipConflicting)
+                    .then(() => refetch())
+                    .catch((error) =>
+                      showErrorToast(
+                        toast,
+                        error,
+                        t("Couldn't move this session"),
+                        "calendar-x",
+                      ),
+                    )
+              : undefined,
           });
         } catch (error) {
           showErrorToast(
@@ -950,10 +978,10 @@ export function DayTimeline({
       // back to its real (server) position.
       const deadline = deadlineBySession.get(taskId) ?? null;
       if (isPastDeadlineDrop(startISO, deadline)) {
-        confirm(t("Schedule after the deadline?"), {
+        confirm(t("Past the deadline?"), {
           description: t("This session will start past its due time."),
-          confirmLabel: t("Schedule anyway"),
-          cancelLabel: t("Cancel"),
+          confirmLabel: t("Keep late"),
+          cancelLabel: t("Snap back"),
           onConfirm: () => {
             commitWithScope();
           },
@@ -974,7 +1002,6 @@ export function DayTimeline({
       refetch,
       tasks,
       onRequestScopedUpdate,
-      onRequestSlotPick,
       tz,
     ],
   );
@@ -1036,24 +1063,35 @@ export function DayTimeline({
     [formatSnapLabel, dragSnap],
   );
 
+  const commitHourHeight = useCallback((next: number) => {
+    setHourHeight(next);
+  }, []);
+
+  // `scale` is cumulative for the whole pinch, so the level is taken from the
+  // level at pinch start, not from the previous frame.
   const zoomGesture = Gesture.Pinch()
+    .onStart(() => {
+      pinchStartHourHeight.value = baseHourHeight.value;
+    })
     .onUpdate((e) => {
-      const newHeight = clamp(
-        baseHourHeight.value * e.scale,
+      baseHourHeight.value = clamp(
+        pinchStartHourHeight.value * e.scale,
         HOUR_HEIGHT_MIN,
         HOUR_HEIGHT_MAX,
       );
-      baseHourHeight.value = newHeight;
     })
     .onEnd(() => {
-      runOnJS(setHourHeight)(baseHourHeight.value);
+      runOnJS(commitHourHeight)(baseHourHeight.value);
     });
 
-  const animatedContentStyle = useAnimatedStyle(() => ({
-    height: baseHourHeight.value * 24,
-  }));
+  const animatedContentStyle = useAnimatedStyle(
+    () => ({
+      height: gridHeightFor(baseHourHeight.value),
+    }),
+    [],
+  );
 
-  // The orange drop-line's position — driven straight from the UI-thread
+  // The drop-line's position — driven straight from the UI-thread
   // `dragPreviewMinSV` (see `task-block.tsx`'s pan gesture) instead of the
   // `dragSnap` React state, so it snaps to the finger with zero bridge
   // latency instead of lagging a state round-trip behind. Hidden (opacity 0)
@@ -1061,8 +1099,8 @@ export function DayTimeline({
   const dragLineStyle = useAnimatedStyle(() => {
     const min = dragPreviewMinSV.value;
     if (min < 0) return { opacity: 0 };
-    return { opacity: 1, top: (min / DAILY_HORIZON) * totalHeight };
-  });
+    return { opacity: 1, top: minToY(grid, min) };
+  }, [grid]);
 
   const nowClock = toZonedTime(now, tz);
   const nowMinutes = nowClock.getHours() * 60 + nowClock.getMinutes();
@@ -1099,13 +1137,11 @@ export function DayTimeline({
   // the cold-open loading→"now" transition.
   const initialContentOffset = useMemo(() => {
     const shared = syncScroll ? getTimelineScrollFraction() : null;
-    const y =
-      shared != null
-        ? shared * totalHeight
-        : Math.max(0, ((8 * 60) / DAILY_HORIZON) * totalHeight - 120);
+    const y = shared != null ? shared * totalHeight : anchorScrollY();
     // Computed once, on mount — a stable identity so React Native never
     // re-applies it and fights a later scroll.
     return { x: 0, y };
+    // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only offset, see above.
   }, []);
 
   return (
@@ -1151,8 +1187,8 @@ export function DayTimeline({
       >
         {error ? (
           <>
-            <View className="mb-3.5 size-[76px] items-center justify-center rounded-[22px] border border-destructive/35 bg-destructive/15">
-              <AlertTriangle size={34} className="text-destructive" />
+            <View className="mb-4">
+              <ErrorMark size={84} />
             </View>
             <Text className="text-center text-lg font-bold">
               {t("Couldn't load your day")}
@@ -1173,18 +1209,18 @@ export function DayTimeline({
           </>
         ) : showSkeleton ? (
           <Animated.View style={animatedContentStyle} className="relative">
-            <TimeGutter hourHeight={hourHeight} />
+            <TimeGutter grid={grid} />
 
             <View
               className="absolute top-0 bottom-0 bg-card"
-              style={{ left: GUTTER_WIDTH, right: rightInset }}
+              style={{ left: GUTTER_WIDTH, right: 0 }}
             >
-              {HOURS.map((hour) => (
+              {hourLineMins.map((min) => (
                 <View
-                  key={hour}
+                  key={min}
                   className="absolute left-0 right-0 bg-border/50"
                   style={{
-                    top: hour * hourHeight,
+                    top: minToY(grid, min),
                     height: 1,
                   }}
                 />
@@ -1195,8 +1231,10 @@ export function DayTimeline({
                   key={p.startMin}
                   className="absolute left-1.5 right-1.5"
                   style={{
-                    top: (p.startMin / DAILY_HORIZON) * totalHeight,
-                    height: (p.duration / DAILY_HORIZON) * totalHeight,
+                    top: minToY(grid, p.startMin),
+                    height:
+                      minToY(grid, p.startMin + p.duration) -
+                      minToY(grid, p.startMin),
                   }}
                 >
                   <Skeleton className="h-full w-full rounded-xl" />
@@ -1207,13 +1245,10 @@ export function DayTimeline({
         ) : (
           <GestureDetector gesture={zoomGesture}>
             <Animated.View
-              entering={
-                hadSkeletonRef.current ? FadeIn.duration(220) : undefined
-              }
               style={animatedContentStyle}
               className="relative"
             >
-              <TimeGutter hourHeight={hourHeight} />
+              <TimeGutter grid={grid} />
 
               {/* The scroll padding under midnight (it clears the floating bar)
                   stays part of the day column: same panel, same gutter rule. */}
@@ -1230,17 +1265,17 @@ export function DayTimeline({
                 className="absolute top-0 bg-card"
                 style={{
                   left: GUTTER_WIDTH,
-                  right: rightInset,
+                  right: 0,
                   bottom: -bottomInset,
                 }}
               >
                 {/* Hour separator lines */}
-                {HOURS.map((hour) => (
+                {hourLineMins.map((min) => (
                   <View
-                    key={hour}
+                    key={min}
                     className="absolute left-0 right-0 bg-border/50"
                     style={{
-                      top: hour * hourHeight,
+                      top: minToY(grid, min),
                       height: 1,
                     }}
                   />
@@ -1251,16 +1286,18 @@ export function DayTimeline({
                     onPress={openNewTaskForm}
                     accessibilityRole="button"
                     accessibilityLabel={t("Add a session to this day")}
-                    className="absolute items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-brand-orange/70 bg-brand-orange/5 active:bg-brand-orange/10"
+                    className="absolute items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-primary/70 bg-primary/5 px-4 py-5 active:bg-primary/10"
                     style={{
                       left: BLOCK_GUTTER,
                       right: BLOCK_GUTTER,
-                      top: (EMPTY_ZONE_START_MIN / DAILY_HORIZON) * totalHeight,
-                      height: (EMPTY_ZONE_MINUTES / DAILY_HORIZON) * totalHeight,
+                      top: minToY(grid, emptyZoneStartMin),
+                      minHeight:
+                        minToY(grid, emptyZoneStartMin + EMPTY_ZONE_MINUTES) -
+                        minToY(grid, emptyZoneStartMin),
                     }}
                   >
-                    <Plus size={20} className="text-brand-orange" />
-                    <Text className="text-center text-[14px] font-semibold text-brand-orange">
+                    <Plus size={20} className="text-session-task-ink" />
+                    <Text className="text-center text-[14px] font-semibold text-session-task-ink">
                       {t("Tap to add a session")}
                     </Text>
                     <Text className="text-center text-[12px] text-muted-foreground">
@@ -1271,7 +1308,7 @@ export function DayTimeline({
                         onPress={openTimetableImport}
                         accessibilityRole="button"
                         hitSlop={8}
-                        className="mt-2 flex-row items-center gap-1.5 rounded-full bg-brand-orange px-3.5 py-2 active:opacity-80"
+                        className="mt-2 flex-row items-center gap-1.5 rounded-full bg-primary px-3.5 py-2 active:opacity-80"
                       >
                         <GraduationCap
                           size={15}
@@ -1286,7 +1323,7 @@ export function DayTimeline({
                 )}
 
                 {isToday && (
-                  <NowIndicator now={now} tz={tz} totalHeight={totalHeight} />
+                  <NowIndicator top={minToY(grid, nowMinutes)} />
                 )}
 
                 {segments.map((segment) => {
@@ -1305,12 +1342,15 @@ export function DayTimeline({
                       segment={segment}
                       layout={blockLayout}
                       tz={tz}
-                      totalHeight={totalHeight}
+                      grid={grid}
                       leftOffset={leftOffsetPx}
                       topShift={topShifts.get(segment.segmentId) ?? 0}
+                      checkAtTop={coveredIds.has(segment.segmentId)}
                       blockWidth={blockWidthPx}
                       deadline={deadlineBySession.get(segment.taskId) ?? null}
                       late={lateSessionIds.has(segment.taskId)}
+                      anchor={tasks.find((t) => t.id === segment.taskId)?.anchor}
+                      checkState={checkStateById.get(segment.taskId)}
                       onReschedule={handleReschedule}
                       settleKey={settleKey}
                       onDragStateChange={handleDragStateChange}
@@ -1353,7 +1393,7 @@ export function DayTimeline({
 
                 <Animated.View
                   pointerEvents="none"
-                  className="absolute left-0 right-0 z-20 border-t-2 border-dashed border-brand-orange"
+                  className="absolute left-0 right-0 z-20 border-t-2 border-dashed border-primary"
                   style={dragLineStyle}
                 />
               </View>
@@ -1365,7 +1405,7 @@ export function DayTimeline({
                 className="absolute left-0 z-20"
                 style={[{ width: GUTTER_WIDTH }, dragLineStyle]}
               >
-                <View className="absolute right-2 -translate-y-1/2 rounded-md bg-brand-orange px-1.5 py-px">
+                <View className="absolute right-2 -translate-y-1/2 rounded-md bg-primary px-1.5 py-px">
                   <Text className="text-[11px] font-bold text-primary-foreground">
                     {dragChipLabel}
                   </Text>

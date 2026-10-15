@@ -43,17 +43,26 @@ export function createSessionAtNowHref(tz: string): Href {
   } as Href;
 }
 
-export function CreateSessionFab({ tz }: { tz: string }) {
+export function CreateSessionFab({
+  tz,
+  hidden = false,
+}: {
+  tz: string;
+  /** Hides by opacity: the button stays mounted so siblings keep their indices. */
+  hidden?: boolean;
+}) {
   useLanguage();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   return (
-    // Wrapper + button carry the two halves of the shared amber glow (see
+    // Wrapper + button carry the two halves of the shared orange glow (see
     // `lib/fab-glow.ts`) — the same treatment the tab bar's Optimize button
     // gets, so the two floating actions read as one family.
     <View
+      pointerEvents={hidden ? "none" : "auto"}
       style={[
         FAB_GLOW_OUTER,
+        hidden ? { opacity: 0 } : null,
         // Same row as the floating tab bar, to its right and the same height,
         // so the calendar keeps the whole screen above them.
         {

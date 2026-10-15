@@ -11,6 +11,8 @@ export interface PushMessage {
   tone: PushTone;
   /** APNs category (action buttons); `null` for a plain push. */
   category?: string | null;
+  /** Extra string-map keys merged into the data payload (e.g. a check-in's session ids). */
+  extra?: Record<string, string>;
 }
 
 /** What a sender hands back so {@link PushService} can log + prune. */

@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Patch, UseGuards } from "@nestjs/common";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { toUserResponse } from "./user-response";
+import { StudentService } from "./student.service";
 import { UsersService } from "./users.service";
 import { CurrentUser } from "./decorators/current-user.decorator";
 import type { User } from "../../generated/prisma";
@@ -9,11 +10,24 @@ import { CookieAuthGuard } from "../auth/guards";
 @Controller("users")
 @UseGuards(CookieAuthGuard)
 export class UsersController {
-  constructor(private usersService: UsersService) {}
+  constructor(
+    private usersService: UsersService,
+    private studentService: StudentService,
+  ) {}
 
   @Get("me")
   me(@CurrentUser() user: User) {
     return { success: true, data: toUserResponse(user) };
+  }
+
+  @Get("me/student")
+  async student(@CurrentUser() user: User) {
+    return { success: true, data: await this.studentService.profile(user.id) };
+  }
+
+  @Get("me/marks")
+  async marks(@CurrentUser() user: User) {
+    return { success: true, data: await this.studentService.marks(user.id) };
   }
 
   @Patch("update/basic-info")

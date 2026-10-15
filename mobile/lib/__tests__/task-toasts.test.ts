@@ -2,13 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { Session } from "@zenflow/shared";
 import { showMovedToast } from "../move-toast";
 import {
-  getSlotTakenError,
   placementToastMessage,
   shouldSurfaceRescheduleHint,
-  showBulkPickToast,
   showErrorToast,
-  showSeriesAlternativesPrompt,
-  showSlotTakenToast,
   showSplitToast,
   splitToastMessage,
 } from "../task-toasts";
@@ -108,7 +104,6 @@ describe("showMovedToast", () => {
   it("puts the date and the time together in the title", () => {
     const toast = vi.fn();
     showMovedToast(toast, {
-      first: false,
       to: new Date(2026, 9, 12, 9, 0),
       withTime: true,
     });
@@ -120,7 +115,6 @@ describe("showMovedToast", () => {
   it("puts the date in the title when there is no time", () => {
     const toast = vi.fn();
     showMovedToast(toast, {
-      first: false,
       to: new Date(2026, 9, 12),
       withTime: false,
     });
@@ -150,92 +144,5 @@ describe("shouldSurfaceRescheduleHint", () => {
       false, // 11
       false, // 12
     ]);
-  });
-});
-
-describe("getSlotTakenError", () => {
-  const axiosErr = (status: number, data: unknown) => ({
-    isAxiosError: true,
-    response: { status, data },
-  });
-
-  it("returns the body on a 409 SLOT_TAKEN", () => {
-    const body = {
-      success: false,
-      statusCode: 409,
-      message: "That alternative time now overlaps another sitting of this task.",
-      code: "SLOT_TAKEN",
-    };
-    expect(getSlotTakenError(axiosErr(409, body))).toEqual(body);
-  });
-
-  it("ignores a 409 carrying a different code, e.g. SCHEDULE_INFEASIBLE", () => {
-    expect(
-      getSlotTakenError(axiosErr(409, { code: "SCHEDULE_INFEASIBLE" })),
-    ).toBeNull();
-  });
-
-  it("ignores a non-409 even with the right code", () => {
-    expect(getSlotTakenError(axiosErr(500, { code: "SLOT_TAKEN" }))).toBeNull();
-  });
-
-  it("ignores a non-axios error", () => {
-    expect(getSlotTakenError(new Error("boom"))).toBeNull();
-  });
-});
-
-describe("showSeriesAlternativesPrompt", () => {
-  it("is a persistent tip toast carrying a View action", () => {
-    const toast = vi.fn();
-    const onView = vi.fn();
-    showSeriesAlternativesPrompt(toast, 3, 5, onView);
-    const { title, variant, persistent, position, action, description } =
-      toast.mock.calls[0][0];
-    expect(title).toBe("3 sittings have an alternative");
-    expect(variant).toBe("tip");
-    // Every other toast fades once its time in front is up.
-    expect(persistent).toBe(true);
-    expect(position).toBe("bottom");
-    expect(action.label).toBe("View");
-    action.onPress();
-    expect(onView).toHaveBeenCalled();
-    expect(description).toContain("All 5 are already scheduled");
-  });
-
-  it("uses singular copy for a single divergent sitting", () => {
-    const toast = vi.fn();
-    showSeriesAlternativesPrompt(toast, 1, 1, vi.fn());
-    expect(toast.mock.calls[0][0].title).toBe("1 sitting has an alternative");
-    expect(toast.mock.calls[0][0].description).toContain("All 1 are");
-  });
-});
-
-describe("showSlotTakenToast", () => {
-  it("is destructive and states that nothing moved", () => {
-    const toast = vi.fn();
-    showSlotTakenToast(toast);
-    const { title, variant, description } = toast.mock.calls[0][0];
-    expect(title).toBe("That time was just taken");
-    expect(variant).toBe("destructive");
-    expect(description).toContain("Nothing moved");
-  });
-});
-
-describe("showBulkPickToast", () => {
-  it("is a plain success when nothing failed", () => {
-    const toast = vi.fn();
-    showBulkPickToast(toast, 3, 0);
-    const { title, variant } = toast.mock.calls[0][0];
-    expect(title).toBe("Updated 3 sittings");
-    expect(variant).toBe("success");
-  });
-
-  it("warns and names the failure count on a partial pass", () => {
-    const toast = vi.fn();
-    showBulkPickToast(toast, 2, 1);
-    const { title, variant, description } = toast.mock.calls[0][0];
-    expect(title).toBe("Updated 2, skipped 1");
-    expect(variant).toBe("warning");
-    expect(description).toContain("stayed put");
   });
 });

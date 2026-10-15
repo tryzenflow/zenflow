@@ -36,15 +36,17 @@ Covered now, by file in `mobile/test/screens/`:
 
 | File | Covers |
 | --- | --- |
-| `login` | invalid email, OTP request success/server error/429 lockout/offline, verify success/wrong code, change email |
-| `onboarding` | step order, name save, skip paths, notifications step (on, blocked, not now), preference saves and rollback, tags bulk, summary "Set up" detour, `onboarded: true` and its failure |
-| `week` | header range and today chip, blocks from `GET /sessions` in the user's timezone, tap and recurring-id routing, empty-day add, day switching and "Jump to today", `date` deep link, "Next up" pill |
+| `login` | student ID and full email, invalid email, OTP request success/server error/429 lockout/offline, verify success/wrong code/pasted code, change email |
+| `onboarding` | step order, name save, skip paths, notifications step (on, blocked, not now), focus band save, preference saves and rollback, summary "Set up" detour, default tags and DND routines on finish (best effort, skipped by title), `onboarded: true` and its failure |
+| `week` | header range and today chip, blocks from `GET /sessions` in the user's timezone, tap opens the detail sheet, Edit routing for recurring ids, empty-day add, day switching and "Jump to today", `date` deep link, "Next up" pill |
 | `month` | grid and adjacent days, pills, month navigation, "Jump to today", load-failure toast |
 | `task-new` | defaults and route-param prefill, validation, `POST /sessions` payload, landing on the placed day, no-slot, infeasible policies and retry, divergent hand-off, error |
 | `task-edit` | read-only view, edit and `PATCH`, validation, infeasible retry, delete (one-off, recurring scopes, task sittings) and failure |
 | `settings`, `settings-sections`, `preferences-section`, `dlu-accounts` | sign-out; profile edit; finish-setup card; tags; language, timezone, reminder and notification toggle; connect, sync, update and disconnect LMS and portal accounts |
 | `notifications` | empty, list, open row, dismiss, select and clear all, sync-conflict "Reschedule them all" |
 | `tab-bar` | labels, tab press events, no navigation on the focused tab |
+| `components/session-detail-sheet` | details on open, note off the peek snap and loaded at full, empty note, Edit route with the session id, check-off from the disc |
+| `components/session-search-view` | day headers, type-coloured row borders, title highlight, empty and no-match states, load on open, Back |
 
 Not covered by component tests, on purpose: pan, long-press and swipe gestures (the gesture-handler and swipeable stubs only simulate taps), and `className` styling.
 
@@ -100,7 +102,7 @@ In a PR, `ci.yml` calls it after lint, typecheck and unit tests pass, and `CI ok
 Builds run on GitHub runners via `expo prebuild` (no Expo/EAS account).
 
 - `e2e` (default): emulator-host API URL, cleartext HTTP allowed (`plugins/withE2eCleartext.js`, `ZENFLOW_E2E=1` only).
-- `release`: run the workflow manually. API defaults to `https://zenflow.alphatrann.com/api/v1`, or pass `api_url`.
+- `release`: run the workflow manually. API defaults to `https://api.usezenflow.com/api/v1`, or pass `api_url`.
 
 ### Android artifact: `.apk`
 

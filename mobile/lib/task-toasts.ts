@@ -7,10 +7,7 @@ import {
   type InfeasiblePolicy,
   SCHEDULE_INFEASIBLE_CODE,
   type ScheduleInfeasibleError,
-  SLOT_TAKEN_CODE,
   type Session,
-  type SlotPickResponse,
-  type SlotTakenError,
 } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { describeSaveError } from "./save-error";
@@ -163,25 +160,6 @@ export function getInfeasibleError(
 }
 
 /**
- * The 409 SLOT_TAKEN body when `error` is one, else null (#58).
- *
- * Keys on `code`, NOT on `statusCode === 409` — the 409 is already spoken for
- * by SCHEDULE_INFEASIBLE, and matching the status alone would swallow a
- * concurrent edit's infeasibility prompt.
- *
- * Raised by `POST /sessions/:id/slot-pick` with `chose: "alternative"` when a
- * `TASK` series sitting's alternative now overlaps a sibling: the two plans'
- * ledgers are independent, so a sibling can move into the window between the
- * create response and the pick. Nothing was recorded, so the pick can still be
- * answered "primary" afterwards.
- */
-export function getSlotTakenError(error: unknown): SlotTakenError | null {
-  if (!isAxiosError(error) || error.response?.status !== 409) return null;
-  const body = error.response.data as Partial<SlotTakenError>;
-  return body?.code === SLOT_TAKEN_CODE ? (body as SlotTakenError) : null;
-}
-
-/**
  * Run `attempt`; on a 409 SCHEDULE_INFEASIBLE show a toast with one action per
  * offered policy, each retrying via `attempt(policy)`. Results go to
  * `onSuccess`; any other failure (or a failed retry) goes to `onError`.
@@ -262,136 +240,5 @@ export function showSkippedToast(
     }),
     icon: "calendar-clock",
     duration: 4000,
-  });
-}
-
-/**
- * Toast shown after the user picks the alternative slot in a divergent
- * placement (issue #41). Title "Moved to new slot", description "{when}. Thanks, noted for next time."
- */
-export function showAlternativePickToast(
-  toast: ToastFn,
-  alternativeSlot: string,
-  tz: string,
-): void {
-  const when = format(zonedDate(alternativeSlot, tz), "h:mm a 'on' EEE MMM d");
-  toast({
-    title: t("Moved to new slot"),
-    description: t("{when}. Thanks, noted for next time.", { when }),
-    variant: "success",
-    icon: "calendar-clock",
-    duration: 4000,
-    position: "bottom",
-  });
-}
-
-/**
- * The dismissible post-create prompt for a `TASK` series whose sittings
- * diverged (issue #59). Every sitting is already scheduled at its primary by
- * the time this shows, so the copy has to say so — the prompt is an offer, not
- * a gate.
- *
- * `persistent` is load-bearing: every other toast fades once its time in
- * front is up (`components/ui/toast.tsx`), and this offer must stay until the
- * user opens it or closes it. It is otherwise a plain toast — same card, same
- * button row — not a special A/B style.
- */
-export function showSeriesAlternativesPrompt(
-  toast: ToastFn,
-  count: number,
-  total: number,
-  onView: () => void,
-): void {
-  toast({
-    title: t(
-      count === 1
-        ? "{count} sitting has an alternative"
-        : "{count} sittings have an alternative",
-      { count },
-    ),
-    description: t("All {total} are already scheduled. Swap any you like.", {
-      total,
-    }),
-    variant: "tip",
-    icon: "sparkles",
-    persistent: true,
-    position: "bottom",
-    action: {
-      label: t("View"),
-      onPress: onView,
-      color: { light: "#f97316", dark: "#fb923c" },
-    },
-  });
-}
-
-/**
- * The 409 SLOT_TAKEN toast. Destructive, and states plainly that nothing moved
- * — the series sheet reverts that one card to its primary and leaves the rest
- * of the list usable, so the user must not think the pick landed.
- */
-export function showSlotTakenToast(toast: ToastFn): void {
-  toast({
-    title: t("That time was just taken"),
-    description: t("Nothing moved. Pick another time or keep this one."),
-    variant: "destructive",
-    icon: "calendar-x",
-    position: "bottom",
-  });
-}
-
-/**
- * Confirmation after a series sitting is actually moved (#59). Reads its copy
- * off the `SlotPickResponse` rather than the request, so it reflects what the
- * server recorded rather than what we asked for.
- *
- * Model identity is deliberately absent: the user never sees which policy
- * proposed what (same rule as #41).
- */
-export function showSeriesPickToast(
-  toast: ToastFn,
-  picked: SlotPickResponse,
-  tz: string,
-): void {
-  if (picked.chosenByUser !== "alternative") return;
-  const at = picked.session.scheduledStartTime;
-  if (!at) return;
-  const when = format(zonedDate(at, tz), "h:mm a 'on' EEE MMM d");
-  toast({
-    title: t("Moved to new slot"),
-    description: t("{when}. Thanks, noted for next time.", { when }),
-    variant: "success",
-    icon: "calendar-clock",
-    duration: 4000,
-    position: "bottom",
-  });
-}
-
-/**
- * Result of a "switch all" / "keep all" pass (#59). The caller uses
- * `Promise.allSettled`, so one 409 never rolls back the sittings that did land
- * — report both counts instead of failing silently.
- */
-export function showBulkPickToast(
-  toast: ToastFn,
-  applied: number,
-  failed: number,
-): void {
-  if (failed === 0) {
-    toast({
-      title: t("Updated {count} sittings", { count: applied }),
-      variant: "success",
-      icon: "calendar-check",
-      duration: 4000,
-      position: "bottom",
-    });
-    return;
-  }
-  toast({
-    title: t("Updated {applied}, skipped {failed}", { applied, failed }),
-    description: t("Skipped ones clashed with another sitting and stayed put."),
-    variant: "warning",
-    icon: "calendar-clock",
-    duration: 6000,
-    position: "bottom",
   });
 }

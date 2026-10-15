@@ -168,14 +168,14 @@ describe("SlotPickService — series sibling clash (#58)", () => {
     expect(prisma.slotProposal.update).not.toHaveBeenCalled();
   });
 
-  it("applies the alternative when siblings only touch it (half-open intervals)", async () => {
+  it("applies the alternative when siblings sit exactly the series gap away", async () => {
     const { service, tx, prisma } = await makeService(seriesRow(), [
       {
-        scheduledStartTime: new Date("2026-06-11T11:00:00.000Z"),
+        scheduledStartTime: new Date("2026-06-11T11:15:00.000Z"),
         durationMinutes: 60,
       },
       {
-        scheduledStartTime: new Date("2026-06-11T09:00:00.000Z"),
+        scheduledStartTime: new Date("2026-06-11T08:45:00.000Z"),
         durationMinutes: 60,
       },
     ]);
@@ -192,6 +192,22 @@ describe("SlotPickService — series sibling clash (#58)", () => {
       where: { id: "prop-1" },
       data: { chosenByUser: SchedulingModel.LINUCB },
     });
+  });
+
+  it("409 SLOT_TAKEN when a sibling ends inside the series gap", async () => {
+    const { service } = await makeService(seriesRow(), [
+      {
+        scheduledStartTime: new Date("2026-06-11T09:00:00.000Z"),
+        durationMinutes: 60,
+      },
+    ]);
+    await expect(
+      service.recordPick(
+        "task-1",
+        { slotProposalId: "prop-1", chose: "alternative" },
+        user,
+      ),
+    ).rejects.toBeInstanceOf(SlotTakenException);
   });
 
   it("a non-series session never queries siblings", async () => {

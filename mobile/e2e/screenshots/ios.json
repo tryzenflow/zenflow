@@ -1,0 +1,65 @@
+{
+  "name": "Zenflow",
+  "identifier": "com.zenflow.source",
+  "subtitle": "Nguồn cài Zenflow cho iOS",
+  "description": "Nguồn cài chính thức của Zenflow cho LiveContainer, AltStore và SideStore. File IPA chưa ký, trình cài tự ký bằng Apple ID của bạn.",
+  "iconURL": "https://raw.githubusercontent.com/tryzenflow/releases/main/assets/Zenflow/Logo/logo.png",
+  "website": "https://usezenflow.com",
+  "tintColor": "FFA552",
+  "featuredApps": [
+    "com.zenflow.app"
+  ],
+  "apps": [
+    {
+      "name": "Zenflow",
+      "bundleIdentifier": "com.zenflow.app",
+      "developerName": "Zenflow",
+      "subtitle": "Lịch học và việc cần làm tự xếp giờ",
+      "localizedDescription": "Zenflow xếp việc cần làm vào lịch học của bạn.\n\nĐăng nhập bằng email để:\n• Xem lịch tuần và lịch tháng\n• Kết nối LMS và cổng sinh viên để nhập thời khoá biểu và hạn nộp\n• Thêm việc kèm hạn nộp và để Zenflow tự chọn giờ\n• Chia việc lớn thành nhiều buổi\n• Nhận nhắc giờ học và hạn nộp",
+      "iconURL": "https://raw.githubusercontent.com/tryzenflow/releases/main/assets/Zenflow/Logo/logo.png",
+      "tintColor": "FFA552",
+      "category": "productivity",
+      "screenshots": {
+        "iphone": [
+          "https://raw.githubusercontent.com/tryzenflow/releases/main/assets/Zenflow/ScreenShots/screenshot-1.png",
+          "https://raw.githubusercontent.com/tryzenflow/releases/main/assets/Zenflow/ScreenShots/screenshot-2.png",
+          "https://raw.githubusercontent.com/tryzenflow/releases/main/assets/Zenflow/ScreenShots/screenshot-3.png",
+          "https://raw.githubusercontent.com/tryzenflow/releases/main/assets/Zenflow/ScreenShots/screenshot-4.png",
+          "https://raw.githubusercontent.com/tryzenflow/releases/main/assets/Zenflow/ScreenShots/screenshot-5.png",
+          "https://raw.githubusercontent.com/tryzenflow/releases/main/assets/Zenflow/ScreenShots/screenshot-6.png",
+          "https://raw.githubusercontent.com/tryzenflow/releases/main/assets/Zenflow/ScreenShots/screenshot-7.png"
+        ]
+      },
+      "screenshotURLs": [
+        "https://raw.githubusercontent.com/tryzenflow/releases/main/assets/Zenflow/ScreenShots/screenshot-1.png",
+        "https://raw.githubusercontent.com/tryzenflow/releases/main/assets/Zenflow/ScreenShots/screenshot-2.png",
+        "https://raw.githubusercontent.com/tryzenflow/releases/main/assets/Zenflow/ScreenShots/screenshot-3.png",
+        "https://raw.githubusercontent.com/tryzenflow/releases/main/assets/Zenflow/ScreenShots/screenshot-4.png",
+        "https://raw.githubusercontent.com/tryzenflow/releases/main/assets/Zenflow/ScreenShots/screenshot-5.png",
+        "https://raw.githubusercontent.com/tryzenflow/releases/main/assets/Zenflow/ScreenShots/screenshot-6.png",
+        "https://raw.githubusercontent.com/tryzenflow/releases/main/assets/Zenflow/ScreenShots/screenshot-7.png"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0-beta.0",
+          "buildVersion": "1",
+          "date": "2026-10-15",
+          "localizedDescription": "• Đăng nhập chỉ cần mã số sinh viên\n• Nút kính cho mọi thao tác phụ\n• Ô nhập dễ hơn: chip gợi ý, chọn giờ trên dòng thời gian, thanh thời lượng, chọn ngày theo tuần\n• Mỗi môn học có màu riêng, đổi được và đồng bộ giữa các máy\n• Lịch ngày gọn hơn: chụm để thu phóng, nhớ mức thu phóng, nội dung khối theo chiều cao\n• Chế độ Ngày, Tuần và Tháng với lưới tuần 7 cột\n• Tìm kiếm mở danh sách cuộn không giới hạn\n• Chi tiết buổi học trong bảng trượt\n• Tự chọn khung giờ tốt nhất, sửa lịch lặp mặc định chỉ áp dụng cho buổi này\n• Bỏ thanh xem trước, rút gọn danh sách bắt đầu, Cài đặt thành tab Tôi\n• Soạn việc bằng một dòng, hiểu cả tiếng Việt và tiếng Anh\n• Đánh dấu buổi đã xong hoặc bỏ qua, thẻ Hôm nay và chuỗi ngày\n• Mức neo cho buổi cố định, xem trước khi kéo và bảng dọn chỗ\n• Onboarding hỏi giờ bạn tập trung tốt nhất và hiện thời khoá biểu ngay sau khi kết nối\n• Mỗi lần xếp giờ có một dòng lý do\n• Nhắc buổi sáng và tổng kết buổi tối\n• Hoàn tác khi kéo, xoá và dời lịch",
+          "downloadURL": "https://github.com/tryzenflow/releases/releases/latest/download/zenflow-ios-unsigned.ipa",
+          "size": 0,
+          "minOSVersion": "15.1"
+        }
+      ],
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {}
+      },
+      "version": "1.0.0-beta.0",
+      "versionDate": "2026-10-15",
+      "versionDescription": "• Đăng nhập chỉ cần mã số sinh viên\n• Nút kính cho mọi thao tác phụ\n• Ô nhập dễ hơn: chip gợi ý, chọn giờ trên dòng thời gian, thanh thời lượng, chọn ngày theo tuần\n• Mỗi môn học có màu riêng, đổi được và đồng bộ giữa các máy\n• Lịch ngày gọn hơn: chụm để thu phóng, nhớ mức thu phóng, nội dung khối theo chiều cao\n• Chế độ Ngày, Tuần và Tháng với lưới tuần 7 cột\n• Tìm kiếm mở danh sách cuộn không giới hạn\n• Chi tiết buổi học trong bảng trượt\n• Tự chọn khung giờ tốt nhất, sửa lịch lặp mặc định chỉ áp dụng cho buổi này\n• Bỏ thanh xem trước, rút gọn danh sách bắt đầu, Cài đặt thành tab Tôi\n• Soạn việc bằng một dòng, hiểu cả tiếng Việt và tiếng Anh\n• Đánh dấu buổi đã xong hoặc bỏ qua, thẻ Hôm nay và chuỗi ngày\n• Mức neo cho buổi cố định, xem trước khi kéo và bảng dọn chỗ\n• Onboarding hỏi giờ bạn tập trung tốt nhất và hiện thời khoá biểu ngay sau khi kết nối\n• Mỗi lần xếp giờ có một dòng lý do\n• Nhắc buổi sáng và tổng kết buổi tối\n• Hoàn tác khi kéo, xoá và dời lịch",
+      "downloadURL": "https://github.com/tryzenflow/releases/releases/latest/download/zenflow-ios-unsigned.ipa",
+      "size": 0
+    }
+  ],
+  "news": []
+}

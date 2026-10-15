@@ -19,9 +19,10 @@ from src.core.constants import (
     PREFERENCE_MATRIX_LENGTH,
     TIME_GRANULARITY,
 )
+from src.core.reason import PlacementReason
 from src.schemas import ArmId, ArmState
 
-PLACEMENT_CONTRACT_VERSION = 1
+PLACEMENT_CONTRACT_VERSION = 3
 MAX_MEMBERS = 64
 
 PlacementPolicy = Literal["HEURISTIC", "LINUCB"]
@@ -29,12 +30,16 @@ Outcome = Literal[
     "PLACED",
     "NEEDS_INFEASIBLE_CONTEXT",
     "DISPLACED",
+    "NEEDS_CONFIRMATION",
     "ACCEPTED_CONFLICTS",
     "ACCEPTED_LATE",
     "ACCEPTED_LAST_RESORT",
     "INFEASIBLE",
 ]
 WorkloadType = Literal["LECTURE", "ASSIGNMENT", "EXAM", "TASK", "DND"]
+# ADR-0022: how firmly a flexible session holds its slot.
+Anchor = Literal["AUTO", "CHOSEN", "PINNED"]
+ChosenMoves = Literal["ASK", "ALLOW", "FORBID"]
 
 
 class _Req(BaseModel):
@@ -88,10 +93,14 @@ class FlexibleWire(_Req):
     duration_minutes: int = Field(gt=0)
     deadline_ms: int
     start_ms: int
+    anchor: Anchor = "AUTO"
+    completed: bool = False
+    series_id: str | None = None
 
 
 class InfeasibleContext(_Req):
     policy: Literal["ACCEPT_CONFLICTS", "ACCEPT_LATE_DEADLINE"] | None = None
+    chosen_moves: ChosenMoves = "ASK"
     flexible: list[FlexibleWire]
     fixed: list[IntervalMs]
     horizon_occupied: list[IntervalMs]
@@ -187,6 +196,8 @@ class Move(_Resp):
     id: str
     from_ms: int
     to_ms: int
+    anchor: Literal["AUTO", "CHOSEN"]
+    cost: float
 
 
 class PlacedMember(_Resp):
@@ -199,6 +210,8 @@ class PlacedMember(_Resp):
     moves: list[Move]
     late: bool
     conflicting: bool
+    # Why the start was chosen; null only when there is no start.
+    reason: PlacementReason | None
 
 
 class Timings(_Resp):

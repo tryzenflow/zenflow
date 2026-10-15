@@ -1,4 +1,53 @@
-/** Spotlight placement math for the checklist's "show me" (issue #116). RN-free so it can be unit-tested. */
+/**
+ * Spotlight placement math for the checklist's former "show me" (issue #116).
+ * RN-free so it can be unit-tested. No caller requests a spotlight since #245;
+ * the anchors and bubble are kept until they are removed.
+ */
+import type { TipId } from "@zenflow/shared";
+import { t } from "./i18n";
+
+/** The steps the spotlight anchors were drawn for: the retired 7-step checklist. */
+export type SpotlightStep = Extract<
+  TipId,
+  | "switch-day"
+  | "create-task"
+  | "move-task"
+  | "block-actions"
+  | "open-month"
+  | "open-day"
+  | "move-day"
+>;
+
+/** Bubble copy per spotlight step, read through `t()` on access. */
+function copy(title: string, hint: string) {
+  return {
+    get title() {
+      return t(title);
+    },
+    get hint() {
+      return t(hint);
+    },
+  };
+}
+
+export const SPOTLIGHT_COPY: Record<SpotlightStep, { title: string; hint: string }> = {
+  "switch-day": copy("Switch day", "Swipe the calendar, or tap a day at the top."),
+  "create-task": copy("Create a task", "Tap +, or tap an empty day."),
+  "move-task": copy(
+    "Move a task",
+    "Hold one of your tasks and drag it to reschedule in 15-minute steps.",
+  ),
+  "block-actions": copy(
+    "Hold a task for more actions",
+    "Hold it without moving. Move to… changes the day.",
+  ),
+  "open-month": copy("Open the Month view", "Tap Month in the tab bar."),
+  "open-day": copy("Open a day", "Tap a day in the month to see its tasks."),
+  "move-day": copy(
+    "Move a task to another day",
+    "Hold one of your tasks in the day's list, then drag it onto another day.",
+  ),
+};
 
 export interface Rect {
   x: number;

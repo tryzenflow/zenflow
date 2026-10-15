@@ -105,8 +105,8 @@ frontend `dev | build | typecheck | lint | test:e2e`.
   decorators `@CurrentUser`, `@IsValidTimezone`, `@IsRRule`; Prisma errors via
   `src/prisma/error-codes.ts`. Global prefix `/api/v1`; Swagger at `/api`.
 - **Frontend:** kebab-case files, PascalCase components; axios only in `src/api/`; Zustand
-  for the user store; build UI from `components/ui/` primitives; Tailwind v4 OKLch tokens
-  ("Warm Sunrise" Taupe+Amber); **no mobile-responsive target**.
+  for the user store; build UI from `components/ui/` primitives; Tailwind v4 tokens
+  ("Warm Sunrise", `packages/core/src/palette.ts`); **no mobile-responsive target**.
 
 ## Tests, lint, typecheck
 

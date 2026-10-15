@@ -1,13 +1,23 @@
 generator client {
-  provider      = "prisma-client-js"
-  output        = "../generated/prisma"
-  engineType    = "binary"
-  binaryTargets = "native"
+  provider        = "prisma-client-js"
+  output          = "../generated/prisma"
+  engineType      = "binary"
+  binaryTargets   = "native"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pg_trgm, unaccent]
+}
+
+/// Onboarding answer: when the user focuses best (`@zenflow/shared` FOCUS_BANDS).
+enum FocusBand {
+  MORNING
+  AFTERNOON
+  EVENING
+  LATE_NIGHT
 }
 
 enum Language {
@@ -16,11 +26,15 @@ enum Language {
 }
 
 model User {
-  id       String   @id @default(uuid())
-  name     String   @db.VarChar(60)
-  email    String   @unique @db.VarChar(255)
-  timezone String   @default("Asia/Saigon") @db.VarChar(50)
-  lang     Language @default(VI_VN)
+  id                 String              @id @default(uuid())
+  studentProfile     StudentProfile?
+  studyPrograms      StudyProgram[]
+  studentMarks       StudentMark[]
+  studentTermResults StudentTermResult[]
+  name               String              @db.VarChar(60)
+  email              String              @unique @db.VarChar(255)
+  timezone           String              @default("Asia/Saigon") @db.VarChar(50)
+  lang               Language            @default(VI_VN)
 
   /// Reminder lead time (minutes) applied to new sessions that omit `reminders`; 0 = none.
   defaultReminderMinutes Int @default(10)
@@ -31,11 +45,19 @@ model User {
   /// User intent for native push (Settings toggle / OS-permission denial, set by mobile). Gates push fan-out only; in-app/SSE unaffected.
   allowNotifications Boolean @default(true)
 
+  /// Morning brief push time (`HH:mm`, user tz); null = off.
+  morningBriefTime   String? @db.VarChar(5)
+  /// Evening check-in push time (`HH:mm`, user tz); null = off.
+  eveningCheckinTime String? @db.VarChar(5)
+
   /// Getting-started checklist steps done, plus `checklist-hidden` (`TIP_IDS` in @zenflow/shared); append-only.
   seenTips String[] @default([])
 
   preferenceMatrix          Float[]   @default([])
   preferenceMatrixDecayedAt DateTime?
+
+  /// Onboarding focus band; null = not asked yet. Seeds `preferenceMatrix` only while it is still the default.
+  focusBand FocusBand?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -55,11 +77,16 @@ model User {
 
   banditArmStates BanditArmState[]
 
+  occurrenceStates SessionOccurrenceState[]
+  streak           UserStreak?
+  courseColours    CourseColour[]
+
   // Issue #56: which portal sections / Moodle courses this student is
   // confirmed in, so an ingestion pass can be served from the shared
   // occurrence cache without walking their timetable.
   portalSectionEnrollments PortalSectionEnrollment[]
   lmsCourseEnrollments     LmsCourseEnrollment[]
+  placementPlans           PlacementPlan[]
 }
 
 /**
@@ -164,6 +191,7 @@ model Tag {
 
   @@unique([userId, name])
   @@index([userId])
+  // GET /sessions/search uses the `Tag_name_unaccent_idx` expression index, which lives in migrations only.
 }
 
 enum SessionType {
@@ -212,8 +240,9 @@ model Session {
   // Stamped on every user move/resize of a scheduled TASK; the RETAINED sweep
   // treats `lastMovedAt == null` as "never moved".
   lastMovedAt DateTime?
-  // Idempotency guard for the RETAINED sweep — set once the session has elapsed
-  // unmoved and its RETAINED SessionEvent has been written.
+  // Settlement stamp of the outcome sweep (ADR-0023): set once an unmoved TASK's
+  // outcome (completed, skipped or missed) is recorded, so a re-run is a no-op.
+  // The name predates ADR-0023; it is not a retained flag.
   retainedAt  DateTime?
 
   // Two-consecutive-run confirmation gate for ingested rows (materializer.service.ts).
@@ -232,6 +261,23 @@ model Session {
   // run) is what actually soft-deletes the row and raises the removal
   // notification. Always null for a user-created (non-ingested) session.
   syncMissedAt    DateTime?
+
+  // Done or skipped (issue #247). Mutually exclusive; both clear on undo.
+  // Unused on a recurring representative: occurrences use SessionOccurrenceState.
+  completedAt DateTime?
+  skipped     Boolean   @default(false)
+
+  // How firmly the scheduler may move this session (ADR-0022). AUTO moves
+  // freely, CHOSEN only with the user's confirmation, PINNED never. Set by a
+  // user drag or time pick (CHOSEN), the pin routes (PINNED) and unpin (AUTO).
+  anchor     SessionAnchor @default(AUTO)
+  anchoredAt DateTime?
+
+  // Why the scheduler picked the start (issue #254). The reason describes
+  // `placementReasonStartAt`; once the start moves by any other write, the two
+  // differ and the reason is not shown.
+  placementReason        PlacementReason?
+  placementReasonStartAt DateTime?
 
   // Per-user labels (implicit many-to-many).
   tags Tag[]
@@ -294,12 +340,8 @@ model Session {
   // occurrence fan-out uses to find every session belonging to a course whose
   // cached items changed. Null for everything else.
   //
-  // Nullable and self-healing rather than backfilled by a script: the
-  // materializer repairs a missing back-link on the next run that sees the
-  // item, and deliberately does NOT count the repair as an upstream change —
-  // a back-link is invisible to the student, so folding it into
-  // differsFromUpstream would mark every ingested row "updated" on the first
-  // run after deploy and announce an entire calendar as changed.
+  // Set on create only. Rows ingested before this column existed are linked
+  // by `pnpm --filter backend backfill:lms-course` (scripts/backfill-lms-course.ts).
   lmsCourseId Int?
 
   reminders     SessionReminder[]
@@ -316,6 +358,8 @@ model Session {
   @@index([seriesId, createdAt])
   @@index([userId, scheduleStudyUnitId])
   @@index([userId, lmsCourseId])
+  // GET /sessions/search uses the `Session_{title,note,location}_unaccent_idx` expression indexes, which live in migrations only.
+  @@index([userId, completedAt])
 }
 
 model SessionSeries {
@@ -329,9 +373,61 @@ model SessionSeries {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  sessions Session[]
+  sessions         Session[]
+  occurrenceStates SessionOccurrenceState[]
 
   @@index([userId])
+}
+
+/// Done or skipped state of one virtual occurrence of a recurring series (issue #247).
+/// A row exists only while the occurrence is done or skipped.
+model SessionOccurrenceState {
+  id              String    @id @default(uuid())
+  occurrenceStart DateTime
+  completedAt     DateTime?
+  skipped         Boolean   @default(false)
+
+  seriesId String
+  series   SessionSeries @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([seriesId, occurrenceStart])
+  @@index([userId, completedAt])
+}
+
+/// Daily completion streak, recomputed from completion days on every check-off and read (issue #247).
+model UserStreak {
+  userId           String   @id
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  current          Int      @default(0)
+  longest          Int      @default(0)
+  freezesAvailable Int      @default(0)
+  /// Days (YYYY-MM-DD, user tz) inside the current streak covered by a freeze.
+  frozenDays       String[] @default([])
+  /// Last day (YYYY-MM-DD, user tz) with a completed session.
+  lastActiveDay    String?  @db.VarChar(10)
+  updatedAt        DateTime @updatedAt
+}
+
+/// A user's own colour pick for one course (issue #238). `courseKey` is
+/// `lms:<Moodle course id>` or `portal:<ScheduleStudyUnitID>`; a course with no
+/// row paints with its automatic colour from `@zenflow/core`.
+model CourseColour {
+  id        String   @id @default(uuid())
+  courseKey String   @db.VarChar(120)
+  /// Index into the 12-swatch set (`COURSE_COLOUR_SWATCH_COUNT`).
+  swatch    Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseKey])
 }
 
 // Excludes DND; at most twice per session (enforced in DTO + RemindersService).
@@ -395,13 +491,13 @@ model SlotProposal {
   // behind the chosen slot, kept so a delayed MOVE / RETAINED reward can call
   // `/update` for the right arm (`docs/adr/0001-linucb-model-design.md` §9).
   // Empty / null when the primary policy was the heuristic.
-  featureVector    Float[]        @default([])
-  selectedArm      SchedulingArm?
+  featureVector   Float[]        @default([])
+  selectedArm     SchedulingArm?
   // Applied LinUCB slot-score weights (`wL` = 1, `wS` = proximity-scaled
   // stability, `services/bandit/src/core/slot_score.py::stability_weight`);
   // null when the primary policy was the pref-only heuristic.
-  linucbWeight     Float?
-  stabilityWeight  Float?
+  linucbWeight    Float?
+  stabilityWeight Float?
 
   // Provenance (ADR-0003): which implementation produced the placement, so A/B
   // analysis can exclude degraded (frozen-TS-fallback) events.
@@ -433,11 +529,30 @@ model SlotProposal {
   @@index([experimentId])
 }
 
+enum SessionAnchor {
+  AUTO
+  CHOSEN
+  PINNED
+}
+
+// Why the scheduler picked a start (services/bandit/src/core/reason.py).
+enum PlacementReason {
+  PREFERRED_HOUR
+  BEFORE_DEADLINE
+  ONLY_FREE_SLOT
+  NEAR_CLASS
+  MOVED_FOR_DEADLINE
+  BEST_AVAILABLE
+}
+
 enum SessionEventType {
   CREATE
   MOVE // user drag or resize of a scheduled TASK (negative signal)
-  RETAINED // session elapsed without ever being moved (positive signal)
+  RETAINED // legacy: session elapsed without ever being moved (+1); no longer written (ADR-0023)
   SYSTEM_MOVE // scheduler-initiated move (displacement / conflict reschedule): reward 0, no preference update
+  COMPLETE // user checked the session off; removed on undo. rewardScore +1 once settled in its slot
+  SKIP // user marked the session skipped; removed on undo. rewardScore -1 once settled
+  MISSED // unmoved session with no check-off by the cutoff (rewardScore -1), ADR-0023
 }
 
 /// Range-partitioned by month on `occurredAt` (hand-written migration, ADR-0016); children are `SessionEvent_YYYY_MM`.
@@ -446,7 +561,7 @@ model SessionEvent {
   eventType           SessionEventType
   oldSnapshot         Json? // { scheduledStartTime, durationMinutes, tags[], type }; null on CREATE/RETAINED
   newSnapshot         Json
-  rewardScore         Float            @default(0.0) // CREATE 0 · MOVE -1 · RETAINED +1
+  rewardScore         Float            @default(0.0) // CREATE 0 · MOVE graded ≤ 0 · COMPLETE +1 · SKIP / MISSED -1 (ADR-0023)
   dragDistanceMinutes Int? // signed (new − old start); null unless MOVE — for graded reward later
   policy              SchedulingModel? // attribution once a model is live
   // The `SessionSeries.id` shared by the N sittings placed in one
@@ -454,6 +569,10 @@ model SessionEvent {
   // can be reverted (delete the series) as one action. Null for a single-sitting
   // create. Plain scalar, not a relation: it must survive the series' deletion.
   seriesId            String?
+  // Shared by every row one user action wrote (a drag's MOVE, a cascade's
+  // SYSTEM_MOVEs, a confirmed plan). `POST /sessions/undo/:groupId` reverts them
+  // together. Null for rows written outside such an action.
+  groupId             String?
   occurredAt          DateTime         @default(now())
 
   // Nullable + SetNull so RETAINED / observation-count history survives a
@@ -474,6 +593,26 @@ model SessionEvent {
   @@index([sessionId])
   @@index([slotProposalId])
   @@index([seriesId])
+  @@index([groupId])
+}
+
+/// A placement the user has to confirm (ADR-0022): the cheapest plan moves a
+/// CHOSEN session. Nothing is applied until `POST /sessions/placement/confirm`.
+/// `subjectId` is the session being placed (null for a create, which is
+/// inserted from `createInput` on confirm). `moves` is the plan's `PlacementMove[]`.
+model PlacementPlan {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId   String?
+  subjectFrom DateTime? // the subject's start when the plan was made (null for a create)
+  startAt     DateTime // the subject's planned start
+  moves       Json
+  createInput Json? // the CreateSessionDto of a create that needs confirmation
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model File {
@@ -523,6 +662,7 @@ model Integration {
   schedules         IngestionSchedule[]
   portalEnrollments PortalSectionEnrollment[]
   lmsEnrollments    LmsCourseEnrollment[]
+  syncRuns          SyncRun[]
 
   @@unique([userId, provider])
   @@index([provider, userId])
@@ -711,11 +851,11 @@ model PortalSection {
   // timetableThroughDate is a date, not an ISO week number: HK02 straddles New
   // Year and week numbers wrap 52 (or 53) -> 1, so "covered through week N" is
   // not a numeric comparison. semester.ts walks Mondays for the same reason.
-  timetableRefreshedAt  DateTime?
-  timetableThroughDate  DateTime?
+  timetableRefreshedAt DateTime?
+  timetableThroughDate DateTime?
 
-  occurrences     PortalSectionOccurrence[]
-  enrollments     PortalSectionEnrollment[]
+  occurrences PortalSectionOccurrence[]
+  enrollments PortalSectionEnrollment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -974,4 +1114,201 @@ model LmsCourseOccurrence {
   updatedAt DateTime @updatedAt
 
   @@index([lmsCourseId, startsAt])
+}
+
+// ---------------------------------------------------------------------------
+// Split ingestion queues: student profile, marks, and fan-out run tracking.
+// ---------------------------------------------------------------------------
+
+// A student's DLU profile (GET /api/student/info plus marks aggregates).
+// Normalised fields only: no phone, birthday, birthplace or raw payload.
+model StudentProfile {
+  userId        String @id
+  integrationId String
+
+  studentId String?
+  fullName  String
+  gender    String?
+  cohort    String? // "Khóa 47"
+  className String? // "CTK47A"
+  faculty   String? // marks OlogyName
+  major     String? // marks ChuyenNganh
+
+  studyProgramId   String?
+  studyProgramName String?
+
+  // Cumulative figures from the latest marks row.
+  gpa4          Float?
+  gpa10         Float?
+  creditsEarned Int?
+  ranking       String? // TenXepLoai
+
+  profileFetchedAt DateTime
+  marksFetchedAt   DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model StudyProgram {
+  id             String @id @default(uuid())
+  userId         String
+  studyProgramId String
+  name           String
+  type           Int
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, studyProgramId])
+}
+
+// One graded course. Keyed by the portal's ScheduleStudyUnitID so it lines up
+// with PortalSectionEnrollment / PortalSection for the current term; past
+// terms have no enrolment row and stand on their own.
+model StudentMark {
+  id                  String   @id @default(uuid())
+  userId              String
+  scheduleStudyUnitId String
+  yearStudy           String
+  termId              String
+  curriculumId        String?
+  curriculumName      String
+  credits             Int
+  score10             Float?
+  score4              Float?
+  letter              String?
+  passed              Boolean?
+  note                String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, scheduleStudyUnitId])
+  @@index([userId, yearStudy, termId])
+}
+
+model StudentTermResult {
+  id        String @id @default(uuid())
+  userId    String
+  yearStudy String
+  termId    String
+
+  gpa4              Float?
+  gpa10             Float?
+  creditsEarned     Int?
+  cumulativeGpa4    Float?
+  cumulativeGpa10   Float?
+  cumulativeCredits Int?
+  conductScore      Int?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, yearStudy, termId])
+}
+
+// Week-level cache coverage. PortalSection.timetableThroughDate is a single
+// watermark, which cannot say "week N is cached" when weeks are fetched by
+// separate jobs, so each fetched week stamps its own row.
+model PortalWeekCoverage {
+  scheduleStudyUnitId String
+  weekStart           DateTime @db.Date
+  refreshedAt         DateTime
+
+  @@id([scheduleStudyUnitId, weekStart])
+}
+
+enum SyncUnitStatus {
+  PENDING
+  DONE
+  FAILED
+}
+
+// One fan-out pass for one integration: a timetable term split into week jobs,
+// or an LMS calendar split into month jobs. Units finish in any order; the job
+// that completes the last one wins the notifiedAt compare-and-set and does the
+// closing work (deletion pass, single digest, schedule outcome).
+model SyncRun {
+  id            String            @id @default(uuid())
+  integrationId String
+  kind          IngestionSyncKind
+  // "<year>/<term>" for a timetable, "calendar" for LMS.
+  scope         String
+  totalUnits    Int
+
+  // The claimed IngestionSchedule row this run settles.
+  scheduleId     String?
+  claimedAt      DateTime?
+  dueAt          DateTime?
+  cacheHitStreak Int       @default(0)
+
+  servedFromCache Boolean   @default(true)
+  notifiedAt      DateTime?
+  finishedAt      DateTime?
+
+  integration Integration   @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  units       SyncRunUnit[]
+
+  createdAt DateTime @default(now())
+
+  @@index([integrationId, kind, createdAt])
+  @@index([finishedAt, createdAt])
+}
+
+model SyncRunUnit {
+  runId   String
+  // Week start "YYYY-MM-DD" or month "YYYY-MM".
+  unit    String
+  status  SyncUnitStatus @default(PENDING)
+  // True when a live request was made for this unit.
+  fetched Boolean        @default(false)
+  // Lectures this unit created and other rows it updated or removed; summed
+  // when the run settles to word its notice.
+  created Int            @default(0)
+  changed Int            @default(0)
+
+  run SyncRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@id([runId, unit])
+}
+
+// Per-window LMS cache state. A course used to keep one fingerprint for the
+// last window any student walked, which thrashes once the calendar is fetched
+// one month per job. Each (course, scope) now carries its own coverage and
+// corroboration state, and each student's last view is kept per scope too.
+// The old LmsCourse.occurrences* and LmsCourseEnrollment.seenFingerprint
+// columns are no longer read.
+model LmsCourseWindow {
+  lmsCourseId      Int
+  // Names the months the view covers, e.g. "2026-10".
+  scope            String
+  refreshedAt      DateTime
+  throughDate      DateTime
+  fingerprint      String?
+  fingerprintBy    String?
+  priorFingerprint String?
+
+  @@id([lmsCourseId, scope])
+}
+
+model LmsCourseSeen {
+  userId      String
+  lmsCourseId Int
+  scope       String
+  // This student's own last live view of the course in the scope; null when it
+  // could not be cached (an item with no course block).
+  fingerprint String?
+
+  @@id([userId, lmsCourseId, scope])
+  // Fan-out direction: who last saw this exact view.
+  @@index([lmsCourseId, scope, fingerprint])
 }

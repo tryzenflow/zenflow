@@ -8,7 +8,7 @@ export function localizeValidation(
     [
       /^Could not sign in to your DLU (.+) account\. Check your username and password\.$/,
       (match) =>
-        `Không thể đăng nhập tài khoản DLU ${match[1]}. Kiểm tra tài khoản và mật khẩu.`,
+        `Chưa đăng nhập được tài khoản DLU ${match[1]}. Check lại tài khoản với mật khẩu nha.`,
     ],
     [
       /^No (.+) account connected$/,
@@ -21,7 +21,7 @@ export function localizeValidation(
     ],
     [
       /^Cannot find (?:session|TASK series|recurring series|series with id)(?: with id)? .+$/,
-      () => "Không tìm thấy lịch này. Có thể lịch đã bị xóa.",
+      () => "Không thấy lịch này. Chắc đã bị xóa rồi.",
     ],
     [
       /^Invalid occurrence start .+$/,
@@ -35,9 +35,9 @@ export function localizeValidation(
       /^Day number must be between 0 and 6, got (.+)$/,
       (match) => `Số thứ trong tuần phải từ 0 đến 6, đã nhận ${match[1]}.`,
     ],
-    [/^(.+) must be an email$/, () => "Vui lòng nhập địa chỉ email hợp lệ."],
-    [/^(.+) should not be empty$/, () => "Vui lòng điền thông tin bắt buộc."],
-    [/^(.+) must be an integer number$/, () => "Vui lòng nhập số nguyên."],
+    [/^(.+) must be an email$/, () => "Nhập email cho đúng nha."],
+    [/^(.+) should not be empty$/, () => "Điền đủ thông tin nha."],
+    [/^(.+) must be an integer number$/, () => "Nhập số nguyên nha."],
     [
       /^(.+) must be longer than or equal to (\d+) characters$/,
       (match) => `Thông tin phải có ít nhất ${match[2]} ký tự.`,
@@ -49,7 +49,7 @@ export function localizeValidation(
     [
       /^Not enough time for (\d+) sessions before this deadline\nChoose a later deadline or fewer sessions\.$/,
       (match) =>
-        `Không đủ thời gian cho ${match[1]} buổi trước hạn chót\nChọn hạn chót muộn hơn hoặc giảm số buổi.`,
+        `Không đủ giờ cho ${match[1]} buổi trước deadline\nDời deadline ra sau hoặc bớt số buổi nha.`,
     ],
     [
       /^Title must be at most (\d+) characters\.$/,
@@ -78,19 +78,19 @@ export function localizeValidation(
     ],
     [
       /^Invalid input: expected int, received number$/,
-      () => "Vui lòng nhập số nguyên.",
+      () => "Nhập số nguyên nha.",
     ],
     [
       /^Invalid input: expected number, received (?:NaN|undefined|string|null)$/,
-      () => "Vui lòng nhập số hợp lệ.",
+      () => "Nhập số cho đúng nha.",
     ],
     [
       /^Invalid input: expected string, received (?:undefined|null|number)$/,
-      () => "Vui lòng nhập văn bản hợp lệ.",
+      () => "Nhập chữ cho đúng nha.",
     ],
     [
       /^Invalid option: expected one of .+$/,
-      () => "Vui lòng chọn một loại lịch hợp lệ.",
+      () => "Chọn loại lịch cho đúng nha.",
     ],
   ];
   for (const [pattern, translate] of patterns) {

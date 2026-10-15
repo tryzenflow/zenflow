@@ -8,6 +8,12 @@ import { useToast } from "@/components/ui/toast";
 import { usePushStatusStore } from "@/hooks/use-push-status-store";
 import { useUserStore } from "@/hooks/use-user-store";
 import { rescheduleWithToast } from "@/lib/reschedule-toast";
+import { applyCheckIn } from "@/lib/daily-checkin";
+import {
+  checkInActionOf,
+  checkInSessionIds,
+  isCheckInCategory,
+} from "@/lib/daily-push";
 import { PUSH_ACTION_RESCHEDULE, pushCategoryFor } from "@zenflow/shared";
 import { notificationToastVisual } from "@/lib/notification-visual";
 import {
@@ -77,6 +83,26 @@ export function usePushRegistration(): void {
       const data = response.notification.request.content.data as
         | Record<string, string>
         | undefined;
+      // Evening check-in buttons. Android runs them in the background task
+      // (lib/daily-checkin-task.ts), so this only applies them while the app
+      // is up; iOS opens the app for the button and it lands here.
+      const checkIn = checkInActionOf(response.actionIdentifier);
+      if (checkIn && isCheckInCategory(data?.categoryId)) {
+        if (AppState.currentState !== "background") {
+          const result = await applyCheckIn(
+            checkIn,
+            checkInSessionIds(data?.sessionIds),
+          ).catch(() => null);
+          const ok = result !== null && result.failed === 0;
+          toast({
+            title: ok
+              ? t(checkIn === "done" ? "Marked done" : "Marked missed")
+              : t("Could not save. Try again."),
+            variant: ok ? undefined : "destructive",
+          });
+        }
+        return;
+      }
       // iOS "Reschedule" button on a sync-conflict push: act without opening the app.
       if (
         response.actionIdentifier === PUSH_ACTION_RESCHEDULE &&

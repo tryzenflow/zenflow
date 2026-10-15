@@ -5,7 +5,6 @@
   "compilerOptions": {
     "deleteOutDir": true,
     "assets": [
-      { "include": "mail/templates/**/*.hbs", "watchAssets": true },
       { "include": "mail/templates/**/*.png", "watchAssets": true },
       { "include": "landing/assets/**/*", "watchAssets": true }
     ],

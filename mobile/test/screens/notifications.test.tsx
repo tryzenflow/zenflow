@@ -9,6 +9,7 @@ import { makeNotification, makeSession } from "@/test/fixtures";
 import { API, testUser } from "@/test/msw/handlers";
 import { server } from "@/test/msw/server";
 import { renderScreen } from "@/test/utils/render";
+import { waitForContent } from "@/test/utils/skeleton";
 
 const toastShown = (text: string | RegExp) =>
   waitFor(() => expect(screen.getAllByText(text).length).toBeGreaterThan(0));
@@ -48,28 +49,31 @@ beforeEach(() => {
 });
 
 describe("NotificationsScreen", () => {
-  it("shows an empty inbox", () => {
+  it("shows an empty inbox", async () => {
     seed([]);
     renderScreen(<NotificationsScreen />);
+    await waitForContent();
     expect(screen.getByText("You're all caught up")).toBeTruthy();
     expect(screen.queryByText("Select")).toBeNull();
   });
 
-  it("lists notifications with the unread count in the header", () => {
+  it("lists notifications with the unread count in the header", async () => {
     seed([
       makeNotification({ id: "n1", title: "New assignment", content: "Graph theory report" }),
       makeNotification({ id: "n2", title: "Exam moved", content: "Final moved to Friday", readAt: "2026-10-14T00:00:00.000Z" }),
     ]);
     renderScreen(<NotificationsScreen />);
+    await waitForContent();
     expect(screen.getByText("New assignment")).toBeTruthy();
     expect(screen.getByText("Exam moved")).toBeTruthy();
     expect(screen.getByText("Inbox")).toBeTruthy();
     expect(screen.getByText("1")).toBeTruthy(); // unread badge
   });
 
-  it("closes via the backdrop and the back button", () => {
+  it("closes via the backdrop and the back button", async () => {
     seed([]);
     renderScreen(<NotificationsScreen />);
+    await waitForContent();
     fireEvent.click(screen.getByLabelText("Close"));
     fireEvent.click(screen.getByLabelText("Back"));
     expect(router.back).toHaveBeenCalledTimes(2);
@@ -86,6 +90,7 @@ describe("NotificationsScreen", () => {
       );
       seed([makeNotification({ id: "n1", title: "New assignment", sessionId: "s9" })]);
       renderScreen(<NotificationsScreen />);
+      await waitForContent();
       fireEvent.click(screen.getByText("New assignment"));
       await waitFor(() =>
         expect(router.dismissTo).toHaveBeenCalledWith({
@@ -102,6 +107,7 @@ describe("NotificationsScreen", () => {
       server.use(http.get(`${API}/sessions/gone`, () => HttpResponse.json({}, { status: 404 })));
       seed([makeNotification({ id: "n1", title: "Old item", sessionId: "gone" })]);
       renderScreen(<NotificationsScreen />);
+      await waitForContent();
       fireEvent.click(screen.getByText("Old item"));
       await toastShown("Couldn't find that item");
       expect(router.dismissTo).not.toHaveBeenCalled();
@@ -110,6 +116,7 @@ describe("NotificationsScreen", () => {
     it("only marks a removal (no session) as read", async () => {
       seed([makeNotification({ id: "n1", title: "Lecture removed", sessionId: null })]);
       renderScreen(<NotificationsScreen />);
+      await waitForContent();
       fireEvent.click(screen.getByText("Lecture removed"));
       await waitFor(() => expect(calls).toEqual(["read:n1"]));
       expect(router.dismissTo).not.toHaveBeenCalled();
@@ -120,6 +127,7 @@ describe("NotificationsScreen", () => {
     it("removes a notification", async () => {
       seed([makeNotification({ id: "n1", title: "A" }), makeNotification({ id: "n2", title: "B" })]);
       renderScreen(<NotificationsScreen />);
+      await waitForContent();
       fireEvent.click(screen.getAllByText("Dismiss")[0]);
       await waitFor(() => expect(screen.queryByText("A")).toBeNull());
       expect(screen.getByText("B")).toBeTruthy();
@@ -130,6 +138,7 @@ describe("NotificationsScreen", () => {
       server.use(http.delete(`${API}/notifications/:id`, () => HttpResponse.json({}, { status: 500 })));
       seed([makeNotification({ id: "n1", title: "A" })]);
       renderScreen(<NotificationsScreen />);
+      await waitForContent();
       fireEvent.click(screen.getByText("Dismiss"));
       await toastShown("Couldn't dismiss notification");
       expect(screen.getByText("A")).toBeTruthy();
@@ -147,6 +156,7 @@ describe("NotificationsScreen", () => {
 
     it("deletes just the selected rows", async () => {
       renderScreen(<NotificationsScreen />);
+      await waitForContent();
       fireEvent.click(screen.getByText("Select"));
       fireEvent.click(screen.getByText("A"));
       fireEvent.click(screen.getByText("C"));
@@ -157,8 +167,9 @@ describe("NotificationsScreen", () => {
       expect(screen.getByText("B")).toBeTruthy();
     });
 
-    it("selects all and toggles back to none", () => {
+    it("selects all and toggles back to none", async () => {
       renderScreen(<NotificationsScreen />);
+      await waitForContent();
       fireEvent.click(screen.getByText("Select"));
       fireEvent.click(screen.getByText("All"));
       expect(screen.getByText("3 selected")).toBeTruthy();
@@ -166,8 +177,9 @@ describe("NotificationsScreen", () => {
       expect(screen.getByText("0 selected")).toBeTruthy();
     });
 
-    it("leaves selecting without deleting", () => {
+    it("leaves selecting without deleting", async () => {
       renderScreen(<NotificationsScreen />);
+      await waitForContent();
       fireEvent.click(screen.getByText("Select"));
       fireEvent.click(screen.getByText("A"));
       fireEvent.click(screen.getByLabelText("Cancel selection"));
@@ -177,6 +189,7 @@ describe("NotificationsScreen", () => {
 
     it("asks before clearing everything, and clears on confirm", async () => {
       renderScreen(<NotificationsScreen />);
+      await waitForContent();
       fireEvent.click(screen.getByText("Select"));
       fireEvent.click(screen.getByText("All"));
       fireEvent.click(screen.getByLabelText("Delete selected"));
@@ -190,6 +203,7 @@ describe("NotificationsScreen", () => {
 
     it("keeps everything when the clear-all prompt is cancelled", async () => {
       renderScreen(<NotificationsScreen />);
+      await waitForContent();
       fireEvent.click(screen.getByText("Select"));
       fireEvent.click(screen.getByText("All"));
       fireEvent.click(screen.getByLabelText("Delete selected"));
@@ -218,6 +232,7 @@ describe("NotificationsScreen", () => {
       );
       seed([conflict()]);
       renderScreen(<NotificationsScreen />);
+      await waitForContent();
       fireEvent.click(screen.getByText("Reschedule"));
       await toastShown("Rescheduled 2 tasks");
     });
@@ -232,6 +247,7 @@ describe("NotificationsScreen", () => {
       );
       seed([conflict()]);
       renderScreen(<NotificationsScreen />);
+      await waitForContent();
       fireEvent.click(screen.getByText("Reschedule"));
       await toastShown("Rescheduled 1, 1 left");
       expect(screen.getAllByText("The rest still overlap. Move them by hand.").length).toBeGreaterThan(0);
@@ -243,13 +259,15 @@ describe("NotificationsScreen", () => {
       );
       seed([conflict()]);
       renderScreen(<NotificationsScreen />);
+      await waitForContent();
       fireEvent.click(screen.getByText("Reschedule"));
       await toastShown("Couldn't reschedule tasks");
     });
 
-    it("hides the action once it has been taken", () => {
+    it("hides the action once it has been taken", async () => {
       seed([{ ...conflict(), actionTakenAt: "2026-10-15T00:00:00.000Z" }]);
       renderScreen(<NotificationsScreen />);
+      await waitForContent();
       expect(screen.queryByText("Reschedule")).toBeNull();
     });
   });

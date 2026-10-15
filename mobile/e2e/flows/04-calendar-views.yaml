@@ -5,10 +5,10 @@ tags: [smoke]
 - assertVisible:
     id: tab.index
 - tapOn:
-    id: tab.month
+    id: view-switch.month
 - extendedWaitUntil:
     visible:
-      id: tab.month
+      id: view-switch.month
     timeout: 10000
 - tapOn:
     id: tab.settings

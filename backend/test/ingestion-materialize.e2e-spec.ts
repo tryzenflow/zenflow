@@ -105,8 +105,14 @@ async function connectedStudent(label: string) {
   await connect(student, "LMS");
   return student;
 }
+// The marks job raises its own `marks.ready` note when the portal first
+// returns marks; it is not a change digest, so these specs leave it out.
+const digestRows = async (student: Student) =>
+  (await noteRows(prisma, student)).filter(
+    (n) => n.eventName !== "marks.ready",
+  );
 const inbox = async (student: Student) =>
-  (await noteRows(prisma, student)).map((n) => n.eventName).sort();
+  (await digestRows(student)).map((n) => n.eventName).sort();
 
 describe("the first sync", () => {
   it("puts the school's items on the calendar, marked with where they came from", async () => {
@@ -143,7 +149,7 @@ describe("the first sync", () => {
   it("raises one digest per kind of change, each pointing at a real session", async () => {
     const student = await connectedStudent("digest");
     await syncAll(student);
-    const rows = await noteRows(prisma, student);
+    const rows = await digestRows(student);
     const names = rows.map((n) => n.eventName);
     expect(names).toEqual(
       expect.arrayContaining([

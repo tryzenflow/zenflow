@@ -1,7 +1,7 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { formatTitle } from "@/lib/i18n";
-import { InlineDateField } from "@/components/tasks/form/inline-date-field";
+import { InlineDateField } from "@/components/ui/inline-date-field";
 import {
   BottomSheet,
   BottomSheetContent,
@@ -12,9 +12,10 @@ import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { TimePickerInline } from "@/components/ui/time-picker";
 import { useToast } from "@/components/ui/toast";
-import { completeStep } from "@/hooks/use-checklist";
-import { showMovedToast } from "@/lib/move-toast";
+import { showMovedToast, showResizedToast } from "@/lib/move-toast";
+import { restoreSessionTime } from "@/lib/move-undo";
 import { isPastDeadlineDrop } from "@/lib/overdue";
+import { showErrorToast } from "@/lib/task-toasts";
 import {
   getSeriesKind,
   snapToNearestLaterQuarterHour,
@@ -27,10 +28,11 @@ import type { Session, UpdateScope } from "@zenflow/shared";
 import * as Haptics from "expo-haptics";
 import { forwardRef, useImperativeHandle, useMemo, useState } from "react";
 import { View } from "react-native";
-import type {
-  PendingSessionUpdate,
-  UpdateRecurringScope,
-} from "./update-recurring-sheet";
+import {
+  type PendingSessionUpdate,
+  type UpdateRecurringScope,
+  moveUndoable,
+} from "@/lib/recurring-scope";
 
 export interface RescheduleSheetHandle {
   /** Open the "Move to…" picker for `session`, seeded from its current start
@@ -57,10 +59,9 @@ interface RescheduleSheetProps {
    * instant — the calendar screen re-points its focus / refetches / pulses the
    * block from here (the handler the old cross-day-drag drop used to run). */
   onMoved?: (session: Session, startISO: string) => void;
-  /** When `session` belongs to a series (`getSeriesKind` !== "none"), defers
-   * the commit to the caller's scope-confirmation sheet (`UpdateRecurringSheet`)
-   * instead of committing directly. `onResolve(null)` means the user backed
-   * out — the sheet stays open, nothing was committed. */
+  /** When `session` belongs to a series (`getSeriesKind` !== "none"), the
+   * caller picks the commit scope (`resolveMoveScope`) before this commits.
+   * `onResolve(null)` means the user undid it: nothing was committed. */
   onRequestScopedUpdate?: (
     session: Session,
     pending: PendingSessionUpdate,
@@ -85,7 +86,7 @@ const MAX_START_MIN = 23 * 60 + 45;
  * carries the user-tz wall clock in its local fields) plus a Start/End
  * `TimePickerInline` pair (minutes-of-day, 15-min grid) — Clockify-style: the
  * session may cross midnight (`endMinutes <= startMinutes`), in which case the
- * End picker gets a primary-orange "+1" badge and the length is computed as
+ * End picker gets a primary "+1" badge and the length is computed as
  * running into the next day, rather than requiring a second date input. The
  * confirm path rebuilds a wall-clock `Date` from the date + start time and
  * runs it through `zonedWallClockToUtc`, exactly like
@@ -168,6 +169,7 @@ export const RescheduleSheet = forwardRef<
     if (!session || !pickedISO || busy) return;
     setBusy(true);
     try {
+      const before = session;
       await onConfirm(
         session.id,
         pickedISO,
@@ -175,12 +177,32 @@ export const RescheduleSheet = forwardRef<
         scope,
         skipConflicting,
       );
-      // Same confirmation a drag-and-drop move gets.
-      showMovedToast(toast, {
-        first: completeStep("move-day"),
-        to: zonedDate(pickedISO, tz),
-        withTime: true,
-      });
+      // Same confirmation a drag-and-drop move gets, with the same undo.
+      const onUndo = moveUndoable(before, scope)
+        ? () =>
+            void restoreSessionTime(before, scope, skipConflicting).catch(
+              (error) =>
+                showErrorToast(
+                  toast,
+                  error,
+                  t("Couldn't move this session"),
+                  "calendar-x",
+                ),
+            )
+        : undefined;
+      // Only the length changed: say that, not "Moved to".
+      if (
+        before.scheduledStartTime === pickedISO &&
+        before.durationMinutes !== durationMinutes
+      ) {
+        showResizedToast(toast, { minutes: durationMinutes, onUndo });
+      } else {
+        showMovedToast(toast, {
+          to: zonedDate(pickedISO, tz),
+          withTime: true,
+          onUndo,
+        });
+      }
       onMoved?.(session, pickedISO);
       sheet.close();
     } finally {
@@ -198,6 +220,9 @@ export const RescheduleSheet = forwardRef<
     // A timetable-grouped lecture moves just that meeting — no scope prompt.
     const needsScope = seriesKind === "recurring" || seriesKind === "task";
     if (needsScope && onRequestScopedUpdate) {
+      // A recurring move asks nothing and waits out its undo window, so the
+      // sheet closes now; the undo toast carries the rest.
+      if (seriesKind === "recurring") sheet.close();
       onRequestScopedUpdate(
         session,
         { scheduledStartTime: pickedISO, durationMinutes },
@@ -219,10 +244,10 @@ export const RescheduleSheet = forwardRef<
       session.type === "TASK" &&
       isPastDeadlineDrop(pickedISO, session.deadline)
     ) {
-      confirm(t("Schedule after the deadline?"), {
+      confirm(t("Past the deadline?"), {
         description: t("This session will start past its due time."),
-        confirmLabel: t("Schedule anyway"),
-        cancelLabel: t("Cancel"),
+        confirmLabel: t("Keep late"),
+        cancelLabel: t("Snap back"),
         onConfirm: () => {
           commitWithScope();
         },
@@ -286,7 +311,7 @@ export const RescheduleSheet = forwardRef<
                         fontWeight: "800",
                       }}
                     >
-                      +1
+                      {t("tomorrow")}
                     </Text>
                   </View>
                 )}

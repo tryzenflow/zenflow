@@ -47,6 +47,11 @@
           }
         }
       }
+    },
+    "allowUnusedPatches": true,
+    "patchedDependencies": {
+      "expo-task-manager@58.0.11": "patches/expo-task-manager@58.0.11.patch",
+      "unimodules-app-loader@58.0.2": "patches/unimodules-app-loader@58.0.2.patch"
     }
   },
   "dependencies": {

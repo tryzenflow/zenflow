@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/spinner";
 import { CircleUserRound, Mail } from "@/components/Icons";
 import { BackIcon, WaitIcon } from "@/components/brand/icons";
 import { SunriseBackdrop } from "@/components/brand/sunrise-backdrop";
@@ -17,19 +18,18 @@ import {
   useForm,
 } from "react-hook-form";
 import {
-  ActivityIndicator,
   Pressable,
   TextInput,
   type TextInputInstance,
   View,
 } from "react-native";
+import { SESSION_TONES } from "@zenflow/core";
 import type { User } from "@zenflow/shared";
 import { z } from "zod";
 
 import { requestOtp, verifyOtp } from "@/api/auth";
 import { updateBasicInfo } from "@/api/users";
 import { LanguageSelect } from "@/components/language-select";
-import { getBaseURL } from "@/lib/api-client";
 import { type LegalPage, legalUrl } from "@/lib/legal-links";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
@@ -41,7 +41,14 @@ import { useUserStore } from "@/hooks/use-user-store";
 import { cacheSessionUser } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { hideEmail } from "@/utils/hide-email";
-import { Loader2Icon } from "lucide-react-native";
+import {
+  extractOtp,
+  type LoginMode,
+  loginEmail,
+  parseLoginInput,
+  STUDENT_EMAIL_DOMAIN,
+  switchLoginMode,
+} from "@/lib/login-id";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /**
@@ -68,12 +75,13 @@ function getRetryAfterSeconds(error: unknown): number {
   return DEFAULT_RETRY_AFTER_SECONDS;
 }
 
-/** Amber clock icon + message, matching mockups/login.html's "Locked" frames. */
+/** Sun clock icon + message, matching mockups/login.html's "Locked" frames. */
 function LockoutNotice({ children }: { children: ReactNode }) {
   useLanguage();
+  const { isDarkColorScheme } = useColorScheme();
   return (
     <View className="mt-2 flex-row items-start gap-1.5">
-      <WaitIcon size={15} color="#F0B101" />
+      <WaitIcon size={15} color={SESSION_TONES.conflict.ink[isDarkColorScheme ? "dark" : "light"]} />
       <Text className="flex-1 text-[13px] font-medium text-foreground">
         {children}
       </Text>
@@ -81,6 +89,7 @@ function LockoutNotice({ children }: { children: ReactNode }) {
   );
 }
 
+// The `email` field holds the raw input: a student ID or a full address.
 const emailSchema = z.object({
   email: z.email({
     get message() {
@@ -89,8 +98,15 @@ const emailSchema = z.object({
   }),
 });
 
+const idSchema = z.object({
+  email: z.string().regex(/^\d+$/, {
+    get message() {
+      return t("Enter your student ID.");
+    },
+  }),
+});
+
 const otpSchema = z.object({
-  email: z.email(),
   otp: z.string().length(6, {
     get message() {
       return t("Your one-time password must be 6 digits.");
@@ -149,30 +165,34 @@ function OtpBoxes({
           </Text>
         </View>
       ))}
+      {/* Covers the boxes so autofill and long-press paste have a real
+          target. No `maxLength`: it would cut a pasted message before
+          `extractOtp` finds the code. `one-time-code` maps to Android's OTP
+          autofill hint and to iOS `oneTimeCode`. */}
       <TextInput
         ref={inputRef}
         value={value}
-        onChangeText={(v) =>
-          onChangeText(v.replace(/[^0-9]/g, "").slice(0, OTP_LENGTH))
-        }
+        onChangeText={(v) => onChangeText(extractOtp(v, OTP_LENGTH))}
         testID="login.otp"
         keyboardType="number-pad"
-        maxLength={OTP_LENGTH}
+        autoComplete="one-time-code"
+        textContentType="oneTimeCode"
+        importantForAutofill="yes"
         editable={!disabled}
         autoFocus
-        className="absolute h-px w-px opacity-0"
+        caretHidden
+        className="absolute inset-0 opacity-0"
       />
     </Pressable>
   );
 }
 
 function openLegal(page: LegalPage) {
-  const url = legalUrl(page, getBaseURL());
+  const url = legalUrl(page);
   // Loaded on tap: the native module isn't needed to render the screen.
-  if (url)
-    void import("expo-web-browser")
-      .then((WebBrowser) => WebBrowser.openBrowserAsync(url))
-      .catch(() => {});
+  void import("expo-web-browser")
+    .then((WebBrowser) => WebBrowser.openBrowserAsync(url))
+    .catch(() => {});
 }
 
 export default function LoginScreen() {
@@ -186,6 +206,9 @@ export default function LoginScreen() {
   const muted = theme.mutedForeground;
 
   const [stage, setStage] = useState<"email" | "otp">("email");
+  const [loginMode, setLoginMode] = useState<LoginMode>("id");
+  // The address the code went to; verify and resend use it.
+  const [sentTo, setSentTo] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   // Rate-limit UI state (issue #14 — LimitKit on the backend):
@@ -204,28 +227,32 @@ export default function LoginScreen() {
 
   const form = useForm<FormValues>({
     resolver: zodResolver(
-      stage === "email" ? emailSchema : otpSchema,
+      stage === "otp"
+        ? otpSchema
+        : loginMode === "id"
+          ? idSchema
+          : emailSchema,
     ) as Resolver<FormValues>,
     defaultValues: { email: "", otp: "" },
     mode: "onSubmit",
     reValidateMode: "onSubmit",
   });
 
-  const { handleSubmit, setError, clearErrors, watch, getValues } = form;
-  const email = watch("email");
+  const { handleSubmit, setError, clearErrors } = form;
 
   // No local redirect here: the root layout's `AuthGate` is the single
   // source of truth for post-auth navigation and reacts to `setUser` below
   // on its own. A screen-local `router.replace` here used to race it.
 
-  const handleEmailRequest = async (data: EmailFormValues) => {
+  const handleEmailRequest = async (address: string) => {
     if (requestLockout.active) return;
     setSubmitting(true);
     clearErrors("email");
     try {
-      await requestOtp(data.email, getLanguage());
+      await requestOtp(address, getLanguage());
       toast(t("Check your inbox"), "info", { icon: Mail });
       requestLockout.clear();
+      setSentTo(address);
       setStage("otp");
       form.setValue("otp", "");
       otpLockout.clear();
@@ -255,7 +282,7 @@ export default function LoginScreen() {
     setSubmitting(true);
     clearErrors("otp");
     try {
-      const result = await verifyOtp(getValues("email"), data.otp);
+      const result = await verifyOtp(sentTo, data.otp);
       let user: User = result.data;
       // New users land on onboarding next — "back" would be wrong for them.
       if (user.onboardedAt) {
@@ -290,7 +317,8 @@ export default function LoginScreen() {
   };
 
   const onSubmit: SubmitHandler<FormValues> = async (data) => {
-    if (stage === "email") await handleEmailRequest(data as EmailFormValues);
+    if (stage === "email")
+      await handleEmailRequest(loginEmail(data.email, loginMode));
     else await handleOtpVerify(data as OtpFormValues);
   };
 
@@ -305,7 +333,7 @@ export default function LoginScreen() {
       </View>
       <View className="flex-1 justify-center">
         <View className="items-center gap-3.5 pb-[26px]">
-          <Logo glow breathe className="h-[60px] w-[60px] rounded-full" />
+          <Logo glow breathe className="h-[64px] w-[64px]" />
           <View className="items-center gap-1">
             <Text className="text-[22px] font-bold tracking-[-0.02em]">
               {stage === "email" ? t("Login to Zenflow") : t("Enter your code")}
@@ -313,7 +341,7 @@ export default function LoginScreen() {
             <Text className="text-[14px] text-center text-muted-foreground">
               {stage === "email"
                 ? t("Tell Zenflow what needs doing. It finds the time.")
-                : t("Sent to {email}", { email: hideEmail(email) })}
+                : t("Sent to {email}", { email: hideEmail(sentTo) })}
             </Text>
           </View>
         </View>
@@ -338,22 +366,75 @@ export default function LoginScreen() {
                 name="email"
                 render={({ field }) => (
                   <FormInput
+                    // Remount on a mode flip so the new keyboard type applies.
+                    key={loginMode}
                     name={field.name}
-                    label={t("Email")}
+                    label={loginMode === "id" ? t("Student ID") : t("Email")}
                     labelClassName="text-[14px] font-semibold"
                     testID="login.email"
-                    placeholder="m@example.com"
-                    keyboardType="email-address"
+                    placeholder={
+                      loginMode === "id"
+                        ? "2012345"
+                        : `name@${STUDENT_EMAIL_DOMAIN}`
+                    }
+                    keyboardType={
+                      loginMode === "id" ? "number-pad" : "email-address"
+                    }
                     autoCapitalize="none"
-                    autoComplete="email"
+                    autoCorrect={false}
+                    autoComplete={loginMode === "id" ? "username" : "email"}
+                    autoFocus={loginMode === "email"}
                     editable={!submitting && !requestLockout.active}
                     value={field.value}
                     onBlur={field.onBlur}
-                    onChange={field.onChange}
-                    className="h-[50px] rounded-xl border-glass-edge/35 bg-glass/10 px-4 dark:border-glass-edge/25 dark:bg-glass/[0.03] web:focus-visible:border-ring web:focus-visible:ring-ring/50 web:focus-visible:ring-[3px]"
+                    onChange={(text) => {
+                      const next = parseLoginInput(text, loginMode);
+                      clearErrors("email");
+                      if (next.mode !== loginMode) setLoginMode(next.mode);
+                      field.onChange(next.value);
+                    }}
+                    rightElement={
+                      loginMode === "id" ? (
+                        <Text
+                          testID="login.email-suffix"
+                          className="text-base text-muted-foreground"
+                        >
+                          @{STUDENT_EMAIL_DOMAIN}
+                        </Text>
+                      ) : undefined
+                    }
+                    className={cn(
+                      "h-[50px] rounded-xl border-glass-edge/35 bg-glass/10 px-4 dark:border-glass-edge/25 dark:bg-glass/[0.03] web:focus-visible:border-ring web:focus-visible:ring-ring/50 web:focus-visible:ring-[3px]",
+                      loginMode === "id" && "pr-[116px]",
+                    )}
                   />
                 )}
               />
+              {/* Number keypads have no `@` key, so lecturers switch here. */}
+              <Pressable
+                testID={
+                  loginMode === "id" ? "login.use-email" : "login.use-id"
+                }
+                accessibilityRole="button"
+                hitSlop={14}
+                disabled={submitting || requestLockout.active}
+                onPress={() => {
+                  const to = loginMode === "id" ? "email" : "id";
+                  clearErrors("email");
+                  setLoginMode(to);
+                  form.setValue(
+                    "email",
+                    switchLoginMode(form.getValues("email"), to),
+                  );
+                }}
+                className="mt-2.5 self-start"
+              >
+                <Text className="text-[13px] font-semibold text-primary">
+                  {loginMode === "id"
+                    ? t("Sign in with email")
+                    : t("Sign in with student ID")}
+                </Text>
+              </Pressable>
               {requestLockout.active && (
                 <LockoutNotice>
                   {t("Too many requests. Wait a moment, then try again.")}
@@ -381,7 +462,7 @@ export default function LoginScreen() {
                   )}
                 >
                   <BackIcon size={15} color={theme.primary} />
-                  <Text className="text-[13px] font-semibold text-brand-orange">
+                  <Text className="text-[13px] font-semibold text-session-task-ink">
                     {t("Change email")}
                   </Text>
                 </View>
@@ -423,11 +504,7 @@ export default function LoginScreen() {
               />
               {submitting ? (
                 <View className="flex-row items-center justify-center gap-[9px]">
-                  <ActivityIndicator
-                    className="mr-2"
-                    size="small"
-                    color="black"
-                  />
+                  <View className="mr-2"><Spinner size={18} tone="onPrimary" /></View>
                   <Text className="text-[14px] text-muted-foreground">
                     {t("Verifying code…")}
                   </Text>
@@ -459,7 +536,7 @@ export default function LoginScreen() {
                   variant="ghost"
                   testID="login.resend"
                   disabled={submitting}
-                  onPress={() => handleEmailRequest({ email })}
+                  onPress={() => handleEmailRequest(sentTo)}
                   className="w-full rounded-xl"
                 >
                   <Text className="text-sm font-semibold text-muted-foreground">
@@ -487,11 +564,7 @@ export default function LoginScreen() {
                 onPress={handleSubmit(onSubmit)}
               >
                 {submitting && (
-                  <ActivityIndicator
-                    className="mr-2"
-                    size="small"
-                    color="black"
-                  />
+                  <View className="mr-2"><Spinner size={18} tone="onPrimary" /></View>
                 )}
                 <Text
                   className={cn(
@@ -507,8 +580,8 @@ export default function LoginScreen() {
         </Glass>
         </View>
 
-        {/* Foreground colour, not muted/orange: this sits on the backdrop's orange
-            glow, where grey and orange text both lose contrast. */}
+        {/* Foreground colour, not muted or primary: this sits on the backdrop's
+            glow, where both lose contrast. */}
         <Text className="mt-[22px] px-2.5 text-center text-[13px] leading-[19px] text-foreground/80">
           {t("By continuing, you agree to our")}{" "}
           <Text

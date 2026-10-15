@@ -1,7 +1,9 @@
 import { MailerService } from "@nestjs-modules/mailer";
 import { Injectable } from "@nestjs/common";
 import type { Lang } from "@zenflow/shared";
+import { render } from "@react-email/components";
 import { join } from "path";
+import { ConfirmEmail } from "./templates/confirm-email";
 import { PrismaService } from "../prisma/prisma.service";
 
 // Resolved relative to __dirname so it works both from src (ts-node/jest) and
@@ -56,6 +58,11 @@ export class MailService {
           team: "The Zenflow Team",
           rights: "All rights reserved.",
         };
+    const props = {
+      otp,
+      ...copy,
+      fontBaseUrl: process.env.PUBLIC_URL?.replace(/\/+$/, "") || undefined,
+    };
     await this.mailerService.sendMail({
       // Only set `from` when explicitly provided. nodemailer copies every key
       // present on the message (even `from: undefined`) before applying
@@ -67,8 +74,8 @@ export class MailService {
       subject: vi
         ? "Xác nhận địa chỉ email của bạn"
         : "Confirm your email account",
-      template: "./confirm-email",
-      context: { otp, ...copy },
+      html: await render(ConfirmEmail(props)),
+      text: await render(ConfirmEmail(props), { plainText: true }),
       attachments: [
         {
           filename: "logo.png",

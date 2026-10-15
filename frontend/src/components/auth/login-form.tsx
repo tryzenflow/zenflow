@@ -20,7 +20,7 @@ import {
   InputOTPSlot,
 } from "@/components/ui/input-otp";
 import { cn } from "@/lib/utils";
-import { Loader2 } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { hideEmail } from "@/utils/hide-email";
@@ -28,6 +28,7 @@ import { useUserStore } from "@/hooks/use-user-store";
 import { requestOtp, verifyOtp } from "@/api/auth";
 import { isAxiosError } from "axios";
 import { Logo } from "@/components/logo";
+import { SITE_URL } from "@/lib/site";
 
 const emailSchema = z.object({
   email: z.email({ message: "Invalid email address." }),
@@ -239,18 +240,28 @@ export function LoginForm({
           )}
 
           <Button type="submit" disabled={loading} className="w-full">
-            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {loading && <Spinner className="mr-2 h-4 w-4" />}
             {stage === "email" ? "Send OTP" : "Login"}
           </Button>
         </form>
       </Form>
       <p className="px-6 text-center text-sm text-muted-foreground">
         By clicking continue, you agree to our{" "}
-        <a href="#" className="underline underline-offset-4 hover:text-primary">
+        <a
+          href={`${SITE_URL}/terms`}
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-4 hover:text-primary"
+        >
           Terms of Service
         </a>{" "}
         and{" "}
-        <a href="#" className="underline underline-offset-4 hover:text-primary">
+        <a
+          href={`${SITE_URL}/privacy`}
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-4 hover:text-primary"
+        >
           Privacy Policy
         </a>
         .

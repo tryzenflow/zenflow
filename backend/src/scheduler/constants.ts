@@ -11,7 +11,10 @@
 export const MAX_SCAN_DAYS = 60;
 
 /** Max sessions of one `TASK` series allowed to land on a single calendar day (issue #32). */
-export const MAX_SERIES_PER_DAY = 1;
+export const MAX_SERIES_PER_DAY = 3;
+
+/** Minimum gap between two sessions of one `TASK` series on the same day. */
+export const SERIES_GAP_MINUTES = 15;
 
 /**
  * Per-update step size η for preference-matrix acquisition.
@@ -63,13 +66,14 @@ export const STABILITY_WEIGHT = 0.1;
 export const STABILITY_SATURATION_HOURS = 4;
 
 /**
- * Reward written on the `SessionEvent` for each outcome of the move-or-keep
- * model. A user drag/resize of a scheduled TASK is a negative signal; a TASK
- * that elapses unmoved (detected by the RETAINED sweep) is a positive one.
- * `CREATE` events carry a neutral 0.
+ * Reward written on the `SessionEvent` for each outcome (ADR-0023). A user
+ * drag/resize of a scheduled TASK is graded by displacement (`MOVE`). An
+ * unmoved TASK is positive when checked off in its slot and negative when
+ * skipped or missed. `CREATE` events carry a neutral 0.
  */
 export const SESSION_MOVE_REWARD = -1.0;
-export const SESSION_RETAINED_REWARD = 1.0;
+export const SESSION_COMPLETED_REWARD = 1.0;
+export const SESSION_MISSED_REWARD = -1.0;
 
 /**
  * Disjoint LinUCB scheduling parameters
@@ -157,3 +161,6 @@ export const SESSION_SYSTEM_MOVE_REWARD = 0;
 /** Latest local start a scan considers (cap on days scanned, ~30d); does NOT
  * replace `MAX_SCAN_DAYS`, which still normalizes the context vector. */
 export const SCAN_CAP_DAYS = 30;
+
+/** How long a placement plan waiting for confirmation stays valid (ADR-0022). */
+export const PLACEMENT_PLAN_TTL_MS = 30 * 60_000;

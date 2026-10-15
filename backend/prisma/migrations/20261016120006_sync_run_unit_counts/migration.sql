@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "SyncRunUnit" ADD COLUMN     "changed" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "created" INTEGER NOT NULL DEFAULT 0;

@@ -2,7 +2,7 @@
 
 A series (``len(members) > 1``) whose members all set ``computeBoth`` with one
 shared ``primaryPolicy`` gets a heuristic-only plan and a LinUCB plan, each
-with its own sibling ledger (non-overlap + ``MAX_SERIES_PER_DAY``), over the
+with its own sibling ledger (non-overlap + the series day cap), over the
 same batched ``(M, N, D)`` tensor. Every other request keeps the single
 shared-ledger pass unchanged.
 """
@@ -13,7 +13,12 @@ from typing import Any
 
 import pytest
 
-from src.core.constants import DAY_MS, MAX_SERIES_PER_DAY, MS_PER_MINUTE
+from src.core.constants import (
+    DAY_MS,
+    MS_PER_MINUTE,
+    SERIES_GAP_MINUTES,
+)
+from src.core.series_spread import series_day_cap
 from src.core.slot import local_date_str
 from src.place import _Placer, _Timer
 from src.schemas_place import PlacedMember, PlaceRequest
@@ -51,10 +56,13 @@ def with_members(req: PlaceRequest, ms: list[dict[str, Any]]) -> PlaceRequest:
     return PlaceRequest.model_validate(body)
 
 
+GAP = SERIES_GAP_MINUTES * MS_PER_MINUTE
+
+
 def cross_midnight(policy: str) -> PlaceRequest:
     """4 sittings over 2 days: the LinUCB plan puts s0 at 23:45 (runs past
-    midnight), so a shared ledger would push the heuristic pick for s1 off
-    00:00 -- an independent heuristic plan doesn't see that sibling."""
+    midnight), so a shared ledger would move the heuristic pick for s1 -- an
+    independent heuristic plan doesn't see that sibling."""
     return make_req(
         members=members(policy, [120, 120, 60, 90]),
         deadlineMs=NOW + DAY_MS,
@@ -77,7 +85,19 @@ def spread(policy: str) -> PlaceRequest:
     )
 
 
-SCENARIOS = [cross_midnight, spread]
+def crowded(policy: str) -> PlaceRequest:
+    """8 hour-long sittings in 6 hours: at most 5 fit, the rest fall back."""
+    return make_req(
+        members=members(policy, [60] * 8),
+        deadlineMs=NOW + 6 * HOUR,
+        days=make_days(1),
+        maxScanDays=60,
+        bandit=bandit(warm_state(8)),
+        user={"preferenceMatrix": [0.0] * 168, "observationCount": 0},
+    )
+
+
+SCENARIOS = [cross_midnight, spread, crowded]
 POLICIES = ["HEURISTIC", "LINUCB"]
 
 
@@ -141,10 +161,10 @@ def test_alt_plan_does_not_share_the_applied_plans_ledger() -> None:
     assert s0.linucb is not None and s0.start_ms == s0.linucb.start_ms
     assert local_date_str(s0.start_ms, "UTC") == "2026-09-21"
     assert s0.start_ms + 120 * MS_PER_MINUTE > NOW + 16 * HOUR  # past midnight
-    # ...but s1's heuristic alternative is from the heuristic plan (its own s0
-    # at 08:00), not squeezed around the applied LinUCB s0.
+    # ...but s1's heuristic alternative is from the heuristic plan: one gap
+    # after its own s0 (08:00 to 10:00), not placed around the applied LinUCB s0.
     assert s1.heuristic is not None and shared[1].heuristic is not None
-    assert s1.heuristic.start_ms == NOW + 16 * HOUR  # 00:00 on day 2
+    assert s1.heuristic.start_ms == NOW + 2 * HOUR + GAP  # 10:15 on day 1
     assert shared[1].heuristic.start_ms != s1.heuristic.start_ms
 
 
@@ -152,14 +172,20 @@ def _assert_plan_valid(plan: list[PlacedMember], req: PlaceRequest) -> None:
     dur = {m.id: m.duration_minutes * MS_PER_MINUTE for m in req.members}
     starts = [r.start_ms for r in plan]
     assert all(s is not None for s in starts)  # invariant 7 (PLACE)
-    ivs = [(s, s + dur[r.id]) for s, r in zip(starts, plan, strict=True) if s]
+    # A last resort sitting in a full window may overlap; placed ones never do.
+    ivs = [
+        (s, s + dur[r.id])
+        for s, r in zip(starts, plan, strict=True)
+        if s and r.outcome == "PLACED"
+    ]
     for i, (a0, a1) in enumerate(ivs):
         for b0, b1 in ivs[i + 1 :]:
-            assert a1 <= b0 or b1 <= a0, "siblings overlap"
+            assert a1 + GAP <= b0 or b1 + GAP <= a0, "siblings too close"
     days = [local_date_str(a0, "UTC") for a0, _ in ivs]
-    for i, r in enumerate(plan):
-        if r.outcome == "PLACED":
-            assert days[:i].count(days[i]) < MAX_SERIES_PER_DAY
+    span = (req.deadline_ms - req.now_ms) // DAY_MS
+    cap = series_day_cap(span, len(req.members))
+    for i, day in enumerate(days):
+        assert days[:i].count(day) < cap
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS)
@@ -173,11 +199,13 @@ def test_both_plans_respect_cap_and_sibling_non_overlap(scenario: Any) -> None:
 def test_applied_plan_always_placed_and_last_resort_carries_no_pick(
     policy: str,
 ) -> None:
-    req = cross_midnight(policy)
+    req = crowded(policy)
     got = run(req)
     _assert_plan_valid(got, req)
-    assert [r.outcome for r in got[2:]] == ["ACCEPTED_LAST_RESORT"] * 2
-    assert all(r.heuristic is None and r.linucb is None for r in got[2:])
+    resorted = [r for r in got if r.outcome == "ACCEPTED_LAST_RESORT"]
+    assert len(resorted) >= 3
+    pick = "heuristic" if policy == "HEURISTIC" else "linucb"
+    assert all(getattr(r, pick) is None for r in resorted)
 
 
 def test_linucb_plan_member_falls_back_to_heuristic_when_linucb_finds_nothing(

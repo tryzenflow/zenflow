@@ -3,10 +3,10 @@ import { config } from "dotenv";
 /**
  * Process role (ADR-0011, ADR-0007). One image, picked by the `ROLE` env:
  *  - `api`            HTTP only; produces jobs, consumes none, no cron.
- *  - `watcher`        the cron heartbeat (ingestion ticker, reminder sweep,
+ *  - `watcher`        the cron heartbeat (ingestion watcher, reminder sweep,
  *                     retained-sessions, matrix decay); enqueues, never consumes.
- *  - `worker-portal`  consumes `portal-fetch`.
- *  - `worker-lms`     consumes `lms-fetch`.
+ *  - `worker-portal`  consumes every `portal-*` queue.
+ *  - `worker-lms`     consumes every `lms-*` queue.
  *  - `worker-notify`  consumes `notify` (push, email, reminder).
  *  - `worker`         watcher + every consumer (the pre-queue single worker).
  *  - `all`            everything incl. HTTP (default; local dev and the test stack).
@@ -59,7 +59,16 @@ export function parseRole(value: string | undefined): Role {
 }
 
 /** Names of the consumable queues (see `queue/queues.ts`). */
-export type ConsumedQueue = "portal-fetch" | "lms-fetch" | "notify";
+export type ConsumedQueue =
+  | "portal-fetch"
+  | "portal-profile"
+  | "portal-marks"
+  | "portal-discovery"
+  | "portal-week"
+  | "lms-fetch"
+  | "lms-discovery"
+  | "lms-month"
+  | "notify";
 
 /** Serves the API (controllers, sessions, CORS, Swagger). */
 export const runsHttp = (role: Role): boolean =>
@@ -76,9 +85,9 @@ export function consumesQueue(role: Role, queue: ConsumedQueue): boolean {
     case "worker":
       return true;
     case "worker-portal":
-      return queue === "portal-fetch";
+      return queue.startsWith("portal-");
     case "worker-lms":
-      return queue === "lms-fetch";
+      return queue.startsWith("lms-");
     case "worker-notify":
       return queue === "notify";
     default:

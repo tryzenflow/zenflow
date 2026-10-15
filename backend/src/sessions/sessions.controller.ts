@@ -17,17 +17,52 @@ import { SlotPickDto } from "./dto/slot-pick.dto";
 import { ListSessionsDto } from "./dto/list-sessions.dto";
 import { ListSessionSuggestionsDto } from "./dto/list-session-suggestions.dto";
 import { DeadlineOptionsDto } from "./dto/deadline-options.dto";
+import { SearchSessionsDto } from "./dto/search-sessions.dto";
+import { SessionSearchService } from "./session-search.service";
 import { SignNoteFilesInterceptor } from "./sign-note-files.interceptor";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { type User } from "../../generated/prisma";
 import { deadlineOptions } from "./utils/deadline-options";
+import { ConfirmPlacementDto } from "./dto/confirm-placement.dto";
+import { PlacementPlanService } from "./placement-plan.service";
+import { SessionAnchorService } from "./session-anchor.service";
 
 @Controller("sessions")
 @UseGuards(CookieAuthGuard)
 @UseInterceptors(SignNoteFilesInterceptor)
 export class SessionsController {
-  constructor(private readonly sessionsService: SessionsService) {}
+  constructor(
+    private readonly sessionsService: SessionsService,
+    private readonly searchService: SessionSearchService,
+    private readonly placementPlans: PlacementPlanService,
+    private readonly anchors: SessionAnchorService,
+  ) {}
+
+  // NOTE: must precede @Post(":id/...") routes so "placement" isn't matched as an :id.
+  /** Apply a plan the scheduler asked to confirm (ADR-0022). Atomic. */
+  @Post("placement/confirm")
+  async confirmPlacement(
+    @Body() dto: ConfirmPlacementDto,
+    @CurrentUser() user: User,
+  ) {
+    const data = await this.placementPlans.confirm(user, dto.planId);
+    return { success: true, message: "Placement confirmed", data };
+  }
+
+  /** Revert every move one undo group made (a drag, a cascade or a confirmed plan). */
+  @Post("undo/:groupId")
+  async undoPlacement(
+    @Param("groupId") groupId: string,
+    @CurrentUser() user: User,
+  ) {
+    const data = await this.placementPlans.undo(user, groupId);
+    return {
+      success: true,
+      message: `Restored ${data.restored.length} session(s)`,
+      data,
+    };
+  }
 
   @Post()
   async create(@Body() dto: CreateSessionDto, @CurrentUser() user: User) {
@@ -59,6 +94,17 @@ export class SessionsController {
     };
   }
 
+  // NOTE: must precede @Get(":id") so "search" isn't matched as an :id.
+  @Get("search")
+  async search(@Query() dto: SearchSessionsDto, @CurrentUser() user: User) {
+    const data = await this.searchService.search(dto, user);
+    return {
+      success: true,
+      message: `Found ${data.sessions.length} sessions`,
+      data,
+    };
+  }
+
   // NOTE: must precede @Get(":id") so "deadline-options" isn't matched as an :id.
   @Get("deadline-options")
   deadlineOptions(@Query() dto: DeadlineOptionsDto, @CurrentUser() user: User) {
@@ -82,6 +128,20 @@ export class SessionsController {
     return { success: true, message: "Session updated", data };
   }
 
+  /** Pin a task: the scheduler never moves it (ADR-0022). */
+  @Post(":id/pin")
+  async pin(@Param("id") id: string, @CurrentUser() user: User) {
+    const data = await this.anchors.pin(id, user);
+    return { success: true, message: "Session pinned", data };
+  }
+
+  /** Unpin a task: back to `AUTO`. */
+  @Delete(":id/pin")
+  async unpin(@Param("id") id: string, @CurrentUser() user: User) {
+    const data = await this.anchors.unpin(id, user);
+    return { success: true, message: "Session unpinned", data };
+  }
+
   @Post(":id/slot-pick")
   async slotPick(
     @Param("id") id: string,
@@ -90,6 +150,45 @@ export class SessionsController {
   ) {
     const data = await this.sessionsService.slotPick(id, dto, user);
     return { success: true, message: "Slot pick recorded", data };
+  }
+
+  @Post(":id/complete")
+  async complete(@Param("id") id: string, @CurrentUser() user: User) {
+    const data = await this.sessionsService.setCheckOff(
+      id,
+      "complete",
+      true,
+      user,
+    );
+    return { success: true, message: "Session completed", data };
+  }
+
+  @Delete(":id/complete")
+  async uncomplete(@Param("id") id: string, @CurrentUser() user: User) {
+    const data = await this.sessionsService.setCheckOff(
+      id,
+      "complete",
+      false,
+      user,
+    );
+    return { success: true, message: "Completion undone", data };
+  }
+
+  @Post(":id/skip")
+  async skip(@Param("id") id: string, @CurrentUser() user: User) {
+    const data = await this.sessionsService.setCheckOff(id, "skip", true, user);
+    return { success: true, message: "Session skipped", data };
+  }
+
+  @Delete(":id/skip")
+  async unskip(@Param("id") id: string, @CurrentUser() user: User) {
+    const data = await this.sessionsService.setCheckOff(
+      id,
+      "skip",
+      false,
+      user,
+    );
+    return { success: true, message: "Skip undone", data };
   }
 
   // NOTE: must precede @Delete(":id") so "series" isn't matched as an :id.

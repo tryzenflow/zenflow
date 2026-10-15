@@ -45,6 +45,14 @@ describe("renderLegalPage", () => {
     expect(html).not.toContain("<b>@x.test");
   });
 
+  it("names the site without breaking a contact address on the same domain", () => {
+    const html = renderLegalPage("privacy", "en", "privacy@usezenflow.com");
+    expect(html).toContain('<span class="nh">usezenflow.com</span>');
+    expect(html).toContain(
+      '<a href="mailto:privacy@usezenflow.com">privacy@usezenflow.com</a>',
+    );
+  });
+
   it("adds SEO metadata and an inline favicon, and absolute tags only with a base URL", () => {
     const bare = renderLegalPage("privacy", "en", "a@x.test");
     expect(bare).toContain('<meta name="description"');

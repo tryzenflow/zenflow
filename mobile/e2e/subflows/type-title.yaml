@@ -1,0 +1,10 @@
+# Types into the focused field and retypes once if the slow emulator dropped keys.
+appId: com.zenflow.app
+---
+- inputText: ${TITLE}
+- runFlow:
+    when:
+      notVisible: ${TITLE}
+    commands:
+      - eraseText: 40
+      - inputText: ${TITLE}

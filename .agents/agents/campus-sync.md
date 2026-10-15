@@ -8,6 +8,7 @@ owns:
   - backend/src/lms/**
   - backend/src/portal/**
   - backend/scripts/fixtures/**
+  - backend/scripts/backfill-lms-course.ts
   - backend/scripts/fake-dlu-server.ts
   - backend/scripts/fake-dlu-fixtures.ts
 tools: Read, Edit, Write, Grep, Glob, Bash

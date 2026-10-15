@@ -1,6 +1,6 @@
-# Marketing screenshots for the landing page and posts: signs in as a seeded
+# Marketing screenshots for the landing page, posts and ios.json: signs in as a seeded
 # fixture student (LMS and portal connected, see e2e/screenshots.sh) and
-# captures four screens. Not part of the smoke suite; run via `pnpm e2e:screenshots`.
+# captures the app screens. Not part of the smoke suite; run via `pnpm e2e:screenshots`.
 # Needs EMAIL (the seeded student) and MAILPIT_URL.
 appId: com.zenflow.app
 ---
@@ -11,6 +11,8 @@ appId: com.zenflow.app
       notifications: deny
 - assertVisible:
     id: login.email
+- tapOn:
+    id: login.use-email
 - tapOn:
     id: login.email
 - inputText: ${EMAIL}
@@ -37,19 +39,31 @@ appId: com.zenflow.app
       id: "task-block\\..*"
     timeout: 120000
 - waitForAnimationToEnd
-- takeScreenshot: week
+- takeScreenshot: day
 - tapOn:
-    id: tab.month
+    id: view-switch.week
 - extendedWaitUntil:
     visible:
-      id: tab.month
+      id: "week-bar\\..*"
+    timeout: 10000
+- waitForAnimationToEnd
+- takeScreenshot: week
+- tapOn:
+    id: view-switch.month
+- extendedWaitUntil:
+    visible:
+      id: "month-cell\\..*"
     timeout: 10000
 - waitForAnimationToEnd
 - takeScreenshot: month
 - tapOn:
-    id: tab.settings
+    id: tab.list
+- extendedWaitUntil:
+    visible:
+      id: "session-search\\.row\\..*"
+    timeout: 20000
 - waitForAnimationToEnd
-- takeScreenshot: settings
+- takeScreenshot: list
 - tapOn:
     id: tab.index
 - tapOn:
@@ -60,3 +74,21 @@ appId: com.zenflow.app
     timeout: 10000
 - waitForAnimationToEnd
 - takeScreenshot: new-task
+- tapOn:
+    id: task.close
+- tapOn:
+    id: tab.settings
+- extendedWaitUntil:
+    visible:
+      id: settings.student-card
+    timeout: 20000
+- waitForAnimationToEnd
+- takeScreenshot: settings
+- tapOn:
+    id: settings.student-card
+- extendedWaitUntil:
+    visible:
+      id: marks.sheet
+    timeout: 20000
+- waitForAnimationToEnd
+- takeScreenshot: marks

@@ -89,7 +89,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ...(googleServicesFile ? { googleServicesFile } : {}),
     // Resize the visible window when the keyboard opens instead of the
     // default pan behavior — required for `KeyboardAvoidingView`
-    // (`SessionFormScreen`) to work; without this the fixed footer + focused
+    // (the task composer sheet) to work; without this the fixed footer + focused
     // input near the bottom of the task form scroll can end up hidden under
     // the keyboard on Android (mirrors the `android_keyboardInputMode`
     // already passed to `BottomSheetModal` for the tag picker's own sheet).
@@ -139,9 +139,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       {
         image: "./assets/images/splash.png",
         resizeMode: "contain",
-        // The mark fills 560 of the PNG's 1024px, so 160 renders it at the
-        // 88pt `BootScreen` draws it at: the native → JS handover doesn't jump.
-        imageWidth: 160,
+        // The PNG is the whole tile, so 120 renders it at the 120pt
+        // `BootScreen` draws it at: the native → JS handover doesn't jump.
+        imageWidth: 120,
         // Match the app's own backgrounds (`--background`), light and dark.
         backgroundColor: "#FEFCFA",
         dark: { backgroundColor: "#0F0D0A" },

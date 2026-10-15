@@ -13,6 +13,14 @@ overrides:
 
 packageExtensionsChecksum: sha256-MiHZ3mgtOUb60KfpkAkui5ad/9eLmcQda0MiZKaTRqA=
 
+patchedDependencies:
+  expo-task-manager@58.0.11:
+    hash: 7356c7c63f56ce7eb8f40476e47d77ca0c6105553d60aca24c9f40e69261bf10
+    path: patches/expo-task-manager@58.0.11.patch
+  unimodules-app-loader@58.0.2:
+    hash: 47a0a861d867b84b9886ed7afc05a4579332270caac74061c2de7ec47545febe
+    path: patches/unimodules-app-loader@58.0.2.patch
+
 importers:
 
   .:
@@ -59,7 +67,7 @@ importers:
         version: 1.3.0(ioredis@5.11.1)(redis@5.12.1(@opentelemetry/api@1.9.1))
       '@nestjs-modules/mailer':
         specifier: ^2.0.2
-        version: 2.3.6(@nestjs/common@11.1.24(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.24)(@nestjs/event-emitter@3.1.0(@nestjs/common@11.1.24(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.24))(bullmq@6.3.11(ioredis@5.11.1)(pg@8.21.0)(redis@5.12.1(@opentelemetry/api@1.9.1)))(chokidar@4.0.3)(nodemailer@7.0.13)(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+        version: 2.3.6(@nestjs/common@11.1.24(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.24)(@nestjs/event-emitter@3.1.0(@nestjs/common@11.1.24(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.24))(bullmq@6.3.11(ioredis@5.11.1)(pg@8.21.0)(redis@5.12.1(@opentelemetry/api@1.9.1)))(chokidar@4.0.3)(nodemailer@7.0.13)(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
       '@nestjs/cache-manager':
         specifier: ^3.0.1
         version: 3.1.2(@nestjs/common@11.1.24(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.24)(cache-manager@7.2.8)(keyv@5.6.0)(rxjs@7.8.2)
@@ -123,6 +131,9 @@ importers:
       '@prisma/instrumentation':
         specifier: ^6.19.3
         version: 6.19.3(@opentelemetry/api@1.9.1)
+      '@react-email/components':
+        specifier: ^1.0.12
+        version: 1.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@zenflow/shared':
         specifier: workspace:*
         version: link:../packages/shared
@@ -201,6 +212,12 @@ importers:
       prisma:
         specifier: ^6.13.0
         version: 6.19.3(typescript@5.7.3)
+      react:
+        specifier: 19.3.0
+        version: 19.3.0
+      react-dom:
+        specifier: 19.3.0
+        version: 19.3.0(react@19.3.0)
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -259,6 +276,12 @@ importers:
       '@types/passport-local':
         specifier: ^1.0.38
         version: 1.0.38
+      '@types/react':
+        specifier: 19.3.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.3.0)
       '@types/supertest':
         specifier: ^6.0.2
         version: 6.0.3
@@ -390,7 +413,7 @@ importers:
         version: 0.5.20(tailwindcss@4.3.3)
       '@tailwindcss/vite':
         specifier: ^4.1.14
-        version: 4.3.3(vite@6.4.3(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.51.2)(yaml@2.9.0))
+        version: 4.3.3(vite@6.4.3(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.51.2)(yaml@2.9.1))
       '@tiptap/extension-highlight':
         specifier: ^3.11.0
         version: 3.26.0(@tiptap/core@3.26.0(@tiptap/pm@3.26.0))
@@ -499,7 +522,7 @@ importers:
         version: 0.2.6
       '@vitejs/plugin-react':
         specifier: ^4.2.1
-        version: 4.7.0(vite@6.4.3(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.51.2)(yaml@2.9.0))
+        version: 4.7.0(vite@6.4.3(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.51.2)(yaml@2.9.1))
       eslint:
         specifier: ^9.18.0
         version: 9.39.4(jiti@2.7.0)
@@ -526,10 +549,10 @@ importers:
         version: 8.60.1(eslint@9.39.4(jiti@2.7.0))(typescript@5.7.3)
       vite:
         specifier: ^6.0.11
-        version: 6.4.3(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.51.2)(yaml@2.9.0)
+        version: 6.4.3(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.51.2)(yaml@2.9.1)
       vite-plugin-pwa:
         specifier: ^0.21.1
-        version: 0.21.2(@vite-pwa/assets-generator@0.2.6)(vite@6.4.3(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.51.2)(yaml@2.9.0))(workbox-build@7.4.1(@types/babel__core@7.20.5))(workbox-window@7.4.1)
+        version: 0.21.2(@vite-pwa/assets-generator@0.2.6)(vite@6.4.3(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.51.2)(yaml@2.9.1))(workbox-build@7.4.1(@types/babel__core@7.20.5))(workbox-window@7.4.1)
       workbox-core:
         specifier: ^7.3.0
         version: 7.4.1
@@ -698,6 +721,9 @@ importers:
       expo-system-ui:
         specifier: ~58.0.3
         version: 58.0.3(expo@58.0.0-preview.8)(react-native-web@0.21.3(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-native@0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))
+      expo-task-manager:
+        specifier: ~58.0.11
+        version: 58.0.11(patch_hash=7356c7c63f56ce7eb8f40476e47d77ca0c6105553d60aca24c9f40e69261bf10)(expo@58.0.0-preview.8)(react-native@0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))
       expo-web-browser:
         specifier: ~58.0.2
         version: 58.0.2(expo@58.0.0-preview.8)(react-native@0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))
@@ -4852,6 +4878,185 @@ packages:
   '@radix-ui/rect@1.1.3':
     resolution: {integrity: sha512-JtyZR+mqgBibTo8xea3B6ZRmzZiM/YeVBtUkas6zMuXjAlfIFIW2FgqeM9eLyvEaYX66vr6DJMK+4U6LV0KhNw==}
 
+  '@react-email/body@0.3.0':
+    resolution: {integrity: sha512-uGo0BOOzjbMUo3lu+BIDWayvn5o6Xyfmnlla5VGf05n8gHMvO1ll7U4FtzWe3hxMLwt53pmc4iE0M+B5slG+Ug==}
+    engines: {node: '>=20.0.0'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/button@0.2.1':
+    resolution: {integrity: sha512-qXyj7RZLE7POy9BMKSoqQ00tOXThjOZSUnI2Yu9i29IHngPlmrNayIWBoVKtElES7OWwypUcpiajwi1mUWx6/A==}
+    engines: {node: '>=20.0.0'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/code-block@0.2.1':
+    resolution: {integrity: sha512-M3B7JpVH4ytgn83/ujRR1k1DQHvTeABiDM61OvAbjLRPhC/5KLHU5KkzIbbuGIrjWwxAbL1kSQzU8MhLEtSxyw==}
+    engines: {node: '>=20.0.0'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/code-inline@0.0.6':
+    resolution: {integrity: sha512-jfhebvv3dVsp3OdPgKXnk8+e2pBiDVZejDOBFzBa/IblrAJ9cQDkN6rBD5IyEg8hTOxwbw3iaI/yZFmDmIguIA==}
+    engines: {node: '>=20.0.0'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/column@0.0.14':
+    resolution: {integrity: sha512-f+W+Bk2AjNO77zynE33rHuQhyqVICx4RYtGX9NKsGUg0wWjdGP0qAuIkhx9Rnmk4/hFMo1fUrtYNqca9fwJdHg==}
+    engines: {node: '>=20.0.0'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/components@1.0.12':
+    resolution: {integrity: sha512-tH18JhPDWgE+3jnYkzyB6ZrZdfNnEsFe4PwmuXmlOw4NGIysP8wPY5aXZg++pTG9qUabXg1nzX/FGHGkObH8xQ==}
+    engines: {node: '>=20.0.0'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/container@0.0.16':
+    resolution: {integrity: sha512-QWBB56RkkU0AJ9h+qy33gfT5iuZknPC7Un/IjZv9B0QmMIK+WWacc0cH6y2SV5Cv/b99hU94fjEMOOO4enpkbQ==}
+    engines: {node: '>=20.0.0'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/font@0.0.10':
+    resolution: {integrity: sha512-0urVSgCmQIfx5r7Xc586miBnQUVnGp3OTYUm8m5pwtQRdTRO5XrTtEfNJ3JhYhSOruV0nD8fd+dXtKXobum6tA==}
+    engines: {node: '>=20.0.0'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/head@0.0.13':
+    resolution: {integrity: sha512-AJg6le/08Gz4tm+6MtKXqtNNyKHzmooOCdmtqmWxD7FxoAdU1eVcizhtQ0gcnVaY6ethEyE/hnEzQxt1zu5Kog==}
+    engines: {node: '>=20.0.0'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/heading@0.0.16':
+    resolution: {integrity: sha512-jmsKnQm1ykpBzw4hCYHwBkt5pW2jScXffPeEH5ZRF5tZeF5b1pvlFTO9han7C0pCkZYo1kEvWiRtx69yfCIwuw==}
+    engines: {node: '>=20.0.0'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/hr@0.0.12':
+    resolution: {integrity: sha512-TwmOmBDibavUQpXBxpmZYi2Iks/yeZOzFYh+di9EltMSnEabH8dMZXrl+pxNXzCgZ2XE8HY7VmUL65Lenfu5PA==}
+    engines: {node: '>=20.0.0'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/html@0.0.12':
+    resolution: {integrity: sha512-KTShZesan+UsreU7PDUV90afrZwU5TLwYlALuCSU0OT+/U8lULNNbAUekg+tGwCnOfIKYtpDPKkAMRdYlqUznw==}
+    engines: {node: '>=20.0.0'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/img@0.0.12':
+    resolution: {integrity: sha512-sRCpEARNVTf3FQhZOC+JTvu5r6ubiYWkT0ucYXg8ctkyi4G8QG+jgYPiNUqVeTLA2STOfmPM/nrk1nb84y6CPQ==}
+    engines: {node: '>=20.0.0'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/link@0.0.13':
+    resolution: {integrity: sha512-lkWc/NjOcefRZMkQoSDDbuKBEBDES9aXnFEOuPH845wD3TxPwh+QTf0fStuzjoRLUZWpHnio4z7qGGRYusn/sw==}
+    engines: {node: '>=20.0.0'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/markdown@0.0.18':
+    resolution: {integrity: sha512-gSuYK5fsMbGk87jDebqQ6fa2fKcWlkf2Dkva8kMONqLgGCq8/0d+ZQYMEJsdidIeBo3kmsnHZPrwdFB4HgjUXg==}
+    engines: {node: '>=20.0.0'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/preview@0.0.14':
+    resolution: {integrity: sha512-aYK8q0IPkBXyMsbpMXgxazwHxYJxTrXrV95GFuu2HbEiIToMwSyUgb8HDFYwPqqfV03/jbwqlsXmFxsOd+VNaw==}
+    engines: {node: '>=20.0.0'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/render@2.0.6':
+    resolution: {integrity: sha512-xOzaYkH3jLZKqN5MqrTXYnmqBYUnZSVbkxdb5PGGmDcK6sKDVMliaDiSwfXajRC9JtSHTcGc2tmGLHWuCgVpog==}
+    engines: {node: '>=20.0.0'}
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+      react-dom: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/row@0.0.13':
+    resolution: {integrity: sha512-bYnOac40vIKCId7IkwuLAAsa3fKfSfqCvv6epJKmPE0JBuu5qI4FHFCl9o9dVpIIS08s/ub+Y/txoMt0dYziGw==}
+    engines: {node: '>=20.0.0'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/section@0.0.17':
+    resolution: {integrity: sha512-qNl65ye3W0Rd5udhdORzTV9ezjb+GFqQQSae03NDzXtmJq6sqVXNWNiVolAjvJNypim+zGXmv6J9TcV5aNtE/w==}
+    engines: {node: '>=20.0.0'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/tailwind@2.0.7':
+    resolution: {integrity: sha512-kGw80weVFXikcnCXbigTGXGWQ0MRCSYNCudcdkWxebkWYd0FG6/NPoN3V1p/u68/4+NxZwYPVi2fhnp0x23HdA==}
+    engines: {node: '>=20.0.0'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+    peerDependencies:
+      '@react-email/body': '>=0'
+      '@react-email/button': '>=0'
+      '@react-email/code-block': '>=0'
+      '@react-email/code-inline': '>=0'
+      '@react-email/container': '>=0'
+      '@react-email/heading': '>=0'
+      '@react-email/hr': '>=0'
+      '@react-email/img': '>=0'
+      '@react-email/link': '>=0'
+      '@react-email/preview': '>=0'
+      '@react-email/text': '>=0'
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+    peerDependenciesMeta:
+      '@react-email/body':
+        optional: true
+      '@react-email/button':
+        optional: true
+      '@react-email/code-block':
+        optional: true
+      '@react-email/code-inline':
+        optional: true
+      '@react-email/container':
+        optional: true
+      '@react-email/heading':
+        optional: true
+      '@react-email/hr':
+        optional: true
+      '@react-email/img':
+        optional: true
+      '@react-email/link':
+        optional: true
+      '@react-email/preview':
+        optional: true
+
+  '@react-email/text@0.1.6':
+    resolution: {integrity: sha512-TYqkioRS45wTR5il3dYk/SbUjjEdhSwh9BtRNB99qNH1pXAwA45H7rAuxehiu8iJQJH0IyIr+6n62gBz9ezmsw==}
+    engines: {node: '>=20.0.0'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
   '@react-native-async-storage/async-storage@2.2.0':
     resolution: {integrity: sha512-gvRvjR5JAaUZF8tv2Kcq/Gbt3JHwbKFYfmb445rhOj6NUMx3qPLixmDx5pZAyb9at1bYvJ4/eTUipU5aki45xw==}
     peerDependencies:
@@ -5341,6 +5546,9 @@ packages:
 
   '@scarf/scarf@1.4.0':
     resolution: {integrity: sha512-xxeapPiUXdZAE3che6f3xogoJPeZgig6omHEy1rIY5WVsB3H2BHNnZH+gHG6x91SCWyQCzWGsuL2Hh3ClO5/qQ==}
+
+  '@selderee/plugin-htmlparser2@0.11.0':
+    resolution: {integrity: sha512-P33hHGdldxGabLFjPPpaTxVolMrzrcegejx+0GxjrIb9Zv48D8yAIA/QTDR2dFl7Uz7urX8aX6+5bCZslr+gWQ==}
 
   '@selderee/plugin-htmlparser2@0.12.0':
     resolution: {integrity: sha512-oELmoyA6ML9jDRMV3kgcMQFKxUfBU0yFVn6yTctVaLT5ygXnxH52I3TZEgV9EhXJC68/uFvE5Daj1/25c0Xa/A==}
@@ -7122,6 +7330,9 @@ packages:
   css-select@5.2.2:
     resolution: {integrity: sha512-TizTzUddG/xYLA3NXodFM0fSbNizXjOKhqiQQwvhlspadZokn1KDy0NZFS0wuEubIYAV5/c1/lAr0TaaFXEXzw==}
 
+  css-select@6.0.0:
+    resolution: {integrity: sha512-rZZVSLle8v0+EY8QAkDWrKhpgt6SA5OtHsgBnsj6ZaLb5dmDVOWUDtQitd9ydxxvEjhewNudS6eTVU7uOyzvXw==}
+
   css-tree@1.1.3:
     resolution: {integrity: sha512-tRpdppF7TRazZrjJ6v3stzv93qxRcSsFmW6cX0Zm2NVKpxE1WV1HblnghVv9TreireHkqI/VDEsfolRF1p6y7Q==}
     engines: {node: '>=8.0.0'}
@@ -7136,6 +7347,10 @@ packages:
 
   css-what@6.2.2:
     resolution: {integrity: sha512-u/O3vwbptzhMs3L1fQE82ZSLHQQfto5gyZzwteVIEyeaY5Fc7R4dapF/BvRoSYFeqfBk4m0V1Vafq5Pjv25wvA==}
+    engines: {node: '>= 6'}
+
+  css-what@7.0.0:
+    resolution: {integrity: sha512-wD5oz5xibMOPHzy13CyGmogB3phdvcDaB5t0W/Nr5Z2O/agcB8YwOz6e2Lsp10pNDzBoDO9nVa3RGs/2BttpHQ==}
     engines: {node: '>= 6'}
 
   cssesc@3.0.0:
@@ -8058,6 +8273,12 @@ packages:
       react-native-web:
         optional: true
 
+  expo-task-manager@58.0.11:
+    resolution: {integrity: sha512-ummXCHlVuQrWhnhwxBwIdWnao6bXneSgf1dzPTlMcPaflPlXr+wuiX30VMZNvA6mP9d2jVPlg+IRihj7udqbSQ==}
+    peerDependencies:
+      expo: '*'
+      react-native: '*'
+
   expo-updates-interface@58.0.0:
     resolution: {integrity: sha512-zFh/g/UJIN1NzGQZeH7WAuM3pJ86teBXAU3V234oBjsIEJT4ckcis/IIhHjkWswQ2Li7kOBeRCdCxEYDPAcHbA==}
     peerDependencies:
@@ -8630,6 +8851,10 @@ packages:
     resolution: {integrity: sha512-2OH59Gtprdczel+7Rxgpz9hGVJREaf8Lt1H4kZwWHpEn70VQKRuMNGsb2eDbwaTzrYzb0hheiOG1P7Dim0B4dQ==}
     engines: {node: '>=20.19.0'}
 
+  html-to-text@9.0.5:
+    resolution: {integrity: sha512-qY60FjREgVZL03vJU6IfMV4GDjGBIoOyvuFdpBDIX9yTlDw0TjxVBQp+P8NvpdIXNJvfWBTNul7fsAQJq2FNpg==}
+    engines: {node: '>=14'}
+
   htmlnano@3.3.2:
     resolution: {integrity: sha512-VtiwPbplKD8Xp/6mCJxbiTnJaqQvwIp+IovfFmgNL42Ltksl94zxP4YbVdR5qQ5shtEBhYzx+vpGc8v4QnjoyQ==}
     hasBin: true
@@ -8669,6 +8894,9 @@ packages:
 
   htmlparser2@7.2.0:
     resolution: {integrity: sha512-H7MImA4MS6cw7nbyURtLPO1Tms7C5H602LRETv95z1MxO/7CP7rDVROehUYeYBUYEON94NXXDEPmZuq+hX4sog==}
+
+  htmlparser2@8.0.2:
+    resolution: {integrity: sha512-GYdjWKDkbRLkZ5geuHs5NY1puJ+PXwP7+fHPRz06Eirsb9ugf6d8kkXav6ADhcODhFFPMIXyxkxSuMf3D6NCFA==}
 
   htmlparser2@9.1.0:
     resolution: {integrity: sha512-5zfg6mHUoaer/97TxnGpxmbR7zJtPwIYFMZ/H5ucTlPZhKvtum05yiPK3Mgai3a0DyVxv7qYqoweaEd2nrYQzQ==}
@@ -9306,6 +9534,9 @@ packages:
   launder@1.7.1:
     resolution: {integrity: sha512-mU6WRz5EusL9ZZuiZ5SO4Y6C0P9PAUR9iwdb6bzj4KDihm28DiHFw+/yk9DBH4f+Pv1wuzQ4e2jV3oQ7mkIqvw==}
 
+  leac@0.6.0:
+    resolution: {integrity: sha512-y+SqErxb8h7nE/fiEX07jsbuhrpO9lL8eca7/Y1nuWV2moNlXhyd59iDGcRf6moVyDMbmTNzL40SUyrFU/yDpg==}
+
   leac@0.7.0:
     resolution: {integrity: sha512-qMrZeyEekgdRQ9o6a4NAB2EQZrv827GJdn1vnapwSJ90hWRB4TzUSunvacPkxQ2TnNqHNI1/zSt0hlo0crG8Jw==}
 
@@ -9555,6 +9786,11 @@ packages:
 
   makeerror@1.0.12:
     resolution: {integrity: sha512-JmqCvUhmt43madlpFzG4BQzG2Z3m6tvQDNKdClZnO3VbIudJYmxsT0FNJMeiB2+JTSlTQTSbU8QdesVmwJcmLg==}
+
+  marked@15.0.12:
+    resolution: {integrity: sha512-8dD6FusOQSrpv9Z1rdNMdlSgQOIP880DHqnohobOmYLElGEqAL/JvxvuxZO16r4HtjTlfPRDC1hbvxC9dPN2nA==}
+    engines: {node: '>= 18'}
+    hasBin: true
 
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
@@ -10214,6 +10450,9 @@ packages:
   parse5@7.3.0:
     resolution: {integrity: sha512-IInvU7fabl34qmi9gY8XOVxhYyMyuH2xUNpb2q8/Y+7552KlejkRvqvD19nMoUW/uQGGbqNpA6Tufu5FL5BZgw==}
 
+  parseley@0.12.1:
+    resolution: {integrity: sha512-e6qHKe3a9HWr0oMRVDTRhKce+bRO8VGQR3NyVwcjwrbhMmFCX9KszEV35+rn4AdilFAq9VPxP/Fe1wC9Qjd2lw==}
+
   parseley@0.13.1:
     resolution: {integrity: sha512-uNBJZzmb60l6p6VWLTmevizNAGnE0xoSf1n0B4q3ntegDNzcS68NRCcBDZTcyXHxt2XhBChsCuqj4M+nChvE/A==}
 
@@ -10293,6 +10532,9 @@ packages:
 
   peberminta@0.10.0:
     resolution: {integrity: sha512-80B2AsU+I4Qdb0ZAPSfe9UwvGzwkM37IKIFEvdS3D/3Ndgv2bsuJ0bfG1+iEYO+l7Gfd4EUJmuRyq7efLgRMzQ==}
+
+  peberminta@0.9.0:
+    resolution: {integrity: sha512-XIxfHpEuSJbITd1H3EeQwpcZbTLHc+VVr8ANI9t5sit565tsI4/xK3KWTUFE2e6QiangUkh3B0jihzmGnNrRsQ==}
 
   perfect-debounce@1.0.0:
     resolution: {integrity: sha512-xCy9V055GLEqoFaHoC1SoLIaLmWctgCUaBaWxDZ7/Zx4CTyX7cJQLJOok/orfjZAh9kEYpjJa4d0KcJmCbctZA==}
@@ -10704,6 +10946,10 @@ packages:
     peerDependenciesMeta:
       typescript:
         optional: true
+
+  prismjs@1.30.0:
+    resolution: {integrity: sha512-DEvV2ZF2r2/63V+tK8hQvrR2ZGn10srHbXviTlcv7Kpzw8jWiNTqbVgjO3IY8RxrrOUF8VPMQQFysYYYv0YZxw==}
+    engines: {node: '>=6'}
 
   proc-log@4.2.0:
     resolution: {integrity: sha512-g8+OnU/L2v+wyiVK+D5fA34J7EH8jZ8DDlvwhRCMxmMj7UCBvxiO1mGeN+36JXIKF4zevU4kRBd8lVgG9vLelA==}
@@ -11330,6 +11576,10 @@ packages:
     resolution: {integrity: sha512-6R3J5M4AcbtLUdZmRv2SygeVaM7IhrLXu9BmnOGmmACak8fiUtOsYNWUS4uK7upbmHIBbLBeFeI//477BKLBzA==}
     engines: {node: '>=11.0.0'}
 
+  sax@1.6.1:
+    resolution: {integrity: sha512-42tBVwLWnaQvW5zc4HbZrTuWccECCZfBi92FDuwtqxasH+JbPB3/FOKb1m222K42R4WxuxzzMsTswfzgtSu64Q==}
+    engines: {node: '>=11.0.0'}
+
   scheduler@0.23.2:
     resolution: {integrity: sha512-UOShsPwz7NrMUqhR6t0hWjFduvOzbtv7toDH1/hIrfRNIDBnnBWd0CwJTGvTpngVlmwGCdP9/Zl/tVrDqcuYzQ==}
 
@@ -11346,6 +11596,9 @@ packages:
 
   secure-json-parse@4.1.0:
     resolution: {integrity: sha512-l4KnYfEyqYJxDwlNVyRfO2E4NTHfMKAWdUuA8J0yve2Dz/E/PdBepY03RvyJpssIpRFwJoCD55wA+mEDs6ByWA==}
+
+  selderee@0.11.0:
+    resolution: {integrity: sha512-5TF+l7p4+OsnP8BCCvSyZiSPc4x4//p5uPwK8TCnVPJYRmU2aYKMpOXvw8zM5a5JvuuCGN1jmsMwuU2W02ukfA==}
 
   selderee@0.12.0:
     resolution: {integrity: sha512-b1YMh3+DHZp59DLna3qVwQ5iOla/nrI6mLBNW02XxU77M3046Df6VLkoaJyFz20VsGIG5kkp+FK0kg4K4HnUFw==}
@@ -11752,6 +12005,11 @@ packages:
 
   svgo@4.0.1:
     resolution: {integrity: sha512-XDpWUOPC6FEibaLzjfe0ucaV0YrOjYotGJO1WpF0Zd+n6ZGEQUsSugaoLq9QkEZtAfQIxT42UChcssDVPP3+/w==}
+    engines: {node: '>=16'}
+    hasBin: true
+
+  svgo@4.1.0:
+    resolution: {integrity: sha512-bkxnTg1kSU0guhIBmibA6UUhrQmPVA1XsQLN+ylCd+UWzbnLkySOcXpyk1mrl05f+pcaCx2eHb+sp6BgMZWX+Q==}
     engines: {node: '>=16'}
     hasBin: true
 
@@ -12206,6 +12464,9 @@ packages:
   unicode-property-aliases-ecmascript@2.2.0:
     resolution: {integrity: sha512-hpbDzxUY9BFwX+UeBnxv3Sh1q7HFxj48DTmXchNgRa46lO8uj3/1iEn3MiNUYTg1g9ctIqXCCERn8gYZhHC5lQ==}
     engines: {node: '>=4'}
+
+  unimodules-app-loader@58.0.2:
+    resolution: {integrity: sha512-d7vZN9/awIwPCqzfw1qR/geJEzv3ElW0VdwXFnPw29QZYoAZI0jqXGKPZVG1vQCfhEiWJtBX/nVm1XI8wshrDg==}
 
   unique-string@2.0.0:
     resolution: {integrity: sha512-uNaeirEPvpZWSgzwsPGtU2zVSTrn/8L5q/IexZmH0eH6SA73CmAA5U4GwORTxQAZs95TAXLNqeLoPPNO5gZfWg==}
@@ -12685,6 +12946,11 @@ packages:
 
   yaml@2.9.0:
     resolution: {integrity: sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==}
+    engines: {node: '>= 14.6'}
+    hasBin: true
+
+  yaml@2.9.1:
+    resolution: {integrity: sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==}
     engines: {node: '>= 14.6'}
     hasBin: true
 
@@ -15514,7 +15780,7 @@ snapshots:
       '@tybys/wasm-util': 0.10.2
     optional: true
 
-  '@nestjs-modules/mailer@2.3.6(@nestjs/common@11.1.24(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.24)(@nestjs/event-emitter@3.1.0(@nestjs/common@11.1.24(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.24))(bullmq@6.3.11(ioredis@5.11.1)(pg@8.21.0)(redis@5.12.1(@opentelemetry/api@1.9.1)))(chokidar@4.0.3)(nodemailer@7.0.13)(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)':
+  '@nestjs-modules/mailer@2.3.6(@nestjs/common@11.1.24(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.24)(@nestjs/event-emitter@3.1.0(@nestjs/common@11.1.24(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.24))(bullmq@6.3.11(ioredis@5.11.1)(pg@8.21.0)(redis@5.12.1(@opentelemetry/api@1.9.1)))(chokidar@4.0.3)(nodemailer@7.0.13)(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)':
     dependencies:
       '@css-inline/css-inline': 0.20.0
       '@nestjs/common': 11.1.24(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -15531,7 +15797,7 @@ snapshots:
       ejs: 5.0.2
       handlebars: 4.7.9
       liquidjs: 10.27.0
-      mjml: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
       nunjucks: 3.2.4(chokidar@4.0.3)
       preview-email: 3.1.3
       pug: 3.0.4
@@ -17478,6 +17744,130 @@ snapshots:
 
   '@radix-ui/rect@1.1.3': {}
 
+  '@react-email/body@0.3.0(react@19.3.0)':
+    dependencies:
+      react: 19.3.0
+
+  '@react-email/button@0.2.1(react@19.3.0)':
+    dependencies:
+      react: 19.3.0
+
+  '@react-email/code-block@0.2.1(react@19.3.0)':
+    dependencies:
+      prismjs: 1.30.0
+      react: 19.3.0
+
+  '@react-email/code-inline@0.0.6(react@19.3.0)':
+    dependencies:
+      react: 19.3.0
+
+  '@react-email/column@0.0.14(react@19.3.0)':
+    dependencies:
+      react: 19.3.0
+
+  '@react-email/components@1.0.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
+    dependencies:
+      '@react-email/body': 0.3.0(react@19.3.0)
+      '@react-email/button': 0.2.1(react@19.3.0)
+      '@react-email/code-block': 0.2.1(react@19.3.0)
+      '@react-email/code-inline': 0.0.6(react@19.3.0)
+      '@react-email/column': 0.0.14(react@19.3.0)
+      '@react-email/container': 0.0.16(react@19.3.0)
+      '@react-email/font': 0.0.10(react@19.3.0)
+      '@react-email/head': 0.0.13(react@19.3.0)
+      '@react-email/heading': 0.0.16(react@19.3.0)
+      '@react-email/hr': 0.0.12(react@19.3.0)
+      '@react-email/html': 0.0.12(react@19.3.0)
+      '@react-email/img': 0.0.12(react@19.3.0)
+      '@react-email/link': 0.0.13(react@19.3.0)
+      '@react-email/markdown': 0.0.18(react@19.3.0)
+      '@react-email/preview': 0.0.14(react@19.3.0)
+      '@react-email/render': 2.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@react-email/row': 0.0.13(react@19.3.0)
+      '@react-email/section': 0.0.17(react@19.3.0)
+      '@react-email/tailwind': 2.0.7(@react-email/body@0.3.0(react@19.3.0))(@react-email/button@0.2.1(react@19.3.0))(@react-email/code-block@0.2.1(react@19.3.0))(@react-email/code-inline@0.0.6(react@19.3.0))(@react-email/container@0.0.16(react@19.3.0))(@react-email/heading@0.0.16(react@19.3.0))(@react-email/hr@0.0.12(react@19.3.0))(@react-email/img@0.0.12(react@19.3.0))(@react-email/link@0.0.13(react@19.3.0))(@react-email/preview@0.0.14(react@19.3.0))(@react-email/text@0.1.6(react@19.3.0))(react@19.3.0)
+      '@react-email/text': 0.1.6(react@19.3.0)
+      react: 19.3.0
+    transitivePeerDependencies:
+      - react-dom
+
+  '@react-email/container@0.0.16(react@19.3.0)':
+    dependencies:
+      react: 19.3.0
+
+  '@react-email/font@0.0.10(react@19.3.0)':
+    dependencies:
+      react: 19.3.0
+
+  '@react-email/head@0.0.13(react@19.3.0)':
+    dependencies:
+      react: 19.3.0
+
+  '@react-email/heading@0.0.16(react@19.3.0)':
+    dependencies:
+      react: 19.3.0
+
+  '@react-email/hr@0.0.12(react@19.3.0)':
+    dependencies:
+      react: 19.3.0
+
+  '@react-email/html@0.0.12(react@19.3.0)':
+    dependencies:
+      react: 19.3.0
+
+  '@react-email/img@0.0.12(react@19.3.0)':
+    dependencies:
+      react: 19.3.0
+
+  '@react-email/link@0.0.13(react@19.3.0)':
+    dependencies:
+      react: 19.3.0
+
+  '@react-email/markdown@0.0.18(react@19.3.0)':
+    dependencies:
+      marked: 15.0.12
+      react: 19.3.0
+
+  '@react-email/preview@0.0.14(react@19.3.0)':
+    dependencies:
+      react: 19.3.0
+
+  '@react-email/render@2.0.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
+    dependencies:
+      html-to-text: 9.0.5
+      prettier: 3.8.3
+      react: 19.3.0
+      react-dom: 19.3.0(react@19.3.0)
+
+  '@react-email/row@0.0.13(react@19.3.0)':
+    dependencies:
+      react: 19.3.0
+
+  '@react-email/section@0.0.17(react@19.3.0)':
+    dependencies:
+      react: 19.3.0
+
+  '@react-email/tailwind@2.0.7(@react-email/body@0.3.0(react@19.3.0))(@react-email/button@0.2.1(react@19.3.0))(@react-email/code-block@0.2.1(react@19.3.0))(@react-email/code-inline@0.0.6(react@19.3.0))(@react-email/container@0.0.16(react@19.3.0))(@react-email/heading@0.0.16(react@19.3.0))(@react-email/hr@0.0.12(react@19.3.0))(@react-email/img@0.0.12(react@19.3.0))(@react-email/link@0.0.13(react@19.3.0))(@react-email/preview@0.0.14(react@19.3.0))(@react-email/text@0.1.6(react@19.3.0))(react@19.3.0)':
+    dependencies:
+      '@react-email/text': 0.1.6(react@19.3.0)
+      react: 19.3.0
+      tailwindcss: 4.3.3
+    optionalDependencies:
+      '@react-email/body': 0.3.0(react@19.3.0)
+      '@react-email/button': 0.2.1(react@19.3.0)
+      '@react-email/code-block': 0.2.1(react@19.3.0)
+      '@react-email/code-inline': 0.0.6(react@19.3.0)
+      '@react-email/container': 0.0.16(react@19.3.0)
+      '@react-email/heading': 0.0.16(react@19.3.0)
+      '@react-email/hr': 0.0.12(react@19.3.0)
+      '@react-email/img': 0.0.12(react@19.3.0)
+      '@react-email/link': 0.0.13(react@19.3.0)
+      '@react-email/preview': 0.0.14(react@19.3.0)
+
+  '@react-email/text@0.1.6(react@19.3.0)':
+    dependencies:
+      react: 19.3.0
+
   '@react-native-async-storage/async-storage@2.2.0(react-native@0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))':
     dependencies:
       merge-options: 3.0.4
@@ -17891,6 +18281,11 @@ snapshots:
 
   '@scarf/scarf@1.4.0': {}
 
+  '@selderee/plugin-htmlparser2@0.11.0':
+    dependencies:
+      domhandler: 5.0.3
+      selderee: 0.11.0
+
   '@selderee/plugin-htmlparser2@0.12.0(selderee@0.12.0)':
     dependencies:
       domelementtype: 2.3.0
@@ -18022,12 +18417,12 @@ snapshots:
       postcss-selector-parser: 6.0.10
       tailwindcss: 4.3.3
 
-  '@tailwindcss/vite@4.3.3(vite@6.4.3(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.51.2)(yaml@2.9.0))':
+  '@tailwindcss/vite@4.3.3(vite@6.4.3(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.51.2)(yaml@2.9.1))':
     dependencies:
       '@tailwindcss/node': 4.3.3
       '@tailwindcss/oxide': 4.3.3
       tailwindcss: 4.3.3
-      vite: 6.4.3(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.51.2)(yaml@2.9.0)
+      vite: 6.4.3(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.51.2)(yaml@2.9.1)
 
   '@testing-library/dom@10.4.2':
     dependencies:
@@ -18727,7 +19122,7 @@ snapshots:
       - bare-buffer
       - react-native-b4a
 
-  '@vitejs/plugin-react@4.7.0(vite@6.4.3(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.51.2)(yaml@2.9.0))':
+  '@vitejs/plugin-react@4.7.0(vite@6.4.3(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.51.2)(yaml@2.9.1))':
     dependencies:
       '@babel/core': 7.29.7
       '@babel/plugin-transform-react-jsx-self': 7.29.7(@babel/core@7.29.7)
@@ -18735,7 +19130,7 @@ snapshots:
       '@rolldown/pluginutils': 1.0.0-beta.27
       '@types/babel__core': 7.20.5
       react-refresh: 0.17.0
-      vite: 6.4.3(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.51.2)(yaml@2.9.0)
+      vite: 6.4.3(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.51.2)(yaml@2.9.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -19840,6 +20235,15 @@ snapshots:
       domutils: 3.2.2
       nth-check: 2.1.1
 
+  css-select@6.0.0:
+    dependencies:
+      boolbase: 1.0.0
+      css-what: 7.0.0
+      domhandler: 5.0.3
+      domutils: 3.2.2
+      nth-check: 2.1.1
+    optional: true
+
   css-tree@1.1.3:
     dependencies:
       mdn-data: 2.0.14
@@ -19858,6 +20262,9 @@ snapshots:
     optional: true
 
   css-what@6.2.2: {}
+
+  css-what@7.0.0:
+    optional: true
 
   cssesc@3.0.0: {}
 
@@ -20908,6 +21315,12 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  expo-task-manager@58.0.11(patch_hash=7356c7c63f56ce7eb8f40476e47d77ca0c6105553d60aca24c9f40e69261bf10)(expo@58.0.0-preview.8)(react-native@0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0)):
+    dependencies:
+      expo: 58.0.0-preview.8(@babel/core@7.29.7)(@expo/dom-webview@58.0.1)(@expo/metro-runtime@58.0.8)(expo-router@58.0.9)(react-dom@19.3.0(react@19.3.0))(react-native-web@0.21.3(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-native-webview@14.0.1(react-native@0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react-native-worklets@0.13.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(react-native@0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react-native@0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
+      react-native: 0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0)
+      unimodules-app-loader: 58.0.2(patch_hash=47a0a861d867b84b9886ed7afc05a4579332270caac74061c2de7ec47545febe)
+
   expo-updates-interface@58.0.0(expo@58.0.0-preview.8):
     dependencies:
       expo: 58.0.0-preview.8(@babel/core@7.29.7)(@expo/dom-webview@58.0.1)(@expo/metro-runtime@58.0.8)(expo-router@58.0.9)(react-dom@19.3.0(react@19.3.0))(react-native-web@0.21.3(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-native-webview@14.0.1(react-native@0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react-native-worklets@0.13.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(react-native@0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react-native@0.88.0-rc.2(@babel/core@7.29.7)(@react-native/metro-config@0.88.0-rc.2(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
@@ -21683,7 +22096,15 @@ snapshots:
       selderee: 0.12.0
     optional: true
 
-  htmlnano@3.3.2(cssnano@7.1.9(postcss@8.5.28))(postcss@8.5.28)(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  html-to-text@9.0.5:
+    dependencies:
+      '@selderee/plugin-htmlparser2': 0.11.0
+      deepmerge: 4.3.1
+      dom-serializer: 2.0.0
+      htmlparser2: 8.0.2
+      selderee: 0.11.0
+
+  htmlnano@3.3.2(cssnano@7.1.9(postcss@8.5.28))(postcss@8.5.28)(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@types/relateurl': 0.2.33
       commander: 14.0.3
@@ -21692,7 +22113,7 @@ snapshots:
     optionalDependencies:
       cssnano: 7.1.9(postcss@8.5.28)
       postcss: 8.5.28
-      svgo: 4.0.1
+      svgo: 4.1.0
       terser: 5.51.2
     transitivePeerDependencies:
       - typescript
@@ -21719,6 +22140,13 @@ snapshots:
       domutils: 2.8.0
       entities: 3.0.1
     optional: true
+
+  htmlparser2@8.0.2:
+    dependencies:
+      domelementtype: 2.3.0
+      domhandler: 5.0.3
+      domutils: 3.2.2
+      entities: 4.5.0
 
   htmlparser2@9.1.0:
     dependencies:
@@ -22585,6 +23013,8 @@ snapshots:
     dependencies:
       dayjs: 1.11.23
 
+  leac@0.6.0: {}
+
   leac@0.7.0:
     optional: true
 
@@ -22796,6 +23226,8 @@ snapshots:
   makeerror@1.0.12:
     dependencies:
       tmpl: 1.0.5
+
+  marked@15.0.12: {}
 
   math-intrinsics@1.1.0: {}
 
@@ -23054,11 +23486,11 @@ snapshots:
 
   minipass@7.1.3: {}
 
-  mjml-accordion@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-accordion@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23069,11 +23501,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-body@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-body@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23084,11 +23516,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-button@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-button@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23099,11 +23531,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-carousel@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-carousel@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23114,16 +23546,16 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-cli@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-cli@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       chokidar: 4.0.3
       glob: 11.1.0
       lodash: 4.18.1
       minimatch: 10.2.5
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
       mjml-parser-xml: 5.3.0
-      mjml-preset-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-preset-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
       mjml-validator: 5.3.0
       yargs: 17.7.2
     transitivePeerDependencies:
@@ -23136,11 +23568,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-column@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-column@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23151,14 +23583,14 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-core@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-core@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       cheerio: 1.0.0
       cssnano: 7.1.9(postcss@8.5.28)
       cssnano-preset-lite: 4.0.6(postcss@8.5.28)
       detect-node: 2.1.0
-      htmlnano: 3.3.2(cssnano@7.1.9(postcss@8.5.28))(postcss@8.5.28)(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      htmlnano: 3.3.2(cssnano@7.1.9(postcss@8.5.28))(postcss@8.5.28)(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
       js-beautify: 1.15.4
       juice: 11.1.1
       lodash: 4.18.1
@@ -23175,11 +23607,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-divider@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-divider@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23190,11 +23622,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-group@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-group@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23205,11 +23637,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-head-attributes@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-head-attributes@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23220,11 +23652,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-head-breakpoint@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-head-breakpoint@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23235,11 +23667,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-head-font@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-head-font@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23250,11 +23682,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-head-html-attributes@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-head-html-attributes@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23265,11 +23697,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-head-preview@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-head-preview@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23280,11 +23712,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-head-style@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-head-style@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23295,11 +23727,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-head-title@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-head-title@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23310,11 +23742,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-head@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-head@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23325,11 +23757,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-hero@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-hero@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23340,11 +23772,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-image@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-image@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23355,11 +23787,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-navbar@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-navbar@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23378,34 +23810,34 @@ snapshots:
       lodash: 4.18.1
     optional: true
 
-  mjml-preset-core@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-preset-core@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
-      mjml-accordion: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-body: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-button: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-carousel: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-column: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-divider: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-group: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-head: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-head-attributes: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-head-breakpoint: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-head-font: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-head-html-attributes: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-head-preview: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-head-style: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-head-title: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-hero: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-image: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-navbar: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-raw: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-section: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-social: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-spacer: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-table: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-text: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-wrapper: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-accordion: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-body: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-button: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-carousel: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-column: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-divider: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-group: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-head: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-head-attributes: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-head-breakpoint: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-head-font: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-head-html-attributes: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-head-preview: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-head-style: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-head-title: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-hero: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-image: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-navbar: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-raw: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-section: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-social: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-spacer: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-table: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-text: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-wrapper: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23416,11 +23848,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-raw@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-raw@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23431,11 +23863,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-section@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-section@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23446,11 +23878,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-social@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-social@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23461,11 +23893,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-spacer@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-spacer@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23476,11 +23908,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-table@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-table@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23491,11 +23923,11 @@ snapshots:
       - uncss
     optional: true
 
-  mjml-text@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-text@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23511,12 +23943,12 @@ snapshots:
       '@babel/runtime': 7.29.7
     optional: true
 
-  mjml-wrapper@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml-wrapper@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
       lodash: 4.18.1
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-section: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-section: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
     transitivePeerDependencies:
       - purgecss
       - relateurl
@@ -23527,12 +23959,12 @@ snapshots:
       - uncss
     optional: true
 
-  mjml@5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3):
+  mjml@5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3):
     dependencies:
       '@babel/runtime': 7.29.7
-      mjml-cli: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
-      mjml-preset-core: 5.3.0(svgo@4.0.1)(terser@5.51.2)(typescript@5.7.3)
+      mjml-cli: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
+      mjml-preset-core: 5.3.0(svgo@4.1.0)(terser@5.51.2)(typescript@5.7.3)
       mjml-validator: 5.3.0
     transitivePeerDependencies:
       - purgecss
@@ -23946,6 +24378,11 @@ snapshots:
       entities: 6.0.1
     optional: true
 
+  parseley@0.12.1:
+    dependencies:
+      leac: 0.6.0
+      peberminta: 0.9.0
+
   parseley@0.13.1:
     dependencies:
       leac: 0.7.0
@@ -24022,6 +24459,8 @@ snapshots:
 
   peberminta@0.10.0:
     optional: true
+
+  peberminta@0.9.0: {}
 
   perfect-debounce@1.0.0: {}
 
@@ -24469,6 +24908,8 @@ snapshots:
       typescript: 5.7.3
     transitivePeerDependencies:
       - magicast
+
+  prismjs@1.30.0: {}
 
   proc-log@4.2.0: {}
 
@@ -25333,6 +25774,9 @@ snapshots:
 
   sax@1.6.0: {}
 
+  sax@1.6.1:
+    optional: true
+
   scheduler@0.23.2:
     dependencies:
       loose-envify: 1.4.0
@@ -25353,6 +25797,10 @@ snapshots:
       ajv-keywords: 5.1.0(ajv@8.20.0)
 
   secure-json-parse@4.1.0: {}
+
+  selderee@0.11.0:
+    dependencies:
+      parseley: 0.12.1
 
   selderee@0.12.0:
     dependencies:
@@ -25834,6 +26282,17 @@ snapshots:
       sax: 1.6.0
     optional: true
 
+  svgo@4.1.0:
+    dependencies:
+      commander: 11.1.0
+      css-select: 6.0.0
+      css-tree: 3.2.1
+      css-what: 7.0.0
+      csso: 5.0.5
+      picocolors: 1.1.1
+      sax: 1.6.1
+    optional: true
+
   swagger-ui-dist@5.32.6:
     dependencies:
       '@scarf/scarf': 1.4.0
@@ -26308,6 +26767,8 @@ snapshots:
 
   unicode-property-aliases-ecmascript@2.2.0: {}
 
+  unimodules-app-loader@58.0.2(patch_hash=47a0a861d867b84b9886ed7afc05a4579332270caac74061c2de7ec47545febe): {}
+
   unique-string@2.0.0:
     dependencies:
       crypto-random-string: 2.0.0
@@ -26455,12 +26916,12 @@ snapshots:
       - supports-color
       - terser
 
-  vite-plugin-pwa@0.21.2(@vite-pwa/assets-generator@0.2.6)(vite@6.4.3(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.51.2)(yaml@2.9.0))(workbox-build@7.4.1(@types/babel__core@7.20.5))(workbox-window@7.4.1):
+  vite-plugin-pwa@0.21.2(@vite-pwa/assets-generator@0.2.6)(vite@6.4.3(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.51.2)(yaml@2.9.1))(workbox-build@7.4.1(@types/babel__core@7.20.5))(workbox-window@7.4.1):
     dependencies:
       debug: 4.4.3
       pretty-bytes: 6.1.1
       tinyglobby: 0.2.17
-      vite: 6.4.3(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.51.2)(yaml@2.9.0)
+      vite: 6.4.3(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.51.2)(yaml@2.9.1)
       workbox-build: 7.4.1(@types/babel__core@7.20.5)
       workbox-window: 7.4.1
     optionalDependencies:
@@ -26479,7 +26940,7 @@ snapshots:
       lightningcss: 1.30.1
       terser: 5.51.2
 
-  vite@6.4.3(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.51.2)(yaml@2.9.0):
+  vite@6.4.3(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.51.2)(yaml@2.9.1):
     dependencies:
       esbuild: 0.25.12
       fdir: 6.5.0(picomatch@4.0.4)
@@ -26493,7 +26954,7 @@ snapshots:
       jiti: 2.7.0
       lightningcss: 1.30.1
       terser: 5.51.2
-      yaml: 2.9.0
+      yaml: 2.9.1
 
   vitest@2.1.9(@types/node@26.6.4)(happy-dom@20.14.5)(lightningcss@1.30.1)(msw@2.15.0(@types/node@26.6.4)(typescript@6.0.3))(terser@5.51.2):
     dependencies:
@@ -26870,6 +27331,9 @@ snapshots:
   yallist@3.1.1: {}
 
   yaml@2.9.0: {}
+
+  yaml@2.9.1:
+    optional: true
 
   yargs-parser@21.1.1: {}
 
