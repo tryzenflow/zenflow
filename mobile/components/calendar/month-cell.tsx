@@ -15,6 +15,9 @@ import {
   monthPillCap,
   splitCellSessions,
 } from "@/lib/month-date-math";
+import { useCourseColourStore } from "@/hooks/use-course-colours";
+import { courseStyleFor } from "@/lib/course-colour";
+import { useColorScheme } from "@/lib/useColorScheme";
 import { isSessionPastDeadline } from "@/lib/overdue";
 import { SESSION_TYPE_META } from "@zenflow/core";
 import {
@@ -268,13 +271,33 @@ const MonthPill = memo(function MonthPill({ session, hidden }: MonthPillProps) {
   const late = isSessionPastDeadline(session);
   const Icon = sessionTypeIcon(session.type);
   const continuation = isContinuationEntry(session);
+  const { isDarkColorScheme } = useColorScheme();
+  const overrides = useCourseColourStore((s) => s.overrides);
+  // Course colour wins over the type tone; late stays cherry.
+  const course =
+    late || !session.courseKey
+      ? null
+      : courseStyleFor(
+          session.courseKey,
+          overrides,
+          isDarkColorScheme ? "dark" : "light",
+        );
 
   return (
     <View
-      style={hidden ? { opacity: 0 } : undefined}
+      style={[
+        hidden ? { opacity: 0 } : undefined,
+        course
+          ? { backgroundColor: course.tint, borderLeftColor: course.stripe }
+          : undefined,
+      ]}
       className={cn(
         "flex-row items-center gap-1 rounded-[5px] border-l-2 px-1.5 py-0.5",
-        late ? MONTH_PILL_LATE_CLASSES : MONTH_PILL_CLASSES[state],
+        late
+          ? MONTH_PILL_LATE_CLASSES
+          : course
+            ? undefined
+            : MONTH_PILL_CLASSES[state],
         continuation &&
           "rounded-t-none border-t-[1.5px] border-t-muted-foreground/50 [border-top-style:dashed]",
       )}
@@ -296,11 +319,14 @@ const MonthPill = memo(function MonthPill({ session, hidden }: MonthPillProps) {
       )}
       <Text
         numberOfLines={1}
+        style={course ? { color: course.ink } : undefined}
         className={cn(
           "flex-1 text-[9.5px] font-semibold leading-tight",
           late
             ? "text-session-late-ink"
-            : MONTH_PILL_TEXT_CLASSES[state],
+            : course
+              ? undefined
+              : MONTH_PILL_TEXT_CLASSES[state],
         )}
       >
         {session.title}

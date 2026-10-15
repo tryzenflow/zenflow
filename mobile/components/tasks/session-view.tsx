@@ -12,6 +12,7 @@ import {
   type LucideIcon,
 } from "@/components/Icons";
 import { SessionTypeBadge } from "@/components/calendar/session-type-badge";
+import { CourseColourPicker } from "@/components/tasks/course-colour-picker";
 import { isSessionPastDeadline } from "@/lib/overdue";
 import { localizedReminderLabel } from "@/components/tasks/form/reminder-field";
 import { Text } from "@/components/ui/text";
@@ -291,6 +292,15 @@ function SessionViewImpl({ task, values, tz }: SessionViewProps) {
           </Property>
         )}
       </View>
+
+      {task.courseKey && (
+        <View className="gap-2">
+          <Text className="text-[13px] font-semibold text-muted-foreground">
+            {t("Course colour")}
+          </Text>
+          <CourseColourPicker courseKey={task.courseKey} />
+        </View>
+      )}
 
       <View className="h-px bg-border" />
 

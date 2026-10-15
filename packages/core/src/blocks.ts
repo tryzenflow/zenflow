@@ -19,6 +19,7 @@ export function taskToBlock(task: Session): Event | null {
     tags: task.tags,
     state: deriveState(task),
     location: task.location,
+    courseKey: task.courseKey,
   };
 }
 

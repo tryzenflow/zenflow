@@ -440,6 +440,8 @@ export class MaterializerService {
           externalKey: block.externalKey,
           scheduleStudyUnitId: (block as Partial<ParsedPortalItem>)
             .scheduleStudyUnitId,
+          lmsCourseId:
+            (block as Partial<ParsedLmsItem>).lmsCourse?.lmsCourseId ?? null,
         });
         newId = row.id;
 

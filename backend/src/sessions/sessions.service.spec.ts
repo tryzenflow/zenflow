@@ -262,6 +262,7 @@ describe("SessionsService.create", () => {
       seriesId: null,
       rrule: null,
       timetableGroupId: null,
+      courseKey: null,
       sessionIndex: null,
       sessionTotal: null,
       late: false,

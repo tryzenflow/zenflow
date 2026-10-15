@@ -78,6 +78,9 @@ Drag, resize and reschedule are all `PATCH /sessions/:id` (a `MOVE` signal).
 | --- | --- | --- |
 | GET | `/tags` | The user's tags |
 | POST | `/tags/bulk` | Idempotent bulk create |
+| GET | `/course-colours` | The user's course colour picks (`CourseColoursResponse`) |
+| PUT | `/course-colours/:courseKey` | Save a pick, `{ swatch }` 0 to 11. Key is `lms:<id>` or `portal:<id>`, URL-encoded |
+| DELETE | `/course-colours/:courseKey` | Drop the pick; the course returns to its automatic colour |
 | GET | `/files/limits` | `maxFileBytes`, `maxFilesPerRequest`, `userQuotaBytes` |
 | GET | `/files/usage` | Limits plus `usedBytes` |
 | POST | `/files/upload` | Multipart. Default 20 MB x 5 files, 150 MB per user. 413 `File too large` or `Storage full`. [ADR-0021](../adr/0021-upload-limits.md) |

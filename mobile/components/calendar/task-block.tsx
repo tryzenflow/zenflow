@@ -21,6 +21,9 @@ import {
   sessionTone,
 } from "@zenflow/core";
 import type { DaySegment } from "@zenflow/shared";
+import { useCourseColourStore } from "@/hooks/use-course-colours";
+import { courseStyleFor } from "@/lib/course-colour";
+import { sessionTypeIcon } from "./session-type-badge";
 import { toZonedTime } from "date-fns-tz";
 import * as Haptics from "expo-haptics";
 import { memo, useCallback, useEffect, useState } from "react";
@@ -192,6 +195,7 @@ function SessionBlockImpl({
   useLanguage();
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const { isDarkColorScheme } = useColorScheme();
+  const courseOverrides = useCourseColourStore((s) => s.overrides);
   const startMin = minutesOfDayLocal(segment.start, tz);
   const rawEndMin = minutesOfDayLocal(segment.end, tz);
   // A task spilling past midnight normally clamps its bottom to 24:00
@@ -646,16 +650,31 @@ function SessionBlockImpl({
   // One even 1px rim per tone; the 3px stripe is a separate rounded bar inset
   // inside the block, like Apple Calendar.
   const tone = sessionTone(state, overdue);
-  const stateClasses = `${flashRing} ${SESSION_TONE_CLASSES[tone].tint}`;
+  // A session with a course paints with its course colour; overdue stays cherry.
+  const courseColour = overdue
+    ? null
+    : courseStyleFor(
+        segment.courseKey ?? null,
+        courseOverrides,
+        isDarkColorScheme ? "dark" : "light",
+      );
+  const stateClasses = `${flashRing} ${courseColour ? "" : SESSION_TONE_CLASSES[tone].tint}`;
   // Solid single-colour rim, drawn as its own overlay ABOVE the blur: a border on
   // the blurred container itself came out jagged (the blur mask isn't anti-aliased).
-  const edgeColor = hexAlpha(SESSION_TONES[tone].base, isDarkColorScheme ? 0.45 : 0.55);
+  const edgeColor = hexAlpha(
+    courseColour?.stripe ?? SESSION_TONES[tone].base,
+    isDarkColorScheme ? 0.45 : 0.55,
+  );
   const topRadius = segment.continued ? 0 : 14;
   const bottomRadius = segment.continues && !drawsThrough ? 0 : 14;
 
-  const accentColor = SESSION_TONES[tone].base;
-  // Meta/time text: the tone's AA ink.
-  const timeClass = SESSION_TONE_CLASSES[tone].text;
+  const accentColor = courseColour?.stripe ?? SESSION_TONES[tone].base;
+  // Meta/time text: the tone's AA ink, or the course ink.
+  const timeClass = courseColour ? "" : SESSION_TONE_CLASSES[tone].text;
+  const courseInkStyle = courseColour ? { color: courseColour.ink } : undefined;
+  // The type icon wears the course ink on a course block, so the type stays
+  // visible without a badge.
+  const TypeIcon = sessionTypeIcon(segment.type);
 
   const horizontal = {
     left: leftOffset + nestOffset,
@@ -696,7 +715,11 @@ function SessionBlockImpl({
       <GestureDetector gesture={composedGesture}>
         <Animated.View
           testID={`task-block.${segment.taskId}`}
-          style={[moveStyle, { height }]}
+          style={[
+            moveStyle,
+            { height },
+            courseColour ? { backgroundColor: courseColour.tint } : null,
+          ]}
           className={cn(
             "flex overflow-hidden rounded-[14px]",
             tier !== "full"
@@ -784,9 +807,12 @@ function SessionBlockImpl({
             <View className="w-full min-w-0 flex-row items-center gap-1.5">
               {/* Explicit px line heights: `leading-none` clipped the tops of
                   the glyphs on Android. */}
+              {courseColour && (
+                <TypeIcon size={11} color={courseColour.ink} />
+              )}
               <Text
                 className="min-w-0 flex-1 text-[11px] font-semibold leading-[14px]"
-                style={COMPACT_TEXT_STYLE}
+                style={[COMPACT_TEXT_STYLE, courseInkStyle]}
                 numberOfLines={1}
                 ellipsizeMode="tail"
               >
@@ -795,7 +821,7 @@ function SessionBlockImpl({
               {tier === "time" && (
                 <Text
                   className={cn("shrink-0 text-[11px] font-medium leading-[14px]", timeClass)}
-                  style={COMPACT_TEXT_STYLE}
+                  style={[COMPACT_TEXT_STYLE, courseInkStyle]}
                 >
                   {segment.continued
                     ? t("ends {time}", { time: fmt(segment.taskEnd, tz) })
@@ -805,15 +831,22 @@ function SessionBlockImpl({
             </View>
           ) : (
             <>
-              <Text
-                className="text-[12px] font-semibold leading-4"
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
-                {segment.title}
-              </Text>
+              <View className="w-full min-w-0 flex-row items-center gap-1.5">
+                {courseColour && (
+                  <TypeIcon size={12} color={courseColour.ink} />
+                )}
+                <Text
+                  className="min-w-0 shrink text-[12px] font-semibold leading-4"
+                  style={courseInkStyle}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {segment.title}
+                </Text>
+              </View>
               <Text
                 className={cn("text-[12px] font-medium leading-[15px]", timeClass)}
+                style={courseInkStyle}
                 numberOfLines={1}
               >
                 {segment.continued

@@ -1,5 +1,6 @@
 import { t } from "@/lib/i18n";
 import { useAppUpdate } from "@/hooks/use-app-update";
+import { useCourseColourSync } from "@/hooks/use-course-colours";
 import { useLanguage } from "@/hooks/use-language";
 import { SettingsIcon } from "@/components/brand/icons";
 import { AppTabBar } from "@/components/tab-bar";
@@ -13,6 +14,7 @@ export const unstable_settings = {
 export default function AppTabsLayout() {
   useLanguage();
   useAppUpdate();
+  useCourseColourSync();
   return (
     // Fully custom bar (`components/tab-bar.tsx`): a floating glassmorphic
     // pill — the default edge-to-edge bar's rectangular `shadow*`/`elevation`

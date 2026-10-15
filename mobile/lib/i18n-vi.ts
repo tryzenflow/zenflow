@@ -576,4 +576,7 @@ export default {
   "Marked done": "Đã đánh dấu xong",
   "Marked missed": "Đã đánh dấu bỏ lỡ",
   "Could not save. Try again.": "Không thể lưu. Hãy thử lại.",
+  "Course colour": "Màu môn học",
+  "Colour {n}": "Màu {n}",
+  "Reset to automatic": "Đặt lại màu tự động",
 } as Record<string, string>;

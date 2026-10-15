@@ -65,6 +65,12 @@ export interface Session {
    * instead).
    */
   timetableGroupId: string | null;
+  /**
+   * The course this session belongs to, or `null`: `lms:<Moodle course id>`
+   * for an LMS item, `portal:<ScheduleStudyUnitID>` for a portal meeting or
+   * exam. The key a {@link CourseColour} is stored under.
+   */
+  courseKey: string | null;
   /** 1-based position within a `TASK` series (`null` outside a session-count series). */
   sessionIndex: number | null;
   /** Total session count of this session's `TASK` series (`null` otherwise). */

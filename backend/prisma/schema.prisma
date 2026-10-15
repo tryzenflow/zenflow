@@ -64,6 +64,7 @@ model User {
 
   occurrenceStates SessionOccurrenceState[]
   streak           UserStreak?
+  courseColours    CourseColour[]
 
   // Issue #56: which portal sections / Moodle courses this student is
   // confirmed in, so an ingestion pass can be served from the shared
@@ -390,6 +391,23 @@ model UserStreak {
   /// Last day (YYYY-MM-DD, user tz) with a completed session.
   lastActiveDay    String?  @db.VarChar(10)
   updatedAt        DateTime @updatedAt
+}
+
+/// A user's own colour pick for one course (issue #238). `courseKey` is
+/// `lms:<Moodle course id>` or `portal:<ScheduleStudyUnitID>`; a course with no
+/// row paints with its automatic colour from `@zenflow/core`.
+model CourseColour {
+  id        String   @id @default(uuid())
+  courseKey String   @db.VarChar(120)
+  /// Index into the 12-swatch set (`COURSE_COLOUR_SWATCH_COUNT`).
+  swatch    Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseKey])
 }
 
 // Excludes DND; at most twice per session (enforced in DTO + RemindersService).
