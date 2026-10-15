@@ -87,8 +87,10 @@ is mounted under the splash so the launch URL `/` resolves, then the guards narr
 | `/(app)/today`      | Today tab: redirects to the calendar's Day view on today                          |
 | `/(app)/settings`   | Me tab: profile, appearance, preferences (language, default reminder), integrations; Advanced holds timezone and storage |
 | `/task/new`         | create task or event (bottom-sheet composer)                                      |
-| `/task/[id]/edit`   | edit session (same composer; type fixed)                                          |
+| `/task/[id]/edit`   | edit session (same composer; type fixed), opened from a block's detail sheet      |
 | `/notifications`    | ingestion inbox (modal)                                                           |
+
+A calendar block opens its detail sheet in place (`components/calendar/session-detail-sheet.tsx`): peek shows the details, swipe up to full loads the note. Its Edit button pushes `/task/[id]/edit`.
 
 Session model, series-scope editing, recurrence and reschedule match web: see
 [ADR-0002](../docs/adr/0002-scheduling-simplification.md).

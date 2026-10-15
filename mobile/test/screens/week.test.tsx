@@ -84,18 +84,23 @@ describe("WeekScreen", () => {
     );
   });
 
-  it("opens the session editor when a block is tapped", async () => {
+  it("opens the session detail sheet in place when a block is tapped", async () => {
     renderScreen(<WeekScreen />);
     fireEvent.click(await block("a"));
-    expect(router.push).toHaveBeenCalledWith("/task/a/edit");
+    expect((await screen.findByTestId("session-detail-title")).textContent).toBe("Algorithms lecture");
+    expect(screen.getByText("Edit")).toBeTruthy();
+    expect(router.push).not.toHaveBeenCalled();
   });
 
-  it("encodes a recurring occurrence id in the editor route", async () => {
+  it("opens the editor for a recurring occurrence from its detail sheet", async () => {
     const id = "series1::2026-10-15T03:00:00.000Z";
     sessions = [makeSession({ id, title: "Weekly lab", seriesId: "series1", rrule: "FREQ=WEEKLY" })];
     renderScreen(<WeekScreen />);
     fireEvent.click(await block(id));
-    expect(router.push).toHaveBeenCalledWith(`/task/${encodeURIComponent(id)}/edit`);
+    fireEvent.click(await screen.findByText("Edit"));
+    await waitFor(() =>
+      expect(router.push).toHaveBeenCalledWith(`/task/${encodeURIComponent(id)}/edit`),
+    );
   });
 
   it("offers to add a session on an empty day", async () => {
