@@ -95,8 +95,8 @@ const TOAST_VARIANTS: Record<
   }
 > = {
   default: {
-    badge: "bg-blue-500/15",
-    icon: "text-blue-600 dark:text-blue-400",
+    badge: "bg-session-lecture/15",
+    icon: "text-session-lecture-ink",
     Icon: Info,
   },
   destructive: {
@@ -110,13 +110,13 @@ const TOAST_VARIANTS: Record<
     Icon: AlertTriangle,
   },
   success: {
-    badge: "bg-green-500/15",
-    icon: "text-green-600 dark:text-green-400",
+    badge: "bg-session-done/15",
+    icon: "text-session-done-ink",
     Icon: CheckCircle,
   },
   info: {
-    badge: "bg-blue-500/15",
-    icon: "text-blue-600 dark:text-blue-400",
+    badge: "bg-session-lecture/15",
+    icon: "text-session-lecture-ink",
     Icon: Info,
   },
   tip: {
@@ -154,7 +154,7 @@ const VARIANT_ACCENT: Record<ToastVariant, ToastAccent> = {
 };
 
 /** `--primary-foreground`: the dark ink used on every primary fill. */
-const ON_PRIMARY = "#15161F";
+const ON_PRIMARY = "#16232B";
 
 function luminance(hex: string): number {
   const [r, g, b] = [1, 3, 5].map((i) => {
