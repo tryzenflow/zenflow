@@ -27,7 +27,7 @@ For developers and API clients. Live schema: Swagger UI at `<API_URL>/api`.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/users/me` | Profile |
-| PATCH | `/users/update/basic-info` | Name, timezone, lang, `defaultReminderMinutes` |
+| PATCH | `/users/update/basic-info` | Name, timezone, lang, `defaultReminderMinutes`, `focusBand` (`MORNING`, `AFTERNOON`, `EVENING`, `LATE_NIGHT`; seeds the preference matrix while it is still the default) |
 | GET | `/users/me/preference-matrix` | 168-float matrix for the Insights heatmap |
 | GET | `/users/me/streak` | Daily completion streak (`Streak`) |
 | GET | `/users/me/daily-push` | Morning brief and evening check-in times (`DailyPushSettings`) |
