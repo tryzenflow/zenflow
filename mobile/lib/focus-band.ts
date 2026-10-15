@@ -19,6 +19,14 @@ export const FOCUS_BAND_HOURS: Record<FocusBand, { from: string; to: string }> =
 /** Preselected in onboarding so the step is one tap. */
 export const DEFAULT_FOCUS_BAND: FocusBand = "MORNING";
 
+/** Minute of day a focus band starts; 8:00 when none was chosen. */
+export function focusBandStartMin(band: FocusBand | null | undefined): number {
+  const [h, m] = FOCUS_BAND_HOURS[band ?? DEFAULT_FOCUS_BAND].from
+    .split(":")
+    .map(Number);
+  return h * 60 + m;
+}
+
 const LABEL: Record<FocusBand, string> = {
   MORNING: "Morning",
   AFTERNOON: "Afternoon",

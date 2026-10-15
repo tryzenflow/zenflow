@@ -131,9 +131,11 @@ export function scrollAnchorMin(opts: {
   isToday: boolean;
   nowMin: number;
   firstEventMin: number | null;
+  /** Anchor for an empty day; defaults to 8:00. */
+  emptyMin?: number;
 }): number {
   if (opts.isToday) return opts.nowMin;
-  return opts.firstEventMin ?? DEFAULT_ANCHOR_MIN;
+  return opts.firstEventMin ?? opts.emptyMin ?? DEFAULT_ANCHOR_MIN;
 }
 
 /** Scroll offset (px) that puts `min` near the top of the viewport. */

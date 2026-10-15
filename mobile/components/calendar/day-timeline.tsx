@@ -26,6 +26,7 @@ import { type DayStatus, deriveDayStatus } from "@/lib/day-status";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import { useNow } from "@/hooks/use-now";
 import { useUserStore } from "@/hooks/use-user-store";
+import { focusBandStartMin } from "@/lib/focus-band";
 import { isPastDeadlineDrop } from "@/lib/overdue";
 import {
   showDisplacedToast,
@@ -115,8 +116,7 @@ import type {
 import { moveUndoable } from "@/lib/recurring-scope";
 import { rememberPlacement } from "@/lib/slot-alternatives";
 
-/** The empty-day "add a task" zone spans 8:00–10:00. */
-const EMPTY_ZONE_START_MIN = 8 * 60;
+/** The empty-day "add a task" zone spans two hours from the focus band's start. */
 const EMPTY_ZONE_MINUTES = 120;
 
 /** Inset (px) of every block from the day column's edges. */
@@ -280,6 +280,8 @@ export function DayTimeline({
   useLanguage();
   const offline = useOffline();
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
+  const focusBand = useUserStore((s) => s.user?.focusBand);
+  const emptyZoneStartMin = focusBandStartMin(focusBand);
   const { confirm, toast } = useToast();
   // Bumped whenever a drop settles, so a block whose start didn't change
   // (save failed, sheet cancelled) releases its drop pin and snaps back.
@@ -571,9 +573,10 @@ export function DayTimeline({
           isToday,
           nowMin: wallMinuteNow(tz),
           firstEventMin,
+          emptyMin: emptyZoneStartMin,
         }),
       ),
-    [grid, isToday, firstEventMin, tz],
+    [grid, isToday, firstEventMin, tz, emptyZoneStartMin],
   );
 
   const scrollToAnchor = useCallback(() => {
@@ -618,7 +621,7 @@ export function DayTimeline({
       if (positionedRef.current !== "none") return;
       positionedRef.current = "pending";
       scrollRef.current?.scrollTo({
-        y: scrollYForMin(grid, 8 * 60),
+        y: scrollYForMin(grid, emptyZoneStartMin),
         animated: false,
       });
       return;
@@ -631,7 +634,7 @@ export function DayTimeline({
       // open, and a notify here would fight the neighbours' own positioning.
       setTimelineScrollFraction(anchorScrollY() / totalHeight, false);
     }
-  }, [loading, error, totalHeight, grid, scrollToAnchor, anchorScrollY, syncScroll, tz]);
+  }, [loading, error, totalHeight, grid, scrollToAnchor, anchorScrollY, syncScroll, tz, emptyZoneStartMin]);
 
   useEffect(() => {
     positionScroll();
@@ -845,7 +848,7 @@ export function DayTimeline({
     [router],
   );
   const openNewTaskForm = useCallback(() => {
-    let startMin = EMPTY_ZONE_START_MIN;
+    let startMin = emptyZoneStartMin;
     if (isToday) {
       const wall = zonedNow(tz);
       startMin = Math.max(
@@ -864,7 +867,7 @@ export function DayTimeline({
         params: { start: zonedWallClockToUtc(start, tz).toISOString() },
       } as Href),
     );
-  }, [date, isToday, router, tz]);
+  }, [date, isToday, router, tz, emptyZoneStartMin]);
 
   const handleReschedule = useCallback(
     async (taskId: string, startISO: string) => {
@@ -1279,14 +1282,14 @@ export function DayTimeline({
                     onPress={openNewTaskForm}
                     accessibilityRole="button"
                     accessibilityLabel={t("Add a session to this day")}
-                    className="absolute items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-primary/70 bg-primary/5 active:bg-primary/10"
+                    className="absolute items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-primary/70 bg-primary/5 px-4 py-5 active:bg-primary/10"
                     style={{
                       left: BLOCK_GUTTER,
                       right: BLOCK_GUTTER,
-                      top: minToY(grid, EMPTY_ZONE_START_MIN),
-                      height:
-                        minToY(grid, EMPTY_ZONE_START_MIN + EMPTY_ZONE_MINUTES) -
-                        minToY(grid, EMPTY_ZONE_START_MIN),
+                      top: minToY(grid, emptyZoneStartMin),
+                      minHeight:
+                        minToY(grid, emptyZoneStartMin + EMPTY_ZONE_MINUTES) -
+                        minToY(grid, emptyZoneStartMin),
                     }}
                   >
                     <Plus size={20} className="text-session-task-ink" />
