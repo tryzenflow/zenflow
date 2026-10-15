@@ -2,8 +2,13 @@ import { TodayCard } from "@/components/calendar/today-card";
 import { navigateOnce } from "@/lib/nav";
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
-import { updateSession } from "@/api/tasks";
-import { showSkippedToast } from "@/lib/task-toasts";
+import { getSessionDetails, updateSession } from "@/api/tasks";
+import { findCachedSession } from "@/lib/session-cache";
+import { showErrorToast, showSkippedToast } from "@/lib/task-toasts";
+import {
+  SessionDetailSheet,
+  type SessionDetailSheetHandle,
+} from "@/components/calendar/session-detail-sheet";
 import type { TimelineState } from "@/components/calendar/day-timeline";
 import {
   RescheduleSheet,
@@ -178,6 +183,7 @@ export default function CalendarScreen() {
   const rescheduleSheetRef = useRef<RescheduleSheetHandle>(null);
   const updateScopeSheetRef = useRef<UpdateRecurringSheetHandle>(null);
   const blockActionsSheetRef = useRef<BlockActionsSheetHandle>(null);
+  const sessionDetailSheetRef = useRef<SessionDetailSheetHandle>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const closeSearch = useCallback(() => setSearchOpen(false), []);
 
@@ -239,15 +245,22 @@ export default function CalendarScreen() {
     router.setParams({ flash: undefined });
   }, [flashParam, armFlash, router]);
 
+  // Tapping a block opens its detail sheet in place. The calendar cache holds
+  // the session already; otherwise it is fetched first.
   const handleSessionPress = useCallback(
     (taskId: string) => {
-      // A recurring occurrence id ("<seriesId>::<startISO>") must be encoded to
-      // survive the route path.
-      navigateOnce(() =>
-        router.push(`/task/${encodeURIComponent(taskId)}/edit` as Href),
-      );
+      const cached = findCachedSession(taskId);
+      if (cached) {
+        sessionDetailSheetRef.current?.open(cached);
+        return;
+      }
+      getSessionDetails(taskId)
+        .then((session) => sessionDetailSheetRef.current?.open(session))
+        .catch((error) =>
+          showErrorToast(toast, error, t("Couldn't open this session"), "calendar-x"),
+        );
     },
-    [router],
+    [toast],
   );
 
   // Long-press a block → open the "Move to…" sheet for that session.
@@ -436,6 +449,7 @@ export default function CalendarScreen() {
         <CreateSessionFab tz={tz} />
       )}
 
+      <SessionDetailSheet ref={sessionDetailSheetRef} tz={tz} />
       <BlockActionsSheet
         ref={blockActionsSheetRef}
         onReschedule={handleRequestReschedule}

@@ -673,4 +673,10 @@ export default {
   "Other time": "Giờ khác",
   "Moved this occurrence": "Đã dời buổi này",
   "Apply to all": "Áp dụng cho tất cả",
+  "Due {date}": "Hạn {date}",
+  "Not scheduled yet": "Chưa xếp lịch",
+  "Moves freely": "Tự dời theo lịch",
+  "Time set by you": "Giờ do bạn chọn",
+  "Pinned in place": "Đã ghim cố định",
+  "Swipe up to read the note": "Vuốt lên để đọc ghi chú",
 } as Record<string, string>;

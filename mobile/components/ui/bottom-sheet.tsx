@@ -93,6 +93,8 @@ type BottomSheetContentProps = Omit<
    * this reimplementation has no mounted-but-closed state to preserve. */
   enableDismissOnClose?: boolean;
   snapPoints?: Array<string | number>;
+  /** Accepted for API parity with `bottom-sheet.native.tsx`, and ignored: this sheet does not snap, so it never reports a snap index. */
+  onChange?: (index: number) => void;
   enableDynamicSizing?: boolean;
   /** Accepted for API parity with `bottom-sheet.native.tsx`, and ignored — the
    * web sheet sizes itself with CSS. Destructured out so it can't leak onto
@@ -112,6 +114,7 @@ const BottomSheetContent = React.forwardRef<
       backdropProps: _backdropProps,
       enableDismissOnClose: _enableDismissOnClose,
       snapPoints: _snapPoints,
+      onChange: _onChange,
       enableDynamicSizing: _enableDynamicSizing,
       maxDynamicContentSize: _maxDynamicContentSize,
       ...props
