@@ -22,7 +22,10 @@
     "release-note-files-undo-redo",
     "restore-saved-theme",
     "sentence-case-copy-and-names",
-    "short-user-facing-copy"
+    "short-user-facing-copy",
+    "split-ingestion-queues",
+    "spread-tasks-and-focus-band",
+    "usezenflow-domains"
   ],
   "initialVersions": {
     "backend": "0.0.0",
