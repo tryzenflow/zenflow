@@ -191,8 +191,7 @@ model Tag {
 
   @@unique([userId, name])
   @@index([userId])
-  // Trigram index for GET /sessions/search.
-  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin)
+  // GET /sessions/search uses the `Tag_name_unaccent_idx` expression index, which lives in migrations only.
 }
 
 enum SessionType {
@@ -359,10 +358,7 @@ model Session {
   @@index([seriesId, createdAt])
   @@index([userId, scheduleStudyUnitId])
   @@index([userId, lmsCourseId])
-  // Trigram indexes for GET /sessions/search.
-  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
-  @@index([note(ops: raw("gin_trgm_ops"))], type: Gin)
-  @@index([location(ops: raw("gin_trgm_ops"))], type: Gin)
+  // GET /sessions/search uses the `Session_{title,note,location}_unaccent_idx` expression indexes, which live in migrations only.
   @@index([userId, completedAt])
 }
 
