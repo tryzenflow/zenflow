@@ -120,6 +120,24 @@ describe("GET /sessions/search", () => {
     expect(none.sessions).toEqual([]);
   });
 
+  it("ignores accents, composed or decomposed", async () => {
+    const student = await signUp("search-accents");
+    const composed = await lecture(student, base() + DAY, {
+      title: "Phát triển ứng dụng web",
+    });
+    const decomposed = await lecture(student, base() + 2 * DAY, {
+      title: "Pha\u0301t \u0111o\u0323c",
+    });
+
+    const phat = await search(student, { q: "phat" });
+    expect(phat.sessions.map((s) => s.id)).toEqual([
+      composed.id,
+      decomposed.id,
+    ]);
+    const typed = await search(student, { q: "Phát đọc" });
+    expect(typed.sessions.map((s) => s.id)).toEqual([decomposed.id]);
+  });
+
   it("pages forward and backward around the anchor", async () => {
     const student = await signUp("search-paging");
     const anchor = base();

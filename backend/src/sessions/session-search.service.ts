@@ -91,21 +91,21 @@ export class SessionSearchService {
     return { start: dto.anchor ? new Date(dto.anchor) : new Date(), id: "" };
   }
 
-  /** Every term must hit the title, note text (tags stripped), location or a tag name. */
+  /** Every term must hit the title, note text (tags stripped), location or a tag name, ignoring accents. */
   private matchSql(terms: string[]): Prisma.Sql {
     if (terms.length === 0) return Prisma.sql`TRUE`;
     return Prisma.join(
       terms.map((term) => {
-        const p = likePattern(term);
+        const p = Prisma.sql`immutable_unaccent(${likePattern(term)}::text)`;
         return Prisma.sql`(
-          s."title" ILIKE ${p}
-          OR s."location" ILIKE ${p}
-          OR (s."note" ILIKE ${p}
-              AND regexp_replace(s."note", '<[^>]*>', ' ', 'g') ILIKE ${p})
+          immutable_unaccent(s."title") ILIKE ${p}
+          OR immutable_unaccent(s."location") ILIKE ${p}
+          OR (immutable_unaccent(s."note") ILIKE ${p}
+              AND immutable_unaccent(regexp_replace(s."note", '<[^>]*>', ' ', 'g')) ILIKE ${p})
           OR EXISTS (
             SELECT 1 FROM "_SessionToTag" st
             JOIN "Tag" t ON t."id" = st."B"
-            WHERE st."A" = s."id" AND t."name" ILIKE ${p}
+            WHERE st."A" = s."id" AND immutable_unaccent(t."name") ILIKE ${p}
           )
         )`;
       }),
