@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { randomUUID } from "crypto";
 import type {
   CreateSessionResponse,
   RemoveSessionResponse,
@@ -28,7 +29,8 @@ import { DAY_MS } from "../scheduler/core/slot";
 import { CreateSessionDto } from "./dto/create-session.dto";
 import { ListSessionSuggestionsDto } from "./dto/list-session-suggestions.dto";
 import { ListSessionsDto } from "./dto/list-sessions.dto";
-import { WITH_TAGS_AND_SERIES } from "./types/session-row";
+import { SessionRow, WITH_TAGS_AND_SERIES } from "./types/session-row";
+import { PlacementNeedsConfirmationException } from "./placement-plan.exception";
 import {
   slotProposalFieldsOf,
   toCreateSessionResponse,
@@ -39,6 +41,25 @@ import { insertFixedSession } from "./fixed-session-writer";
 import { mapSessionPrismaError } from "./prisma-error";
 import { placeOrDiscard } from "./placement-compensation";
 import { NO_FEASIBLE_SLOT_MESSAGE, SeriesService } from "./series.service";
+
+type OccurrenceCheckOff = Pick<SharedSession, "completedAt" | "skipped">;
+
+const occurrenceStateKey = (seriesId: string, start: Date): string =>
+  `${seriesId}|${start.getTime()}`;
+
+/** An occurrence's done or skipped state; a missing row means neither. */
+function occurrenceCheckOff(
+  states: Map<string, OccurrenceCheckOff>,
+  seriesId: string,
+  start: Date,
+): OccurrenceCheckOff {
+  return (
+    states.get(occurrenceStateKey(seriesId, start)) ?? {
+      completedAt: null,
+      skipped: false,
+    }
+  );
+}
 
 /**
  * Plain session CRUD: `create` (dispatches by type — single `TASK`,
@@ -73,11 +94,18 @@ export class SessionCrudService {
       // Pre-flight feasibility — BEFORE any row is inserted, so an
       // infeasible request never leaves an unplaced task/series behind (no
       // rollback needed; see NO_FEASIBLE_SLOT_MESSAGE).
+      const durations = dto.sessionDurations;
+      if (durations && durations.length !== sessionCount) {
+        throw new BadRequestException(
+          "sessionDurations must have one entry per session.",
+        );
+      }
       if (sessionCount > 1) {
         const feasible = await this.taskPlacement.canPlaceSeries({
           user,
           durationMinutes: dto.durationMinutes,
           sessionCount,
+          durations,
           deadline,
           now,
         });
@@ -113,6 +141,44 @@ export class SessionCrudService {
     return this.createFixedOneOff(dto, user, cleanTags);
   }
 
+  /**
+   * Inserts one unplaced `TASK` row and its CREATE event. Shared by the
+   * create path and a confirmed create plan, which runs it in its own
+   * transaction.
+   */
+  async insertSingleTask(
+    tx: Prisma.TransactionClient,
+    user: User,
+    dto: CreateSessionDto,
+    cleanTags: string[],
+    deadline: Date,
+    undoGroupId?: string,
+  ): Promise<SessionRow> {
+    const tagIds = await this.tagsService.resolveTagIds(tx, user.id, cleanTags);
+    const s = await tx.session.create({
+      data: {
+        type: "TASK",
+        source: "USER",
+        title: dto.title,
+        note: dto.note ?? null,
+        location: dto.location ?? null,
+        durationMinutes: dto.durationMinutes,
+        deadline,
+        tags: { connect: tagIds.map((id) => ({ id })) },
+        userId: user.id,
+      },
+      include: WITH_TAGS_AND_SERIES,
+    });
+    await tx.sessionEvent.create({
+      data: {
+        ...createEventData(s, user.id),
+        ...(undoGroupId ? { groupId: undoGroupId } : {}),
+      },
+    });
+    recordCreateEvent();
+    return s;
+  }
+
   /** A flexible, deadline-driven `TASK` — inserted, then engine-placed. */
   private async createSingleTask(
     dto: CreateSessionDto,
@@ -121,38 +187,21 @@ export class SessionCrudService {
     deadline: Date,
     now: Date,
   ): Promise<CreateSessionResponse> {
-    const created = await this.prisma.$transaction(async (tx) => {
-      const tagIds = await this.tagsService.resolveTagIds(
-        tx,
-        user.id,
-        cleanTags,
-      );
-      const s = await tx.session.create({
-        data: {
-          type: "TASK",
-          source: "USER",
-          title: dto.title,
-          note: dto.note ?? null,
-          location: dto.location ?? null,
-          durationMinutes: dto.durationMinutes,
-          deadline,
-          tags: { connect: tagIds.map((id) => ({ id })) },
-          userId: user.id,
-        },
-        include: WITH_TAGS_AND_SERIES,
-      });
-      await tx.sessionEvent.create({ data: createEventData(s, user.id) });
-      recordCreateEvent();
-      return s;
-    });
+    // One undo entry covers the create and whatever its placement displaced.
+    const undoGroupId = randomUUID();
+    const created = await this.prisma.$transaction((tx) =>
+      this.insertSingleTask(tx, user, dto, cleanTags, deadline, undoGroupId),
+    );
 
     // heuristic → 50/50 A/B → optional LinUCB override + SlotProposal. Never
     // leaves the row unplaced: a miss gets the last resort, a throw discards it.
+    // A plan that needs the user's confirmation discards it the same way and
+    // answers 409 with the plan; the dto is kept so a confirm can insert it.
     const placement = await placeOrDiscard(
       this.prisma,
       { userId: user.id, sessionIds: [created.id] },
-      () =>
-        this.taskPlacement.placeOnCreate({
+      async () => {
+        const res = await this.taskPlacement.placeOnCreate({
           user,
           task: {
             id: created.id,
@@ -161,11 +210,23 @@ export class SessionCrudService {
           },
           now,
           infeasiblePolicy: dto.infeasiblePolicy,
-        }),
+          createInput: dto as unknown as Prisma.InputJsonValue,
+          undoGroupId,
+        });
+        if (res.pendingPlan) {
+          throw new PlacementNeedsConfirmationException(res.pendingPlan);
+        }
+        return res;
+      },
     );
     return toCreateSessionResponse(
-      { ...created, scheduledStartTime: placement.scheduledStartTime },
-      slotProposalFieldsOf(placement),
+      {
+        ...created,
+        scheduledStartTime: placement.scheduledStartTime,
+        placementReason: placement.placementReason ?? null,
+        placementReasonStartAt: placement.scheduledStartTime,
+      },
+      { ...slotProposalFieldsOf(placement), undoGroupId },
     );
   }
 
@@ -281,6 +342,13 @@ export class SessionCrudService {
       include: WITH_TAGS_AND_SERIES,
     });
 
+    const states = await this.occurrenceStates(
+      user.id,
+      rows,
+      new Date(displayStart.getTime() - DAY_MS),
+      displayEnd,
+    );
+
     const sessions: SharedSession[] = [];
     for (const row of rows) {
       if (row.seriesId && row.series?.rrule && row.scheduledStartTime) {
@@ -301,6 +369,7 @@ export class SessionCrudService {
             ...base,
             id: occurrenceId(row.seriesId, occ),
             scheduledStartTime: occ.toISOString(),
+            ...occurrenceCheckOff(states, row.seriesId, occ),
           });
         }
       } else {
@@ -320,6 +389,38 @@ export class SessionCrudService {
     }
 
     return { sessions };
+  }
+
+  /** Done or skipped occurrences of the recurring reps in `rows`, keyed by {@link occurrenceStateKey}. */
+  private async occurrenceStates(
+    userId: string,
+    rows: {
+      seriesId: string | null;
+      series: { rrule: string | null } | null;
+    }[],
+    from: Date,
+    to: Date,
+  ): Promise<Map<string, OccurrenceCheckOff>> {
+    const seriesIds = rows
+      .filter((r) => r.seriesId && r.series?.rrule)
+      .map((r) => r.seriesId as string);
+    if (seriesIds.length === 0) return new Map();
+    const found = await this.prisma.sessionOccurrenceState.findMany({
+      where: {
+        userId,
+        seriesId: { in: seriesIds },
+        occurrenceStart: { gte: from, lt: to },
+      },
+    });
+    return new Map(
+      found.map((s) => [
+        occurrenceStateKey(s.seriesId, s.occurrenceStart),
+        {
+          completedAt: s.completedAt?.toISOString() ?? null,
+          skipped: s.skipped,
+        },
+      ]),
+    );
   }
 
   async suggestions(
@@ -377,7 +478,19 @@ export class SessionCrudService {
       });
       if (!rep)
         throw new NotFoundException(`Cannot find session with id ${id}`);
-      return { ...toSessionDto(rep), id, scheduledStartTime: occ.startISO };
+      const start = new Date(occ.startISO);
+      const states = await this.occurrenceStates(
+        user.id,
+        [rep],
+        start,
+        new Date(start.getTime() + 1),
+      );
+      return {
+        ...toSessionDto(rep),
+        id,
+        scheduledStartTime: occ.startISO,
+        ...occurrenceCheckOff(states, occ.seriesId, start),
+      };
     }
 
     const session = await this.prisma.session.findFirst({

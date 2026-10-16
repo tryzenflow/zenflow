@@ -818,7 +818,10 @@ const server = createServer((req, res) => {
       if (pathname === "/api/student/exam" && req.method === "GET") {
         const namhoc = searchParams.get("namhoc") ?? "2026-2027";
         const hocky = searchParams.get("hocky") ?? "HK01";
-        countRequest(`portal:exam:${namhoc}:${hocky}`, studentIdFromAuthHeader(req));
+        countRequest(
+          `portal:exam:${namhoc}:${hocky}`,
+          studentIdFromAuthHeader(req),
+        );
         const studentId = studentIdFromAuthHeader(req);
         const fixtures = studentId ? loadDluFixtures() : null;
         if (hidden.exams) return sendJson(res, 200, []);
@@ -871,6 +874,77 @@ const server = createServer((req, res) => {
             ? fixtureRegistHistory(studentId, year, term)
             : buildRegistHistory(year, term),
         );
+      }
+
+      // Student profile, study programs and marks. Fictional; the marks rows
+      // carry the PII fields the real payload repeats on every course so the
+      // backend's "normalised fields only" rule stays exercised.
+      if (pathname === "/api/student/info" && req.method === "GET") {
+        countRequest("portal:info", studentIdFromAuthHeader(req));
+        return sendJson(res, 200, {
+          sinhVien: {
+            HoTen: "Sinh Viên Mẫu",
+            GioiTinh: "Nam",
+            KhoaHoc: "Khóa 47",
+            LopSinhVien: "CTK47A",
+          },
+        });
+      }
+      if (pathname === "/api/student/getstudyprogram" && req.method === "GET") {
+        countRequest("portal:studyprogram", studentIdFromAuthHeader(req));
+        return sendJson(res, 200, [
+          {
+            StudentID: "2000000",
+            StudyProgramID: "CQ23CT-PM",
+            StudyProgramName: "CQ23CT-PM",
+            Type: 1,
+          },
+        ]);
+      }
+      if (pathname === "/api/student/marks" && req.method === "GET") {
+        countRequest(
+          `portal:marks:${searchParams.get("ctdt") ?? ""}`,
+          studentIdFromAuthHeader(req),
+        );
+        const row = (unit: string, name: string, score: string | null) => ({
+          StudentID: "2000000",
+          ScheduleStudyUnitID: unit,
+          YearStudy: "2023-2024",
+          TermID: "HK01",
+          CurriculumID: unit.slice(0, 8),
+          CurriculumName: name,
+          Credits: "3",
+          DiemTK_10: score,
+          DiemTK_4: score ? "4.0" : null,
+          DiemTK_Chu: score ? "A" : null,
+          IsPass: score ? "x" : null,
+          OlogyName: "CÔNG NGHỆ THÔNG TIN",
+          ChuyenNganh: "Công nghệ thông tin",
+          TenXepLoai: "Xuất sắc",
+          TB_HK_4: "4.00",
+          TB_HK_10: "9.23",
+          Dat_HK: "13",
+          TB_TL_TN: "3.85",
+          TB_TL_HK_10: "9.10",
+          T_TC_TL_TN: "101",
+          DiemRenLuyenHK: "75",
+          MobilePhone: "0900000000",
+          BirthDay: "01/01/2005",
+        });
+        return sendJson(res, 200, [
+          {
+            NamHoc: "2023-2024",
+            DanhSachDiem: [
+              {
+                HocKy: "HK01",
+                DanhSachDiemHK: [
+                  row("23120CT110103", "Nhập môn ngành CNTT", "9.4"),
+                  row("23120CT110203", "Lập trình căn bản", "8.7"),
+                ],
+              },
+            ],
+          },
+        ]);
       }
 
       sendJson(res, 404, {

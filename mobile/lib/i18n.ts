@@ -78,6 +78,23 @@ export function formatTitle(...args: Parameters<typeof format>) {
   return text.charAt(0).toLocaleUpperCase(locale()) + text.slice(1);
 }
 
+/** A deadline with its exact time, so 0:00 and 23:59 read differently. */
+export function localizedDeadlineExact(
+  deadline: string,
+  tz: string,
+  ref: Date,
+): string {
+  const due = zonedDate(deadline, tz);
+  const days = differenceInCalendarDays(due, zonedDate(ref, tz));
+  const day =
+    days === 0
+      ? t("today")
+      : days === 1
+        ? t("tomorrow")
+        : format(due, due.getFullYear() === zonedDate(ref, tz).getFullYear() ? "EEE MMM d" : "MMM d yyyy");
+  return `${day}, ${format(due, "HH:mm")}`;
+}
+
 export function localizedDeadlineShort(
   deadline: string,
   tz: string,

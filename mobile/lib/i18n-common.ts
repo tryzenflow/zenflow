@@ -12,38 +12,38 @@ export default {
   PM: "Chiều",
   General: "Thông báo chung",
   Reminders: "Nhắc nhở",
-  Offline: "Ngoại tuyến",
+  Offline: "Offline",
   "Profile saved on this device": "Đã lưu hồ sơ trên thiết bị này",
-  "File too large": "Tệp quá lớn",
-  "Each file can be up to {size} MB.": "Mỗi tệp tối đa {size} MB.",
+  "File too large": "File quá lớn",
+  "Each file can be up to {size} MB.": "Mỗi file tối đa {size} MB.",
   "Storage full": "Đã đầy dung lượng",
   Storage: "Dung lượng",
-  "File storage": "Dung lượng tệp",
-  "Usage is unavailable offline.": "Không xem được dung lượng khi ngoại tuyến.",
+  "File storage": "Dung lượng file",
+  "Usage is unavailable offline.": "Không xem được dung lượng khi offline.",
   "Couldn't load your usage.": "Không tải được dung lượng đã dùng.",
   "Offline. Showing your last known usage.":
-    "Ngoại tuyến. Đang hiện dung lượng gần nhất.",
+    "Offline. Đang hiện dung lượng gần nhất.",
   "{used} of {total} used": "Đã dùng {used} / {total}",
   "Almost full. Remove files from your notes to free up space.":
-    "Sắp đầy. Hãy xoá bớt tệp trong ghi chú để giải phóng dung lượng.",
+    "Sắp đầy rồi. Xóa bớt file trong ghi chú cho thoáng nha.",
   "Storage full. Remove files from your notes to upload more.":
-    "Đã đầy dung lượng. Hãy xoá bớt tệp trong ghi chú để tải thêm.",
+    "Hết dung lượng rồi. Xóa bớt file trong ghi chú để up thêm nha.",
   "Remove files from your notes, or use smaller ones.":
-    "Hãy xoá bớt tệp trong ghi chú, hoặc dùng tệp nhỏ hơn.",
+    "Xóa bớt file trong ghi chú, hoặc dùng file nhỏ hơn nha.",
   Close: "Đóng",
   "Available online": "Chỉ xem được khi có mạng",
-  "Reconnect to play this file.": "Hãy kết nối mạng để phát tệp này.",
+  "Reconnect to play this file.": "Có mạng lại rồi mở file này nha.",
   "Couldn't load. Tap to retry.": "Không tải được. Chạm để thử lại.",
   "Overdue at": "Hết hạn vào",
   Hour: "Giờ",
   Minute: "Phút",
   "+{count} more": "+{count} nữa",
-  "Back online": "Đã có mạng trở lại",
+  "Back online": "Có mạng lại rồi",
   "Your calendar and tasks are up to date.":
-    "Lịch và công việc của bạn đã được cập nhật.",
-  "You're offline": "Bạn đang ngoại tuyến",
+    "Lịch và task của bạn đã được cập nhật.",
+  "You're offline": "Bạn đang offline",
   "Showing saved days. Changes can't be saved until you reconnect.":
-    "Đang hiện lịch đã lưu. Bạn cần có mạng để lưu thay đổi.",
+    "Đang hiện lịch đã lưu. Có mạng lại mới lưu được nha.",
   "Saved {time}": "Đã lưu {time}",
   "Showing saved days": "Đang hiện lịch đã lưu",
   Urgent: "Khẩn cấp",
@@ -52,11 +52,11 @@ export default {
   Theme: "Giao diện",
   Add: "Thêm",
   "{count} sitting has an alternative":
-    "{count} buổi có thời gian khác để chọn",
+    "{count} buổi có thời gian thay thế để chọn",
   "Location must be at most 200 characters.":
     "Địa điểm không được vượt quá 200 ký tự.",
   "This part didn't load. Everything else still works.":
     "Phần này chưa tải được. Các phần còn lại vẫn dùng bình thường.",
   "OTP Code is not found or may have been expired":
-    "Mã không tồn tại hoặc đã hết hạn. Bạn gửi lại mã mới nhé.",
+    "Mã không có hoặc hết hạn rồi. Gửi lại mã mới nha.",
 };

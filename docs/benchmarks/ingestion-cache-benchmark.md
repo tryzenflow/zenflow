@@ -1,6 +1,6 @@
 # Ingestion benchmark: no cache vs cache + fanout
 
-Date: 2026-10-02. Branch: `feat/issue-56-ingestion-cache`.
+Date: 2026-10-02. Branch: `feat/issue-56-ingestion-cache`. Measured with the one-minute ticker and one job per student pass, before [ADR-0024](../adr/0024-split-ingestion-queues.md).
 
 ## Goal
 Measure how many upstream requests the ingestion pipeline sends to DLU while the timetable changes, with and without the occurrence cache and fanout, and check that students' own moves and deletes survive.

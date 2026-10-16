@@ -1,3 +1,5 @@
+import { UI } from "@zenflow/core";
+
 // Re-export calendar constants from the shared core package.
 export {
   DAILY_HORIZON,
@@ -5,26 +7,25 @@ export {
   WEEK_STARTS_ON,
 } from "@zenflow/core";
 
-// React Navigation's native header/tab-bar chrome takes plain color strings, not `className` —
-// this is the one hand-maintained hex mirror of the Warm Sunrise tokens for that purpose only.
-// Keep in sync with app/global.css.
+// React Navigation's native header/tab-bar chrome takes plain color strings, not `className`.
+// Derived from the core `UI` tokens, the same values app/global.css carries.
 export const NAV_THEME = {
   light: {
-    background: "#FEFCFA",
-    border: "#E8E5DF",
-    card: "#FFFFFF",
-    notification: "#E7000B",
-    primary: "#FF8E3E",
-    text: "#0F0D0A",
-    mutedForeground: "#797065",
+    background: UI.light.background,
+    border: UI.light.border,
+    card: UI.light.card,
+    notification: UI.light.destructive,
+    primary: UI.light.primary,
+    text: UI.light.foreground,
+    mutedForeground: UI.light.mutedForeground,
   },
   dark: {
-    background: "#0F0D0A",
-    border: "#36322D",
-    card: "#1D1A17",
-    notification: "#FF6467",
-    primary: "#FF7A24",
-    text: "#FBFAF8",
-    mutedForeground: "#ACA397",
+    background: UI.dark.background,
+    border: UI.dark.border,
+    card: UI.dark.card,
+    notification: UI.dark.destructive,
+    primary: UI.dark.primary,
+    text: UI.dark.foreground,
+    mutedForeground: UI.dark.mutedForeground,
   },
 };

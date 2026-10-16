@@ -1,5 +1,6 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
+import { completeStep } from "@/hooks/use-checklist";
 import {
   connectIntegration,
   disconnectIntegration,
@@ -29,10 +30,13 @@ import {
   useBottomSheet,
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { useIntegrationStore } from "@/hooks/use-integration-store";
+import { useUserStore } from "@/hooks/use-user-store";
+import { studentIdOf } from "@/lib/login-id";
 import { cn } from "@/lib/utils";
 import type { IntegrationProvider, IntegrationStatus } from "@zenflow/shared";
 import { isAxiosError } from "axios";
@@ -207,7 +211,9 @@ function syncErrorToast(
       };
     if (status === 503)
       return {
-        title: t("Couldn't reach {provider}", { provider: PROVIDER_LABEL[provider] }),
+        title: t("Couldn't reach {provider}", {
+          provider: PROVIDER_LABEL[provider],
+        }),
         description: t("Try again in a bit."),
       };
   }
@@ -217,8 +223,11 @@ function syncErrorToast(
 function errorMessageFor(
   error: unknown,
   provider: IntegrationProvider,
+  ownId: string,
 ): string {
   if (isAxiosError(error)) {
+    if (error.response?.data?.code === "STUDENT_ID_MISMATCH")
+      return t("Use your own student ID ({id}) to connect.", { id: ownId });
     if (error.code === "ERR_CANCELED")
       return t("{provider} is taking too long. Try again in a bit.", {
         provider: PROVIDER_LABEL[provider],
@@ -228,9 +237,7 @@ function errorMessageFor(
         provider: PROVIDER_LABEL[provider],
       });
   }
-  return t(
-    "Sign-in didn't work. Check your student ID and password.",
-  );
+  return t("Sign-in didn't work. Check your student ID and password.");
 }
 
 /**
@@ -243,6 +250,8 @@ export function DluAccountsSection({
   useLanguage();
   const { toast } = useToast();
   const { integrations, updateIntegration, loading } = useIntegrationStore();
+  // The server only accepts the student's own ID, so a new connection starts with it.
+  const ownId = studentIdOf(useUserStore((s) => s.user?.email));
   const [selectedProvider, setSelectedProvider] =
     useState<IntegrationProvider | null>(null);
   const [mode, setMode] = useState<SheetMode>("connect");
@@ -276,7 +285,7 @@ export function DluAccountsSection({
     setSelectedProvider(provider);
     setMode(next);
     setError(null);
-    setStudentId("");
+    setStudentId(next === "connect" ? ownId : "");
     setPassword("");
     setShowPassword(false);
     signInSheet.open();
@@ -326,6 +335,7 @@ export function DluAccountsSection({
               { signal: controller.signal },
             );
       updateIntegration(selectedProvider, status);
+      if (mode === "connect") completeStep("connect-dlu");
       toast(
         mode === "connect" ? t("Connected") : t("Credentials updated"),
         "success",
@@ -333,7 +343,7 @@ export function DluAccountsSection({
       );
       closeSignInSheet();
     } catch (err) {
-      setError(errorMessageFor(err, selectedProvider));
+      setError(errorMessageFor(err, selectedProvider, ownId));
     } finally {
       clearTimeout(timeoutId);
       setIsSubmitting(false);
@@ -492,7 +502,9 @@ export function DluAccountsSection({
                   >
                     <RefreshCw size={14} className="text-primary-foreground" />
                     <Text className="text-[13px] font-semibold text-primary-foreground">
-                      {syncing.includes(provider) ? t("Syncing…") : t("Sync now")}
+                      {syncing.includes(provider)
+                        ? t("Syncing…")
+                        : t("Sync now")}
                     </Text>
                   </Button>
                 </View>
@@ -537,7 +549,10 @@ export function DluAccountsSection({
 
         {/* Sign-in / update-credentials sheet */}
         <BottomSheetContent ref={signInSheet.ref}>
-          <BottomSheetView hadHeader={false} style={{ paddingBottom: sheetBottom }}>
+          <BottomSheetView
+            hadHeader={false}
+            style={{ paddingBottom: sheetBottom }}
+          >
             <View className="pb-3 pt-1">
               <Text className="text-xl font-bold tracking-tight">
                 {mode === "connect"
@@ -637,6 +652,9 @@ export function DluAccountsSection({
               disabled={!canSubmit}
               onPress={handleSubmit}
             >
+              {isSubmitting && (
+                <View className="mr-2"><Spinner size={18} tone="onPrimary" /></View>
+              )}
               <Text className="font-semibold text-primary-foreground">
                 {isSubmitting
                   ? mode === "connect"
@@ -654,7 +672,10 @@ export function DluAccountsSection({
 
         {/* Disconnect confirm sheet */}
         <BottomSheetContent ref={confirmSheet.ref}>
-          <BottomSheetView hadHeader={false} style={{ paddingBottom: sheetBottom }}>
+          <BottomSheetView
+            hadHeader={false}
+            style={{ paddingBottom: sheetBottom }}
+          >
             <View className="pb-3 pt-1">
               <Text className="text-xl font-bold tracking-tight">
                 {t("Disconnect {provider}?", { provider: selectedName })}

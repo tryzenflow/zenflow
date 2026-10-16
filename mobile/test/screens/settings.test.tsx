@@ -37,7 +37,7 @@ describe("SettingsScreen sign out", () => {
       }),
     );
     renderScreen(<SettingsScreen />);
-    fireEvent.click(screen.getByTestId("settings.sign-out"));
+    fireEvent.click(await screen.findByTestId("settings.sign-out"));
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/(auth)/login"));
     expect(logoutCalls).toBe(1);
     expect(useUserStore.getState().user).toBeNull();
@@ -46,7 +46,7 @@ describe("SettingsScreen sign out", () => {
   it("still signs out locally when the logout request fails", async () => {
     server.use(http.post(`${API}/auth/logout`, () => HttpResponse.error()));
     renderScreen(<SettingsScreen />);
-    fireEvent.click(screen.getByTestId("settings.sign-out"));
+    fireEvent.click(await screen.findByTestId("settings.sign-out"));
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/(auth)/login"));
     expect(useUserStore.getState().user).toBeNull();
   });

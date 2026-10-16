@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { isAxiosError } from "axios";
-import { Loader2, Plug, RefreshCw } from "lucide-react";
+import { Plug, RefreshCw } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -200,7 +201,7 @@ function ProviderCard({
               (connected && !username && !password)
             }
           >
-            {busy === "connect" && <Loader2 className="size-3.5 animate-spin" />}
+            {busy === "connect" && <Spinner className="size-3.5" />}
             {connected ? "Update credentials" : "Connect"}
           </Button>
           {connected && (
@@ -212,7 +213,7 @@ function ProviderCard({
                 disabled={busy !== null}
               >
                 {busy === "sync" ? (
-                  <Loader2 className="size-3.5 animate-spin" />
+                  <Spinner className="size-3.5" />
                 ) : (
                   <RefreshCw className="size-3.5" />
                 )}
@@ -262,7 +263,7 @@ export function IntegrationsPanel() {
   if (!statuses) {
     return (
       <div className="flex items-center justify-center py-10 text-muted-foreground">
-        <Loader2 className="size-5 animate-spin" />
+        <Spinner className="size-5" />
       </div>
     );
   }

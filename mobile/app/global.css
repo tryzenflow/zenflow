@@ -3,10 +3,9 @@
 @tailwind utilities;
 
 /*
- * "Warm Sunrise" tokens, hand-translated from frontend/src/index.css OKLch values to sRGB.
- * NativeWind v4's StyleSheet output can't consume OKLch directly (see docs/react-native-migration.md
- * "Design tokens"). Re-derive these by running the OKLch->sRGB conversion again if the web palette
- * changes — do not hand-tweak them independently of frontend/src/index.css.
+ * Warm Sunrise tokens: orange, yellow and lime on warm paper and ink. Keep in
+ * step with frontend/src/index.css and the hex values in packages/core/src/palette.ts
+ * (lib/__tests__/palette.test.ts checks).
  *
  * Stored as space-separated "R G B" channels (not hex) and consumed via rgb(var(--x) / <alpha-value>)
  * in tailwind.config.ts — that's what lets Tailwind's /NN opacity modifiers (bg-primary/10, etc.)
@@ -24,11 +23,11 @@
     --primary: 255 142 62;
     --primary-foreground: 43 20 6;
     --secondary: 246 243 239;
-    --secondary-foreground: 28 26 24;
+    --secondary-foreground: 15 13 10;
     --muted: 246 243 239;
-    --muted-foreground: 121 112 101;
+    --muted-foreground: 111 102 91;
     --accent: 246 243 239;
-    --accent-foreground: 28 26 24;
+    --accent-foreground: 15 13 10;
     --destructive: 231 0 11;
     --destructive-foreground: 255 255 255;
     --border: 232 229 223;
@@ -37,9 +36,26 @@
     --brand-orange: 255 142 62;
     --brand-yellow: 240 177 1;
     --brand-lime: 216 249 152;
-    --success: 16 185 129;
+    --success: 216 249 152;
     --glass: 255 255 255;
     --glass-edge: 255 142 62;
+
+    --session-lecture: 59 130 196;
+    --session-lecture-ink: 36 92 148;
+    --session-exam: 20 160 155;
+    --session-exam-ink: 14 111 107;
+    --session-assignment: 240 177 1;
+    --session-assignment-ink: 122 90 0;
+    --session-task: 255 142 62;
+    --session-task-ink: 154 74 12;
+    --session-dnd: 168 162 158;
+    --session-dnd-ink: 95 87 77;
+    --session-done: 216 249 152;
+    --session-done-ink: 79 107 20;
+    --session-late: 231 0 11;
+    --session-late-ink: 184 0 9;
+    --session-conflict: 155 197 61;
+    --session-conflict-ink: 79 107 20;
   }
 
   .dark:root {
@@ -51,22 +67,39 @@
     --popover-foreground: 251 250 248;
     --primary: 255 122 36;
     --primary-foreground: 43 20 6;
-    --secondary: 44 40 35;
+    --secondary: 44 40 34;
     --secondary-foreground: 251 250 248;
     --muted: 44 40 34;
     --muted-foreground: 172 163 151;
-    --accent: 44 40 35;
+    --accent: 44 40 34;
     --accent-foreground: 251 250 248;
     --destructive: 255 100 103;
-    --destructive-foreground: 255 255 255;
+    --destructive-foreground: 15 13 10;
     --border: 54 50 45;
     --input: 54 50 45;
     --ring: 255 122 36;
     --brand-orange: 255 122 36;
-    --brand-yellow: 246 185 21;
-    --brand-lime: 203 237 134;
-    --success: 52 211 153;
+    --brand-yellow: 240 177 1;
+    --brand-lime: 216 249 152;
+    --success: 216 249 152;
     --glass: 255 236 220;
     --glass-edge: 255 170 100;
+
+    --session-lecture: 59 130 196;
+    --session-lecture-ink: 143 189 232;
+    --session-exam: 20 160 155;
+    --session-exam-ink: 111 211 205;
+    --session-assignment: 240 177 1;
+    --session-assignment-ink: 246 201 60;
+    --session-task: 255 142 62;
+    --session-task-ink: 255 168 102;
+    --session-dnd: 168 162 158;
+    --session-dnd-ink: 184 176 164;
+    --session-done: 216 249 152;
+    --session-done-ink: 216 249 152;
+    --session-late: 231 0 11;
+    --session-late-ink: 255 128 131;
+    --session-conflict: 155 197 61;
+    --session-conflict-ink: 199 226 123;
   }
 }

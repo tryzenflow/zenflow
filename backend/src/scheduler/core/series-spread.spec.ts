@@ -1,4 +1,9 @@
-import { seriesDayWindows, seriesWindowsAreDisjoint } from "./series-spread";
+import { MAX_SERIES_PER_DAY } from "../constants";
+import {
+  seriesDayCap,
+  seriesDayWindows,
+  seriesWindowsAreDisjoint,
+} from "./series-spread";
 
 function assertPartition(
   windows: [number, number][],
@@ -104,6 +109,16 @@ describe("seriesDayWindows — non-overlapping day buckets across [0, daySpan]",
     }
   });
 
+  it("deals extra sittings evenly across the days, not onto the last one", () => {
+    expect(seriesDayWindows(2, 5)).toEqual([
+      [0, 0],
+      [0, 0],
+      [1, 1],
+      [1, 1],
+      [2, 2],
+    ]);
+  });
+
   it("clamps a negative / fractional span to whole days from 0", () => {
     expect(seriesDayWindows(-4, 2)).toEqual([
       [0, 0],
@@ -140,5 +155,17 @@ describe("seriesWindowsAreDisjoint — count <= daySpan + 1 boundary", () => {
     expect(seriesWindowsAreDisjoint(-4, 2)).toBe(false);
     expect(seriesWindowsAreDisjoint(4.9, 5)).toBe(true); // floor(4.9)=4 → 5 days
     expect(seriesWindowsAreDisjoint(4.9, 6)).toBe(false);
+  });
+});
+
+describe("seriesDayCap", () => {
+  it("keeps the default cap while the days have room", () => {
+    expect(seriesDayCap(9, 4)).toBe(MAX_SERIES_PER_DAY);
+    expect(seriesDayCap(1, 6)).toBe(MAX_SERIES_PER_DAY);
+  });
+
+  it("raises the cap so every sitting fits across the days", () => {
+    expect(seriesDayCap(0, 6)).toBe(6);
+    expect(seriesDayCap(1, 8)).toBe(4);
   });
 });

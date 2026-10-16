@@ -3,11 +3,18 @@ import * as path from "path";
 import { Queue, type Job } from "bullmq";
 import Redis from "ioredis";
 import request from "supertest";
+import type { StudentMarksResponse, StudentResponse } from "@zenflow/shared";
 import { PrismaClient } from "../../generated/prisma";
 import {
+  ALL_QUEUES,
+  LMS_DISCOVERY_QUEUE,
   LMS_FETCH_QUEUE,
+  LMS_MONTH_QUEUE,
   NOTIFY_QUEUE,
+  PORTAL_DISCOVERY_QUEUE,
   PORTAL_FETCH_QUEUE,
+  PORTAL_PROFILE_QUEUE,
+  PORTAL_WEEK_QUEUE,
   type FetchJobData,
   type NotifyJobData,
 } from "../../src/queue/queues";
@@ -47,7 +54,7 @@ import {
  *
  * Timing is shortened through env in `support/stack.ts` (3 attempts, 1 s
  * backoff, breaker opens after 3 failures for 4 s, 4 s sync cooldown, 6 s sync
- * wait). The one wall-clock dependency is the watcher's per-minute cron.
+ * wait). The watcher ticks every 5 seconds.
  */
 
 jest.setTimeout(240_000);
@@ -99,6 +106,10 @@ const noteRows = (student: Student) =>
     orderBy: { sentAt: "asc" },
   });
 
+/** Rows raised by the sync passes: the marks note comes from its own job on connect. */
+const syncNoteRows = async (student: Student) =>
+  (await noteRows(student)).filter((n) => n.eventName !== "marks.ready");
+
 async function integrationOf(student: Student, provider: "PORTAL" | "LMS") {
   return prisma.integration.findFirstOrThrow({
     where: { userId: student.id, provider },
@@ -137,7 +148,7 @@ beforeAll(async () => {
   }
   redis = new Redis({ ...QUEUE_REDIS, maxRetriesPerRequest: null });
   // Start from empty queues so counts below belong to this run.
-  for (const def of [PORTAL_FETCH_QUEUE, LMS_FETCH_QUEUE, NOTIFY_QUEUE]) {
+  for (const def of ALL_QUEUES) {
     for (const name of [def.name, dlqName(def.name)]) {
       await queueOf(name).obliterate({ force: true });
     }
@@ -167,67 +178,134 @@ afterAll(async () => {
 // 1. The watcher only enqueues; separate worker roles consume
 // ---------------------------------------------------------------------------
 
-describe("1. ticker enqueues, worker roles consume", () => {
+describe("1. connect and the 5 second watcher enqueue, worker roles consume", () => {
   let student: Student;
 
-  it("claims due schedule rows on the cron and enqueues stable-id jobs", async () => {
+  const jobsFor = async (name: string) =>
+    (await jobsOf(queueOf(name))).filter(
+      (j) => (j.data as { userId?: string }).userId === student.id,
+    );
+  const allDone = (jobs: Job[]) =>
+    jobs.length > 0 && jobs.every((j) => j.finishedOn) ? jobs : false;
+
+  it("connect queues the profile fetch and enrolment discovery as separate jobs", async () => {
     student = await signUp("tick");
     await connect(student, "PORTAL");
     await connect(student, "LMS");
 
-    // The watcher's cron fires once a minute; give it two ticks.
-    const portalIds = await until(
-      "portal-fetch jobs from the ticker",
-      async () => {
-        const jobs = (await jobsOf(portalQ())).filter(
-          (j) => (j.data as FetchJobData).userId === student.id,
-        );
-        return jobs.length > 0 && jobs.every((j) => j.finishedOn)
-          ? jobs
-          : false;
-      },
-      130_000,
-      1_000,
+    const profile = await until(
+      "portal-profile job",
+      async () => allDone(await jobsFor(PORTAL_PROFILE_QUEUE.name)),
+      30_000,
+      500,
     );
-    const lmsJobs = await until(
-      "lms-fetch jobs from the ticker",
+    const discovery = await until(
+      "portal-discovery job",
+      async () => allDone(await jobsFor(PORTAL_DISCOVERY_QUEUE.name)),
+      30_000,
+      500,
+    );
+    const lmsDiscovery = await until(
+      "lms-discovery job",
+      async () => allDone(await jobsFor(LMS_DISCOVERY_QUEUE.name)),
+      30_000,
+      500,
+    );
+    for (const job of [...profile, ...discovery, ...lmsDiscovery]) {
+      expect(await job.getState()).toBe("completed");
+    }
+    expect(profile).toHaveLength(1);
+    expect(discovery).toHaveLength(1);
+    expect(lmsDiscovery).toHaveLength(1);
+  });
+
+  it("shows the profile and marks once their jobs finish", async () => {
+    await until(
+      "profile and marks stored",
       async () => {
-        const jobs = (await jobsOf(lmsQ())).filter(
-          (j) => (j.data as FetchJobData).userId === student.id,
-        );
-        return jobs.length > 0 && jobs.every((j) => j.finishedOn)
-          ? jobs
-          : false;
+        const row = await prisma.studentProfile.findUnique({
+          where: { userId: student.id },
+        });
+        return row?.marksFetchedAt ? row : false;
       },
+      30_000,
+      500,
+    );
+    const res = await student.agent.get("/api/v1/users/me/student").expect(200);
+    const body = res.body as { data: StudentResponse };
+    expect(body.data.profile).toMatchObject({
+      fullName: "Sinh Viên Mẫu",
+      className: "CTK47A",
+      cohort: "Khóa 47",
+      gpa4: 3.85,
+      creditsEarned: 101,
+    });
+    const marks = await student.agent.get("/api/v1/users/me/marks").expect(200);
+    const marksBody = marks.body as { data: StudentMarksResponse };
+    expect(marksBody.data.terms[0].marks).toHaveLength(2);
+    // PII from the marks rows is never stored or returned.
+    expect(JSON.stringify([res.body, marks.body])).not.toContain("0900000000");
+  });
+
+  it("the watcher splits the term into one job per week and the calendar into two months", async () => {
+    const weeks = await until(
+      "portal-week jobs",
+      async () => allDone(await jobsFor(PORTAL_WEEK_QUEUE.name)),
       60_000,
       1_000,
     );
-
-    for (const job of portalIds) {
-      const d = job.data as FetchJobData;
-      expect(d.kind).toMatch(/^PORTAL_/);
-      expect(job.id).toBe(idempotencyKey(d.scheduleId, d.dueAt));
-      expect(await job.getState()).toBe("completed");
-      expect((job.returnvalue as { ok: boolean }).ok).toBe(true);
-    }
-    for (const job of lmsJobs) {
-      const d = job.data as FetchJobData;
-      expect(d.kind).toMatch(/^LMS_/);
-      expect(job.id).toBe(idempotencyKey(d.scheduleId, d.dueAt));
-      expect(await job.getState()).toBe("completed");
-    }
-
-    // The schedule rows these jobs served were stamped as run.
-    const rows = await prisma.ingestionSchedule.findMany({
-      where: { integration: { userId: student.id } },
-    });
-    const ranIds = new Set(
-      [...portalIds, ...lmsJobs].map(
-        (j) => (j.data as FetchJobData).scheduleId,
-      ),
+    const months = await until(
+      "lms-month jobs",
+      async () => allDone(await jobsFor(LMS_MONTH_QUEUE.name)),
+      60_000,
+      1_000,
     );
-    for (const row of rows.filter((r) => ranIds.has(r.id))) {
-      expect(row.lastRunAt).not.toBeNull();
+    expect(weeks.length).toBeGreaterThan(1);
+    expect(months).toHaveLength(2);
+    const units = weeks.map((j) => (j.data as { unit: string }).unit);
+    expect(new Set(units).size).toBe(units.length);
+    for (const job of [...weeks, ...months]) {
+      expect(await job.getState()).toBe("completed");
+    }
+
+    // One run per pass, closed once every unit reported.
+    const runs = await prisma.syncRun.findMany({
+      where: { integration: { userId: student.id } },
+      include: { units: true },
+    });
+    expect(runs.length).toBeGreaterThanOrEqual(2);
+    for (const run of runs) {
+      expect(run.finishedAt).not.toBeNull();
+      expect(run.units.every((u) => u.status === "DONE")).toBe(true);
+    }
+  });
+
+  it("raises one timetable notice, however many weeks changed", async () => {
+    const notes = (await noteRows(student)).filter(
+      (n) => n.eventName === "timetable.ready",
+    );
+    expect(notes.length).toBeLessThanOrEqual(1);
+    for (const note of notes) {
+      expect(note.title).toMatch(/^Sem \d timetable is live$/);
+    }
+  });
+
+  it("exam passes still run through portal-fetch", async () => {
+    const exams = await until(
+      "portal-fetch exam job",
+      async () =>
+        allDone(
+          (await jobsFor(PORTAL_FETCH_QUEUE.name)).filter(
+            (j) => (j.data as FetchJobData).kind === "PORTAL_EXAM",
+          ),
+        ),
+      60_000,
+      1_000,
+    );
+    for (const job of exams) {
+      const d = job.data as FetchJobData;
+      expect(job.id).toBe(idempotencyKey(d.scheduleId, d.dueAt));
+      expect(await job.getState()).toBe("completed");
     }
   });
 
@@ -244,15 +322,27 @@ describe("1. ticker enqueues, worker roles consume", () => {
   it("each role runs only its own part", () => {
     const consuming = (p: Proc, q: string) =>
       hasLine(p, `"message":"consuming ${q}"`);
-    for (const q of ["portal-fetch", "lms-fetch", "notify"]) {
+    const portalQueues = [
+      "portal-fetch",
+      "portal-profile",
+      "portal-marks",
+      "portal-discovery",
+      "portal-week",
+    ];
+    const lmsQueues = ["lms-fetch", "lms-discovery", "lms-month"];
+    for (const q of [...portalQueues, ...lmsQueues, "notify"]) {
       expect(consuming(procs.api!, q)).toBe(false);
       expect(consuming(procs.watcher!, q)).toBe(false);
     }
-    expect(consuming(procs["worker-portal"]!, "portal-fetch")).toBe(true);
-    expect(consuming(procs["worker-portal"]!, "lms-fetch")).toBe(false);
+    for (const q of portalQueues) {
+      expect(consuming(procs["worker-portal"]!, q)).toBe(true);
+      expect(consuming(procs["worker-lms"]!, q)).toBe(false);
+    }
+    for (const q of lmsQueues) {
+      expect(consuming(procs["worker-lms"]!, q)).toBe(true);
+      expect(consuming(procs["worker-portal"]!, q)).toBe(false);
+    }
     expect(consuming(procs["worker-portal"]!, "notify")).toBe(false);
-    expect(consuming(procs["worker-lms"]!, "lms-fetch")).toBe(true);
-    expect(consuming(procs["worker-lms"]!, "portal-fetch")).toBe(false);
     expect(consuming(procs["worker-notify"]!, "notify")).toBe(true);
     expect(consuming(procs["worker-notify"]!, "portal-fetch")).toBe(false);
 
@@ -561,6 +651,10 @@ describe("4. notification fan-out from a worker", () => {
     await connect(s, "PORTAL");
     await connect(s, "LMS");
     await parkSchedule(prisma, s);
+    // The marks job raises its note on connect; let it land before the stream opens.
+    await until("marks note", async () =>
+      (await noteRows(s)).some((n) => n.eventName === "marks.ready"),
+    );
 
     const sse = openSse(s);
     const otherSse = openSse(bystander);
@@ -569,7 +663,7 @@ describe("4. notification fan-out from a worker", () => {
     await s.agent.post("/api/v1/integrations/PORTAL/sync").expect(201);
     await s.agent.post("/api/v1/integrations/LMS/sync").expect(201);
 
-    const rows = await noteRows(s);
+    const rows = await syncNoteRows(s);
     expect(rows.length).toBeGreaterThanOrEqual(2);
     expect(new Set(rows.map((r) => r.title)).size).toBe(rows.length);
 
@@ -606,15 +700,19 @@ describe("4. notification fan-out from a worker", () => {
       ]);
       for (const j of jobs) expect(await j.getState()).toBe("completed");
     }
-    const allPush = (await jobsOf(notifyQ())).length;
+    // This student's push jobs only: the queue is shared, and other students'
+    // marks notes keep landing in it.
+    const pushCount = async () =>
+      (await Promise.all(rows.map((r) => pushJobsFor(r.id)))).flat().length;
+    const allPush = await pushCount();
 
     // A quiet re-run (same data upstream) raises nothing and enqueues nothing.
     await sleep((TUNING.cooldownSec + 1) * 1000);
     await s.agent.post("/api/v1/integrations/PORTAL/sync").expect(201);
     await s.agent.post("/api/v1/integrations/LMS/sync").expect(201);
     await sleep(1_000);
-    expect(await noteRows(s)).toHaveLength(rows.length);
-    expect((await jobsOf(notifyQ())).length).toBe(allPush);
+    expect(await syncNoteRows(s)).toHaveLength(rows.length);
+    expect(await pushCount()).toBe(allPush);
     expect(sse.events).toHaveLength(rows.length);
 
     sse.close();

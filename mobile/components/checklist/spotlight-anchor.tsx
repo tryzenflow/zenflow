@@ -1,7 +1,7 @@
 import { Spotlight } from "@/components/checklist/spotlight";
 import { useSpotlight } from "@/hooks/use-spotlight";
 import { type Rect, isOnScreen } from "@/lib/spotlight";
-import type { ChecklistStep } from "@zenflow/shared";
+import type { SpotlightStep } from "@/lib/spotlight";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -32,7 +32,7 @@ export function SpotlightAnchor({
   step,
   ignoreFocus = false,
 }: {
-  step: ChecklistStep;
+  step: SpotlightStep;
   /** For controls outside a screen (the tab bar), which has no focus of its own. */
   ignoreFocus?: boolean;
 }) {
@@ -44,7 +44,7 @@ export function SpotlightAnchor({
 }
 
 /** Only the focused screen answers (Week and Month are both mounted). */
-function FocusGatedAnchor({ step }: { step: ChecklistStep }) {
+function FocusGatedAnchor({ step }: { step: SpotlightStep }) {
   const [focused, setFocused] = useState(false);
   useFocusEffect(
     useCallback(() => {
@@ -55,7 +55,7 @@ function FocusGatedAnchor({ step }: { step: ChecklistStep }) {
   return <Anchor step={step} focused={focused} />;
 }
 
-function Anchor({ step, focused }: { step: ChecklistStep; focused: boolean }) {
+function Anchor({ step, focused }: { step: SpotlightStep; focused: boolean }) {
   const requested = useSpotlight((s) => s.step === step);
   const ref = useRef<ViewInstance>(null);
   const [rect, setRect] = useState<Rect | null>(null);

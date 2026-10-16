@@ -1,5 +1,7 @@
 import {
   NO_SERIES_SITTING_PROPOSAL,
+  courseKeyOf,
+  placementReasonOf,
   toSeriesSessionDto,
 } from "./session-mapper";
 import type { SessionRow } from "./types/session-row";
@@ -29,6 +31,45 @@ const row = (over: Partial<SessionRow> = {}): SessionRow =>
     updatedAt: new Date("2026-06-01T00:00:00.000Z"),
     ...over,
   }) as unknown as SessionRow;
+
+describe("placementReasonOf (#254)", () => {
+  it("returns the reason while the start is the one it was made for", () => {
+    expect(
+      placementReasonOf({
+        placementReason: "PREFERRED_HOUR",
+        placementReasonStartAt: START,
+        scheduledStartTime: START,
+      }),
+    ).toBe("PREFERRED_HOUR");
+  });
+
+  it("hides the reason once the start has moved", () => {
+    expect(
+      placementReasonOf({
+        placementReason: "PREFERRED_HOUR",
+        placementReasonStartAt: START,
+        scheduledStartTime: ALT,
+      }),
+    ).toBeNull();
+  });
+
+  it("is null without a reason or a start", () => {
+    expect(
+      placementReasonOf({
+        placementReason: null,
+        placementReasonStartAt: null,
+        scheduledStartTime: START,
+      }),
+    ).toBeNull();
+    expect(
+      placementReasonOf({
+        placementReason: "NEAR_CLASS",
+        placementReasonStartAt: START,
+        scheduledStartTime: null,
+      }),
+    ).toBeNull();
+  });
+});
 
 describe("toSeriesSessionDto (#58)", () => {
   it("a shown divergent sitting carries its proposal id, primary and alternative", () => {
@@ -87,5 +128,25 @@ describe("toSeriesSessionDto (#58)", () => {
       alternativeSlot: null,
       divergent: false,
     });
+  });
+});
+
+describe("courseKeyOf", () => {
+  it("keys an LMS item by its Moodle course id", () => {
+    expect(courseKeyOf({ lmsCourseId: 90001, scheduleStudyUnitId: null })).toBe(
+      "lms:90001",
+    );
+  });
+
+  it("keys a portal item by its section id", () => {
+    expect(
+      courseKeyOf({ lmsCourseId: null, scheduleStudyUnitId: "99910AB100101" }),
+    ).toBe("portal:99910AB100101");
+  });
+
+  it("is null for a user-created session", () => {
+    expect(
+      courseKeyOf({ lmsCourseId: null, scheduleStudyUnitId: null }),
+    ).toBeNull();
   });
 });

@@ -1,11 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { randomBytes } from "crypto";
-import {
-  Prisma,
-  SchedulingModel,
-  SessionEventType,
-} from "../../generated/prisma";
+import { Prisma, SchedulingModel } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
+import { loadObservationCount } from "../scheduler/io/observation-count";
 import {
   BANDIT_EXPERIMENT_ID,
   BANDIT_MODEL_VERSION,
@@ -63,7 +60,10 @@ export class ExperimentService {
    * the caller can attribute a later `MOVE`/`RETAINED` reward to it. */
   async recordProposal(args: RecordProposalArgs): Promise<string | null> {
     try {
-      const observationCount = await this.loadObservationCount(args.userId);
+      const observationCount = await loadObservationCount(
+        this.prisma,
+        args.userId,
+      );
       const created = await this.prisma.slotProposal.create({
         data: this.buildProposalData(args, observationCount),
         select: { id: true },
@@ -76,15 +76,6 @@ export class ExperimentService {
       );
       return null;
     }
-  }
-
-  private loadObservationCount(userId: string): Promise<number> {
-    return this.prisma.sessionEvent.count({
-      where: {
-        userId,
-        eventType: { in: [SessionEventType.MOVE, SessionEventType.RETAINED] },
-      },
-    });
   }
 
   private buildProposalData(

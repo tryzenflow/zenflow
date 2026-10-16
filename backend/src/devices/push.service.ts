@@ -95,6 +95,32 @@ export class PushService {
     row: Notification,
     opts: SendOptions = {},
   ): Promise<void> {
+    await this.sendMessage(
+      userId,
+      (lang) => {
+        const local = localizeNotification(row, lang);
+        return {
+          title: local.title,
+          body: local.content,
+          data: this.dataFor(row),
+          tone: pushToneFor(row.eventName),
+          category: pushCategoryFor(row.eventName),
+        };
+      },
+      opts,
+    );
+  }
+
+  /**
+   * Deliver a message built from the user's language to every device they
+   * have registered. `build` returns `null` to send nothing. Shared by the
+   * notification path and the daily brief / check-in (issue #255).
+   */
+  async sendMessage(
+    userId: string,
+    build: (lang: string | undefined) => PushMessage | null,
+    opts: SendOptions = {},
+  ): Promise<void> {
     const guard = opts.guard ?? unguarded;
     const wantFcm = !opts.provider || opts.provider === "fcm";
     const wantApns = !opts.provider || opts.provider === "apns";
@@ -110,7 +136,8 @@ export class PushService {
       select: { allowNotifications: true, lang: true },
     });
     if (user && !user.allowNotifications) return;
-    row = localizeNotification(row, user?.lang);
+    const msg = build(user?.lang);
+    if (!msg) return;
 
     const devices = await this.prisma.userDevice.findMany({
       where: { userId },
@@ -134,14 +161,6 @@ export class PushService {
         `${!this.fcm.enabled && android.length ? " [FCM disabled]" : ""}` +
         `${!this.apns.enabled && ios.length ? " [APNs disabled]" : ""}`,
     );
-
-    const msg: PushMessage = {
-      title: row.title,
-      body: row.content,
-      data: this.dataFor(row),
-      tone: pushToneFor(row.eventName),
-      category: pushCategoryFor(row.eventName),
-    };
 
     const settled = await Promise.allSettled([
       this.sendVia("fcm", this.fcm, android, msg, guard),

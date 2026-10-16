@@ -1,4 +1,5 @@
 import { t } from "@/lib/i18n";
+import { GlassButton } from "@/components/ui/glass-button";
 import { useLanguage } from "@/hooks/use-language";
 import {
   CalendarClock,
@@ -28,13 +29,12 @@ import {
 } from "react";
 import { Pressable, View } from "react-native";
 
-/** Which slice of a series a reschedule/resize should hit. */
-export type UpdateRecurringScope = "occurrence" | "following" | "series";
+import type {
+  PendingSessionUpdate,
+  UpdateRecurringScope,
+} from "@/lib/recurring-scope";
 
-export interface PendingSessionUpdate {
-  scheduledStartTime: string;
-  durationMinutes: number;
-}
+export type { PendingSessionUpdate, UpdateRecurringScope };
 
 export interface UpdateRecurringSheetHandle {
   /** Open the scope chooser for `session`, which is about to be moved/resized
@@ -244,13 +244,12 @@ export const UpdateRecurringSheet = forwardRef<
                 {t("Choose which occurrences pick up the new time.")}
               </Text>
             </View>
-            <Pressable
+            <GlassButton
               onPress={sheet.close}
+              icon={X}
               accessibilityLabel={t("Cancel")}
-              className="h-8 w-8 items-center justify-center"
-            >
-              <X size={16} className="text-muted-foreground" />
-            </Pressable>
+              style={{ marginRight: -6 }}
+            />
           </View>
 
           <View className="gap-2.5">
@@ -268,8 +267,18 @@ export const UpdateRecurringSheet = forwardRef<
                         "rounded-b-none border-b-0 border-primary bg-primary/10",
                     )}
                   >
-                    <View className="h-9 w-9 items-center justify-center rounded-xl bg-muted">
-                      <Icon size={17} className="text-muted-foreground" />
+                    <View
+                      className={cn(
+                        "h-9 w-9 items-center justify-center rounded-xl bg-muted",
+                        isExpanded && "bg-primary/15",
+                      )}
+                    >
+                      <Icon
+                        size={17}
+                        className={
+                          isExpanded ? "text-primary" : "text-muted-foreground"
+                        }
+                      />
                     </View>
                     <View className="min-w-0 flex-1">
                       <Text className="text-[15px] font-semibold text-foreground">
@@ -282,7 +291,9 @@ export const UpdateRecurringSheet = forwardRef<
                     {!immediate && (
                       <CalendarClock
                         size={16}
-                        className="text-muted-foreground"
+                        className={
+                          isExpanded ? "text-primary" : "text-muted-foreground"
+                        }
                       />
                     )}
                   </Pressable>

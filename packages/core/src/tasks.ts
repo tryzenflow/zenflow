@@ -24,11 +24,9 @@ import {
 export const MAX_TITLE_LENGTH = 60;
 
 /**
- * Ceiling on a `TASK`'s `sessionCount` — mirrors the backend's
- * `MAX_SESSION_COUNT` (`backend/src/sessions/dto/create-session.dto.ts`):
- * `MAX_SERIES_PER_DAY (1) × MAX_SCAN_DAYS (60)`. A request above this can never
- * be placed in full no matter how loose the deadline is, since the placer puts
- * at most one sitting of a series on any calendar day.
+ * Ceiling on a `TASK`'s `sessionCount`. Mirrors the backend's
+ * `MAX_SESSION_COUNT` (`backend/src/sessions/dto/create-session.dto.ts`): one
+ * per day of the 60-day scheduling horizon.
  */
 export const MAX_TASK_SESSION_COUNT = 60;
 
@@ -83,6 +81,11 @@ export const sessionSchema = z
      * actual enforcement, for a direct API call bypassing the form.
      */
     sessionCount: z.int().min(1, { error: "At least 1 session" }).optional(),
+    /**
+     * Mobile's composer: `duration` is the whole task and `sessionCount` splits
+     * it into equal sittings. Unset, `duration` is the length of each sitting.
+     */
+    splitTotal: z.boolean().optional(),
 
     /**
      * Minutes-before-start reminders (max `MAX_REMINDERS_PER_SESSION`). Omitted
@@ -127,7 +130,8 @@ export const sessionSchema = z
       // `"\n"` splits toast title from description (`splitToastMessage`).
       if (durationOk && deadlineOk) {
         const sessionCount = Math.max(1, Math.trunc(v.sessionCount ?? 1));
-        const neededMs = (v.duration as number) * sessionCount * 60_000;
+        const neededMs =
+          (v.duration as number) * (v.splitTotal ? 1 : sessionCount) * 60_000;
         if (Date.now() + neededMs > Date.parse(v.deadline as string)) {
           ctx.addIssue({
             code: "custom",

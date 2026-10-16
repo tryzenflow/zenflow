@@ -6,11 +6,14 @@
     "backup-failure-visibility",
     "checklist-day-sheet-spotlight",
     "dlu-signups-backups-legal-pages",
+    "enable-occurrence-cache",
     "env-upload-limits-storage-bar",
     "file-ids-queue-release",
     "file-range-requests",
     "glass-login-staging-exporter",
     "health-all-dependencies",
+    "inline-toast-buttons-ci-gating",
+    "landing-page-android-updates",
     "mobile-nav-and-lag",
     "mobile-test-pyramid",
     "offline-follow-ups",
@@ -19,7 +22,10 @@
     "release-note-files-undo-redo",
     "restore-saved-theme",
     "sentence-case-copy-and-names",
-    "short-user-facing-copy"
+    "short-user-facing-copy",
+    "split-ingestion-queues",
+    "spread-tasks-and-focus-band",
+    "usezenflow-domains"
   ],
   "initialVersions": {
     "backend": "0.0.0",

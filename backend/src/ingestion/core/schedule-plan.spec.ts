@@ -64,11 +64,16 @@ describe("batchSizeFor", () => {
   });
 
   it("clamps down to maxBatch, so a mis-set period cannot burst", () => {
-    // An hourly period over 150 students wants 3/tick; a 1-minute period wants
-    // all 150 — the ceiling is what stops the latter.
+    // An hourly period over 7200 students wants 10/tick; a one-tick period
+    // wants all 150 — the ceiling is what stops the latter.
     expect(
-      batchSizeFor({ ...base, population: 150, targetPeriodMs: HOUR }),
-    ).toBe(3);
+      batchSizeFor({
+        ...base,
+        population: 7200,
+        targetPeriodMs: HOUR,
+        maxBatch: 1000,
+      }),
+    ).toBe(10);
     expect(
       batchSizeFor({
         ...base,
@@ -120,7 +125,7 @@ describe("nextDueAfterRun", () => {
 
   it("spreads an all-due-at-once population over one period, and keeps it spread", () => {
     // The property the absence of jitter rests on. 150 rows all seeded due at
-    // T, one-minute ticks, a 60-minute period, 3 claimed per tick: every row is
+    // T, 5 second ticks, a 60-minute period, 1 claimed per tick: every row is
     // claimed exactly once within the period, no tick exceeds batchSize, and
     // the due times they come back with are already fanned out.
     const period = 60 * 60_000;
@@ -133,10 +138,10 @@ describe("nextDueAfterRun", () => {
       population: rows.length,
       targetPeriodMs: period,
     });
-    expect(batchSize).toBe(3);
+    expect(batchSize).toBe(1);
 
     const claimedAt = new Map<number, number>();
-    for (let tick = 0; tick < 60; tick++) {
+    for (let tick = 0; tick < period / TICK_INTERVAL_MS; tick++) {
       const tickNow = new Date(NOW.getTime() + tick * TICK_INTERVAL_MS);
       const due = rows
         .filter((r) => r.nextDueAt.getTime() <= tickNow.getTime())
@@ -152,8 +157,8 @@ describe("nextDueAfterRun", () => {
 
     // Everyone served exactly once in the period…
     expect(claimedAt.size).toBe(150);
-    // …and their next due times now occupy 50 distinct minutes rather than one.
-    expect(new Set(rows.map((r) => r.nextDueAt.getTime())).size).toBe(50);
+    // …and their next due times now occupy 150 distinct ticks rather than one.
+    expect(new Set(rows.map((r) => r.nextDueAt.getTime())).size).toBe(150);
   });
 });
 

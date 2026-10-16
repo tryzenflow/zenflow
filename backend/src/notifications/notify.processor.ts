@@ -7,6 +7,7 @@ import { QueueWorkers } from "../queue/queue-workers.service";
 import { NOTIFY_QUEUE, type NotifyJobData } from "../queue/queues";
 import { withBreaker } from "../queue/with-breaker";
 import { ReminderSchedulerService } from "../reminders/reminder-scheduler.service";
+import { DailyPushService } from "../daily-push/daily-push.service";
 
 /**
  * The `notify` queue consumer (role `worker-notify`, `worker`, `all`):
@@ -24,6 +25,7 @@ export class NotifyProcessor implements OnModuleInit {
     private readonly workers: QueueWorkers,
     private readonly push: PushService,
     private readonly reminders: ReminderSchedulerService,
+    private readonly dailyPush: DailyPushService,
     private readonly breakers: OutboundBreakers,
     private readonly killSwitch: KillSwitchService,
   ) {}
@@ -60,6 +62,14 @@ export class NotifyProcessor implements OnModuleInit {
           data.reminderId,
           new Date(data.startsAt).getTime(),
         );
+      case "daily":
+        return this.dailyPush.deliver(data.userId, data.kind, data.localDate, {
+          provider: data.provider,
+          guard: (provider, fn) =>
+            withBreaker(this.breakers, provider, job, token, fn, {
+              queue: NOTIFY_QUEUE.name,
+            }),
+        });
       default:
         this.logger.warn(`unknown notify job ${job.id}`);
     }

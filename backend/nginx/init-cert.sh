@@ -3,14 +3,16 @@
 # backend/ BEFORE the first `docker compose up`: nginx cannot start without a
 # certificate, so certbot answers the challenge on :80 itself. Renewal then runs
 # in the `certbot` service over the nginx webroot.
-# Usage: LE_EMAIL=ops@example.com ./nginx/init-cert.sh
-#        LE_EMAIL=... DOMAIN=grafana.alphatrann.com ./nginx/init-cert.sh   # one cert per host (also minio.alphatrann.com)
+# Usage: LE_EMAIL=ops@example.com ./nginx/init-cert.sh                  # api.usezenflow.com
+#        LE_EMAIL=... DOMAIN=grafana.usezenflow.com ./nginx/init-cert.sh
+#        LE_EMAIL=... DOMAIN=minio.usezenflow.com ./nginx/init-cert.sh
+# DOMAIN is a comma-separated list for one certificate; it is named after the first host.
 # If nginx is already running (adding a host to a live stack) the webroot method is used
-# instead, so :80 stays up. Point the host's DNS A record here first. Issue the Grafana
-# and MinIO certs BEFORE deploying an nginx.prod.conf that references them, or nginx will not start.
+# instead, so :80 stays up. Point each host's DNS A record here first. Issue every cert
+# BEFORE deploying an nginx.prod.conf that references it, or nginx will not start.
 set -euo pipefail
 : "${LE_EMAIL:?set LE_EMAIL}"
-domain="${DOMAIN:-zenflow.alphatrann.com}"
+domain="${DOMAIN:-api.usezenflow.com}"
 if [ -n "$(docker compose -f compose.prod.yml ps -q --status running nginx)" ]; then
   docker compose -f compose.prod.yml run --rm --entrypoint certbot certbot \
     certonly --webroot -w /var/www/certbot --non-interactive --agree-tos -m "$LE_EMAIL" -d "$domain"

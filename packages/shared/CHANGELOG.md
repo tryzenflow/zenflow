@@ -1,5 +1,21 @@
 # @zenflow/shared
 
+## 1.0.0-beta.11
+
+### Major Changes
+
+- b474dc1: First 1.0 beta. Spread a task out as a daily amount until its deadline, and split a total into sittings of nearly equal length. A series can now take up to three sittings a day, so a near deadline no longer reads as not enough time. Onboarding preselects morning, shows an icon per time of day, and places sleep and meals around the hours you focus best. The empty day slot sits at that time too. Skipped sessions fade with a skip mark, search ignores accents, the streak counts only tasks, and marks and timetable notices open without errors.
+
+  Deployments run the split ingestion queues and their workers, and apply the new migrations before starting.
+
+### Minor Changes
+
+- 3c5e8da: Connecting the portal now fetches your DLU profile and marks, and shows them in Settings. The timetable syncs one week at a time, the LMS calendar one month at a time, and you get one notice that your timetable is filling in.
+
+## 0.1.0-beta.10
+
+## 0.1.0-beta.9
+
 ## 0.1.0-beta.8
 
 ### Minor Changes

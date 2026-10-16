@@ -17,7 +17,6 @@ vi.mock("@/components/checklist/getting-started", () => ({ GettingStarted: () =>
 vi.mock("@/components/tasks/create-task-fab", () => ({ CreateSessionFab: () => null }));
 vi.mock("@/components/calendar/block-actions-sheet", () => ({ BlockActionsSheet: () => null }));
 vi.mock("@/components/calendar/reschedule-sheet", () => ({ RescheduleSheet: () => null }));
-vi.mock("@/components/calendar/series-slot-pick-sheet", () => ({ SeriesSlotPickSheet: () => null }));
 vi.mock("@/components/calendar/update-recurring-sheet", () => ({ UpdateRecurringSheet: () => null }));
 vi.mock("@/lib/tab-bar-metrics", () => ({ useTabBarOverlayHeight: () => 0 }));
 
@@ -57,7 +56,7 @@ describe("WeekScreen", () => {
   it("opens on today's week: month title, Monday-first range and a 'today' chip", async () => {
     renderScreen(<WeekScreen />);
     expect(screen.getByText("October 2026")).toBeTruthy();
-    expect(screen.getByText("Oct 12 – Oct 18")).toBeTruthy();
+    expect(screen.getByText("Oct 12 to Oct 18")).toBeTruthy();
     expect(screen.getByLabelText(/^Thursday, October 15, today/)).toBeTruthy();
     expect(screen.getByLabelText("Monday, October 12")).toBeTruthy();
     expect(screen.getByLabelText("Sunday, October 18")).toBeTruthy();
@@ -85,18 +84,23 @@ describe("WeekScreen", () => {
     );
   });
 
-  it("opens the session editor when a block is tapped", async () => {
+  it("opens the session detail sheet in place when a block is tapped", async () => {
     renderScreen(<WeekScreen />);
     fireEvent.click(await block("a"));
-    expect(router.push).toHaveBeenCalledWith("/task/a/edit");
+    expect((await screen.findByTestId("session-detail-title")).textContent).toBe("Algorithms lecture");
+    expect(screen.getByTestId("session-detail-edit")).toBeTruthy();
+    expect(router.push).not.toHaveBeenCalled();
   });
 
-  it("encodes a recurring occurrence id in the editor route", async () => {
+  it("opens the editor for a recurring occurrence from its detail sheet", async () => {
     const id = "series1::2026-10-15T03:00:00.000Z";
     sessions = [makeSession({ id, title: "Weekly lab", seriesId: "series1", rrule: "FREQ=WEEKLY" })];
     renderScreen(<WeekScreen />);
     fireEvent.click(await block(id));
-    expect(router.push).toHaveBeenCalledWith(`/task/${encodeURIComponent(id)}/edit`);
+    fireEvent.click(await screen.findByTestId("session-detail-edit"));
+    await waitFor(() =>
+      expect(router.push).toHaveBeenCalledWith(`/task/${encodeURIComponent(id)}/edit`),
+    );
   });
 
   it("offers to add a session on an empty day", async () => {
@@ -128,18 +132,8 @@ describe("WeekScreen", () => {
     const { useLocalSearchParams } = await import("expo-router");
     vi.mocked(useLocalSearchParams).mockReturnValue({ date: "2026-10-22T05:00:00.000Z" } as never);
     renderScreen(<WeekScreen />);
-    expect(screen.getByText("Oct 19 – Oct 25")).toBeTruthy();
+    expect(screen.getByText("Oct 19 to Oct 25")).toBeTruthy();
     await waitFor(() => expect(requests).toContain("day:2026-10-22"));
     vi.mocked(useLocalSearchParams).mockReturnValue({} as never);
-  });
-
-  it("announces the next upcoming session", async () => {
-    // 15:00 local, after 'now' (12:00): the pill points at it.
-    sessions = [
-      makeSession({ id: "later", title: "Evening review", scheduledStartTime: "2026-10-15T08:00:00.000Z" }),
-    ];
-    renderScreen(<WeekScreen />);
-    await block("later");
-    await waitFor(() => expect(screen.getByLabelText(/^Next up:/)).toBeTruthy());
   });
 });

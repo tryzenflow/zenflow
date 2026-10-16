@@ -41,7 +41,7 @@ interface ErrorBoundaryState {
  * here, is Expo Router's automatic per-route `ErrorBoundary` (re-exported in
  * `app/_layout.tsx`), unmounting the *entire* routed screen for a failure in
  * one unrelated field. First real use: `DescriptionField`
- * (`components/tasks/form/description-field.tsx`) mounts a
+ * (`components/tasks/note/description-field.tsx`) mounts a
  * `react-native-webview`-backed native view the first time its sheet opens
  * (`@gorhom/bottom-sheet`'s `BottomSheetModal` defers mounting sheet content
  * until `present()` — see its `mount` state); if `react-native-webview` /

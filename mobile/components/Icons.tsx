@@ -38,6 +38,7 @@ import {
   CircleUserRound,
   ClipboardList,
   Clock,
+  Layers,
   Cloud,
   Code,
   Copy,
@@ -51,6 +52,7 @@ import {
   Github,
   Globe,
   GraduationCap,
+  Hand,
   Highlighter,
   ImagePlus,
   Home,
@@ -65,6 +67,8 @@ import {
   Maximize2,
   Redo2,
   Undo2,
+  SkipForward,
+  Flame,
   Pencil,
   Repeat,
   KeyRound,
@@ -72,12 +76,13 @@ import {
   Unlink,
   List,
   ListOrdered,
-  Loader,
   Lock,
   LogOut,
   type LucideIcon,
   Mail,
   MapPin,
+  Pin,
+  PinOff,
   MenuSquare,
   MessageCircleQuestion,
   MessageSquare,
@@ -86,6 +91,7 @@ import {
   Moon,
   MoonStar,
   MousePointer2,
+  ListChecks,
   Notebook,
   Palette,
   Plus,
@@ -104,6 +110,8 @@ import {
   Sparkles,
   Star,
   Sun,
+  Sunrise,
+  Sunset,
   Table,
   Tag,
   Terminal,
@@ -129,6 +137,8 @@ function interopIcon(icon: LucideIcon) {
 }
 interopIcon(Settings);
 interopIcon(Sun);
+interopIcon(Sunrise);
+interopIcon(Sunset);
 interopIcon(MoonStar);
 interopIcon(AlignJustify);
 interopIcon(Activity);
@@ -137,7 +147,6 @@ interopIcon(AlarmClockIcon);
 interopIcon(AlertCircle);
 interopIcon(AlignRight);
 interopIcon(Baby);
-interopIcon(Loader);
 interopIcon(BadgeAlert);
 interopIcon(Calendar);
 interopIcon(CircleUserRound);
@@ -180,6 +189,8 @@ interopIcon(LifeBuoy);
 interopIcon(LogOut);
 interopIcon(Mail);
 interopIcon(MapPin);
+interopIcon(Pin);
+interopIcon(PinOff);
 interopIcon(MessageSquare);
 interopIcon(Monitor);
 interopIcon(Plus);
@@ -202,6 +213,7 @@ interopIcon(Moon);
 interopIcon(Palette);
 interopIcon(Smartphone);
 interopIcon(Clock);
+interopIcon(Layers);
 interopIcon(MessageCircleQuestion);
 interopIcon(MinusCircle);
 interopIcon(MousePointer2);
@@ -232,10 +244,14 @@ interopIcon(Scale);
 interopIcon(CalendarClock);
 interopIcon(ClipboardList);
 interopIcon(GraduationCap);
+interopIcon(Hand);
+interopIcon(ListChecks);
 interopIcon(Notebook);
 interopIcon(Maximize2);
 interopIcon(Redo2);
 interopIcon(Undo2);
+interopIcon(SkipForward);
+interopIcon(Flame);
 interopIcon(Pencil);
 interopIcon(Repeat);
 
@@ -277,6 +293,7 @@ export {
   CircleUserRound,
   ClipboardList,
   Clock,
+  Layers,
   Cloud,
   Code,
   Copy,
@@ -289,6 +306,7 @@ export {
   GalleryHorizontal,
   Globe,
   GraduationCap,
+  Hand,
   Highlighter,
   ImagePlus,
   Info,
@@ -301,6 +319,8 @@ export {
   Maximize2,
   Redo2,
   Undo2,
+  SkipForward,
+  Flame,
   Pencil,
   Repeat,
   KeyRound,
@@ -309,10 +329,11 @@ export {
   List,
   ListOrdered,
   Lock,
-  Loader,
   LogOut,
   Settings,
   Mail,
+  Pin,
+  PinOff,
   MapPin,
   MenuSquare,
   MessageCircleQuestion,
@@ -321,6 +342,7 @@ export {
   Monitor,
   MoonStar,
   MousePointer2,
+  ListChecks,
   Notebook,
   Plus,
   PlusCircle,
@@ -332,6 +354,8 @@ export {
   Search,
   Sparkles,
   Sun,
+  Sunrise,
+  Sunset,
   Table,
   Tag,
   Terminal,

@@ -65,7 +65,7 @@ export function TagPicker({
           className="flex-1"
           value={draft}
           onChangeText={setDraft}
-          placeholder={t("Add your own tag…")}
+          placeholder={t("Add a tag")}
           maxLength={50}
           returnKeyType="done"
           onSubmitEditing={add}

@@ -17,6 +17,7 @@ from src.core.constants import (
     FEATURE_DIM,
     INFEASIBLE_HORIZON_DAYS,
     MS_PER_MINUTE,
+    SERIES_GAP_MINUTES,
 )
 from src.core.linucb_best_slot import best_linucb_slot, days_from_dicts
 from src.core.preference import default_preference_matrix
@@ -280,7 +281,7 @@ def test_series_spreads_members_over_distinct_windows_without_overlap() -> None:
         assert b - a >= 2 * HOUR
 
 
-def test_series_member_without_a_window_slot_gets_a_last_resort_start() -> None:
+def test_series_member_without_a_window_slot_spills_to_the_whole_range() -> None:
     # 2 members, deadline one day ahead, the second window's day is fully blocked.
     days = make_days(2, occupied={1: [(NOW + 16 * HOUR, NOW + 2 * DAY_MS)]})
     body = make_req(
@@ -291,17 +292,26 @@ def test_series_member_without_a_window_slot_gets_a_last_resort_start() -> None:
     )
     a, b = ok(body)["results"]
     assert a["outcome"] == "PLACED"
-    # PLACE never leaves a member unplaced: least-conflict start over the whole
-    # range, clear of its sibling.
-    assert b["outcome"] == "ACCEPTED_LAST_RESORT" and b["startMs"] is not None
-    assert b["conflicting"] is False and b["late"] is False
+    # The second sitting falls back to the free first day, clear of its sibling.
+    assert b["outcome"] == "PLACED" and b["startMs"] is not None
     assert b["startMs"] + HOUR <= body["deadlineMs"]
-    assert b["startMs"] >= a["startMs"] + HOUR or b["startMs"] + HOUR <= a["startMs"]
+    gap = SERIES_GAP_MINUTES * MS_PER_MINUTE
+    assert (
+        b["startMs"] >= a["startMs"] + HOUR + gap
+        or b["startMs"] + HOUR + gap <= a["startMs"]
+    )
 
-    # PREFLIGHT still reports the miss so Nest can reject before writing.
-    body["mode"] = "PREFLIGHT"
-    _, b = ok(body)["results"]
-    assert b["outcome"] == "INFEASIBLE" and b["startMs"] is None
+
+def test_series_with_more_sittings_than_the_day_cap_fits_in_one_day() -> None:
+    members = [member(f"s{i}", 15) for i in range(6)]
+    body = make_req(
+        members=members,
+        deadlineMs=NOW + 12 * HOUR,
+        days=make_days(1),
+        maxScanDays=60,
+    )
+    res = ok(body)["results"]
+    assert [r["outcome"] for r in res] == ["PLACED"] * 6
 
 
 def test_series_fixed_occupied_sibling_holds_its_day() -> None:
@@ -317,13 +327,13 @@ def test_series_fixed_occupied_sibling_holds_its_day() -> None:
     assert local_date_str(r["startMs"], "UTC") != local_date_str(existing[0], "UTC")
 
 
-def test_series_past_deadline_is_pinned_back_to_back() -> None:
+def test_series_past_deadline_is_pinned_a_gap_apart() -> None:
     body = make_req(
         members=[member("a"), member("b")], deadlineMs=NOW - HOUR, maxScanDays=60
     )
     res = ok(body)["results"]
     assert [r["outcome"] for r in res] == ["ACCEPTED_LAST_RESORT"] * 2
-    assert [r["startMs"] for r in res] == [NOW, NOW + HOUR]
+    assert [r["startMs"] for r in res] == [NOW, NOW + HOUR + 15 * 60_000]
     assert all(r["late"] for r in res)
 
     body["mode"] = "PREFLIGHT"

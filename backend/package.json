@@ -1,6 +1,6 @@
 {
   "name": "backend",
-  "version": "0.1.0-beta.8",
+  "version": "1.0.0-beta.11",
   "description": "",
   "author": "",
   "private": true,
@@ -17,6 +17,7 @@
     "test": "jest",
     "golden:export": "ts-node scripts/export-golden-fixtures.ts",
     "backfill:unplaced": "dotenv -e .env.dev -- ts-node scripts/backfill-unplaced-tasks.ts",
+    "backfill:lms-course": "dotenv -e .env.dev -- ts-node scripts/backfill-lms-course.ts",
     "killswitch": "dotenv -e .env.dev -- ts-node src/killswitch/killswitch.cli.ts",
     "dlu:fake": "ts-node scripts/fake-dlu-server.ts",
     "prisma:migrate:deploy": "node scripts/with-database-url.cjs prisma migrate deploy",
@@ -62,6 +63,7 @@
     "@parse/node-apn": "^8.1.0",
     "@prisma/client": "^6.13.0",
     "@prisma/instrumentation": "^6.19.3",
+    "@react-email/components": "^1.0.12",
     "@zenflow/shared": "workspace:*",
     "axios": "^1.11.0",
     "bullmq": "^6.3.11",
@@ -88,6 +90,8 @@
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",
     "prisma": "^6.13.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "reflect-metadata": "^0.2.2",
     "rrule": "^2.8.1",
     "rxjs": "^7.8.1",
@@ -109,6 +113,8 @@
     "@types/node": "^26.6.4",
     "@types/nodemailer": "^6.4.17",
     "@types/passport-local": "^1.0.38",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "^19.2.3",
     "@types/supertest": "^6.0.2",
     "dotenv-cli": "^10.0.0",
     "eslint": "^9.18.0",
@@ -131,12 +137,13 @@
     "moduleFileExtensions": [
       "js",
       "json",
-      "ts"
+      "ts",
+      "tsx"
     ],
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.(t|j)sx?$": "ts-jest"
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s"

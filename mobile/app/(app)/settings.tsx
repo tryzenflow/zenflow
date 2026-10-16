@@ -3,6 +3,7 @@ import { useLanguage } from "@/hooks/use-language";
 import { logout as logoutRequest } from "@/api/auth";
 import { listIntegrations } from "@/api/integrations";
 import { LogOut, Moon } from "@/components/Icons";
+import { DailyPushSection } from "@/components/settings/daily-push-section";
 import { DluAccountsSection } from "@/components/settings/dlu-accounts-section";
 import { FinishSetupCard } from "@/components/settings/finish-setup-card";
 import { TagsRow } from "@/components/settings/tags-row";
@@ -10,9 +11,14 @@ import { usePushStatusStore } from "@/hooks/use-push-status-store";
 import { useNotificationState } from "@/hooks/use-notification-toggle";
 import { PreferencesSection } from "@/components/settings/preferences-section";
 import { ProfileRow } from "@/components/settings/profile-row";
+import { StudentCard } from "@/components/settings/student-card";
+import { useStudent } from "@/hooks/use-student";
 import { SettingsSectionLabel } from "@/components/settings/settings-header";
-import { StorageSection } from "@/components/settings/storage-section";
+import { AdvancedSection } from "@/components/settings/advanced-section";
+import { SettingsSkeleton } from "@/components/settings/settings-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAfterPaint } from "@/hooks/use-after-paint";
+import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
 import { useUserStore } from "@/hooks/use-user-store";
@@ -25,7 +31,7 @@ import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { resetTimelineScroll } from "@/lib/timeline-scroll";
 import { useColorScheme } from "@/lib/useColorScheme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { type Href, useRouter } from "expo-router";
+import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import {
   loadIntegrationCache,
   saveIntegrationCache,
@@ -37,7 +43,7 @@ import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-/** Single flat Settings screen — mirrors mockups/settings.html exactly. */
+/** The Me tab: profile, preferences, daily plan, DLU and account. Advanced holds timezone and storage. */
 export default function SettingsScreen() {
   const offline = useOffline();
   useLanguage();
@@ -52,10 +58,21 @@ export default function SettingsScreen() {
     scrollTo: (o: { y: number; animated: boolean }) => void;
   }>(null);
   const dluY = useRef(0);
+  // `?focus=dlu` (the calendar's "Import my timetable") lands on the LMS and portal section.
+  const { focus } = useLocalSearchParams<{ focus?: string }>();
   const notif = useNotificationState();
   const integrations = useIntegrationStore((s) => s.integrations);
   const integrationsLoading = useIntegrationStore((s) => s.loading);
   const dluConnected = integrations.some((i) => i.connected);
+  const student = useStudent(
+    integrations.some((i) => i.provider === "PORTAL" && i.connected),
+  );
+
+  // Settings stays mounted between visits, so the layout scroll below only covers the first one.
+  useEffect(() => {
+    if (focus !== "dlu" || dluY.current === 0) return;
+    scrollRef.current?.scrollTo({ y: dluY.current, animated: true });
+  }, [focus]);
 
   useEffect(() => {
     let mounted = true;
@@ -108,6 +125,9 @@ export default function SettingsScreen() {
 
   const tabBarOverlay = useTabBarOverlayHeight();
   const insets = useSafeAreaInsets();
+  // Profile and Appearance paint at once; the heavier sections follow.
+  const painted = useAfterPaint();
+  const showSkeleton = useDelayedLoading(!painted);
 
   return (
     <View className="flex-1 bg-background">
@@ -117,7 +137,7 @@ export default function SettingsScreen() {
       >
         <View className="flex-row items-center justify-between">
           <Text className="text-xl font-bold tracking-tight">
-            {t("Settings")}
+            {t("Me")}
           </Text>
           <OfflineIndicator dayKey="settings" />
         </View>
@@ -145,7 +165,10 @@ export default function SettingsScreen() {
         <SettingsSectionLabel>{t("Profile")}</SettingsSectionLabel>
         <View className="overflow-hidden rounded-2xl border border-border bg-card">
           {user ? (
-            <ProfileRow user={user} onUpdated={setUser} />
+            <>
+              <ProfileRow user={user} onUpdated={setUser} />
+              {student ? <StudentCard profile={student} /> : null}
+            </>
           ) : (
             <View className="flex-row items-center gap-[13px] px-4 py-3.5">
               <Skeleton className="size-12 rounded-full" />
@@ -178,23 +201,33 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {showSkeleton ? (
+          <SettingsSkeleton />
+        ) : (
+        <>
         <PreferencesSection />
+        <SettingsSectionLabel>{t("Daily plan")}</SettingsSectionLabel>
         <OfflineLock>
-          <TagsRow />
+          <DailyPushSection />
         </OfflineLock>
         <OfflineLock>
-          <StorageSection />
+          <TagsRow />
         </OfflineLock>
 
         <View
           onLayout={(e) => {
             dluY.current = e.nativeEvent.layout.y;
+            if (focus === "dlu") {
+              scrollRef.current?.scrollTo({ y: dluY.current, animated: true });
+            }
           }}
         >
           <OfflineLock>
             <DluAccountsSection />
           </OfflineLock>
         </View>
+
+        <AdvancedSection />
 
         <SettingsSectionLabel>{t("Account")}</SettingsSectionLabel>
         <View className="mb-[18px] overflow-hidden rounded-2xl border border-border bg-card">
@@ -212,6 +245,8 @@ export default function SettingsScreen() {
             </Text>
           </Pressable>
         </View>
+        </>
+        )}
       </ScrollView>
     </View>
   );

@@ -1,0 +1,310 @@
+import { GlassButton } from "@/components/ui/glass-button";
+import { cn } from "@/lib/utils";
+import { CheckOffButton } from "@/components/calendar/check-off-button";
+import { SessionTypeBadge } from "@/components/calendar/session-type-badge";
+import { localizedReminderLabel } from "@/components/tasks/composer/reminder-field";
+import { SessionProperties } from "@/components/tasks/note/session-properties";
+import { SessionNote } from "@/components/tasks/note/session-note";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useDelayedLoading } from "@/hooks/use-delayed-loading";
+import {
+  Bell,
+  CalendarClock,
+  Clock,
+  Hand,
+  Lock,
+  type LucideIcon,
+  MapPin,
+  Pin,
+  PinOff,
+  Pencil,
+  Sparkles,
+  Tag,
+} from "@/components/Icons";
+import { pinSession, unpinSession } from "@/api/tasks";
+import { useToast } from "@/components/ui/toast";
+import { showErrorToast } from "@/lib/task-toasts";
+import {
+  BottomSheet,
+  BottomSheetContent,
+  BottomSheetHeader,
+  BottomSheetScrollView,
+  BottomSheetView,
+  useBottomSheet,
+} from "@/components/ui/bottom-sheet";
+import { Button } from "@/components/ui/button";
+import { Text } from "@/components/ui/text";
+import { useCheckOff } from "@/hooks/use-check-off";
+import { useLanguage } from "@/hooks/use-language";
+import { placementReasonLine } from "@/lib/placement-reason";
+import { format, formatTitle, localizedDeadlineExact, t } from "@/lib/i18n";
+import { navigateOnce } from "@/lib/nav";
+import {
+  ANCHOR_HINT_KEYS,
+  ANCHOR_LABEL_KEYS,
+  SESSION_DETAIL_SNAP_POINTS,
+  sessionEditHref,
+} from "@/lib/session-detail";
+import { isNoteEmpty } from "@/lib/note-html";
+import { type CheckState, checkStateOf } from "@/lib/today-summary";
+import { useColorScheme } from "@/lib/useColorScheme";
+import { SESSION_TONES, SESSION_TYPE_TONE, zonedDate } from "@zenflow/core";
+import { differenceInCalendarDays } from "date-fns";
+import type { Session } from "@zenflow/shared";
+import { type Href, useRouter } from "expo-router";
+import {
+  type ReactNode,
+  forwardRef,
+  startTransition,
+  useImperativeHandle,
+  useState,
+} from "react";
+import { View } from "react-native";
+
+export interface SessionDetailSheetHandle {
+  open: (session: Session) => void;
+}
+
+interface SessionDetailSheetProps {
+  tz: string;
+}
+
+/** Start and end of a session in the user's timezone, e.g. `10:00 AM to 11:00 AM`. */
+function timeRangeLabel(start: string, durationMinutes: number, tz: string): string {
+  const end = new Date(new Date(start).getTime() + durationMinutes * 60_000);
+  return t("{start} to {end}", {
+    start: format(zonedDate(start, tz), "h:mm a"),
+    end:
+      format(zonedDate(end.toISOString(), tz), "h:mm a") +
+      (differenceInCalendarDays(zonedDate(end.toISOString(), tz), zonedDate(start, tz)) > 0
+        ? ` (${t("tomorrow")})`
+        : ""),
+  });
+}
+
+function DetailRow({ icon: Icon, children }: { icon: LucideIcon; children: ReactNode }) {
+  return (
+    <View className="flex-row items-start gap-3">
+      <View className="w-6 pt-0.5">
+        <Icon size={20} className="text-muted-foreground" />
+      </View>
+      <View className="min-w-0 flex-1 gap-0.5">{children}</View>
+    </View>
+  );
+}
+
+const SKELETON_ROWS = [0, 1, 2];
+
+/** Detail rows while the body renders: an icon slot, then two lines. */
+function DetailSkeleton() {
+  return (
+    <View testID="session-detail-skeleton" className="gap-4 px-5 pb-4 pt-2">
+      {SKELETON_ROWS.map((i) => (
+        <View key={i} className="flex-row items-start gap-3">
+          <Skeleton className="h-5 w-5 rounded-full" />
+          <View className="flex-1 gap-1.5">
+            <Skeleton className={i === 0 ? "h-4 w-3/5" : "h-4 w-2/5"} />
+            <Skeleton className="h-3 w-1/3" />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/**
+ * The session detail sheet a calendar block opens: the details, then the note.
+ * Check-off is the block's disc; Edit opens the composer for this session.
+ */
+export const SessionDetailSheet = forwardRef<SessionDetailSheetHandle, SessionDetailSheetProps>(
+  ({ tz }, ref) => {
+    useLanguage();
+    const router = useRouter();
+    const sheet = useBottomSheet();
+    const checkOff = useCheckOff();
+    const { isDarkColorScheme } = useColorScheme();
+    const { toast } = useToast();
+    const [session, setSession] = useState<Session | null>(null);
+    const [checked, setChecked] = useState<CheckState | null>(null);
+    // The header paints with the sheet; the rows follow once it has painted.
+    const [bodyReady, setBodyReady] = useState(false);
+    const showSkeleton = useDelayedLoading(!bodyReady);
+
+    useImperativeHandle(
+      ref,
+      () => ({
+        open: (next) => {
+          setSession(next);
+          setChecked(null);
+          setBodyReady(false);
+          sheet.open();
+          requestAnimationFrame(() => startTransition(() => setBodyReady(true)));
+        },
+      }),
+      [sheet],
+    );
+
+    const onToggle = async (next: "done" | "open"): Promise<boolean> => {
+      if (!session) return false;
+      const ok = await checkOff({ id: session.id, title: session.title }, "complete", next === "done");
+      if (ok) setChecked(next === "done" ? "done" : "open");
+      return ok;
+    };
+
+    const edit = () => {
+      if (!session) return;
+      const href = sessionEditHref(session.id);
+      sheet.close();
+      // Let the sheet finish dismissing before the composer modal mounts.
+      setTimeout(() => navigateOnce(() => router.push(href as Href)), 180);
+    };
+
+    // Pin keeps the session where it is; unpin hands it back to the scheduler.
+    const togglePin = async () => {
+      if (!session) return;
+      const pinned = session.anchor === "PINNED";
+      try {
+        const next = pinned
+          ? await unpinSession(session.id)
+          : await pinSession(session.id);
+        setSession(next);
+      } catch (error) {
+        showErrorToast(
+          toast,
+          error,
+          pinned ? t("Couldn't unpin this session") : t("Couldn't pin this session"),
+          "calendar-x",
+        );
+      }
+    };
+
+    const state: CheckState = session ? (checked ?? checkStateOf(session)) : "open";
+    const stripe = session ? SESSION_TONES[SESSION_TYPE_TONE[session.type]].base : undefined;
+    const hasNote = !!session?.note && !isNoteEmpty(session.note);
+    const reasonLine =
+      session?.scheduledStartTime && session.placementReason
+        ? placementReasonLine(session.placementReason, session.scheduledStartTime, tz)
+        : null;
+
+    return (
+      <BottomSheet>
+        <BottomSheetContent
+          ref={sheet.ref}
+          snapPoints={SESSION_DETAIL_SNAP_POINTS}
+          enableDynamicSizing={false}
+        >
+          {session && (
+            <>
+              <BottomSheetHeader className="items-start gap-3 border-b-0 px-5 pb-2">
+                {session.type === "TASK" ? (
+                  <CheckOffButton
+                    state={state}
+                    title={session.title}
+                    onToggle={onToggle}
+                    // The disc sits 8pt inside its 44pt target; pull it back to line up with the rows below.
+                    style={{ marginLeft: -8, marginRight: -4 }}
+                  />
+                ) : null}
+                <View className="min-w-0 flex-1 gap-1.5">
+                  {stripe && (
+                    <View
+                      testID="session-detail-stripe"
+                      className="h-1 w-8 rounded-full"
+                      style={{ backgroundColor: stripe }}
+                    />
+                  )}
+                  <View className="flex-row flex-wrap items-center gap-2">
+                    <SessionTypeBadge type={session.type} size="lg" />
+                  </View>
+                  <Text
+                    testID="session-detail-title"
+                    className={cn(
+                      "text-[20px] font-bold leading-tight tracking-tight",
+                      state === "done" && "line-through",
+                    )}
+                    numberOfLines={2}
+                  >
+                    {session.title}
+                  </Text>
+                </View>
+                <GlassButton
+                  icon={Pencil}
+                  onPress={edit}
+                  accessibilityLabel={t("Edit")}
+                  testID="session-detail-edit"
+                  style={{ alignSelf: "flex-start" }}
+                />
+              </BottomSheetHeader>
+
+              {!bodyReady || showSkeleton ? (
+                <DetailSkeleton />
+              ) : (
+              <BottomSheetScrollView
+                contentContainerStyle={{ paddingBottom: 40 }}
+                nestedScrollEnabled
+              >
+                <View className="gap-4 px-5 pb-4 pt-2">
+                  <SessionProperties task={session} tz={tz} />
+                  {reasonLine && (
+                    <Text testID="session-detail-reason" className="text-[13px] text-muted-foreground">
+                      {reasonLine}
+                    </Text>
+                  )}
+
+                  {session.type === "TASK" && (
+                    <DetailRow
+                      icon={
+                        session.anchor === "PINNED"
+                          ? Lock
+                          : session.anchor === "CHOSEN"
+                            ? Hand
+                            : Sparkles
+                      }
+                    >
+                      <View className="flex-row items-center justify-between gap-3">
+                        <View className="min-w-0 flex-1">
+                          <Text testID="session-detail-anchor" className="text-[15px] font-medium">
+                            {t(ANCHOR_LABEL_KEYS[session.anchor])}
+                          </Text>
+                          <Text className="text-[14px] text-muted-foreground">
+                            {t(ANCHOR_HINT_KEYS[session.anchor])}
+                          </Text>
+                        </View>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          testID="session-detail-pin"
+                          onPress={togglePin}
+                          className="flex-row gap-1.5"
+                        >
+                          {session.anchor === "PINNED" ? (
+                            <PinOff size={17} className="text-foreground" />
+                          ) : (
+                            <Pin size={17} className="text-foreground" />
+                          )}
+                          <Text className="text-[13px] font-semibold text-foreground">
+                            {session.anchor === "PINNED" ? t("Unpin") : t("Pin in place")}
+                          </Text>
+                        </Button>
+                      </View>
+                    </DetailRow>
+                  )}
+
+                  {hasNote && session.note && (
+                    <View className="gap-2">
+                      <Text className="text-[13px] font-semibold text-muted-foreground">{t("Notes")}</Text>
+                      <SessionNote key={session.id} html={session.note} />
+                    </View>
+                  )}
+                </View>
+              </BottomSheetScrollView>
+              )}
+            </>
+          )}
+        </BottomSheetContent>
+      </BottomSheet>
+    );
+  },
+);
+
+SessionDetailSheet.displayName = "SessionDetailSheet";

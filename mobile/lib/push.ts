@@ -5,6 +5,9 @@ import {
   type DevicePlatform,
   type PushDataPayload,
   type PushTone,
+  DAILY_ACTION_DONE,
+  DAILY_ACTION_MISSED,
+  DAILY_CHECKIN_CATEGORY,
   PUSH_ACTION_RESCHEDULE,
   PUSH_CATEGORY_CONFLICT,
   pushChannelId,
@@ -149,16 +152,35 @@ export async function ensureAndroidChannel(): Promise<void> {
  * iOS action buttons: the sync-conflict push gets one "Reschedule" that runs
  * in the background. Android shows no buttons on FCM notification messages, so
  * a tap there opens the inbox instead (see `use-push-registration.ts`).
+ *
+ * The evening check-in has Done and Missed on both platforms. Android runs
+ * them in the background task; iOS opens the app to apply them.
  */
 export async function registerPushCategories(): Promise<void> {
-  if (Platform.OS !== "ios") return;
-  await Notifications.setNotificationCategoryAsync(PUSH_CATEGORY_CONFLICT, [
-    {
-      identifier: PUSH_ACTION_RESCHEDULE,
-      buttonTitle: t("Reschedule"),
-      options: { opensAppToForeground: false },
-    },
-  ]);
+  if (Platform.OS === "ios") {
+    await Notifications.setNotificationCategoryAsync(PUSH_CATEGORY_CONFLICT, [
+      {
+        identifier: PUSH_ACTION_RESCHEDULE,
+        buttonTitle: t("Reschedule"),
+        options: { opensAppToForeground: false },
+      },
+    ]);
+  }
+  if (Platform.OS === "ios" || Platform.OS === "android") {
+    const opensApp = Platform.OS === "ios";
+    await Notifications.setNotificationCategoryAsync(DAILY_CHECKIN_CATEGORY, [
+      {
+        identifier: DAILY_ACTION_DONE,
+        buttonTitle: t("Done"),
+        options: { opensAppToForeground: opensApp },
+      },
+      {
+        identifier: DAILY_ACTION_MISSED,
+        buttonTitle: t("Missed"),
+        options: { opensAppToForeground: opensApp },
+      },
+    ]);
+  }
 }
 
 /**

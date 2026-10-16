@@ -6,16 +6,22 @@ tags: [smoke]
     id: fab.new-task
 - tapOn:
     id: task.title
-- inputText: E2E write report
+# The keyboard is still opening on the CI emulator and drops the first keys.
+- waitForAnimationToEnd:
+    timeout: 3000
+- runFlow:
+    file: ../subflows/type-title.yaml
+    env:
+      TITLE: E2E write report
 # hideKeyboard taps outside the field and can land on the description editor;
 # Return blurs a single-line input, which drops the keyboard that otherwise
 # covers the pinned save button.
 - pressKey: Enter
 - scrollUntilVisible:
     element:
-      id: task.deadline.noRush
+      id: task.deadline.chip.noRush
 - tapOn:
-    id: task.deadline.noRush
+    id: task.deadline.chip.noRush
 - tapOn:
     id: task.save
 # (a task block's label also carries its type and time, hence the wildcards)
@@ -29,7 +35,10 @@ tags: [smoke]
 - tapOn:
     id: task.title
 - eraseText: 40
-- inputText: E2E report v2
+- runFlow:
+    file: ../subflows/type-title.yaml
+    env:
+      TITLE: E2E report v2
 - pressKey: Enter
 - tapOn:
     id: task.save

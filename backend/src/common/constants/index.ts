@@ -5,17 +5,22 @@ export const DAY_OF_WEEK = 7;
 export const TIME_GRANULARITY = 15;
 
 /**
- * Grace window (ms) after a scheduled TASK's end before the RETAINED sweep
- * counts it as "kept" — leaves a short window for a last-minute drag. Default:
- * 15 minutes.
+ * Grace window (ms) after a scheduled TASK's end before the outcome sweep
+ * settles a check-off or skip (ADR-0023). Default: 15 minutes.
  */
-export const RETAINED_GRACE_MS = 15 * 60 * 1000;
+export const OUTCOME_GRACE_MS = 15 * 60 * 1000;
 
 /**
- * Max sessions the RETAINED sweep processes per transaction, so one run never
+ * Cutoff (ms) after a scheduled TASK's end with no check-off, at which the
+ * outcome sweep settles the placement as missed (ADR-0023). Default: 24 hours.
+ */
+export const OUTCOME_MISS_CUTOFF_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Max sessions the outcome sweep processes per transaction, so one run never
  * opens a single unbounded transaction over the whole elapsed backlog.
  */
-export const RETAINED_BATCH_SIZE = 100;
+export const OUTCOME_BATCH_SIZE = 100;
 
 /** AES-256-GCM: 96-bit IV (NIST SP 800-38D recommended), 256-bit key. */
 export const IV_RANDOM_BYTES_SIZE = 12;

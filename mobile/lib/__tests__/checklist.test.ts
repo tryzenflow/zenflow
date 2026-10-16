@@ -1,11 +1,16 @@
 import { CHECKLIST_STEPS } from "@zenflow/shared";
 import { describe, expect, it } from "vitest";
-import {
-  CHECKLIST_GROUPS,
-  STEP_COPY,
-  STEP_NEEDS,
-  checklistProgress,
-} from "../checklist";
+import { STEP_COPY, STEP_SCREEN, checklistProgress } from "../checklist";
+
+describe("CHECKLIST_STEPS", () => {
+  it("is the three steps: connect DLU, add a task, finish a session", () => {
+    expect([...CHECKLIST_STEPS]).toEqual([
+      "connect-dlu",
+      "add-task",
+      "finish-session",
+    ]);
+  });
+});
 
 describe("STEP_COPY", () => {
   it("has a title and hint for every step", () => {
@@ -16,66 +21,39 @@ describe("STEP_COPY", () => {
   });
 });
 
-describe("CHECKLIST_GROUPS", () => {
-  it("puts every step in exactly one group, in step order", () => {
-    expect(CHECKLIST_GROUPS.flatMap((g) => [...g.steps])).toEqual([
-      ...CHECKLIST_STEPS,
-    ]);
-  });
-
-  it("splits progress into Week and Month", () => {
-    const { groups } = checklistProgress(["open-month"]);
-    expect(groups.map((g) => g.title)).toEqual(["Week view", "Month view"]);
-    expect(groups[0].items.some((i) => i.done)).toBe(false);
-    expect(groups[1].items.filter((i) => i.done).map((i) => i.id)).toEqual([
-      "open-month",
-    ]);
-  });
-});
-
-describe("STEP_NEEDS", () => {
-  it("blocks task steps until a task is created", () => {
-    const by = (seen: string[]) =>
-      Object.fromEntries(
-        checklistProgress(seen).items.map((i) => [i.id, i.blockedBy]),
-      );
-    expect(by([])["move-task"]).toBe("create-task");
-    expect(by([])["block-actions"]).toBe("create-task");
-    expect(by([])["move-day"]).toBe("create-task");
-    expect(by([])["create-task"]).toBeNull();
-    expect(by([])["open-day"]).toBeNull();
-    expect(by(["create-task"])["move-task"]).toBeNull();
-  });
-
-  it("only ever depends on an earlier step", () => {
-    for (const [step, needs] of Object.entries(STEP_NEEDS)) {
-      expect(CHECKLIST_STEPS.indexOf(needs)).toBeLessThan(
-        CHECKLIST_STEPS.indexOf(step as (typeof CHECKLIST_STEPS)[number]),
-      );
-    }
+describe("STEP_SCREEN", () => {
+  it("opens DLU on the Me tab and the other steps on the calendar", () => {
+    expect(STEP_SCREEN["connect-dlu"]).toBe("me");
+    expect(STEP_SCREEN["add-task"]).toBe("calendar");
+    expect(STEP_SCREEN["finish-session"]).toBe("calendar");
   });
 });
 
 describe("checklistProgress", () => {
-  it("starts empty and visible", () => {
+  it("starts empty and visible with three items", () => {
     const p = checklistProgress(undefined);
     expect(p.done).toBe(0);
-    expect(p.total).toBe(CHECKLIST_STEPS.length);
+    expect(p.total).toBe(3);
     expect(p.visible).toBe(true);
     expect(p.items.map((i) => i.id)).toEqual([...CHECKLIST_STEPS]);
   });
 
   it("counts steps stored on the server or done this session", () => {
-    const p = checklistProgress(["create-task"], new Set(["move-task"]));
+    const p = checklistProgress(["connect-dlu"], new Set(["finish-session"]));
     expect(p.done).toBe(2);
     expect(p.items.filter((i) => i.done).map((i) => i.id)).toEqual([
-      "create-task",
-      "move-task",
+      "connect-dlu",
+      "finish-session",
     ]);
   });
 
-  it("ignores ids that aren't steps", () => {
-    expect(checklistProgress(["checklist-hidden", "nope"]).done).toBe(0);
+  it("counts a task created before the trim as the add-task step", () => {
+    const p = checklistProgress(["create-task"]);
+    expect(p.items.find((i) => i.id === "add-task")?.done).toBe(true);
+  });
+
+  it("ignores retired step ids that are not steps any more", () => {
+    expect(checklistProgress(["open-month", "move-day"]).done).toBe(0);
   });
 
   it("is hidden once the user hides it, even this session", () => {

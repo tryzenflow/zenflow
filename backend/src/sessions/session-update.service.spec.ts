@@ -50,6 +50,12 @@ function session(overrides: Partial<SessionRow> & { id: string }): SessionRow {
     retainedAt: null,
     syncConfirmedAt: null,
     syncMissedAt: null,
+    completedAt: null,
+    skipped: false,
+    anchor: "AUTO",
+    anchoredAt: null,
+    placementReason: null,
+    placementReasonStartAt: null,
     deleted: false,
     userId: user.id,
     seriesId: null,
@@ -70,6 +76,7 @@ function fakeSeries() {
     updateRecurringFollowing: jest.fn(),
     redistribute: jest.fn(),
     excludeOccurrence: jest.fn().mockResolvedValue({ id: "noop" }),
+    detachOccurrence: jest.fn(),
     promoteToSeries: jest.fn(),
     resizeSessionCount: jest.fn(),
   };
@@ -902,5 +909,69 @@ describe("SessionUpdateService — recurring occurrence, scope 'series' (or omit
     expect(sessionFindMany).not.toHaveBeenCalled();
     expect(series.excludeOccurrence).not.toHaveBeenCalled();
     expect(result.skippedSessionIds).toBeUndefined();
+  });
+});
+
+describe("SessionUpdateService — recurring occurrence, scope 'occurrence'", () => {
+  it("detaches just that occurrence at the new time, leaving the series' time untouched", async () => {
+    const findFirst = jest.fn().mockResolvedValue({
+      scheduledStartTime: new Date("2026-06-01T09:00:00.000Z"),
+      durationMinutes: 90,
+    });
+    const transaction = jest.fn();
+    const prisma = { session: { findFirst }, $transaction: transaction };
+    const series = fakeSeries();
+    series.detachOccurrence = jest.fn().mockResolvedValue({ id: "one-off-1" });
+    const service = await makeService(prisma as never, series);
+
+    const occId = occurrenceId(
+      "lecture-series-1",
+      new Date("2026-06-08T09:00:00.000Z"),
+    );
+    const result = await service.update(
+      occId,
+      {
+        scheduledStartTime: "2026-06-08T10:00:00.000Z",
+        scope: "occurrence",
+      },
+      user,
+    );
+
+    expect(transaction).not.toHaveBeenCalled();
+    expect(series.updateRecurringFollowing).not.toHaveBeenCalled();
+    expect(series.detachOccurrence).toHaveBeenCalledWith(
+      "lecture-series-1",
+      "2026-06-08T09:00:00.000Z",
+      { scheduledStartTime: "2026-06-08T10:00:00.000Z", durationMinutes: 90 },
+      user,
+    );
+    expect(result.id).toBe("one-off-1");
+  });
+
+  it("an rrule change with scope 'occurrence' is a series change and does not detach", async () => {
+    const findFirst = jest.fn().mockResolvedValue({
+      id: "rep-1",
+      scheduledStartTime: new Date("2026-06-01T09:00:00.000Z"),
+      durationMinutes: 90,
+    });
+    const series = fakeSeries();
+    const service = await makeService(
+      { session: { findFirst }, $transaction: jest.fn() } as never,
+      series,
+    );
+
+    await service
+      .update(
+        occurrenceId("lecture-series-1", new Date("2026-06-08T09:00:00.000Z")),
+        {
+          scheduledStartTime: "2026-06-08T10:00:00.000Z",
+          rrule: null,
+          scope: "occurrence",
+        },
+        user,
+      )
+      .catch(() => undefined);
+
+    expect(series.detachOccurrence).not.toHaveBeenCalled();
   });
 });

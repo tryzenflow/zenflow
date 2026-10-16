@@ -175,6 +175,40 @@ describe("Vietnamese notification delivery", () => {
     );
   });
 
+  it("localizes the timetable live and new lecture notices", () => {
+    const live = localizeNotification(
+      {
+        eventName: "timetable.ready",
+        title: "Sem 1 timetable is live",
+        content: "Still syncing, check back soon.",
+      },
+      "VI_VN",
+    );
+    expect(live.title).toBe("Thời khóa biểu HK1 đã lên sóng");
+    expect(live.content).toBe("Đang đồng bộ, lát ghé lại nha.");
+
+    const some = localizeNotification(
+      {
+        eventName: "timetable.changed",
+        title: "3 new lectures",
+        content: "Check your timetable.",
+      },
+      "VI_VN",
+    );
+    expect(some.title).toBe("3 buổi học mới");
+    expect(some.content).toBe("Xem lại thời khóa biểu của bạn.");
+    expect(
+      localizeNotification(
+        {
+          eventName: "timetable.changed",
+          title: "A new lecture",
+          content: "Check your timetable.",
+        },
+        "VI_VN",
+      ).title,
+    ).toBe("Có buổi học mới");
+  });
+
   it("leaves unknown/custom copy unchanged", () => {
     const row = {
       eventName: "custom",

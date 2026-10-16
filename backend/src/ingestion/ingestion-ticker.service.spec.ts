@@ -4,13 +4,13 @@ import { Test, type TestingModule } from "@nestjs/testing";
 import { IngestionScheduleService } from "./ingestion-schedule.service";
 import { IngestionTickerService } from "./ingestion-ticker.service";
 import { QueueService } from "../queue/queue.service";
-import {
-  LMS_FETCH_QUEUE,
-  PORTAL_FETCH_QUEUE,
-  type FetchJobData,
-} from "../queue/queues";
+import { PORTAL_FETCH_QUEUE, type FetchJobData } from "../queue/queues";
 import { LMSService } from "../lms/lms.service";
 import { PortalAPIService } from "../portal/portal-api.service";
+import { PrismaService } from "../prisma/prisma.service";
+import { IngestionDispatchService } from "./ingestion-dispatch.service";
+import { StudentSyncService } from "./student-sync.service";
+import { SyncRunService } from "./sync-run.service";
 import { TICK_INTERVAL_MS, type SyncKindName } from "./core/schedule-plan";
 import type { ClaimedTarget } from "./ingestion-schedule.service";
 
@@ -140,6 +140,10 @@ async function makeTicker(
     counts?: jest.Mock;
     /** Per-upstream breaker wait in ms (`null` = closed). */
     breakers?: { LMS: number | null; PORTAL: number | null };
+    /** Per-kind dispatch result; `false` = the queue refused the jobs. */
+    dispatchOk?: boolean;
+    /** Replaces every dispatch call, e.g. to block or slow it. */
+    dispatchImpl?: () => Promise<boolean>;
   } = {},
 ) {
   const env = { ...ENV, ...(opts.env ?? {}) };
@@ -150,8 +154,45 @@ async function makeTicker(
     opts.counts ??
     jest.fn().mockResolvedValue({ waiting: 0, delayed: 0, active: 0 });
   const breakers = opts.breakers ?? { LMS: null, PORTAL: null };
+  const dispatched: { method: string; scheduleId: string }[] = [];
+  const dispatchOk = opts.dispatchOk ?? true;
+  const result = () =>
+    opts.dispatchImpl ? opts.dispatchImpl() : Promise.resolve(dispatchOk);
+  const dispatch = {
+    enqueueDiscovery: jest.fn((kind: string, t: ClaimedTarget) => {
+      dispatched.push({ method: kind, scheduleId: t.scheduleId });
+      return result();
+    }),
+    startTimetableRun: jest.fn((t: ClaimedTarget) => {
+      dispatched.push({ method: "PORTAL_TIMETABLE", scheduleId: t.scheduleId });
+      return result();
+    }),
+    startCalendarRun: jest.fn((t: ClaimedTarget) => {
+      dispatched.push({ method: "LMS_CALENDAR", scheduleId: t.scheduleId });
+      return result();
+    }),
+    enqueueProfile: jest.fn().mockResolvedValue(undefined),
+  };
   const module: TestingModule = await Test.createTestingModule({
     providers: [
+      {
+        provide: PrismaService,
+        useValue: {
+          integration: { findMany: jest.fn().mockResolvedValue([]) },
+        },
+      },
+      { provide: IngestionDispatchService, useValue: dispatch },
+      {
+        provide: SyncRunService,
+        useValue: {
+          sweepStale: jest.fn().mockResolvedValue(0),
+          prune: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+      {
+        provide: StudentSyncService,
+        useValue: { dueForMarks: jest.fn().mockResolvedValue([]) },
+      },
       {
         provide: KillSwitchService,
         useValue: { isEnabled: jest.fn().mockResolvedValue(true) },
@@ -176,6 +217,8 @@ async function makeTicker(
     schedule,
     enqueue,
     counts,
+    dispatch,
+    dispatched,
   };
 }
 
@@ -219,7 +262,7 @@ describe("IngestionTickerService - enqueueing", () => {
     expect(schedule.ensureAllRowsCalls).toBe(1);
   });
 
-  it("routes portal kinds to portal-fetch and LMS kinds to lms-fetch", async () => {
+  it("routes each kind to its own queue: discovery, a run of weeks or months, or the fetch queue for exams", async () => {
     const schedule = makeScheduleDouble({
       PORTAL_DISCOVERY: [target({ scheduleId: "pd" })],
       PORTAL_TIMETABLE: [target({ scheduleId: "t" })],
@@ -227,21 +270,26 @@ describe("IngestionTickerService - enqueueing", () => {
       LMS_DISCOVERY: [target({ scheduleId: "ld" })],
       LMS_CALENDAR: [target({ scheduleId: "l" })],
     });
-    const { ticker, enqueue } = await makeTicker({ schedule });
+    const { ticker, enqueue, dispatched } = await makeTicker({ schedule });
 
     const summary = await ticker.tick(NOW);
 
-    const queueOf = (id: string) =>
-      enqueue.mock.calls.find((c) => c[1].scheduleId === id)![0];
-    for (const id of ["pd", "t", "e"])
-      expect(queueOf(id)).toBe(PORTAL_FETCH_QUEUE);
-    for (const id of ["ld", "l"]) expect(queueOf(id)).toBe(LMS_FETCH_QUEUE);
+    expect(dispatched).toEqual([
+      { method: "PORTAL_DISCOVERY", scheduleId: "pd" },
+      { method: "LMS_DISCOVERY", scheduleId: "ld" },
+      { method: "PORTAL_TIMETABLE", scheduleId: "t" },
+      { method: "LMS_CALENDAR", scheduleId: "l" },
+    ]);
+    // Only the exam pass still goes through the generic fetch queue.
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(enqueue.mock.calls[0][0]).toBe(PORTAL_FETCH_QUEUE);
+    expect(enqueue.mock.calls[0][1].scheduleId).toBe("e");
     expect(summary.claimed).toBe(5);
   });
 
-  it("enqueues the claim with a job id stable per schedule slot", async () => {
+  it("enqueues an exam claim with a job id stable per schedule slot", async () => {
     const schedule = makeScheduleDouble({
-      PORTAL_TIMETABLE: [target({ scheduleId: "t" })],
+      PORTAL_EXAM: [target({ scheduleId: "e" })],
     });
     const { ticker, enqueue } = await makeTicker({ schedule });
 
@@ -250,28 +298,28 @@ describe("IngestionTickerService - enqueueing", () => {
     expect(enqueue).toHaveBeenCalledWith(
       PORTAL_FETCH_QUEUE,
       {
-        scheduleId: "t",
+        scheduleId: "e",
         userId: "u1",
         integrationId: "int1",
-        kind: "PORTAL_TIMETABLE",
+        kind: "PORTAL_EXAM",
         dueAt: "2026-10-26T02:00:00.000Z",
         claimedAt: NOW.toISOString(),
         cacheHitStreak: 0,
       },
-      { jobId: "t_2026-10-26T02-00-00.000Z" },
+      { jobId: "e_2026-10-26T02-00-00.000Z" },
     );
   });
 
   it("derives the same job id for the same slot on a later tick", async () => {
     const mk = () =>
       makeScheduleDouble({
-        PORTAL_TIMETABLE: [target({ scheduleId: "t", claimedAt: new Date() })],
+        PORTAL_EXAM: [target({ scheduleId: "e", claimedAt: new Date() })],
       });
     const a = await makeTicker({ schedule: mk() });
     const b = await makeTicker({ schedule: mk() });
 
     await a.ticker.tick(NOW);
-    await b.ticker.tick(new Date(NOW.getTime() + 60_000));
+    await b.ticker.tick(new Date(NOW.getTime() + 5_000));
 
     expect(a.enqueue.mock.calls[0][2]).toEqual(b.enqueue.mock.calls[0][2]);
   });
@@ -308,11 +356,7 @@ describe("IngestionTickerService - enqueueing", () => {
       PORTAL_TIMETABLE: [target({ scheduleId: "t" })],
       LMS_CALENDAR: [target({ scheduleId: "l" })],
     });
-    const enqueue = jest
-      .fn()
-      .mockRejectedValueOnce(new Error("redis down"))
-      .mockResolvedValue({});
-    const { ticker } = await makeTicker({ schedule, enqueue });
+    const { ticker } = await makeTicker({ schedule, dispatchOk: false });
 
     const summary = await ticker.tick(NOW);
 
@@ -333,12 +377,14 @@ describe("IngestionTickerService - queue outage and backpressure", () => {
       },
       { PORTAL_TIMETABLE: 100_000 },
     );
-    const enqueue = jest.fn().mockRejectedValue(new Error("redis down"));
-    const { ticker } = await makeTicker({ schedule, enqueue });
+    const { ticker, dispatch } = await makeTicker({
+      schedule,
+      dispatchOk: false,
+    });
 
     const summary = await ticker.tick(NOW);
 
-    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(dispatch.startTimetableRun).toHaveBeenCalledTimes(1);
     expect(schedule.released).toEqual(["a", "b"]);
     expect(schedule.claims.map((c) => c.kind)).not.toContain("LMS_CALENDAR");
     expect(summary).toMatchObject({ claimed: 0, queueUnavailable: true });
@@ -348,10 +394,11 @@ describe("IngestionTickerService - queue outage and backpressure", () => {
     const schedule = makeScheduleDouble({
       PORTAL_TIMETABLE: [target({ scheduleId: "a" })],
     });
-    const enqueue = jest
-      .fn()
-      .mockRejectedValue(new Error("enqueue timed out after 2000ms"));
-    const { ticker } = await makeTicker({ schedule, enqueue });
+    const { ticker } = await makeTicker({
+      schedule,
+      dispatchImpl: () =>
+        Promise.reject(new Error("enqueue timed out after 2000ms")),
+    });
 
     const summary = await ticker.tick(NOW);
     expect(summary.queueUnavailable).toBe(true);
@@ -383,12 +430,12 @@ describe("IngestionTickerService - queue outage and backpressure", () => {
     });
     const counts = jest.fn((def: { name: string }) =>
       Promise.resolve(
-        def.name === "portal-fetch"
+        def.name === "portal-week"
           ? { waiting: 8, delayed: 2 }
           : { waiting: 0, delayed: 0 },
       ),
     );
-    const { ticker, enqueue } = await makeTicker({
+    const { ticker, dispatched } = await makeTicker({
       schedule,
       counts,
       env: { INGESTION_QUEUE_MAX_BACKLOG: 10 },
@@ -400,10 +447,10 @@ describe("IngestionTickerService - queue outage and backpressure", () => {
     expect(claimed).toContain("LMS_CALENDAR");
     expect(claimed).not.toContain("PORTAL_TIMETABLE");
     expect(summary.backpressured).toContain("PORTAL_TIMETABLE");
-    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(dispatched).toEqual([{ method: "LMS_CALENDAR", scheduleId: "l" }]);
   });
 
-  it("trims the batch to the queue's headroom", async () => {
+  it("trims the batch to the queue's headroom, counting a month run as two jobs", async () => {
     const schedule = makeScheduleDouble({}, { LMS_CALENDAR: 100_000 });
     const counts = jest.fn().mockResolvedValue({ waiting: 8, delayed: 0 });
     const { ticker } = await makeTicker({
@@ -416,13 +463,13 @@ describe("IngestionTickerService - queue outage and backpressure", () => {
 
     expect(
       schedule.claims.find((c) => c.kind === "LMS_CALENDAR")?.batchSize,
-    ).toBe(2);
+    ).toBe(1);
   });
 });
 
 describe("IngestionTickerService - batch sizing", () => {
   it("sizes a daily kind so the population spreads across the day", async () => {
-    // 150 students / (24h / 60s) = 0.1 -> the minBatch floor of 1.
+    // 150 students / (24h / 5s) = 0.009 -> the minBatch floor of 1.
     const schedule = makeScheduleDouble({}, { PORTAL_TIMETABLE: 150 });
     const { ticker } = await makeTicker({ schedule });
 
@@ -447,8 +494,8 @@ describe("IngestionTickerService - batch sizing", () => {
   });
 
   it("lets a deliberately huge ceiling reproduce the pre-#56 burst", async () => {
-    // The LMS_CALENDAR plan in the double is hourly: 150 / 60 ticks = 3.
-    const schedule = makeScheduleDouble({}, { LMS_CALENDAR: 150 });
+    // The LMS_CALENDAR plan in the double is hourly: 7200 / 720 ticks = 10.
+    const schedule = makeScheduleDouble({}, { LMS_CALENDAR: 7200 });
     const { ticker } = await makeTicker({
       schedule,
       env: { INGESTION_TICK_MAX_BATCH: 1000 },
@@ -457,12 +504,12 @@ describe("IngestionTickerService - batch sizing", () => {
     await ticker.tick(NOW);
 
     const claim = schedule.claims.find((c) => c.kind === "LMS_CALENDAR");
-    expect(claim?.batchSize).toBe(3);
+    expect(claim?.batchSize).toBe(10);
   });
 
   it("enqueues nothing for a kind with no schedule rows at all", async () => {
     const schedule = makeScheduleDouble({}, { PORTAL_TIMETABLE: 0 });
-    const { ticker, enqueue } = await makeTicker({ schedule });
+    const { ticker, enqueue, dispatched } = await makeTicker({ schedule });
 
     await ticker.tick(NOW);
 
@@ -470,6 +517,7 @@ describe("IngestionTickerService - batch sizing", () => {
       schedule.claims.find((c) => c.kind === "PORTAL_TIMETABLE")?.batchSize,
     ).toBe(0);
     expect(enqueue).not.toHaveBeenCalled();
+    expect(dispatched).toEqual([]);
   });
 });
 
@@ -484,7 +532,7 @@ describe("IngestionTickerService - overlap and budget", () => {
     });
     const { ticker } = await makeTicker({
       schedule,
-      enqueue: jest.fn().mockReturnValue(blocked),
+      dispatchImpl: () => blocked.then(() => true),
     });
 
     const first = ticker.tick(NOW);
@@ -501,20 +549,20 @@ describe("IngestionTickerService - overlap and budget", () => {
       PORTAL_EXAM: [target({ scheduleId: "e" })],
       LMS_CALENDAR: [target({ scheduleId: "l" })],
     });
-    const { ticker, enqueue } = await makeTicker({
+    const { ticker, dispatched } = await makeTicker({
       schedule,
       env: { INGESTION_TICK_BUDGET_MS: 1 },
-      // Burn the budget inside the first kind's enqueue.
-      enqueue: jest.fn().mockImplementation(async () => {
+      // Burn the budget inside the first kind's dispatch.
+      dispatchImpl: async () => {
         await new Promise((r) => setTimeout(r, 15));
-        return {};
-      }),
+        return true;
+      },
     });
 
     const summary = await ticker.tick(NOW);
 
     expect(summary.claimed).toBe(1);
-    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(dispatched).toHaveLength(1);
     expect(schedule.claims.map((c) => c.kind)).toEqual([
       "PORTAL_DISCOVERY",
       "LMS_DISCOVERY",
@@ -522,8 +570,8 @@ describe("IngestionTickerService - overlap and budget", () => {
     ]);
   });
 
-  it("keeps the tick interval and the @Cron expression in step", () => {
-    expect(TICK_INTERVAL_MS).toBe(60_000);
+  it("keeps the tick interval and the @Interval period in step", () => {
+    expect(TICK_INTERVAL_MS).toBe(5_000);
   });
 });
 
@@ -534,7 +582,7 @@ describe("IngestionTickerService - upstream circuit breaker", () => {
       PORTAL_EXAM: [target({ scheduleId: "e" })],
       LMS_CALENDAR: [target({ scheduleId: "l" })],
     });
-    const { ticker, enqueue } = await makeTicker({
+    const { ticker, dispatched } = await makeTicker({
       schedule,
       breakers: { LMS: null, PORTAL: 30_000 },
     });
@@ -546,8 +594,7 @@ describe("IngestionTickerService - upstream circuit breaker", () => {
       "LMS_DISCOVERY",
       "LMS_CALENDAR",
     ]);
-    expect(enqueue).toHaveBeenCalledTimes(1);
-    expect(enqueue.mock.calls[0][0]).toBe(LMS_FETCH_QUEUE);
+    expect(dispatched).toEqual([{ method: "LMS_CALENDAR", scheduleId: "l" }]);
   });
 
   it("resumes automatically once the breaker closes", async () => {
@@ -555,13 +602,13 @@ describe("IngestionTickerService - upstream circuit breaker", () => {
       PORTAL_TIMETABLE: [target({ scheduleId: "t" })],
     });
     const breakers = { LMS: null, PORTAL: 30_000 as number | null };
-    const { ticker, enqueue } = await makeTicker({ schedule, breakers });
+    const { ticker, dispatched } = await makeTicker({ schedule, breakers });
 
     await ticker.tick(NOW);
-    expect(enqueue).not.toHaveBeenCalled();
+    expect(dispatched).toEqual([]);
 
     breakers.PORTAL = null;
     await ticker.tick(NOW);
-    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(dispatched).toHaveLength(1);
   });
 });

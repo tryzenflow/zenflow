@@ -9,8 +9,10 @@ import {
 } from "class-validator";
 import {
   DEFAULT_REMINDER_CHOICES,
+  FOCUS_BANDS,
   LANGS,
   TIP_IDS,
+  type FocusBand,
   type TipId,
   type DefaultReminderChoice,
   type Lang,
@@ -56,4 +58,9 @@ export class UpdateUserDto implements UpdateUserInput {
   @IsIn(TIP_IDS)
   @IsOptional()
   seenTip?: TipId;
+
+  /** Onboarding answer; seeds the preference matrix while it is still the default. */
+  @IsIn(FOCUS_BANDS)
+  @IsOptional()
+  focusBand?: FocusBand;
 }

@@ -1,4 +1,5 @@
-import { OfflineIndicator } from "@/components/offline-indicator";
+import { GettingStarted } from "@/components/checklist/getting-started";
+import { StreakBadge } from "./streak-badge";
 import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
@@ -6,6 +7,8 @@ import { format, formatTitle } from "@/lib/i18n";
 import { Text } from "@/components/ui/text";
 import { useNow } from "@/hooks/use-now";
 import { SESSION_TYPE_META, SESSION_TYPE_ORDER } from "@zenflow/core";
+import { DayBarView } from "@/components/calendar/day-bar";
+import type { DayBar } from "@/lib/day-bar";
 import {
   dateKey,
   shiftWeek,
@@ -35,7 +38,6 @@ import {
 } from "react";
 import { Pressable, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
   Easing,
   clamp,
@@ -96,12 +98,12 @@ function ChipPill({ index, chipWidth }: { index: number; chipWidth: number }) {
           width: chipWidth,
           borderRadius: 12,
           backgroundColor: isDarkColorScheme
-            ? "rgba(255, 122, 36, 0.16)"
+            ? "rgba(255, 122, 36, 0.20)"
             : "rgba(255, 142, 62, 0.12)",
           borderWidth: 1,
           borderColor: isDarkColorScheme
-            ? "rgba(255, 150, 80, 0.26)"
-            : "rgba(255, 142, 62, 0.22)",
+            ? "rgba(255, 150, 80, 0.3)"
+            : "rgba(255, 142, 62, 0.26)",
         },
         style,
       ]}
@@ -109,22 +111,23 @@ function ChipPill({ index, chipWidth }: { index: number; chipWidth: number }) {
   );
 }
 
-const NO_TYPES: SessionType[] = [];
+const NO_BAR: DayBar = { types: [], segments: [] };
 
 const WeekChip = memo(function WeekChip({
   day,
   isFocused,
   isToday,
-  types,
+  bar,
   onSelectDay,
 }: {
   day: Date;
   isFocused: boolean;
   isToday: boolean;
-  /** Already deduped and in canonical order, so dots never jitter. */
-  types: SessionType[];
+  /** The day's load bar (`lib/day-bar.ts`). */
+  bar: DayBar;
   onSelectDay: (day: Date) => void;
 }) {
+  const types = bar.types;
   return (
       <Pressable
         onPress={() => {
@@ -156,15 +159,10 @@ const WeekChip = memo(function WeekChip({
             {format(day, "d")}
           </Text>
         </View>
-        {/* Fixed-height row so a 0-dot day reserves the same space as a
-            5-dot day — the chip's height never jumps day to day. */}
-        <View className="h-[5px] flex-row items-center gap-[3px]">
-          {types.map((type) => (
-            <View
-              key={type}
-              className={`h-[4px] w-[4px] rounded-full ${SESSION_TYPE_META[type].dotClass}`}
-            />
-          ))}
+        {/* Fixed-height slot so an empty day reserves the same space as a busy
+            one: the chip's height never jumps day to day. */}
+        <View className="w-[22px]">
+          <DayBarView bar={bar} />
         </View>
       </Pressable>
   );
@@ -197,9 +195,9 @@ interface WeekHeaderProps {
    * collapses its window back with no focus change. */
   onWeekDragAbort: () => void;
   /** Distinct `SessionType`s scheduled on each day of the visible week,
-   * keyed by `dateKey` (`use-week-day-types.ts`) — drives the small dot row
+   * keyed by `dateKey` (`use-week-day-types.ts`) — drives the load bar
    * under each day-number circle. Absent/empty for a day renders no dots. */
-  dayTypes: Map<string, SessionType[]>;
+  dayTypes: Map<string, DayBar>;
 }
 
 /** Imperative surface the pager drives when a day-swipe crosses a week edge
@@ -248,7 +246,6 @@ function WeekHeaderImpl(
   const now = useNow();
   const { width } = useWindowDimensions();
   const chipWidth = (width - ROW_PADDING_X * 2 - CHIP_GAP * 6) / 7;
-  const insets = useSafeAreaInsets();
 
   // What the title / range / highlight read. The carousel and anchor logic
   // stay on `focusedDate` so they never re-derive mid-swipe.
@@ -406,23 +403,6 @@ function WeekHeaderImpl(
     [weekModeSV],
   );
 
-  // Sorted once per `dayTypes` change instead of per chip per render.
-  const sortedDayTypes = useMemo(() => {
-    const sorted = new Map<string, SessionType[]>();
-    for (const [k, v] of dayTypes) {
-      sorted.set(
-        k,
-        v
-          .slice()
-          .sort(
-            (a, b) =>
-              SESSION_TYPE_ORDER.indexOf(a) - SESSION_TYPE_ORDER.indexOf(b),
-          ),
-      );
-    }
-    return sorted;
-  }, [dayTypes]);
-
   const renderChip = (day: Date) => {
     const key = dateKey(day);
     return (
@@ -431,7 +411,7 @@ function WeekHeaderImpl(
         day={day}
         isFocused={key === focusedKey}
         isToday={key === todayKey}
-        types={sortedDayTypes.get(key) ?? NO_TYPES}
+        bar={dayTypes.get(key) ?? NO_BAR}
         onSelectDay={onSelectDay}
       />
     );
@@ -440,23 +420,24 @@ function WeekHeaderImpl(
   return (
     <GestureDetector gesture={weekSwipe}>
       <View
-        className="overflow-hidden border-b border-border bg-background pb-2"
-        style={{ paddingTop: insets.top + 10 }}
+        className="overflow-hidden border-b border-border bg-background pb-2 pt-2.5"
       >
-        <View className="px-4 pb-2">
-          <Text className="text-xl font-bold tracking-tight">
-            {monthLabel(shownDate)}
-          </Text>
-          <Text className="mt-px text-[11.5px] font-medium text-muted-foreground">
-            {format(titleDays[0], "MMM d")} – {format(titleDays[6], "MMM d")}
-          </Text>
-        </View>
-        {/* Sits left of the notification bell (36px at right-4). */}
-        <View
-          className="absolute right-[60px] z-10"
-          style={{ top: insets.top + 8 }}
-        >
-          <OfflineIndicator dayKey={`${focusedKey}`} />
+        <View className="flex-row items-center justify-between gap-3 px-4 pb-2">
+          <View className="min-w-0 flex-1">
+            <Text className="text-xl font-bold tracking-tight">
+              {monthLabel(shownDate)}
+            </Text>
+            <Text className="mt-px text-sm font-medium text-muted-foreground">
+              {t("{start} to {end}", {
+                start: format(titleDays[0], "MMM d"),
+                end: format(titleDays[6], "MMM d"),
+              })}
+            </Text>
+          </View>
+          <View className="flex-row items-center gap-2">
+            <StreakBadge />
+            <GettingStarted />
+          </View>
         </View>
 
         <Animated.View

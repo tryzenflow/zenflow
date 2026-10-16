@@ -1,7 +1,7 @@
 import { listSessions } from "@/api/tasks";
 import { dateKey, weekStart } from "@/lib/week-date-math";
-import { sessionTypesByDay } from "@/lib/week-day-types";
-import type { Session, SessionType } from "@zenflow/shared";
+import { dayBarsByDay, sameDayBars } from "@/lib/day-bar";
+import type { Session } from "@zenflow/shared";
 import { useUserStore } from "@/hooks/use-user-store";
 import {
   type DayTypes,
@@ -15,19 +15,6 @@ import {
 } from "@/lib/session-cache";
 import { addDays } from "date-fns";
 import { useEffect, useRef, useState } from "react";
-
-function sameDayTypes(
-  a: Map<string, SessionType[]>,
-  b: Map<string, SessionType[]>,
-): boolean {
-  if (a.size !== b.size) return false;
-  for (const [key, types] of a) {
-    const other = b.get(key);
-    if (!other || other.length !== types.length) return false;
-    if (types.some((type, i) => type !== other[i])) return false;
-  }
-  return true;
-}
 
 /**
  * Per-day distinct session types for the CURRENTLY VISIBLE week — what
@@ -46,7 +33,7 @@ function sameDayTypes(
  * bump `WeekScreen` already uses to make every mounted day revalidate — so a
  * task created or moved elsewhere updates the dots too.
  */
-const EMPTY: Map<string, SessionType[]> = new Map();
+
 
 /** The week's dots from saved days / months (offline, or before the fetch lands). */
 function savedWeekTypes(monday: Date, tz: string): DayTypes {
@@ -60,7 +47,7 @@ function savedWeekTypes(monday: Date, tz: string): DayTypes {
   const week = new Set(
     Array.from({ length: 7 }, (_, i) => dateKey(addDays(monday, i))),
   );
-  const all = sessionTypesByDay(Array.from(sessions.values()), tz);
+  const all = dayBarsByDay(Array.from(sessions.values()), tz);
   for (const k of Array.from(all.keys())) if (!week.has(k)) all.delete(k);
   return all;
 }
@@ -69,7 +56,7 @@ export function useWeekDayTypes(
   visibleDate: Date,
   tz: string,
   focusTick: number,
-): Map<string, SessionType[]> {
+): DayTypes {
   const visibleDateRef = useRef(visibleDate);
   visibleDateRef.current = visibleDate;
   const anchorKey = dateKey(weekStart(visibleDate));
@@ -92,12 +79,12 @@ export function useWeekDayTypes(
     listSessions("week", weekStart(visibleDateRef.current))
       .then(({ sessions }) => {
         if (cancelled) return;
-        const next = sessionTypesByDay(sessions, tz);
+        const next = dayBarsByDay(sessions, tz);
         setCachedWeekTypes(key, next);
         // Refetches on every focus; keep the old Map when nothing changed so
         // `WeekHeader` doesn't re-render for an identical dot row.
         setState((prev) =>
-          prev.key === key && sameDayTypes(prev.map, next)
+          prev.key === key && sameDayBars(prev.map, next)
             ? prev
             : { key, map: next },
         );
@@ -107,7 +94,7 @@ export function useWeekDayTypes(
         if (cancelled) return;
         const saved = savedWeekTypes(weekStart(visibleDateRef.current), tz);
         setState((prev) =>
-          prev.key === key && sameDayTypes(prev.map, saved)
+          prev.key === key && sameDayBars(prev.map, saved)
             ? prev
             : { key, map: saved },
         );

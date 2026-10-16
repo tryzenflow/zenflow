@@ -11,10 +11,8 @@ export default {
   // which left overdue pills with RN's default black border and no background.
   // `@zenflow/core` matters for the same reason: `session-type.ts`'s
   // `SESSION_TYPE_META` holds the per-type `dotClass`/`badgeClass`/`textClass`
-  // strings (`bg-teal-500`, `bg-sky-500`, …) that the week-header dot row and
-  // the type badge render — without this only `bg-brand-orange` (used
-  // literally elsewhere in mobile) survived, so every non-TASK dot was
-  // invisible. The web app scans it the same way (`@source` in `index.css`).
+  // strings (`bg-session-lecture`, …) that the week-header dot row and the
+  // type badge render; without it those dots are invisible. The web app scans it the same way (`@source` in `index.css`).
   content: [
     "./app/**/*.{ts,tsx}",
     "./components/**/*.{ts,tsx}",
@@ -66,6 +64,40 @@ export default {
           orange: "rgb(var(--brand-orange) / <alpha-value>)",
           yellow: "rgb(var(--brand-yellow) / <alpha-value>)",
           lime: "rgb(var(--brand-lime) / <alpha-value>)",
+        },
+        session: {
+          lecture: {
+            DEFAULT: "rgb(var(--session-lecture) / <alpha-value>)",
+            ink: "rgb(var(--session-lecture-ink) / <alpha-value>)",
+          },
+          exam: {
+            DEFAULT: "rgb(var(--session-exam) / <alpha-value>)",
+            ink: "rgb(var(--session-exam-ink) / <alpha-value>)",
+          },
+          assignment: {
+            DEFAULT: "rgb(var(--session-assignment) / <alpha-value>)",
+            ink: "rgb(var(--session-assignment-ink) / <alpha-value>)",
+          },
+          task: {
+            DEFAULT: "rgb(var(--session-task) / <alpha-value>)",
+            ink: "rgb(var(--session-task-ink) / <alpha-value>)",
+          },
+          dnd: {
+            DEFAULT: "rgb(var(--session-dnd) / <alpha-value>)",
+            ink: "rgb(var(--session-dnd-ink) / <alpha-value>)",
+          },
+          done: {
+            DEFAULT: "rgb(var(--session-done) / <alpha-value>)",
+            ink: "rgb(var(--session-done-ink) / <alpha-value>)",
+          },
+          late: {
+            DEFAULT: "rgb(var(--session-late) / <alpha-value>)",
+            ink: "rgb(var(--session-late-ink) / <alpha-value>)",
+          },
+          conflict: {
+            DEFAULT: "rgb(var(--session-conflict) / <alpha-value>)",
+            ink: "rgb(var(--session-conflict-ink) / <alpha-value>)",
+          },
         },
         success: "rgb(var(--success) / <alpha-value>)",
       },

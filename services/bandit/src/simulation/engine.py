@@ -21,6 +21,7 @@ from numpy.typing import NDArray
 
 from src.core import constants as consts
 from src.core.arms import seeded_tie_break_order
+from src.core.constants import COMPLETED_REWARD, MISSED_REWARD
 from src.core.context_vector import build_context_vector
 from src.core.linucb_best_slot import LinucbCandidateDay, best_linucb_slot
 from src.core.reward import drag_distance_reward
@@ -34,7 +35,7 @@ from src.core.slot_score import (
 
 from .archetypes import StudentProfile, make_student
 from .learner import RETAINED_REWARD, LinUCBState, PreferenceMatrix
-from .reaction import decide, draw_reaction
+from .reaction import completes, decide, draw_reaction
 from .utility import DayContext, slot_utility
 from .world import (
     SCENARIO_BY_NAME,
@@ -70,6 +71,13 @@ class SimConfig:
     balanced: bool = True
     # weight of the preference matrix in the LinUCB slot score (0 = pure arm band)
     pref_weight: float = consts.LINUCB_PREF_WEIGHT
+    # "completion": kept and checked off +1, kept and missed -1 (ADR-0023).
+    # "retained": the pre-ADR-0023 rule, kept +1 whatever the outcome.
+    reward: str = "completion"
+
+    def __post_init__(self) -> None:
+        if self.reward not in ("completion", "retained"):
+            raise ValueError(f"unknown reward mode: {self.reward}")
 
 
 def linucb_label(alpha: float) -> str:
@@ -88,6 +96,7 @@ class PlacementLog:
     drag: list[float] = field(default_factory=list)
     start: list[int] = field(default_factory=list)
     used_linucb: list[float] = field(default_factory=list)
+    completed: list[float] = field(default_factory=list)
     infeasible: int = 0
 
     def arrays(self) -> dict[str, NDArray[np.float64]]:
@@ -100,6 +109,7 @@ class PlacementLog:
             "drag": np.asarray(self.drag, dtype=np.float64),
             "start": np.asarray(self.start, dtype=np.float64),
             "used_linucb": np.asarray(self.used_linucb, dtype=np.float64),
+            "completed": np.asarray(self.completed, dtype=np.float64),
         }
 
 
@@ -442,15 +452,25 @@ class World:
         if target is None:
             final = prop.start_ms
             drag = 0.0
-            self.prefs.retained(final)
-            if self.linucb is not None and prop.arm is not None and prop.x is not None:
-                self.linucb.observe(prop.arm, prop.x, RETAINED_REWARD)
+            final_utility = prop.utility
         else:
             final = target
             drag = (target - prop.start_ms) / consts.MS_PER_MINUTE
+            final_utility = float(utils[int(np.flatnonzero(starts == target)[0])])
+        done = completes(final_utility, draws)
+        if target is None:
+            if self.cfg.reward == "completion":
+                if done:
+                    self.prefs.retained(final)
+                reward = COMPLETED_REWARD if done else MISSED_REWARD
+            else:
+                self.prefs.retained(final)
+                reward = RETAINED_REWARD
+        else:
             self.prefs.moved(prop.start_ms, target, drag)
-            if self.linucb is not None and prop.arm is not None and prop.x is not None:
-                self.linucb.observe(prop.arm, prop.x, drag_distance_reward(drag))
+            reward = drag_distance_reward(drag)
+        if self.linucb is not None and prop.arm is not None and prop.x is not None:
+            self.linucb.observe(prop.arm, prop.x, reward)
         current[m] = (final, final + dur_ms)
         self.placed.append((final, final + dur_ms))
 
@@ -463,6 +483,7 @@ class World:
         log.drag.append(abs(drag))
         log.start.append(prop.start_ms)
         log.used_linucb.append(1.0 if prop.arm is not None else 0.0)
+        log.completed.append(1.0 if done else 0.0)
 
     def run(self) -> PlacementLog:
         for task in self.tasks:

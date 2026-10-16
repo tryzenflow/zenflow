@@ -145,11 +145,11 @@ Contact point `zenflow-ops-email` (`alerting/contact-points.yml`) is the default
 | Env | Delivery |
 | --- | --- |
 | Staging | Grafana to Mailpit (<http://localhost:8025>) |
-| Prod | Mailgun SMTP from `alerts@zenflow.alphatrann.com` |
+| Prod | Mailgun SMTP from `alerts@usezenflow.com` |
 
 Prod Mailgun setup:
-1. Add domain `zenflow.alphatrann.com`, publish the SPF and DKIM records, wait for "verified".
-2. Create the SMTP password for `postmaster@zenflow.alphatrann.com`.
+1. Verify the `usezenflow.com` sending domain ([domains.md](domains.md#mail)).
+2. Create the SMTP password for `postmaster@usezenflow.com`.
 3. Set `GF_SMTP_PASSWORD` in Vault `grafana`. Host is `smtp.mailgun.org:587` in `compose.prod.yml`.
 4. Deploy, then Grafana > Alerting > Contact points > Test.
 

@@ -2,10 +2,10 @@ import { CHECKLIST_STEPS, type ChecklistStep, type TipId } from "@zenflow/shared
 import { t } from "./i18n";
 
 /**
- * The "Getting started" checklist (issue #116). RN-free so it can be unit-tested
- * (`lib/__tests__/checklist.test.ts`). Each step is ticked off by the real
- * action (see `hooks/use-checklist.ts` call sites); the strings match the
- * labels in `block-actions-sheet.tsx` / `reschedule-sheet.tsx`.
+ * The "Getting started" checklist (issue #116, trimmed to 3 steps in #245).
+ * RN-free so it can be unit-tested (`lib/__tests__/checklist.test.ts`). Each
+ * step is ticked off by the real action (see `hooks/use-checklist.ts` call
+ * sites). Ids live in `CHECKLIST_STEPS` in `@zenflow/shared`.
  */
 
 /** Title/hint read through `t()` on access, so a language switch shows up without rebuilding the table. */
@@ -22,81 +22,35 @@ function copy(title: string, hint: string) {
 
 export const STEP_COPY: Record<ChecklistStep, { title: string; hint: string }> =
   {
-    "switch-day": copy("Switch day", "Swipe the calendar, or tap a day at the top."),
-    "create-task": copy("Create a task", "Tap +, or tap the orange area on an empty day."),
-    "move-task": copy("Move a task", "Hold one of your tasks and drag it to reschedule in 15-minute steps."),
-    "block-actions": copy("Hold a task for more actions", "Hold it without moving. Move to… changes the day."),
-    "open-month": copy("Open the Month view", "Tap Month in the tab bar."),
-    "open-day": copy("Open a day", "Tap a day in the month to see its tasks."),
-    "move-day": copy("Move a task to another day", "Hold one of your tasks in the day's list, then drag it onto another day."),
+    "connect-dlu": copy("Connect DLU", "Import your timetable from the portal."),
+    "add-task": copy("Add a task", "Tap + to schedule your first session."),
+    "finish-session": copy(
+      "Finish a session",
+      "Mark a session done when you complete it.",
+    ),
   };
 
-/**
- * The screen a step's "show me" spotlight lives on (`null`: either — the + button
- * and the tab bar are on both). Tapping a row switches to it first.
- */
-export const STEP_SCREEN: Record<ChecklistStep, "week" | "month" | null> = {
-  "switch-day": "week",
-  "create-task": null,
-  "move-task": "week",
-  "block-actions": "week",
-  "open-month": null,
-  "open-day": "month",
-  "move-day": "month",
+/** Retired ids that count as a step done: a task created before the trim. */
+const ALIASES: Partial<Record<ChecklistStep, TipId>> = {
+  "add-task": "create-task",
 };
 
-/**
- * A step that can't be tried until another is done: moving or holding a task
- * needs a task to exist. Tapping it before then spotlights the earlier step
- * ("create a task first") instead.
- */
-export const STEP_NEEDS: Partial<Record<ChecklistStep, ChecklistStep>> = {
-  "move-task": "create-task",
-  "block-actions": "create-task",
-  "move-day": "create-task",
+/** Where a step's row opens: the Me tab for DLU, the calendar otherwise. */
+export const STEP_SCREEN: Record<ChecklistStep, "calendar" | "me"> = {
+  "connect-dlu": "me",
+  "add-task": "calendar",
+  "finish-session": "calendar",
 };
-
-/** The checklist is shown in two groups, matching the two calendar screens. */
-export const CHECKLIST_GROUPS: {
-  id: "week" | "month";
-  title: string;
-  steps: readonly ChecklistStep[];
-}[] = [
-  {
-    id: "week",
-    get title() {
-      return t("Week view");
-    },
-    steps: ["switch-day", "create-task", "move-task", "block-actions"],
-  },
-  {
-    id: "month",
-    get title() {
-      return t("Month view");
-    },
-    steps: ["open-month", "open-day", "move-day"],
-  },
-];
 
 export interface ChecklistItem {
   id: ChecklistStep;
   title: string;
   hint: string;
   done: boolean;
-  /** The step to do first (not done yet), if this one needs it. */
-  blockedBy: ChecklistStep | null;
-}
-
-export interface ChecklistGroup {
-  id: "week" | "month";
-  title: string;
-  items: ChecklistItem[];
 }
 
 export interface ChecklistProgress {
   items: ChecklistItem[];
-  /** `items` split into the Week / Month groups, in display order. */
-  groups: ChecklistGroup[];
   done: number;
   total: number;
   /** Every step done. */
@@ -113,24 +67,17 @@ export function checklistProgress(
   const isDone = (id: TipId) =>
     (seenTips ?? []).includes(id) || doneThisSession.has(id);
   const items = CHECKLIST_STEPS.map((id) => {
-    const needs = STEP_NEEDS[id];
+    const alias = ALIASES[id];
     return {
       id,
       ...STEP_COPY[id],
-      done: isDone(id),
-      blockedBy: needs && !isDone(needs) ? needs : null,
+      done: isDone(id) || (alias !== undefined && isDone(alias)),
     };
   });
   const done = items.filter((i) => i.done).length;
   const complete = done === items.length;
-  const groups = CHECKLIST_GROUPS.map(({ id, title, steps }) => ({
-    id,
-    title,
-    items: items.filter((i) => steps.includes(i.id)),
-  }));
   return {
     items,
-    groups,
     done,
     total: items.length,
     complete,

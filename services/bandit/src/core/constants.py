@@ -12,6 +12,12 @@ PREFERENCE_RETAINED_WEIGHT = 0.25
 STABILITY_WEIGHT = 0.1
 STABILITY_SATURATION_HOURS = 4
 MOVE_REWARD_SCALE_MINUTES = 240
+# Completion reward (ADR-0023). An unmoved placement settles after its end plus
+# the grace; a placement with no check-off by end plus the cutoff is missed.
+COMPLETED_REWARD = 1.0
+MISSED_REWARD = -1.0
+CHECK_OFF_GRACE_MS = 15 * 60_000
+MISS_CUTOFF_MS = 24 * 60 * 60_000
 MATRIX_HALF_LIFE_DAYS = 21
 
 PREFERENCE_SLOTS_PER_DAY = 24
@@ -48,7 +54,17 @@ LINUCB_PREF_WEIGHT = 1.0
 # Displacement (issue #62 B).
 MAX_DISPLACED_TASKS = 6
 
+# Anchors and displacement cost (issue #250, ADR-0022). A flexible session
+# starting within FROZEN_WINDOW_HOURS of now never moves. A move costs its
+# anchor's base plus the hours moved, plus CROSS_DAY when its local day changes.
+FROZEN_WINDOW_HOURS = 2
+DISPLACE_COST_AUTO = 1
+DISPLACE_COST_CHOSEN = 10
+DISPLACE_COST_CROSS_DAY = 10
+
 # Placement scan scope (ADR-0003; owned by Python, echoed via ``paramsVersion``).
 SCAN_CAP_DAYS = 30
-MAX_SERIES_PER_DAY = 1
+MAX_SERIES_PER_DAY = 3
+# Minimum gap between two sittings of one series on the same day.
+SERIES_GAP_MINUTES = 15
 INFEASIBLE_HORIZON_DAYS = 30

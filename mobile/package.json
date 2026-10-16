@@ -1,7 +1,7 @@
 {
   "name": "mobile",
   "main": "index.ts",
-  "version": "0.1.0-beta.8",
+  "version": "1.0.0-beta.11",
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
@@ -21,7 +21,8 @@
     "test": "pnpm test:unit && pnpm test:component",
     "test:unit": "vitest run",
     "test:component": "vitest run -c vitest.component.config.ts",
-    "e2e": "bash e2e/run.sh"
+    "e2e": "bash e2e/run.sh",
+    "e2e:screenshots": "bash e2e/screenshots.sh"
   },
   "dependencies": {
     "@10play/tentap-editor": "^1.0.1",
@@ -67,6 +68,7 @@
     "expo-font": "~58.0.3",
     "expo-haptics": "~58.0.2",
     "expo-image-picker": "~58.0.10",
+    "expo-intent-launcher": "~58.0.3",
     "expo-linear-gradient": "~58.0.1",
     "expo-linking": "~58.0.8",
     "expo-navigation-bar": "~58.0.2",
@@ -76,6 +78,7 @@
     "expo-splash-screen": "~58.0.1",
     "expo-status-bar": "~58.0.1",
     "expo-system-ui": "~58.0.3",
+    "expo-task-manager": "~58.0.11",
     "expo-web-browser": "~58.0.2",
     "lucide-react-native": "^0.314.0",
     "nativewind": "4.1.6",

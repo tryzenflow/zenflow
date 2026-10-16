@@ -1,5 +1,6 @@
 import { useLanguage } from "@/hooks/use-language";
 import { format, t } from "@/lib/i18n";
+import { GlassButton } from "@/components/ui/glass-button";
 import { CalendarDays, CalendarRange, Trash2, X } from "@/components/Icons";
 import {
   BottomSheet,
@@ -165,13 +166,12 @@ export const DeleteRecurringSheet = forwardRef<
                 </Text>
               )}
             </View>
-            <Pressable
+            <GlassButton
               onPress={sheet.close}
+              icon={X}
               accessibilityLabel={t("Cancel")}
-              className="h-8 w-8 items-center justify-center"
-            >
-              <X size={16} className="text-muted-foreground" />
-            </Pressable>
+              style={{ marginRight: -6 }}
+            />
           </View>
 
           <View className="gap-2.5">

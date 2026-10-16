@@ -1,5 +1,6 @@
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
+import { navigateOnce } from "@/lib/nav";
 import { Check, ChevronRight, ClipboardList } from "@/components/Icons";
 import {
   BottomSheet,
@@ -9,17 +10,10 @@ import {
 } from "@/components/ui/bottom-sheet";
 import { Text } from "@/components/ui/text";
 import { completeStep, useChecklist } from "@/hooks/use-checklist";
-import { useCalendarJump } from "@/hooks/use-calendar-jump";
-import { useSpotlight } from "@/hooks/use-spotlight";
-import { useUserStore } from "@/hooks/use-user-store";
-import { STEP_NEEDS, STEP_SCREEN } from "@/lib/checklist";
-import { findNearestTaskDate } from "@/lib/nearest-task-date";
-import { dateKey } from "@/lib/week-date-math";
+import { STEP_SCREEN } from "@/lib/checklist";
+import type { ChecklistStep } from "@zenflow/shared";
 import { FAB_GLOW_INNER, FAB_GLOW_OUTER } from "@/lib/fab-glow";
 import { cn } from "@/lib/utils";
-import { zonedNow } from "@zenflow/core";
-import { format } from "date-fns";
-import type { ChecklistStep } from "@zenflow/shared";
 import * as Haptics from "expo-haptics";
 import { type Href, useRouter } from "expo-router";
 import { useEffect } from "react";
@@ -36,27 +30,31 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
-/** Gap from the screen's right edge to clear the notification bell (16 + 36 + 8). */
-const BELL_CLEARANCE = 60;
+/** Where each step's row goes. The DLU step opens the Me tab's DLU section. */
+function routeFor(step: ChecklistStep): Href {
+  if (step === "add-task") return "/task/new" as Href;
+  if (STEP_SCREEN[step] === "me") {
+    return { pathname: "/(app)/settings", params: { focus: "dlu" } } as Href;
+  }
+  return "/" as Href;
+}
 
 /**
- * The first-run "Getting started" checklist (issue #116): a small pill floating
- * at the top of the screen, just left of the notification bell that opens a
- * sheet of steps, grouped Week view / Month view. Each step ticks itself off
- * when the user does it (`completeStep`); the pill goes away when every step
- * is done or the user hides it. Render it once in the Week and Month screens.
+ * The first-run "Getting started" checklist: a pill in the calendar header
+ * that opens a sheet of three steps (connect DLU, add a task, finish a
+ * session). Each step ticks itself off when the user does it (`completeStep`).
+ * The pill goes away when every step is done or the user hides it. Render it
+ * inside the calendar header.
  *
- * Deliberately loud — the same amber glow as the + button, and a slow, soft
- * pulse until the first step is ticked — because a first-run guide nobody
- * notices is no guide. Tapping a step closes the sheet, switches to the screen
- * that step lives on and spotlights the control (`SpotlightAnchor`).
+ * Deliberately loud while nothing is ticked: a slow, soft pulse, because a
+ * first-run guide nobody notices is no guide.
  */
 export function GettingStarted() {
   useLanguage();
   const sheet = useBottomSheet();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { groups, done, total, visible } = useChecklist();
+  const { items, done, total, visible } = useChecklist();
   const reduceMotion = useReducedMotion();
 
   // Gentle "bump" while nothing is ticked yet; calm once the user is under way.
@@ -81,92 +79,38 @@ export function GettingStarted() {
     transform: [{ scale: pulse.value }],
   }));
 
-  // Tap a step: close the sheet, go to its screen, then spotlight its control.
-  // If nothing turns up to point at (no task yet), point at + instead.
-  const showMe = async (
-    tapped: ChecklistStep,
-    blockedBy: ChecklistStep | null,
-  ) => {
+  const openStep = (step: ChecklistStep) => {
     Haptics.selectionAsync().catch(() => {});
     sheet.close();
-    let step = blockedBy ?? tapped;
-    let jump: (() => void) | null = null;
-    let foundTask = false;
-    // Steps that need a task: find the nearest day (week) / month that has one
-    // — starting from where the user is, so a day that already has a task
-    // stays put — and move there before pointing at it. Only when there is
-    // none at all, point at + instead. (A task made before the checklist, or
-    // by the planner, counts too.)
-    if (STEP_NEEDS[tapped]) {
-      const tz = useUserStore.getState().user?.timezone || "UTC";
-      const cal = useCalendarJump.getState();
-      const month = STEP_SCREEN[tapped] === "month";
-      const from =
-        (month ? cal.focusedMonth : cal.focusedWeekDay) ?? zonedNow(tz);
-      const day = await findNearestTaskDate(from, tz);
-      if (day) {
-        step = tapped;
-        foundTask = true;
-        if (month) {
-          if (format(day, "yyyy-MM") !== format(from, "yyyy-MM")) {
-            jump = () => useCalendarJump.getState().jumpMonth(day);
-          }
-        } else if (dateKey(day) !== dateKey(from)) {
-          jump = () => useCalendarJump.getState().jumpWeek(day);
-        }
-      } else {
-        step = "create-task";
-      }
-    }
-    const screen = STEP_SCREEN[step];
-    setTimeout(() => {
-      if (screen) router.navigate((screen === "week" ? "/" : "/month") as Href);
-      jump?.();
-      useSpotlight.getState().show(step);
-      // Nothing to point at (the task was deleted, say): point at + instead.
-      setTimeout(() => {
-        const { step: current, shown, show } = useSpotlight.getState();
-        if (current !== step || shown || step === "create-task") return;
-        // A task was found, so "create a task" would be wrong: the control
-        // just wasn't measurable in time. Drop the request, don't redirect.
-        if (foundTask) useSpotlight.getState().clear();
-        else show("create-task");
-      }, 8000);
-    }, 0);
+    const href = routeFor(step);
+    navigateOnce(() => router.navigate(href));
   };
 
   if (!visible) return null;
 
   return (
     <>
-      <View
-        pointerEvents="box-none"
-        style={{ top: insets.top + 8, right: BELL_CLEARANCE }}
-        className="absolute z-20"
-      >
-        <Animated.View
-          style={[FAB_GLOW_OUTER, { borderRadius: 18 }, pulseStyle]}
+      <Animated.View style={[FAB_GLOW_OUTER, { borderRadius: 18 }, pulseStyle]}>
+        <Pressable
+          onPress={() => {
+            Haptics.selectionAsync().catch(() => {});
+            sheet.open();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={t("Getting started, {done} of {total} done", {
+            done,
+            total,
+          })}
+          testID="getting-started.pill"
+          style={FAB_GLOW_INNER}
+          className="h-9 flex-row items-center gap-1.5 rounded-full bg-primary px-3 active:opacity-80"
         >
-          <Pressable
-            onPress={() => {
-              Haptics.selectionAsync().catch(() => {});
-              sheet.open();
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={t("Getting started, {done} of {total} done", {
-              done,
-              total,
-            })}
-            style={FAB_GLOW_INNER}
-            className="h-9 flex-row items-center gap-1.5 rounded-full bg-primary px-3 active:opacity-80"
-          >
-            <ClipboardList size={15} className="text-primary-foreground" />
-            <Text className="text-[13px] font-bold text-primary-foreground">
-              {done === 0 ? t("Getting started") : `${done}/${total}`}
-            </Text>
-          </Pressable>
-        </Animated.View>
-      </View>
+          <ClipboardList size={15} className="text-primary-foreground" />
+          <Text className="text-[13px] font-bold text-primary-foreground">
+            {done === 0 ? t("Getting started") : `${done}/${total}`}
+          </Text>
+        </Pressable>
+      </Animated.View>
 
       <BottomSheet>
         <BottomSheetContent ref={sheet.ref}>
@@ -188,62 +132,47 @@ export function GettingStarted() {
               </View>
             </View>
 
-            {groups.map((group) => (
-              <View key={group.id} className="mt-1">
-                <Text className="px-1 pb-1 pt-3 text-[17px] font-bold tracking-tight text-foreground">
-                  {group.title}
-                </Text>
-                {group.items.map((item) => (
-                  <Pressable
-                    key={item.id}
-                    onPress={() => void showMe(item.id, item.blockedBy)}
-                    accessibilityRole="button"
-                    accessibilityLabel={t("Show me: {title}", { title: item.title })}
-                    className="flex-row items-start gap-3 rounded-xl px-1 py-2.5 active:opacity-70"
-                  >
-                    <View
-                      className={cn(
-                        "mt-0.5 size-[22px] items-center justify-center rounded-full border-[1.5px]",
-                        item.done
-                          ? "border-primary bg-primary"
-                          : "border-border bg-transparent",
-                      )}
-                    >
-                      {item.done ? (
-                        <Check
-                          size={13}
-                          strokeWidth={3}
-                          className="text-primary-foreground"
-                        />
-                      ) : null}
-                    </View>
-                    <View className="min-w-0 flex-1">
-                      <Text
-                        className={cn(
-                          "text-[15px] font-semibold",
-                          item.done
-                            ? "text-muted-foreground line-through"
-                            : "text-foreground",
-                        )}
-                      >
-                        {item.title}
-                      </Text>
-                      <Text className="mt-0.5 text-[13px] leading-[18px] text-muted-foreground">
-                        {item.hint}
-                      </Text>
-                      {item.blockedBy ? (
-                        <Text className="mt-0.5 text-[12.5px] font-medium text-primary">
-                          {t("Create a task first.")}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <ChevronRight
-                      size={16}
-                      className="mt-1 text-muted-foreground"
+            {items.map((item) => (
+              <Pressable
+                key={item.id}
+                onPress={() => openStep(item.id)}
+                accessibilityRole="button"
+                accessibilityLabel={t("Open: {title}", { title: item.title })}
+                className="flex-row items-start gap-3 rounded-xl px-1 py-2.5 active:opacity-70"
+              >
+                <View
+                  className={cn(
+                    "mt-0.5 size-[22px] items-center justify-center rounded-full border-[1.5px]",
+                    item.done
+                      ? "border-primary bg-primary"
+                      : "border-border bg-transparent",
+                  )}
+                >
+                  {item.done ? (
+                    <Check
+                      size={13}
+                      strokeWidth={3}
+                      className="text-primary-foreground"
                     />
-                  </Pressable>
-                ))}
-              </View>
+                  ) : null}
+                </View>
+                <View className="min-w-0 flex-1">
+                  <Text
+                    className={cn(
+                      "text-[15px] font-semibold",
+                      item.done
+                        ? "text-muted-foreground line-through"
+                        : "text-foreground",
+                    )}
+                  >
+                    {item.title}
+                  </Text>
+                  <Text className="mt-0.5 text-[13px] leading-[18px] text-muted-foreground">
+                    {item.hint}
+                  </Text>
+                </View>
+                <ChevronRight size={16} className="mt-1 text-muted-foreground" />
+              </Pressable>
             ))}
 
             <Pressable

@@ -1,7 +1,7 @@
 ---
 name: accounts-api
 summary: "Auth, users, files, notifications, Prisma, shared contract"
-description: "Zenflow's account and platform-facing API: OTP auth and Redis sessions, users and tags, devices and push, reminders, mail, signed file URLs and S3, the public privacy and terms pages, Prisma schema and migrations, and the @zenflow/shared contract."
+description: "Zenflow's account and platform-facing API: OTP auth and Redis sessions, users and tags, devices and push, reminders, mail, signed file URLs and S3, Prisma schema and migrations, and the @zenflow/shared contract."
 owns:
   - backend/src/*.ts
   - backend/src/auth/**
@@ -11,7 +11,9 @@ owns:
   - backend/src/notifications/**
   - backend/src/reminders/**
   - backend/src/mail/**
-  - backend/src/legal/**
+  - backend/src/streaks/**
+  - backend/src/daily-push/**
+  - backend/src/course-colours/**
   - backend/src/files/**
   - backend/src/prisma/**
   - backend/scripts/with-database-url.cjs

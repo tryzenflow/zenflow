@@ -5,13 +5,25 @@ For maintainers (issue #75). Workflows live in `.github/workflows/`.
 | Workflow | Trigger | Does |
 | --- | --- | --- |
 | `ci.yml` | Every PR, merge queue | [CI jobs](#ci-jobs). Final job **`CI ok`** is the only required check |
-| `images.yml` | Push to `main` | Builds `zenflow-api` and `zenflow-bandit`, pushes `ghcr.io/<owner>/<image>:<git-sha>` and `:latest`, deploys that SHA to staging |
+| `images.yml` | Push to `main` | Builds only the changed image, re-tags the other from `:latest` to the same SHA, pushes `ghcr.io/<owner>/<image>:<git-sha>` and `:latest`, deploys to staging unless nothing deployable changed |
 | `release.yml` | GitHub Release published (`vX.Y.Z`) | Deploys the already built images for the tag's commit (must be on `main`) to production. Needs `production` reviewers. No rebuild |
 | `deploy.yml` | Called by the two above, or manual | Single deploy entry point. Manual run is a rollback (`mode=flip` or an older SHA) |
 | `audit.yml` | Weekly, PRs touching the lockfile | `pnpm audit`. Informational |
 | `.github/dependabot.yml` | Weekly | npm, GitHub Actions, Docker, uv |
 
 ## CI jobs
+
+A `changes` job diffs the PR and skips jobs it cannot affect. Skipped jobs pass `CI ok`; other triggers run everything.
+
+| Area | Runs when the PR changes |
+| --- | --- |
+| Backend unit, backend e2e, frontend e2e | backend TS, `packages/`, lockfile, CI wiring, or `services/bandit/` |
+| Bandit tests and image build | `services/bandit/` |
+| API image build | `backend/`, `packages/shared/`, root manifests |
+| Prisma drift | `backend/prisma/` |
+| Vault and compose validation | compose, ops, env, nginx, observability, `scripts/deploy/` |
+| Agents sync | `.agents/`, `.claude/`, `.codex/`, `AGENTS.md` |
+| Mobile build and Maestro e2e | `mobile/`, `packages/`, after lint, typecheck and unit tests |
 
 - Lint (changed files), typecheck (shared, core, backend, frontend, mobile).
 - Unit tests: backend Jest, mobile Vitest, bandit pytest and ruff.

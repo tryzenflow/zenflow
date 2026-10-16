@@ -1,4 +1,5 @@
 import { HttpException, Injectable, Logger } from "@nestjs/common";
+import { randomUUID } from "crypto";
 import type { User } from "../../../generated/prisma";
 import { PrismaService } from "../../prisma/prisma.service";
 import { wouldConflict } from "./conflict-check";
@@ -7,7 +8,10 @@ import { TaskPlacementService } from "./task-placement.service";
 
 export interface RescheduleConflictsResult {
   rescheduled: { id: string; from: Date; to: Date }[];
+  /** Still conflicting: no conflict-free slot, or `PINNED` (never moved). */
   failedSessionIds: string[];
+  /** Undo handle for every move this call made. Absent when nothing moved. */
+  undoGroupId?: string;
 }
 
 interface ConflictRow {
@@ -16,14 +20,21 @@ interface ConflictRow {
   durationMinutes: number;
   deadline: Date;
   scheduledStartTime: Date;
+  anchor: "AUTO" | "CHOSEN" | "PINNED";
 }
 
 /**
  * "Reschedule them all" for a sync-conflict notification (issue #62 D): every
  * listed task that still overlaps something is re-placed through the normal
  * placement path, earliest deadline first; `TASK` series sittings are
- * re-placed as a series to keep one per day. Moves are recorded as
- * `SYSTEM_MOVE`. Idempotent; unmovable tasks go to `failedSessionIds`.
+ * re-placed as a series to keep the per-day cap and sibling gap. Moves are recorded as
+ * `SYSTEM_MOVE` under one undo group. Idempotent; unmovable tasks go to
+ * `failedSessionIds`.
+ *
+ * The user's tap is the confirmation, so `CHOSEN` tasks re-place themselves
+ * (no plan is asked). Other placements forbid moving a `CHOSEN` task
+ * (ADR-0022, `chosenMoves: FORBID`), and a `PINNED` task is never moved: it
+ * stays in `failedSessionIds` as a conflict.
  */
 @Injectable()
 export class ConflictRescheduleService {
@@ -55,10 +66,16 @@ export class ConflictRescheduleService {
         durationMinutes: true,
         deadline: true,
         scheduledStartTime: true,
+        anchor: true,
       },
       orderBy: { deadline: "asc" },
     })) as ConflictRow[];
 
+    const result: RescheduleConflictsResult = {
+      rescheduled: [],
+      failedSessionIds: [],
+    };
+    const groupId = randomUUID();
     const conflicting: ConflictRow[] = [];
     for (const row of rows) {
       const stillConflicts = await wouldConflict(this.prisma, {
@@ -68,13 +85,15 @@ export class ConflictRescheduleService {
         durationMinutes: row.durationMinutes,
         excludeSessionIds: [row.id],
       });
-      if (stillConflicts) conflicting.push(row);
+      if (!stillConflicts) continue;
+      if (row.anchor === "PINNED") {
+        // Never moved: it stays a conflict for the user to resolve.
+        result.failedSessionIds.push(row.id);
+        continue;
+      }
+      conflicting.push(row);
     }
 
-    const result: RescheduleConflictsResult = {
-      rescheduled: [],
-      failedSessionIds: [],
-    };
     const bySeries = new Map<string, ConflictRow[]>();
     const singles: ConflictRow[] = [];
     for (const row of conflicting) {
@@ -88,12 +107,20 @@ export class ConflictRescheduleService {
     }
 
     for (const [seriesId, group] of bySeries) {
-      const ok = await this.respreadSeries(user, seriesId, group, now, result);
+      const ok = await this.respreadSeries(
+        user,
+        seriesId,
+        group,
+        now,
+        result,
+        groupId,
+      );
       if (!ok) singles.push(...group);
     }
     for (const row of singles) {
-      await this.placeOne(user, row, now, result);
+      await this.placeOne(user, row, now, result, groupId);
     }
+    if (result.rescheduled.length) result.undoGroupId = groupId;
     // Ids that vanished or were completed are simply not conflicts anymore.
     return result;
   }
@@ -108,6 +135,7 @@ export class ConflictRescheduleService {
     group: ConflictRow[],
     now: Date,
     result: RescheduleConflictsResult,
+    groupId: string,
   ): Promise<boolean> {
     let plan: { id: string; from: Date | null; to: Date | null }[];
     try {
@@ -154,6 +182,7 @@ export class ConflictRescheduleService {
       user.id,
       moves,
       (id) => dur.get(id) ?? 15,
+      groupId,
     );
     result.rescheduled.push(...applied);
     return true;
@@ -164,6 +193,7 @@ export class ConflictRescheduleService {
     row: ConflictRow,
     now: Date,
     result: RescheduleConflictsResult,
+    groupId: string,
   ): Promise<void> {
     const from = row.scheduledStartTime;
     let to: Date | null;
@@ -179,6 +209,10 @@ export class ConflictRescheduleService {
         now,
         // It already has a start; don't move it onto another conflict.
         allowLastResort: false,
+        // Only the user's own tap moves things here: a CHOSEN task is never
+        // displaced by another one's placement (ADR-0022).
+        chosenMoves: "FORBID",
+        undoGroupId: groupId,
       });
       to = placed.scheduledStartTime;
     } catch (err) {
@@ -194,6 +228,7 @@ export class ConflictRescheduleService {
       user.id,
       [{ id: row.id, fromMs: from.getTime(), toMs: to.getTime() }],
       () => row.durationMinutes,
+      groupId,
     );
     result.rescheduled.push({ id: row.id, from, to });
   }

@@ -29,6 +29,11 @@ import { SyncCooldownException } from "./sync-cooldown.exception";
 import { SyncInflightGuard } from "./sync-inflight.service";
 import { IntegrationAuthService } from "./integration-auth.service";
 import {
+  STUDENT_ID_MISMATCH,
+  studentIdOf,
+  usernameMatchesEmail,
+} from "./student-id";
+import {
   IngestionSyncService,
   ManualSyncUnavailableError,
   type ManualSyncOutcome,
@@ -37,6 +42,7 @@ import {
   DATA_KINDS_BY_PROVIDER,
   IngestionScheduleService,
 } from "../ingestion/ingestion-schedule.service";
+import { IngestionDispatchService } from "../ingestion/ingestion-dispatch.service";
 import { ConnectIntegrationDto } from "./dto/connect-integration.dto";
 import { UpdateIntegrationDto } from "./dto/update-integration.dto";
 
@@ -142,6 +148,8 @@ export class IntegrationsService {
     // now, not at the next tick's backfill sweep.
     @Inject(forwardRef(() => IngestionScheduleService))
     private readonly ingestionSchedule: IngestionScheduleService,
+    @Inject(forwardRef(() => IngestionDispatchService))
+    private readonly ingestionDispatch: IngestionDispatchService,
   ) {}
 
   /** `POST /integrations` — verify against DLU, then encrypt + upsert. */
@@ -347,6 +355,14 @@ export class IntegrationsService {
     provider: IntegrationProvider,
     credentials: { username: string; password: string },
   ): Promise<IntegrationStatus> {
+    if (!usernameMatchesEmail(user.email, credentials.username)) {
+      throw new BadRequestException({
+        success: false,
+        message: `This DLU ${this.label(provider)} account doesn't match your student ID ${studentIdOf(user.email)}.`,
+        code: STUDENT_ID_MISMATCH,
+      });
+    }
+
     let valid: boolean;
     try {
       valid = await this.integrationAuth.verifyCredentials(
@@ -397,6 +413,10 @@ export class IntegrationsService {
     // brand-new integration's confirmed section set is known before anything
     // tries to read it.
     await this.ingestionSchedule.ensureRows(row.id, provider, now);
+
+    // Queue the first jobs now rather than waiting for the watcher: the
+    // profile fetch and enrolment discovery run as separate queue jobs.
+    await this.ingestionDispatch.onConnect(provider, row.id, user.id, now);
 
     // Re-connecting doesn't erase the run history, so report the same sync
     // state `GET /integrations` would.

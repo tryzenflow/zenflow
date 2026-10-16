@@ -28,7 +28,7 @@ describe("FallbackPlacer (frozen heuristic, ADR-0003)", () => {
     expect(heuristic.placeTask).toHaveBeenCalledWith("u", t, tz, [], now);
   });
 
-  it("series: clamps each member to its own day-window, one per day, siblings blocked", async () => {
+  it("series: clamps each member to its own day-window, siblings blocked with the gap", async () => {
     const place = jest
       .fn()
       .mockResolvedValueOnce(slotAt("2026-06-08T09:00:00.000Z"))
@@ -68,14 +68,14 @@ describe("FallbackPlacer (frozen heuristic, ADR-0003)", () => {
     };
     expect(opts1.extraOccupied).toEqual([
       {
-        start: Date.parse("2026-06-08T09:00:00.000Z"),
-        end: Date.parse("2026-06-08T10:00:00.000Z"),
+        start: Date.parse("2026-06-08T08:45:00.000Z"),
+        end: Date.parse("2026-06-08T10:15:00.000Z"),
       },
     ]);
-    expect(opts1.skipDay("2026-06-08")).toBe(true); // MAX_SERIES_PER_DAY = 1
+    expect(opts1.skipDay("2026-06-08")).toBe(false); // MAX_SERIES_PER_DAY = 3
   });
 
-  it("series: a member whose window is full spills over the whole range (still one per day)", async () => {
+  it("series: a member whose window is full spills over the whole range", async () => {
     const place = jest
       .fn()
       .mockResolvedValueOnce(slotAt("2026-06-08T09:00:00.000Z"))
@@ -104,10 +104,10 @@ describe("FallbackPlacer (frozen heuristic, ADR-0003)", () => {
       lastDayStr: "2026-06-10",
     });
     const spill = calls[2][6] as { skipDay: (d: string) => boolean };
-    expect(spill.skipDay("2026-06-08")).toBe(true); // a's day stays capped
+    expect(spill.skipDay("2026-06-08")).toBe(false); // a's day has room left
   });
 
-  it("series: with no room one-per-day, the last pass drops the per-day cap", async () => {
+  it("series: with no room under the per-day cap, the last pass drops it", async () => {
     const place = jest
       .fn()
       .mockResolvedValueOnce(slotAt("2026-06-08T09:00:00.000Z"))

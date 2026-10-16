@@ -82,6 +82,36 @@ export function localizeNotification<
         "Các buổi học này đã được xóa khỏi thời khóa biểu DLU của bạn.",
     };
     content = copy[content] ?? content;
+  } else if (row.eventName === "timetable.ready") {
+    title = title.replace(
+      /^Timetable for semester (\d) (\S+) is available$/,
+      (_, term: string, year: string) =>
+        `Thời khóa biểu học kỳ ${term} ${year} đã sẵn sàng`,
+    );
+    title = title.replace(
+      /^Sem (\d) timetable is live$/,
+      (_, term: string) => `Thời khóa biểu HK${term} đã lên sóng`,
+    );
+    content = content
+      .replace(
+        /^You may not see every week yet\. We're still syncing\.$/,
+        "Bạn có thể chưa thấy đủ các tuần. Chúng tôi vẫn đang đồng bộ.",
+      )
+      .replace(
+        /^Still syncing, check back soon\.$/,
+        "Đang đồng bộ, lát ghé lại nha.",
+      );
+  } else if (row.eventName === "marks.ready") {
+    title = title.replace(/^Your marks are available$/, "Điểm của bạn đã có");
+    content = content.replace(/^Open your profile\.$/, "Mở hồ sơ của bạn.");
+  } else if (row.eventName === "timetable.changed") {
+    title = title
+      .replace(/^Your timetable changed$/, "Thời khóa biểu của bạn đã thay đổi")
+      .replace(/^A new lecture$/, "Có buổi học mới")
+      .replace(/^(\d+) new lectures$/, "$1 buổi học mới");
+    content = content
+      .replace(/^See what changed\.$/, "Xem có gì thay đổi.")
+      .replace(/^Check your timetable\.$/, "Xem lại thời khóa biểu của bạn.");
   } else if (row.eventName === "reminder.fired") {
     const match = title.match(
       /^(Exam|Due|Class|Task starts|Event starts) in (.+?): ([\s\S]+)$/,
@@ -179,4 +209,58 @@ export function localizeNotification<
     );
   }
   return { ...row, title, content };
+}
+
+/** Daily brief counts and the first item of the day (issue #255). */
+export interface DailyBriefCopyInput {
+  classes: number;
+  blocks: number;
+  firstTitle: string;
+  /** `HH:mm` in the user's timezone. */
+  firstTime: string;
+}
+
+/** Morning brief push: counts as the title, the first item as the body. */
+export function dailyBriefCopy(
+  input: DailyBriefCopyInput,
+  lang?: string,
+): { title: string; body: string } {
+  const { classes, blocks, firstTitle, firstTime } = input;
+  if (lang === "VI_VN") {
+    const parts = [
+      classes > 0 ? `${classes} tiết học` : null,
+      blocks > 0 ? `${blocks} buổi học tập` : null,
+    ].filter(Boolean);
+    return {
+      title: parts.join(", "),
+      body: `Tiếp theo: ${firstTitle} lúc ${firstTime}`,
+    };
+  }
+  const parts = [
+    classes > 0 ? `${classes} ${classes === 1 ? "class" : "classes"}` : null,
+    blocks > 0
+      ? `${blocks} ${blocks === 1 ? "study block" : "study blocks"}`
+      : null,
+  ].filter(Boolean);
+  return {
+    title: parts.join(", "),
+    body: `First up: ${firstTitle} at ${firstTime}`,
+  };
+}
+
+/** Evening check-in push: the action buttons carry the choice, so the copy only asks. */
+export function dailyCheckinCopy(lang?: string): {
+  title: string;
+  body: string;
+} {
+  if (lang === "VI_VN") {
+    return {
+      title: "Kiểm tra hôm nay",
+      body: "Đánh dấu các buổi hôm nay là xong hoặc bỏ lỡ.",
+    };
+  }
+  return {
+    title: "Check in on today",
+    body: "Mark today's sessions done or missed.",
+  };
 }

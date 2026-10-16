@@ -35,6 +35,8 @@ export interface Event {
   state: SessionCardState;
   /** Free-text location (room / building) carried through from the session, or null. */
   location?: string | null;
+  /** The course the session belongs to (see {@link Session.courseKey}), or null. */
+  courseKey?: string | null;
 }
 
 /**

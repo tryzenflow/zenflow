@@ -621,7 +621,7 @@ const portalSectionsOut = [...sections.values()].map((sec) => ({
 }));
 
 // Reference week: tuan 44, 2026-2027 HK01 -> Monday 26/10/2026.
-const WEEK_DATES = ["26/10/2026", "27/10/2026", "28/10/2026", "29/10/2026", "30/10/2026", "31/10/2026", "01/11/2026"];
+const WEEK_DATES = ["12/10/2026", "13/10/2026", "14/10/2026", "15/10/2026", "16/10/2026", "17/10/2026", "18/10/2026"];
 const timetableRows = {};
 let weekScheduleSeq = 900000000;
 for (const sec of sections.values()) {

@@ -5,8 +5,10 @@ clock (``nowMs`` is a request field), no randomness. Ports the TS heuristic /
 bandit / series placers and displacement service (``5763a29``):
 
 * one request = one placement event (a single task, or one materialized series);
-* each member scans its own local-day window, skipping days already holding
-  ``MAX_SERIES_PER_DAY`` siblings and never overlapping a sibling;
+* each member scans its own local-day window, then the whole ``now ...
+  deadline`` range when its window has no room, skipping days already holding
+  the series' day cap (``series_day_cap``) and keeping ``SERIES_GAP_MINUTES``
+  clear of every sibling;
 * :class:`~src.policies.heuristic.HeuristicPolicy` /
   :class:`~src.policies.linucb.LinucbPolicy` compute a pick each;
   :class:`~src.policies.selector.PolicySelector` is the A/B split deciding
@@ -33,13 +35,20 @@ from src.core import constants as consts
 from src.core.arms import seeded_tie_break_order
 from src.core.context_vector import build_context_vector
 from src.core.displacement import (
-    flexible_from_dicts,
+    FlexibleTask,
     last_resort_pin,
     pick_late_slot,
     pick_min_conflict_slot,
     plan_displacement,
 )
-from src.core.series_spread import series_day_windows
+from src.core.preference import preference_score_at
+from src.core.reason import (
+    PlacementReason,
+    count_free_starts,
+    is_near_block,
+    placement_reason,
+)
+from src.core.series_spread import series_day_cap, series_day_windows
 from src.core.slot import (
     Intervals,
     add_days_str,
@@ -105,13 +114,19 @@ class _Ledger:
     count_by_day: dict[str, int] = field(default_factory=dict)
 
 
+def _sibling_block(start_ms: int, end_ms: int) -> tuple[int, int]:
+    """A placed sitting as its siblings see it: padded by the series gap."""
+    gap = consts.SERIES_GAP_MINUTES * consts.MS_PER_MINUTE
+    return (start_ms - gap, end_ms + gap)
+
+
 def _seed_ledger(fixed_occupied: list[IntervalMs], tz: str) -> _Ledger:
     """Ledger for a fresh plan. `fixed_occupied` are sittings of the same
     series already on the calendar (past sittings on a redistribute, existing
-    members on a grow): they block their slot AND count toward the per-day cap,
-    so a new sibling never lands on the same local day."""
-    ledger = _Ledger(siblings=_ivals(fixed_occupied))
-    for b, _ in ledger.siblings:
+    members on a grow): they block their slot plus the series gap AND count
+    toward the per-day cap."""
+    ledger = _Ledger(siblings=[_sibling_block(b, e) for b, e in _ivals(fixed_occupied)])
+    for b, _ in _ivals(fixed_occupied):
         day = local_date_str(b, tz)
         ledger.count_by_day[day] = ledger.count_by_day.get(day, 0) + 1
     return ledger
@@ -151,6 +166,7 @@ class _Placer:
         }
         self.heuristic_policy = HeuristicPolicy(self.matrix, self.tz)
         self.linucb_policy = LinucbPolicy(req.bandit, self.tz)
+        self.day_cap = consts.MAX_SERIES_PER_DAY
 
     # ---- helpers ---------------------------------------------------------
     def _select_days(
@@ -160,7 +176,7 @@ class _Placer:
         day = first
         while day <= last and len(out) < self.req.max_scan_days:
             d = self.day_by_str.get(day)
-            capped = ledger.count_by_day.get(day, 0) >= consts.MAX_SERIES_PER_DAY
+            capped = ledger.count_by_day.get(day, 0) >= self.day_cap
             if d is not None and not capped:
                 out.append(d)
             day = add_days_str(day, 1)
@@ -302,12 +318,12 @@ class _Placer:
     def place_member(
         self,
         m: PlacementMember,
-        first: str,
-        last: str,
+        windows: list[tuple[str, str]],
         ledger: _Ledger,
         batch: _ScoreBatch,
         i: int,
     ) -> PlacedMember:
+        """Place ``m`` in the first of ``windows`` that has room."""
         req = self.req
         base = PlacedMember(
             id=m.id,
@@ -319,47 +335,102 @@ class _Placer:
             moves=[],
             late=False,
             conflicting=False,
+            reason=None,
         )
         dur_ms = m.duration_minutes * consts.MS_PER_MINUTE
         if self.next15 + dur_ms > req.deadline_ms:
             return self._no_slot(m, base, ledger)
 
-        days = self._select_days(first, last, ledger)
-        # B.4 correctness invariant: every day this *live* (post-placement)
-        # call selects must already be a column in the batch built upfront
-        # for this member -- see `_build_batch`'s docstring for why that's
-        # guaranteed (count_by_day only grows after batch-build time).
-        assert all(d.day_str in batch.day_index[i] for d in days), (
-            f"member {m.id!r}: live _select_days picked a day outside the "
-            "batch's upfront candidate set"
-        )
-        extra = list(ledger.siblings)
-        lin = (
-            self.linucb(m, days, extra, batch, i)
-            if PolicySelector.should_try_linucb(req.mode, m)
-            else None
-        )
-        heur = (
-            self.heuristic(m, days, extra)
-            if PolicySelector.should_try_heuristic(req.mode, m, lin)
-            else None
+        for first, last in windows:
+            days = self._select_days(first, last, ledger)
+            # B.4 correctness invariant: every day this *live* (post-placement)
+            # call selects must already be a column in the batch built upfront
+            # for this member -- see `_build_batch`'s docstring for why that's
+            # guaranteed (count_by_day only grows after batch-build time).
+            assert all(d.day_str in batch.day_index[i] for d in days), (
+                f"member {m.id!r}: live _select_days picked a day outside the "
+                "batch's upfront candidate set"
+            )
+            extra = list(ledger.siblings)
+            lin = (
+                self.linucb(m, days, extra, batch, i)
+                if PolicySelector.should_try_linucb(req.mode, m)
+                else None
+            )
+            heur = (
+                self.heuristic(m, days, extra)
+                if PolicySelector.should_try_heuristic(req.mode, m, lin)
+                else None
+            )
+
+            decision = PolicySelector.resolve(req.mode, m, heur, lin)
+            if decision is None:
+                continue
+            policy, start_ms = decision
+            return base.model_copy(
+                update={
+                    "outcome": "PLACED",
+                    "applied_policy": policy,
+                    "heuristic": heur,
+                    "linucb": lin,
+                    "start_ms": start_ms,
+                    "reason": self._placed_reason(m, start_ms, days, extra),
+                }
+            )
+        return self._no_slot(m, base, ledger)
+
+    def _free_starts(
+        self, m: PlacementMember, d: PlacementDay, extra: Intervals
+    ) -> int:
+        """Free on-grid starts of ``m`` on one candidate day (sibling-aware)."""
+        req = self.req
+        dur_ms = m.duration_minutes * consts.MS_PER_MINUTE
+        overhang = dur_ms - consts.SLOT_MS
+        return count_free_starts(
+            [*self.occ[d.day_str], *extra],
+            max(self.next15, d.day_start_ms),
+            min(req.deadline_ms, d.day_end_ms),
+            min(req.deadline_ms, d.day_end_ms + overhang),
+            dur_ms,
         )
 
-        decision = PolicySelector.resolve(req.mode, m, heur, lin)
-        if decision is None:
-            return self._no_slot(m, base, ledger)
-        policy, start_ms = decision
-        return base.model_copy(
+    def _placed_reason(
+        self,
+        m: PlacementMember,
+        start_ms: int,
+        days: list[PlacementDay],
+        extra: Intervals,
+    ) -> PlacementReason:
+        dur_ms = m.duration_minutes * consts.MS_PER_MINUTE
+        free = sum(self._free_starts(m, d, extra) for d in days)
+        return placement_reason(
+            "PLACED",
+            free_starts=free,
+            preference=preference_score_at(self.matrix, start_ms, self.tz),
+            near_class=is_near_block(
+                self.occ.get(local_date_str(start_ms, self.tz), []), start_ms, dur_ms
+            ),
+        )
+
+    @staticmethod
+    def _outcome_reason(r: PlacedMember) -> PlacedMember:
+        """Reason for a start that did not come from the preference scan."""
+        if r.start_ms is None:
+            return r
+        return r.model_copy(
             update={
-                "outcome": "PLACED",
-                "applied_policy": policy,
-                "heuristic": heur,
-                "linucb": lin,
-                "start_ms": start_ms,
+                "reason": placement_reason(
+                    r.outcome, free_starts=0, preference=0.0, near_class=False
+                )
             }
         )
 
     def _no_slot(
+        self, m: PlacementMember, base: PlacedMember, ledger: _Ledger
+    ) -> PlacedMember:
+        return self._outcome_reason(self._no_slot_outcome(m, base, ledger))
+
+    def _no_slot_outcome(
         self, m: PlacementMember, base: PlacedMember, ledger: _Ledger
     ) -> PlacedMember:
         req = self.req
@@ -388,31 +459,42 @@ class _Placer:
         plan = plan_displacement(
             m.duration_minutes,
             req.deadline_ms,
-            flexible_from_dicts(
-                [
-                    {
-                        "id": f.id,
-                        "durationMinutes": f.duration_minutes,
-                        "deadlineMs": f.deadline_ms,
-                        "startMs": f.start_ms,
-                    }
-                    for f in ctx.flexible
-                ]
-            ),
+            [
+                FlexibleTask(
+                    f.id,
+                    f.duration_minutes,
+                    f.deadline_ms,
+                    f.start_ms,
+                    f.anchor,
+                    f.completed,
+                    f.series_id,
+                )
+                for f in ctx.flexible
+            ],
             _ivals(ctx.fixed),
             req.now_ms,
             [(ds, de), (ds - consts.DAY_MS, de + consts.DAY_MS)],
             _ivals(ctx.horizon_occupied),
             req.deadline_ms + consts.INFEASIBLE_HORIZON_DAYS * consts.DAY_MS,
+            timezone=self.tz,
+            chosen_moves=ctx.chosen_moves,
         )
         if plan.kind == "placed" and plan.start_ms is not None:
+            # A Chosen session never moves without the user's go-ahead.
+            ask = ctx.chosen_moves == "ASK" and plan.moves_chosen
             return base.model_copy(
                 update={
-                    "outcome": "DISPLACED",
+                    "outcome": "NEEDS_CONFIRMATION" if ask else "DISPLACED",
                     "applied_policy": "HEURISTIC",
                     "start_ms": plan.start_ms,
                     "moves": [
-                        Move(id=v.id, from_ms=v.from_ms, to_ms=v.to_ms)
+                        Move(
+                            id=v.id,
+                            from_ms=v.from_ms,
+                            to_ms=v.to_ms,
+                            anchor="CHOSEN" if v.anchor == "CHOSEN" else "AUTO",
+                            cost=v.cost,
+                        )
                         for v in plan.moves
                     ],
                 }
@@ -520,11 +602,17 @@ class _Placer:
                 moves=[],
                 late=False,
                 conflicting=False,
+                reason=None,
             )
-            r = self._last_resort(m, base, [], ledger.siblings, late=False)
+            r = self._outcome_reason(
+                self._last_resort(m, base, [], ledger.siblings, late=False)
+            )
             if r.start_ms is not None:
                 ledger.siblings.append(
-                    (r.start_ms, r.start_ms + m.duration_minutes * consts.MS_PER_MINUTE)
+                    _sibling_block(
+                        r.start_ms,
+                        r.start_ms + m.duration_minutes * consts.MS_PER_MINUTE,
+                    )
                 )
             out.append(r)
         return out
@@ -560,7 +648,7 @@ class _Placer:
 
     def _run_plan(
         self,
-        windows_days: list[tuple[str, str]],
+        windows_days: list[list[tuple[str, str]]],
         batch: _ScoreBatch,
         policy: PlacementPolicy | None,
     ) -> list[PlacedMember]:
@@ -575,7 +663,7 @@ class _Placer:
         """
         ledger = _seed_ledger(self.req.fixed_occupied, self.tz)
         results: list[PlacedMember] = []
-        for i, (m, (first, last)) in enumerate(
+        for i, (m, windows) in enumerate(
             zip(self.req.members, windows_days, strict=True)
         ):
             pm = (
@@ -585,11 +673,14 @@ class _Placer:
                     update={"primary_policy": policy, "compute_both": False}
                 )
             )
-            r = self.place_member(pm, first, last, ledger, batch, i)
+            r = self.place_member(pm, windows, ledger, batch, i)
             results.append(r)
             if r.start_ms is not None:
                 ledger.siblings.append(
-                    (r.start_ms, r.start_ms + m.duration_minutes * consts.MS_PER_MINUTE)
+                    _sibling_block(
+                        r.start_ms,
+                        r.start_ms + m.duration_minutes * consts.MS_PER_MINUTE,
+                    )
                 )
                 day = local_date_str(r.start_ms, self.tz)
                 ledger.count_by_day[day] = ledger.count_by_day.get(day, 0) + 1
@@ -602,7 +693,8 @@ class _Placer:
         if len(members) == 1:
             first = local_date_str(self.next15, self.tz)
             last = local_date_str(req.deadline_ms - 1, self.tz)
-            windows_days = [(first, last)]
+            windows_days = [[(first, last)]]
+            batch_windows = [(first, last)]
         else:
             if self.next15 >= req.deadline_ms:
                 return self._past_deadline_series(
@@ -612,12 +704,17 @@ class _Placer:
                 math.floor((req.deadline_ms - self.next15) / consts.DAY_MS),
                 consts.MAX_SCAN_DAYS - 1,
             )
+            self.day_cap = series_day_cap(span, len(members))
             windows = series_day_windows(span, len(members))
             start_day = local_date_str(self.next15, self.tz)
-            windows_days = [
+            # Own window first, then the whole range when it has no room.
+            full = (start_day, add_days_str(start_day, span))
+            own = [
                 (add_days_str(start_day, lo), add_days_str(start_day, hi))
                 for lo, hi in windows
             ]
+            windows_days = [list(dict.fromkeys([w, full])) for w in own]
+            batch_windows = [full] * len(members)
 
         # Single upfront batched (M, N, D) tensor build -- M=1 for a lone
         # task, no special-casing -- against an empty ledger (no member placed
@@ -626,7 +723,7 @@ class _Placer:
         # `ledger.siblings`/`count_by_day` forward; no vectors/arm-scores are
         # rebuilt per iteration or per plan.
         batch = self._build_batch(
-            members, windows_days, _seed_ledger(req.fixed_occupied, self.tz)
+            members, batch_windows, _seed_ledger(req.fixed_occupied, self.tz)
         )
 
         primary = self._dual_plan_policy(batch)

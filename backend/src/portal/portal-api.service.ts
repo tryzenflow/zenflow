@@ -5,6 +5,11 @@ import type {
   PortalTimetableRow,
 } from "../ingestion/core/parse-portal";
 import type { PortalRegistHistoryRow } from "../ingestion/core/parse-regist-history";
+import type {
+  PortalMarksYear,
+  PortalStudentInfo,
+  PortalStudyProgramRow,
+} from "../ingestion/core/parse-student";
 import {
   classifyHttpResult,
   OutboundBreakers,
@@ -16,6 +21,10 @@ function portalOperation(url: string): string {
   if (url.includes("/api/authenticate/")) return "authenticate";
   if (url.includes("/DrawingStudentSchedules")) return "fetch_timetable";
   if (url.includes("/api/student/exam")) return "fetch_exams";
+  if (url.includes("/api/student/info")) return "fetch_student_info";
+  if (url.includes("/api/student/getstudyprogram"))
+    return "fetch_study_program";
+  if (url.includes("/api/student/marks")) return "fetch_marks";
   if (url.includes("/api/student/getAllRegistHistory"))
     return "fetch_regist_history";
   return "other";
@@ -227,6 +236,44 @@ export class PortalAPIService {
       hocky: semester,
     });
     return this.getJson<PortalExamRow>(`/api/student/exam?${query}`, token);
+  }
+
+  /** `GET /api/student/info`: the student's name, gender, cohort and class. */
+  async fetchStudentInfo(token: string): Promise<PortalStudentInfo> {
+    const res = await this.fetch(`${this.endpoint}/api/student/info`, {
+      method: "GET",
+      headers: this.authHeaders(token),
+    });
+    if (!res.ok) {
+      throw new Error(
+        `Portal request to /api/student/info failed (status ${res.status})`,
+      );
+    }
+    const json: unknown = await res.json();
+    return json && typeof json === "object" ? json : {};
+  }
+
+  /** `GET /api/student/getstudyprogram`: the programs the student is on. */
+  async fetchStudyPrograms(token: string): Promise<PortalStudyProgramRow[]> {
+    return this.getJson<PortalStudyProgramRow>(
+      "/api/student/getstudyprogram",
+      token,
+    );
+  }
+
+  /**
+   * `GET /api/student/marks` for one study program: years, then terms, then
+   * course rows.
+   *
+   * **PII surface**: each course row repeats the student's phone and birthday,
+   * so the caller keeps normalised fields only and never stores the raw body.
+   */
+  async fetchMarks(
+    token: string,
+    studyProgramId: string,
+  ): Promise<PortalMarksYear[]> {
+    const query = new URLSearchParams({ ctdt: studyProgramId, loai: "SV" });
+    return this.getJson<PortalMarksYear>(`/api/student/marks?${query}`, token);
   }
 
   /**

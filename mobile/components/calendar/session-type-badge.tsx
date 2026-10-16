@@ -10,14 +10,20 @@ import {
   Notebook,
 } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
-import { SESSION_TYPE_META } from "@zenflow/core";
+import {
+  SESSION_TONE_CLASSES,
+  SESSION_TONES,
+  SESSION_TYPE_META,
+  SESSION_TYPE_TONE,
+  hexAlpha,
+} from "@zenflow/core";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
 import type { SessionType } from "@zenflow/shared";
 import { View } from "react-native";
 
 /** Per-type icon — kept here (not in the RN-free `lib/session-type.ts`) and
- * matched to `components/tasks/form/session-type-tabs.tsx`. */
+ * matched to `components/tasks/composer/task-composer.tsx`. */
 const TYPE_ICON: Record<SessionType, LucideIcon> = {
   TASK: CheckSquare,
   ASSIGNMENT: ClipboardList,
@@ -72,6 +78,8 @@ export function SessionTypeBadge({
         meta.badgeClass,
         className,
       )}
+      // Explicit rim: the `border-session-*` class alone left RN's black default in places.
+      style={{ borderColor: hexAlpha(SESSION_TONES[SESSION_TYPE_TONE[type]].base, 0.4) }}
     >
       <Icon size={iconSize} className={meta.textClass} />
       {showLabel && (
@@ -109,13 +117,13 @@ export function OverdueBadge({
 }) {
   useLanguage();
   // Explicit colour, not `dark:text-*` classes: the `dark:` variant didn't
-  // reach the label, which rendered near-black on the dark red card.
+  // reach the label, which rendered near-black on the dark late card.
   const { isDarkColorScheme } = useColorScheme();
-  const red = isDarkColorScheme ? "#fca5a5" : "#dc2626"; // red-300 / red-600
+  const red = SESSION_TONES.late.ink[isDarkColorScheme ? "dark" : "light"];
   return (
     <View
       className={cn(
-        "flex-row items-center gap-1 self-start border border-red-500/40 bg-red-500/15",
+        `flex-row items-center gap-1 self-start border ${SESSION_TONE_CLASSES.late.badge}`,
         size === "lg" ? "gap-1.5 rounded-full px-3 py-1.5" : "rounded",
         size === "lg" ? "" : iconOnly ? "px-0.5 py-0.5" : "px-1.5 py-0.5",
         className,

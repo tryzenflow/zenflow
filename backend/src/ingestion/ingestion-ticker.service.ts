@@ -1,21 +1,28 @@
 import { KillSwitchService } from "../common/killswitch/killswitch.service";
 import { Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Cron, CronExpression } from "@nestjs/schedule";
+import { Interval } from "@nestjs/schedule";
 import { LMSService } from "../lms/lms.service";
 import { PortalAPIService } from "../portal/portal-api.service";
 import { runCronJob } from "../observability/cron";
+import { PrismaService } from "../prisma/prisma.service";
 import { QueueService } from "../queue/queue.service";
 import {
-  LMS_FETCH_QUEUE,
+  LMS_DISCOVERY_QUEUE,
+  LMS_MONTH_QUEUE,
+  PORTAL_DISCOVERY_QUEUE,
   PORTAL_FETCH_QUEUE,
+  PORTAL_MARKS_QUEUE,
+  PORTAL_WEEK_QUEUE,
   type FetchJobData,
 } from "../queue/queues";
+import type { QueueDefinition } from "../queue/queue.types";
 import { idempotencyKey } from "../queue/queue.types";
 import { resolveSemester } from "./core/semester";
 import {
   batchSizeFor,
   orderedPlans,
+  termKey,
   TICK_INTERVAL_MS,
   type SyncKindName,
   type SyncKindPlan,
@@ -24,13 +31,16 @@ import {
   IngestionScheduleService,
   type ClaimedTarget,
 } from "./ingestion-schedule.service";
+import { IngestionDispatchService } from "./ingestion-dispatch.service";
+import { StudentSyncService } from "./student-sync.service";
+import { SyncRunService } from "./sync-run.service";
 import { errorMessage, isIngestionEnabled } from "./watcher-support";
 
 /** What one tick did, per kind — returned for tests and logged when non-empty. */
 export interface TickSummary {
   /** Targets claimed and handed to a fetch queue. */
   claimed: number;
-  byKind: Partial<Record<SyncKindName, number>>;
+  byKind: Partial<Record<SyncKindName | "PORTAL_PROFILE", number>>;
   /** Claims handed back un-enqueued because the queue refused the job. */
   released: number;
   /** Providers skipped this tick because their breaker is open. */
@@ -51,6 +61,20 @@ const EMPTY_TICK: TickSummary = {
 };
 
 const DEFAULT_MAX_BACKLOG = 500;
+
+const DAY_MS = 24 * 60 * 60_000;
+
+/** Profile and marks jobs queued per tick; the day-bucketed ids cap repeats. */
+const STUDENT_JOBS_PER_TICK = 5;
+
+/** About an hour of 5 second ticks. */
+const PRUNE_EVERY_TICKS = 720;
+
+/** Jobs a single claim of a walk kind fans out into (about a term of weeks). */
+const UNITS_PER_CLAIM: Partial<Record<SyncKindName, number>> = {
+  PORTAL_TIMETABLE: 25,
+  LMS_CALENDAR: 2,
+};
 
 /**
  * The single heartbeat that drives all DLU ingestion (issue #56).
@@ -105,11 +129,16 @@ export class IngestionTickerService implements OnModuleInit {
   private readonly warnedUndersized = new Set<string>();
   /** In-process guard: a tick must not start while the previous one runs. */
   private running = false;
+  private ticks = 0;
 
   constructor(
     private readonly config: ConfigService,
     private readonly schedule: IngestionScheduleService,
     private readonly queue: QueueService,
+    private readonly prisma: PrismaService,
+    private readonly dispatch: IngestionDispatchService,
+    private readonly runs: SyncRunService,
+    private readonly student: StudentSyncService,
     private readonly lmsClient: LMSService,
     private readonly portalClient: PortalAPIService,
     private readonly killSwitch: KillSwitchService,
@@ -147,7 +176,7 @@ export class IngestionTickerService implements OnModuleInit {
     );
   }
 
-  @Cron(CronExpression.EVERY_MINUTE)
+  @Interval(TICK_INTERVAL_MS)
   async handleTick(): Promise<void> {
     await runCronJob("ingestion-ticker", async () => {
       const summary = await this.tick();
@@ -261,8 +290,7 @@ export class IngestionTickerService implements OnModuleInit {
         // Backpressure: never claim more than the queue has room for. A claim
         // moves `nextDueAt` a full period out, so claiming rows that will sit
         // in a backed-up queue would silently stretch their cadence.
-        const def =
-          plan.provider === "LMS" ? LMS_FETCH_QUEUE : PORTAL_FETCH_QUEUE;
+        const def = this.queueFor(plan.kind);
         let pending = backlog.get(def.name);
         if (pending === undefined) {
           try {
@@ -286,20 +314,25 @@ export class IngestionTickerService implements OnModuleInit {
           );
           continue;
         }
-        if (room < batchSize) summary.backpressured.push(plan.kind);
+        // A walk kind queues one job per week or month, so a claim costs
+        // several slots of room, not one.
+        const perClaim = UNITS_PER_CLAIM[plan.kind] ?? 1;
+        const roomClaims = Math.max(1, Math.floor(room / perClaim));
+        if (roomClaims < batchSize) summary.backpressured.push(plan.kind);
 
         const targets = await this.schedule.claimDue(
           plan.kind,
           now,
-          Math.min(batchSize, room),
+          Math.min(batchSize, roomClaims),
+          this.gateFor(plan.kind, now),
         );
         if (targets.length === 0) continue;
         summary.byKind[plan.kind] = targets.length;
-        backlog.set(def.name, pending + targets.length);
+        backlog.set(def.name, pending + targets.length * perClaim);
 
-        // Enqueue, never run: the fetch workers do the (sequential) upstream
-        // work. The claim above is the at-most-once guard; the job id makes a
-        // re-enqueue of the same slot a no-op.
+        // Enqueue, never run: the workers do the (sequential) upstream work.
+        // The claim above is the at-most-once guard; job ids make a re-enqueue
+        // of the same slot a no-op.
         for (const target of targets) {
           if (summary.queueUnavailable) {
             // One bounded failure is enough: do not pay the timeout per row.
@@ -307,13 +340,12 @@ export class IngestionTickerService implements OnModuleInit {
             continue;
           }
           try {
-            await this.queue.enqueue(def, this.jobData(plan, target), {
-              jobId: idempotencyKey(
-                target.scheduleId,
-                target.dueAt.toISOString(),
-              ),
-            });
-            summary.claimed += 1;
+            if (await this.dispatchTarget(plan, target, def, now)) {
+              summary.claimed += 1;
+            } else {
+              summary.queueUnavailable = true;
+              await this.release(plan, target, summary);
+            }
           } catch (error) {
             // Queue Redis down or slow: hand the claim back so the row stays due.
             this.logger.warn(
@@ -325,6 +357,11 @@ export class IngestionTickerService implements OnModuleInit {
           }
         }
       }
+
+      if (!summary.queueUnavailable) {
+        await this.enqueueStudentJobs(now, summary);
+      }
+      await this.housekeeping(now);
     } finally {
       this.running = false;
     }
@@ -369,6 +406,84 @@ export class IngestionTickerService implements OnModuleInit {
     }
   }
 
+  /** The queue a kind's jobs go to (the backlog check reads it). */
+  private queueFor(kind: SyncKindName): QueueDefinition {
+    switch (kind) {
+      case "PORTAL_DISCOVERY":
+        return PORTAL_DISCOVERY_QUEUE;
+      case "LMS_DISCOVERY":
+        return LMS_DISCOVERY_QUEUE;
+      case "PORTAL_TIMETABLE":
+        return PORTAL_WEEK_QUEUE;
+      case "PORTAL_EXAM":
+        return PORTAL_FETCH_QUEUE;
+      case "LMS_CALENDAR":
+        return LMS_MONTH_QUEUE;
+    }
+  }
+
+  /**
+   * Which rows a walk kind may claim: enrolment must already be discovered, so
+   * the week and month jobs have sections or courses to work from.
+   */
+  private gateFor(kind: SyncKindName, now: Date) {
+    if (kind === "PORTAL_TIMETABLE") {
+      return {
+        integration: {
+          schedules: {
+            some: {
+              kind: "PORTAL_DISCOVERY" as const,
+              lastSuccessTerm: termKey(resolveSemester(now, this.dluTimezone)),
+            },
+          },
+        },
+      };
+    }
+    if (kind === "LMS_CALENDAR") {
+      return {
+        integration: {
+          schedules: {
+            some: {
+              kind: "LMS_DISCOVERY" as const,
+              lastSuccessAt: { not: null },
+            },
+          },
+        },
+      };
+    }
+    return {};
+  }
+
+  /** Turn one claim into jobs. False when the queue could not take them. */
+  private async dispatchTarget(
+    plan: SyncKindPlan,
+    target: ClaimedTarget,
+    def: QueueDefinition,
+    now: Date,
+  ): Promise<boolean> {
+    switch (plan.kind) {
+      case "PORTAL_DISCOVERY":
+      case "LMS_DISCOVERY":
+        return this.dispatch.enqueueDiscovery(plan.kind, target);
+      case "PORTAL_TIMETABLE":
+        return this.dispatch.startTimetableRun(target, now);
+      case "LMS_CALENDAR":
+        return this.dispatch.startCalendarRun(target, now);
+      case "PORTAL_EXAM":
+        await this.queue.enqueue(
+          def as unknown as QueueDefinition<FetchJobData>,
+          this.jobData(plan, target),
+          {
+            jobId: idempotencyKey(
+              target.scheduleId,
+              target.dueAt.toISOString(),
+            ),
+          },
+        );
+        return true;
+    }
+  }
+
   private jobData(plan: SyncKindPlan, target: ClaimedTarget): FetchJobData {
     return {
       scheduleId: target.scheduleId,
@@ -379,6 +494,53 @@ export class IngestionTickerService implements OnModuleInit {
       claimedAt: target.claimedAt.toISOString(),
       cacheHitStreak: target.cacheHitStreak,
     };
+  }
+
+  /**
+   * Profile for students without one, and marks for those whose marks are
+   * missing or older than a day. Job ids carry a day bucket, so a failing
+   * account is retried daily rather than every tick.
+   */
+  private async enqueueStudentJobs(
+    now: Date,
+    summary: TickSummary,
+  ): Promise<void> {
+    const day = Math.floor(now.getTime() / DAY_MS);
+    try {
+      const missing = await this.prisma.integration.findMany({
+        where: { provider: "PORTAL", user: { studentProfile: null } },
+        select: { id: true, userId: true },
+        take: STUDENT_JOBS_PER_TICK,
+      });
+      for (const row of missing) {
+        await this.dispatch.enqueueProfile(row.userId, row.id, now);
+        summary.byKind.PORTAL_PROFILE =
+          (summary.byKind.PORTAL_PROFILE ?? 0) + 1;
+      }
+      for (const due of await this.student.dueForMarks(
+        now,
+        STUDENT_JOBS_PER_TICK,
+      )) {
+        await this.queue.enqueue(PORTAL_MARKS_QUEUE, due, {
+          jobId: idempotencyKey("marks", due.integrationId, day),
+        });
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Could not queue student profile jobs: ${errorMessage(error)}`,
+      );
+    }
+  }
+
+  /** Close runs whose jobs vanished; prune old ones now and then. */
+  private async housekeeping(now: Date): Promise<void> {
+    try {
+      await this.runs.sweepStale(now);
+      this.ticks += 1;
+      if (this.ticks % PRUNE_EVERY_TICKS === 0) await this.runs.prune(now);
+    } catch (error) {
+      this.logger.warn(`Run housekeeping failed: ${errorMessage(error)}`);
+    }
   }
 
   /** A positive number from config, tolerating the string a `.env` file gives. */

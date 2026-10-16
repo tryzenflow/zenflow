@@ -14,7 +14,7 @@ services:
     build:
       context: ..
       dockerfile: backend/Dockerfile
-    image: ${ZENFLOW_API_IMAGE:-zenflow-api:0.1.0-beta.8}
+    image: ${ZENFLOW_API_IMAGE:-zenflow-api:1.0.0-beta.11}
     expose:
       - "8000"
     networks:
@@ -54,6 +54,7 @@ services:
     environment:
       ROLE: api
       SWAGGER_ENABLED: "true"
+      INGESTION_OCCURRENCE_CACHE_ENABLED: "true"
       OTEL_SDK_DISABLED: "false"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       QUEUE_REDIS_HOST: redis-queue
@@ -69,7 +70,7 @@ services:
     extends:
       service: api
     profiles: !reset []
-    image: ${ZENFLOW_API_IMAGE_BLUE:-${ZENFLOW_API_IMAGE:-zenflow-api:0.1.0-beta.8}}
+    image: ${ZENFLOW_API_IMAGE_BLUE:-${ZENFLOW_API_IMAGE:-zenflow-api:1.0.0-beta.11}}
     environment:
       BANDIT_SERVICE_URL: http://bandit-blue:8000
     depends_on:
@@ -86,7 +87,7 @@ services:
     extends:
       service: api
     profiles: !reset []
-    image: ${ZENFLOW_API_IMAGE_GREEN:-${ZENFLOW_API_IMAGE:-zenflow-api:0.1.0-beta.8}}
+    image: ${ZENFLOW_API_IMAGE_GREEN:-${ZENFLOW_API_IMAGE:-zenflow-api:1.0.0-beta.11}}
     environment:
       BANDIT_SERVICE_URL: http://bandit-green:8000
     depends_on:
@@ -231,7 +232,7 @@ services:
     build:
       context: ..
       dockerfile: backend/Dockerfile
-    image: ${ZENFLOW_API_IMAGE:-zenflow-api:0.1.0-beta.8}
+    image: ${ZENFLOW_API_IMAGE:-zenflow-api:1.0.0-beta.11}
     networks:
       - db
       - egress

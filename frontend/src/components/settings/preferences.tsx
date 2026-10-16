@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { isAxiosError } from "axios";
-import { Loader2, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
 import { getPreferenceMatrix } from "@/api/users";
 import { cn } from "@/lib/utils";
 import type { PreferenceMatrixResponse } from "@zenflow/shared";
@@ -100,7 +101,7 @@ export function UserPreferencesPanel() {
     if (heatmapLoading) {
       return (
         <div className="flex h-40 items-center justify-center text-muted-foreground">
-          <Loader2 className="size-5 animate-spin" />
+          <Spinner className="size-5" />
         </div>
       );
     }

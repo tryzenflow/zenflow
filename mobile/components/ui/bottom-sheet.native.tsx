@@ -1,3 +1,4 @@
+import { scaleType } from "@/lib/type-scale";
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
 import type {
@@ -10,6 +11,7 @@ import {
   BottomSheetFlatList as GBottomSheetFlatList,
   BottomSheetFooter as GBottomSheetFooter,
   BottomSheetModal,
+  BottomSheetModalProvider,
   // Re-exported as-is below (not wrapped) — on native, `BottomSheetContent`
   // here always renders a real `@gorhom/bottom-sheet` `<BottomSheetModal>`,
   // so `BottomSheetScrollView`'s own `useBottomSheetInternal()` context read
@@ -38,10 +40,11 @@ import { FullWindowOverlay } from "react-native-screens";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { X } from "../../components/Icons";
 import type { NativeViewStyle } from "../../lib/native-style";
+import { NAV_THEME } from "../../lib/constants";
 import { useColorScheme } from "../../lib/useColorScheme";
 import { cn } from "../../lib/utils";
 import * as Slot from "../primitives/slot";
-import { Button } from "./button";
+import { GlassButton } from "./glass-button";
 import { Input } from "./input";
 
 // `GBottomSheetTextInput` wraps a `TextInput` from `react-native-gesture-handler`,
@@ -108,6 +111,21 @@ const IosSheetContainer = ({ children }: React.PropsWithChildren) => (
   </FullWindowOverlay>
 );
 
+const InScreenSheets = React.createContext(false);
+
+/**
+ * Hosts sheets inside a modal screen's own view instead of the overlay window,
+ * so they stack above the screen and system pickers (photos, files) still
+ * present above them.
+ */
+function ScreenSheetProvider({ children }: React.PropsWithChildren) {
+  return (
+    <InScreenSheets.Provider value>
+      <BottomSheetModalProvider>{children}</BottomSheetModalProvider>
+    </InScreenSheets.Provider>
+  );
+}
+
 type BottomSheetContentRef = BottomSheetModalMethods;
 
 type BottomSheetContentProps = Omit<
@@ -147,6 +165,7 @@ const BottomSheetContent = React.forwardRef<
   ) => {
     const insets = useSafeAreaInsets();
     const { isDarkColorScheme } = useColorScheme();
+    const inScreen = React.useContext(InScreenSheets);
     const { colors } = useTheme();
     useLanguage();
     const { sheetRef } = useBottomSheetContext();
@@ -206,7 +225,7 @@ const BottomSheetContent = React.forwardRef<
       <BottomSheetModal
         ref={setRefs}
         containerComponent={
-          Platform.OS === "ios" ? IosSheetContainer : undefined
+          Platform.OS === "ios" && !inScreen ? IosSheetContainer : undefined
         }
         index={0}
         enablePanDownToClose={enablePanDownToClose}
@@ -328,16 +347,24 @@ type BottomSheetTextInputProps = React.ComponentPropsWithoutRef<
 const BottomSheetTextInput = React.forwardRef<
   BottomSheetTextInputRef,
   BottomSheetTextInputProps
->(({ className, placeholderClassName, ...props }, ref) => {
+>(({ className, placeholderClassName, style, ...props }, ref) => {
+  const { isDarkColorScheme } = useColorScheme();
+  const caret = (isDarkColorScheme ? NAV_THEME.dark : NAV_THEME.light).primary;
+  const merged = cn(
+    "rounded-md border border-input bg-background px-3 text-[17px] h-12 leading-[1.25] text-foreground items-center  placeholder:text-muted-foreground disabled:opacity-50",
+    className,
+  );
+  // The type scale is applied as inline style (see `lib/type-scale.ts`), the
+  // same way `Input` does, so typed text and placeholder match the rest of the app.
+  const { fontSize } = scaleType(merged);
   return (
     <GBottomSheetTextInput
       ref={ref}
-      className={cn(
-        "rounded-md border border-input bg-background px-3 text-xl h-14 leading-[1.25] text-foreground items-center  placeholder:text-muted-foreground disabled:opacity-50",
-        className,
-      )}
+      className={merged}
       placeholderClassName={cn("text-muted-foreground", placeholderClassName)}
-      style={{ fontFamily: "Geist" }}
+      style={[{ fontFamily: "Geist", fontSize }, style]}
+      selectionColor={caret}
+      cursorColor={caret}
       {...props}
     />
   );
@@ -399,15 +426,12 @@ const BottomSheetHeader = React.forwardRef<
       {...props}
     >
       {children}
-      {/* Bare X (no circle), same as the other sheets' close buttons. */}
-      <Button
+      <GlassButton
         onPress={close}
-        variant="ghost"
+        icon={X}
         accessibilityLabel={t("Close")}
-        className="h-8 w-8 aspect-square self-start p-0 flex items-center justify-center"
-      >
-        <X className="text-muted-foreground" size={16} />
-      </Button>
+        style={{ alignSelf: "flex-start", marginRight: -6 }}
+      />
     </View>
   );
 });
@@ -476,5 +500,6 @@ export {
   BottomSheetScrollView,
   BottomSheetTextInput,
   BottomSheetView,
+  ScreenSheetProvider,
   useBottomSheet,
 };

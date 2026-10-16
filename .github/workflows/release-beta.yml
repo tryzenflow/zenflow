@@ -3,9 +3,9 @@ name: Version & Release (beta)
 # Changesets-driven, modelled on limitkit's release.yml:
 #   1. Merging changesets to main opens/updates a "version packages" PR.
 #   2. Merging that PR bumps every package (one fixed version), so the next run
-#      of this workflow sees a version with no tag yet, builds the Android APK,
-#      the iOS simulator app and an unsigned iOS .ipa (for sideloading), and publishes a GitHub *pre-release* vX.Y.Z-beta.N
-#      with both attached.
+#      of this workflow sees a version with no tag yet, builds the Android APK
+#      and an unsigned iOS .ipa (for sideloading), and publishes a GitHub
+#      *pre-release* vX.Y.Z-beta.N with both attached.
 # Pre-releases never trigger the production deploy (release.yml skips them).
 
 on:
@@ -85,11 +85,15 @@ jobs:
     needs: detect
     if: needs.detect.outputs.new == 'true' && needs.detect.outputs.mobile == 'true'
     uses: ./.github/workflows/mobile.yml
+    # The release keystore secrets (ANDROID_KEYSTORE_BASE64 and friends).
+    secrets: inherit
     with:
       variant: release
       # Repository variable: the API the shipped app talks to (e.g. staging).
       api_url: ${{ vars.MOBILE_API_URL }}
       skip_e2e: true
+      # Already tested in the PR that produced this commit.
+      skip_tests: true
 
   release:
     name: Publish GitHub release
@@ -125,7 +129,7 @@ jobs:
           flags=""
           [ "$PRERELEASE" = "true" ] && flags="--prerelease"
           assets=""
-          [ -d dist ] && assets="dist/zenflow-android.apk dist/zenflow-ios-simulator.zip dist/zenflow-ios-unsigned.ipa"
+          [ -d dist ] && assets="dist/zenflow-android.apk dist/zenflow-ios-unsigned.ipa"
           gh release create "v$VERSION" $assets \
             --target "$GITHUB_SHA" --title "v$VERSION" --notes-file notes.md $flags
 
@@ -179,8 +183,7 @@ jobs:
               printf '\n\nThe app files are the build from %s; the app did not change in this version.\n' "$from" >> notes.md
             fi
           fi
-          flags=""
-          [ "$PRERELEASE" = "true" ] && flags="--prerelease"
-          # shellcheck disable=SC2086
+          # Never a pre-release here: /releases/latest (the landing page's download
+          # link) skips pre-releases, and the app's updater reads the newest release.
           GH_TOKEN="$PUBLIC_RELEASES_TOKEN" gh release create "$tag" assets/* \
-            --repo "$PUBLIC_REPO" --title "$tag" --notes-file notes.md $flags
+            --repo "$PUBLIC_REPO" --title "$tag" --notes-file notes.md --latest

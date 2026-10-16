@@ -2,8 +2,6 @@ import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import * as Joi from "@hapi/joi";
 import { PrismaModule } from "./prisma/prisma.module";
-import { AppService } from "./app.service";
-import { AppController } from "./app.controller";
 import { AuthModule } from "./auth/auth.module";
 import { CacheModule } from "@nestjs/cache-manager";
 import { createKeyv } from "@keyv/redis";
@@ -14,6 +12,8 @@ import { MailService } from "./mail/mail.service";
 import { MailModule } from "./mail/mail.module";
 import { UsersModule } from "./users/users.module";
 import { SessionsModule } from "./sessions/sessions.module";
+import { StreaksModule } from "./streaks/streaks.module";
+import { CourseColoursModule } from "./course-colours/course-colours.module";
 import { TagsModule } from "./tags/tags.module";
 import { FilesModule } from "./files/files.module";
 import { SchedulerModule } from "./scheduler/scheduler.module";
@@ -35,7 +35,6 @@ import {
   consumesQueue,
   envFilePath,
   getRole,
-  runsHttp,
   runsWatcher,
 } from "./common/config/role";
 import { QueueModule } from "./queue/queue.module";
@@ -47,8 +46,9 @@ import {
 } from "./ingestion/fetch-worker.module";
 import { SchedulerWorkerModule } from "./scheduler/scheduler-worker.module";
 import { RemindersWorkerModule } from "./reminders/reminders-worker.module";
+import { DailyPushModule } from "./daily-push/daily-push.module";
+import { DailyPushWorkerModule } from "./daily-push/daily-push-worker.module";
 import { HealthModule } from "./health/health.module";
-import { LegalModule } from "./legal/legal.module";
 
 const configEnvFile = envFilePath();
 // `<PREFIX>_HOST` / `_PORT` / `_PASSWORD` for one Redis instance (connections.ts).
@@ -74,6 +74,7 @@ const jobModules = [
         IngestionWorkerModule,
         SchedulerWorkerModule,
         RemindersWorkerModule,
+        DailyPushWorkerModule,
       ]
     : []),
   ...(consumesQueue(role, "notify") ? [NotifyWorkerModule] : []),
@@ -196,6 +197,9 @@ const jobModules = [
           .positive()
           .default(600), // 10 min
         OTP_VERIFY_EMAIL_LIMIT: Joi.number().integer().positive().default(10),
+        // Proxy hops in front of the app whose X-Forwarded-* headers are trusted
+        // (Cloudflare + nginx = 2; 0 when exposed directly).
+        TRUST_PROXY_HOPS: Joi.number().integer().min(0).default(2),
         // Minimum gap between two syncs of one provider for a student, manual or
         // background (`POST /integrations/:provider/sync` answers 429 inside it).
         SYNC_MANUAL_COOLDOWN_SEC: Joi.number()
@@ -539,12 +543,14 @@ const jobModules = [
     AuthModule,
     MailModule,
     SessionsModule,
+    StreaksModule,
+    CourseColoursModule,
     CryptoModule,
     LMSModule,
     PortalAPIModule,
     TagsModule,
     FilesModule,
-    // Background cron providers (MatrixDecayService, RetainedSessionsService)
+    // Background cron providers (MatrixDecayService, SessionOutcomeService)
     // plus HeuristicScheduleService / BanditScheduleService, the single-session
     // placers SessionsService calls on create / deadline-edit. No day repack —
     // an existing session is never moved; see scheduler.module.ts.
@@ -560,11 +566,10 @@ const jobModules = [
     DevicesModule,
     // Per-session reminders: SchedulerRegistry one-shot timers -> notifications.
     RemindersModule,
+    DailyPushModule,
     HealthModule,
-    LegalModule,
     ...jobModules,
   ],
-  providers: [AppService, MailService],
-  controllers: runsHttp(role) ? [AppController] : [],
+  providers: [MailService],
 })
 export class AppModule {}

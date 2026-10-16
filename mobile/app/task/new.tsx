@@ -1,12 +1,22 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { format } from "@/lib/i18n";
-import { createSession } from "@/api/tasks";
-import { SessionTypeTabs } from "@/components/tasks/form/session-type-tabs";
-import { SessionFormScreen } from "@/components/tasks/task-form-screen";
-import { SessionSheetFields } from "@/components/tasks/task-sheet-fields";
-import { Button } from "@/components/ui/button";
-import { Text } from "@/components/ui/text";
+import {
+  confirmPlacement,
+  createSession,
+  getSessionDetails,
+  undoPlacement,
+} from "@/api/tasks";
+import {
+  MakeRoomSheet,
+  type MakeRoomSheetHandle,
+} from "@/components/calendar/make-room-sheet";
+import { TaskComposer } from "@/components/tasks/composer/task-composer";
+import { getPlacementPlan } from "@/lib/make-room";
+import { showMovedToast } from "@/lib/move-toast";
+import { notifySessionsMutated } from "@/lib/session-cache";
+import { useCourseNames } from "@/hooks/use-course-names";
+import { DRAFT_NEW, useComposerStore } from "@/lib/composer-store";
 import {
   ModalToastScope,
   useModalToast,
@@ -15,11 +25,10 @@ import { completeStep } from "@/hooks/use-checklist";
 import { useLastCreated } from "@/hooks/use-last-created";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
-import { setPendingSlotPick } from "@/lib/pending-slot-pick";
+import { rememberPlacement } from "@/lib/slot-alternatives";
 import { useUploadTracker } from "@/hooks/use-upload-tracker";
 import { goToCalendar, safeBack } from "@/lib/nav";
 import { warmLandingDay } from "@/lib/warm-day";
-import { divergentSittings } from "@/lib/series-alternatives";
 import {
   RESCHEDULE_HINT,
   placementToastMessage,
@@ -41,10 +50,13 @@ import {
 import {
   type CreateSessionInput,
   DEFAULT_REMINDER_MINUTES,
+  type PlacementPlan,
+  type Session,
 } from "@zenflow/shared";
 
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo } from "react";
+import { sittingMinutes } from "@/lib/split-sittings";
+import { useMemo, useRef, useState } from "react";
 
 const DEFAULT_DURATION = 60;
 const DEFAULT_SESSION_COUNT = 1;
@@ -54,6 +66,8 @@ const EMPTY_DEFAULTS: SessionFormValues = {
   title: "",
   duration: DEFAULT_DURATION,
   sessionCount: DEFAULT_SESSION_COUNT,
+  // `duration` is the whole task; the count splits it into equal sittings.
+  splitTotal: true,
   tags: [],
   note: "",
   location: "",
@@ -74,10 +88,15 @@ function toCreateInput(
     ...(values.type === "DND" ? {} : { reminders: values.reminders ?? [] }),
   };
   if (values.type === "TASK") {
+    const count = values.splitTotal ? (values.sessionCount ?? 1) : 1;
+    const parts = sittingMinutes(values.duration ?? DEFAULT_DURATION, count);
     return {
       ...base,
       type: "TASK",
-      durationMinutes: values.duration ?? DEFAULT_DURATION,
+      // A split task sends the length of one sitting: the series is N of them.
+      durationMinutes: parts[0],
+      // The series sums to the total; the last sitting takes the remainder.
+      ...(parts.length > 1 ? { sessionDurations: parts } : {}),
       deadline: values.deadline as string,
       // Omitted/1 → one ordinary task; >1 → a series (issue #33) — see
       // SessionCountField.
@@ -187,92 +206,33 @@ function NewSessionForm() {
     return base;
   }, [start, deadline, sessions, title, tz, user?.defaultReminderMinutes]);
 
-  const form = useSessionForm({ defaultValues: initialDefaults });
+  // A draft from an earlier swipe-down wins over the route prefill.
+  const [draft] = useState(() => useComposerStore.getState().drafts[DRAFT_NEW]);
+  const form = useSessionForm({ defaultValues: draft ?? initialDefaults });
   const loading = form.formState.isSubmitting;
   const type = form.watch("type");
-
-  function switchType(next: SessionFormType) {
-    const common = {
-      title: form.getValues("title"),
-      note: form.getValues("note"),
-      location: form.getValues("location"),
-      tags: form.getValues("tags"),
-      reminders: form.getValues("reminders"),
-    };
-    form.reset(
-      next === "TASK"
-        ? {
-            ...common,
-            type: "TASK",
-            duration: form.getValues("duration") ?? DEFAULT_DURATION,
-            sessionCount:
-              form.getValues("sessionCount") ?? DEFAULT_SESSION_COUNT,
-            deadline: form.getValues("deadline") ?? "",
-          }
-        : {
-            ...common,
-            type: next,
-            date: form.getValues("date"),
-            startTime: form.getValues("startTime") ?? "09:00",
-            endTime: form.getValues("endTime") ?? "10:00",
-            rrule: form.getValues("rrule"),
-          },
-    );
-  }
+  const courses = useCourseNames();
 
   const uploads = useUploadTracker();
+  const makeRoom = useRef<MakeRoomSheetHandle>(null);
 
   async function onSubmit(values: SessionFormValues) {
     if (!user) return;
     const handleCreated = async (
       response: Awaited<ReturnType<typeof createSession>>,
     ) => {
+      useComposerStore.getState().clearDraft(DRAFT_NEW);
       void uploads.settle(values.note);
-      completeStep("create-task");
+      completeStep("add-task");
       useLastCreated.getState().set(response.id);
-      // Handle divergent response — present a primary-vs-alternative pick.
-      // The week view owns the slot-pick sheet, so hand the payload off and
-      // land there first; `useFocusEffect` (app/(app)/index.tsx) opens the
-      // sheet over the week view and the new block is already behind it.
-      if (
-        response.divergent &&
-        response.slotProposalId &&
-        response.primarySlot &&
-        response.alternativeSlot
-      ) {
-        setPendingSlotPick({
-          kind: "single",
-          session: response,
-          primarySlot: response.primarySlot,
-          alternativeSlot: response.alternativeSlot,
-          slotProposalId: response.slotProposalId,
-          tz,
-        });
-        await warmLandingDay(response.primarySlot, tz);
-        goToCalendar(router, { date: response.primarySlot, flash: response.id });
-        return;
+      // The block keeps the applied slot and offers "Other time" when the
+      // placement proposed one; no sheet opens.
+      rememberPlacement(response);
+      if (response.scheduledStartTime) {
+        await warmLandingDay(response.scheduledStartTime, tz);
       }
 
-      // A `sessionCount > 1` series (#59): the divergence rides on `sessions[]`,
-      // while the top-level fields are hard-set to `NO_SLOT_PROPOSAL` server
-      // side, so the single-session guard above can never match one. Filter to
-      // the sittings that actually diverge and hand those off.
-      const series = divergentSittings(response.sessions);
-      if (series.length > 0) {
-        setPendingSlotPick({
-          kind: "series",
-          title: response.title,
-          sittings: series,
-          tz,
-        });
-        await warmLandingDay(series[0].primarySlot, tz);
-        goToCalendar(router, {
-          date: series[0].primarySlot,
-          flash: series[0].session.id,
-        });
-        return;
-      }
-
+      // Toasts fire as the form leaves, so none shows over a form still open.
       showDisplacedToast(toast, response.displacedSessions);
       const { message, variant } = placementToastMessage(response, user);
       showSplitToast(
@@ -294,7 +254,6 @@ function NewSessionForm() {
       // A TASK the scheduler couldn't fit before its deadline comes back
       // unscheduled — nothing to jump to, so just pop back.
       if (response.scheduledStartTime) {
-        await warmLandingDay(response.scheduledStartTime, tz);
         goToCalendar(router, {
           date: response.scheduledStartTime,
           flash: response.id,
@@ -303,6 +262,90 @@ function NewSessionForm() {
         safeBack(router);
       }
     };
+    // The plan moves a session the user chose: nothing is saved until they
+    // pick an action in the Make room sheet (ADR-0022).
+    const openMakeRoom = async (plan: PlacementPlan) => {
+      const moved = await Promise.all(
+        plan.moves.map((move) => getSessionDetails(move.id).catch(() => null)),
+      );
+      const createLate = async () => {
+        try {
+          await handleCreated(
+            await createSession({
+              ...toCreateInput(values, tz),
+              infeasiblePolicy: "ACCEPT_LATE_DEADLINE",
+            } as Parameters<typeof createSession>[0]),
+          );
+        } catch (error) {
+          const again = getPlacementPlan(error);
+          if (again) return openMakeRoom(again);
+          showErrorToast(toast, error, t("Couldn't create the session"), "calendar-x");
+        }
+      };
+      makeRoom.current?.open({
+        subtitle: t("{title} needs a time. These sessions move to fit it.", {
+          title: values.title,
+        }),
+        plan,
+        title: values.title,
+        durationMinutes: values.duration ?? DEFAULT_DURATION,
+        sessions: moved.filter((s): s is Session => s !== null),
+        actions: [
+          {
+            id: "move",
+            label: t("Move it"),
+            run: async () => {
+              try {
+                const confirmed = await confirmPlacement(plan.id);
+                // The confirm answers with an undo group: Undo removes the new
+                // session and puts the moved ones back.
+                if (confirmed.session.scheduledStartTime) {
+                  showMovedToast(toast, {
+                    to: zonedDate(confirmed.session.scheduledStartTime, tz),
+                    withTime: true,
+                    onUndo: () =>
+                      void undoPlacement(confirmed.undoGroupId)
+                        .then(() => notifySessionsMutated())
+                        .catch((error) =>
+                          showErrorToast(
+                            toast,
+                            error,
+                            t("Couldn't move this session"),
+                            "calendar-x",
+                          ),
+                        ),
+                  });
+                }
+                await handleCreated({
+                  ...confirmed.session,
+                  displacedSessions: confirmed.displacedSessions,
+                  undoGroupId: confirmed.undoGroupId,
+                  slotProposalId: null,
+                  primarySlot: null,
+                  alternativeSlot: null,
+                  divergent: false,
+                });
+              } catch (error) {
+                showErrorToast(
+                  toast,
+                  error,
+                  t("The plan changed. Try again."),
+                  "calendar-x",
+                );
+              }
+            },
+          },
+          {
+            id: "late",
+            label: t("Keep mine and accept late"),
+            variant: "outline",
+            run: createLate,
+          },
+          { id: "pick", label: t("Pick another time"), variant: "ghost", run: () => {} },
+        ],
+      });
+    };
+
     await withInfeasibleRetry(
       toast,
       (infeasiblePolicy) =>
@@ -311,13 +354,19 @@ function NewSessionForm() {
           ...(infeasiblePolicy ? { infeasiblePolicy } : {}),
         } as Parameters<typeof createSession>[0]),
       handleCreated,
-      (error) =>
+      (error) => {
+        const plan = getPlacementPlan(error);
+        if (plan) {
+          void openMakeRoom(plan);
+          return;
+        }
         showErrorToast(
           toast,
           error,
           t("Couldn't create the session"),
           "calendar-x",
-        ),
+        );
+      },
     );
   }
 
@@ -338,35 +387,21 @@ function NewSessionForm() {
         });
 
   return (
-    <SessionFormScreen
-      title={t("New session")}
-      subtitle={subtitle}
-      footer={
-        <Button
-          testID="task.save"
-          className="h-[52px] w-full"
-          disabled={loading}
-          onPress={form.handleSubmit(onSubmit, onInvalid)}
-        >
-          <Text className="text-base font-semibold text-primary-foreground">
-            {loading ? t("Adding…") : t("Add session")}
-          </Text>
-        </Button>
-      }
-    >
-      <SessionSheetFields
-        onNoteUpload={uploads.track}
+    <>
+      <TaskComposer
+        mode="create"
         form={form}
         tz={tz}
-        disabled={loading}
-        typeSelector={
-          <SessionTypeTabs
-            value={type}
-            onChange={switchType}
-            disabled={loading}
-          />
-        }
+        title={t("New session")}
+        subtitle={subtitle}
+        courses={courses}
+        busy={loading}
+        onNoteUpload={uploads.track}
+        onValid={onSubmit}
+        onInvalid={onInvalid}
+        onDismiss={() => safeBack(router)}
       />
-    </SessionFormScreen>
+      <MakeRoomSheet ref={makeRoom} tz={tz} />
+    </>
   );
 }

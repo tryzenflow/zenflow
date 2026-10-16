@@ -1,5 +1,6 @@
 const {
   withProjectBuildGradle,
+  withAppBuildGradle,
   withGradleProperties,
 } = require("@expo/config-plugins");
 
@@ -82,7 +83,45 @@ function withKotlinVersionPin(config) {
   });
 }
 
+// The Expo template signs release builds with the shared debug keystore, so every APK carries a
+// key anyone can reproduce, and Android refuses to update over an app signed with a different
+// key. When ANDROID_KEYSTORE_PATH is set (CI release builds) the release build type signs with
+// that keystore; without it (PR builds, e2e, local) it keeps the debug key so builds still work.
+const RELEASE_SIGNING_CONFIG = `
+        release {
+            if (System.getenv('ANDROID_KEYSTORE_PATH')) {
+                storeFile file(System.getenv('ANDROID_KEYSTORE_PATH'))
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+            }
+        }`;
+
+function withReleaseSigning(config) {
+  return withAppBuildGradle(config, (config) => {
+    let src = config.modResults.contents;
+    if (src.includes("ANDROID_KEYSTORE_PATH")) return config;
+    const debugBlock = /(signingConfigs \{\s*debug \{[^}]*\})/;
+    const releaseUse =
+      /(release \{\s*\/\/ Caution![^\n]*\n\s*\/\/ see[^\n]*\n\s*)signingConfig signingConfigs\.debug/;
+    if (!debugBlock.test(src) || !releaseUse.test(src)) {
+      throw new Error(
+        "withReleaseSigning: android/app/build.gradle no longer matches the Expo template",
+      );
+    }
+    src = src
+      .replace(debugBlock, `$1${RELEASE_SIGNING_CONFIG}`)
+      .replace(
+        releaseUse,
+        "$1signingConfig System.getenv('ANDROID_KEYSTORE_PATH') ? signingConfigs.release : signingConfigs.debug",
+      );
+    config.modResults.contents = src;
+    return config;
+  });
+}
+
 module.exports = function withAndroidBuildFixes(config) {
+  config = withReleaseSigning(config);
   config = withSonatypeSnapshotFix(config);
   config = withKotlinVersionPin(config);
   return config;

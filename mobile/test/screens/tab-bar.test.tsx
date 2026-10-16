@@ -4,14 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppTabBar } from "@/components/tab-bar";
 import { renderScreen } from "@/test/utils/render";
 
-vi.mock("@/components/checklist/spotlight-anchor", () => ({ SpotlightAnchor: () => null }));
 
 const routes = [
   { key: "index-k", name: "index" },
-  { key: "month-k", name: "month" },
+  { key: "list-k", name: "list" },
   { key: "settings-k", name: "settings" },
 ];
-const titles: Record<string, string> = { index: "Week", month: "Month", settings: "Settings" };
+const titles: Record<string, string> = { index: "Calendar", list: "List", settings: "Me" };
 
 const emitter = { emit: vi.fn(() => ({ defaultPrevented: false })) };
 const navigateToTab = vi.fn();
@@ -39,7 +38,8 @@ describe("AppTabBar", () => {
   it("renders a labelled tab per route", () => {
     renderScreen(bar(1));
     for (const title of Object.values(titles)) expect(screen.getByLabelText(title)).toBeTruthy();
-    expect(screen.getByTestId("tab.month")).toBeTruthy();
+    expect(screen.getByTestId("tab.list")).toBeTruthy();
+    expect(screen.queryByLabelText("Month")).toBeNull();
   });
 
   it("emits tabPress and navigates when another tab is tapped", () => {
@@ -62,7 +62,7 @@ describe("AppTabBar", () => {
   it("respects a screen that prevents the tab press", () => {
     emitter.emit.mockReturnValue({ defaultPrevented: true });
     renderScreen(bar(0));
-    fireEvent.click(screen.getByTestId("tab.month"));
+    fireEvent.click(screen.getByTestId("tab.list"));
     expect(navigateToTab).not.toHaveBeenCalled();
   });
 });

@@ -7,7 +7,7 @@ One request = one placement event: a single `TASK` or one materialized series. A
 ## Contract
 
 - Types: `packages/shared/src/placement.ts`, mirrored by `services/bandit/src/schemas_place.py`.
-- Wire rules: `extra="forbid"`, camelCase, epoch-ms ints, `contractVersion: 1`.
+- Wire rules: `extra="forbid"`, camelCase, epoch-ms ints, `contractVersion: 3`.
 - Fixtures: `packages/shared/contract/place/*.json` (see its README).
 - Deterministic: no randomness, no clock (`nowMs` is a field); same body gives the same picks.
 
@@ -20,7 +20,8 @@ One request = one placement event: a single `TASK` or one materialized series. A
 
 | Event | Reward |
 | --- | --- |
-| `RETAINED` | `+1` |
+| Completed in slot (`COMPLETE`, unmoved) | `+1` |
+| Skipped or missed (`SKIP`, `MISSED`, unmoved) | `-1` |
 | `MOVE` | `-clamp(abs(dragDistanceMinutes) / 240, 0, 1)` |
 | resize-only `MOVE` (`dragDistanceMinutes == 0`) | `0` |
 | `CREATE` | never sent |
@@ -28,8 +29,8 @@ One request = one placement event: a single `TASK` or one materialized series. A
 ## Scan window (`src/place.py`)
 
 - Local days from the next 15-min boundary to the deadline, capped by `maxScanDays`.
-- Series member: window from `series_day_windows`, span `min(floor((deadline - next15) / 1 day), 59)` days.
-- Days already holding `MAX_SERIES_PER_DAY` (1) siblings are skipped; siblings' intervals are hard blocks.
+- Series member: window from `series_day_windows`, span `min(floor((deadline - next15) / 1 day), 59)` days. More members than days are dealt evenly across them. A member with no room in its window scans the whole range.
+- Days already holding the series day cap are skipped: `MAX_SERIES_PER_DAY` (3), raised to `ceil(members / days)` so every member fits (`series_day_cap`); each sibling blocks its interval plus `SERIES_GAP_MINUTES` (15) on both sides.
 
 ## Policies
 
@@ -50,7 +51,7 @@ One request = one placement event: a single `TASK` or one materialized series. A
 
 - Trigger: `members.length > 1`, every member `computeBoth: true`, one shared `primaryPolicy`. Nest rolls both once per series.
 - `_Placer.run` builds two whole-series plans over the same batch via `_run_plan(policy)`: all-heuristic and all-LinUCB.
-  - Each plan has its own sibling ledger (non-overlap and `MAX_SERIES_PER_DAY`) and its own last resort.
+  - Each plan has its own sibling ledger (sibling gap and the day cap) and its own last resort.
   - Per member, LinUCB falls back to the heuristic when it finds no slot.
 - Per member: `heuristic` and `linucb` are its picks in each plan (`null` where that plan fell back or went last resort).
 - `startMs`, `outcome`, `appliedPolicy`, `late`, `conflicting` come from the primary plan, so applied starts are unchanged.
@@ -61,10 +62,12 @@ One request = one placement event: a single `TASK` or one materialized series. A
 ## No free slot (single member)
 
 1. First call returns `NEEDS_INFEASIBLE_CONTEXT`.
-2. Second call (with `infeasible`) tries EDF displacement over the deadline day, widening to +/-1 day, giving `DISPLACED` with `moves`.
-   - The new task takes the earliest start, clear of fixed blocks, whose cascade succeeds.
-   - Colliding flexible tasks settle in deadline order. Each moves to the free start nearest its old one, on any day up to its own deadline (within `horizonOccupied`).
-   - Never onto a fixed block or an equal-deadline peer (no ripple shifts).
+2. Second call (with `infeasible`) runs cost-based displacement over the deadline day and +/-1 day ([ADR-0022](../adr/0022-anchor-levels-and-cost-based-displacement.md)).
+   - Never moves: `fixed`, `PINNED`, completed, started or starting within 2 h of `nowMs`.
+   - Move cost: `AUTO` 1, `CHOSEN` 10, plus hours moved, plus 10 when the local day changes.
+   - Every start clear of immovable blocks is tried; the cheapest cascade wins (ties: earlier window, earlier start).
+   - Colliding tasks settle in deadline order, each at its cheapest free start up to its own deadline (within `horizonOccupied`), never on a sibling sitting's day.
+   - Result: `DISPLACED`, or `NEEDS_CONFIRMATION` when the plan moves a `CHOSEN` task and `chosenMoves` is `ASK`. `moves[]` carry `anchor` and `cost`.
 3. Otherwise the user's policy applies:
    - `ACCEPT_CONFLICTS` gives `ACCEPTED_CONFLICTS` (min-overlap start; `conflicting` only if it really overlaps `horizonOccupied`).
    - `ACCEPT_LATE_DEADLINE` gives `ACCEPTED_LATE` (`late: true`).
@@ -76,12 +79,27 @@ One request = one placement event: a single `TASK` or one materialized series. A
    - a series whose deadline has passed is pinned back-to-back.
    - `PREFLIGHT` still answers `INFEASIBLE`, so Nest can reject before writing.
 
+## Reason codes
+
+Each result has `reason` (`src/core/reason.py`), or `null` when `startMs` is `null`. Rules run in order for a `PLACED` start:
+
+| Code | When |
+| --- | --- |
+| `ONLY_FREE_SLOT` | the scan found exactly one free start on the candidate days |
+| `PREFERRED_HOUR` | the preference-matrix cell at the start is at least `0.5` |
+| `NEAR_CLASS` | the start touches or is within 30 min of an occupied block on its day |
+| `BEFORE_DEADLINE` | none of the above |
+
+Other outcomes: `DISPLACED` and `NEEDS_CONFIRMATION` give `MOVED_FOR_DEADLINE`; `ACCEPTED_CONFLICTS`, `ACCEPTED_LATE` and `ACCEPTED_LAST_RESORT` give `BEST_AVAILABLE`.
+
+Blocks carry no type on the wire, so `NEAR_CLASS` counts any occupied block, not only lectures.
+
 ## Errors, auth, observability
 
 | Item | Behaviour |
 | --- | --- |
 | Validation | `422` (FastAPI `detail` list) |
-| Contract version | `422 {"code":"CONTRACT_VERSION","supported":1,"got":n}` |
+| Contract version | `422 {"code":"CONTRACT_VERSION","supported":2,"got":n}` |
 | Body size | `413` above 2 MB |
 | Bad or missing bearer | `401` |
 | Auth | `BANDIT_SERVICE_TOKEN` set requires `Authorization: Bearer <token>` on `/v1/place`, `/v1/update`; unset = open (dev/tests) |

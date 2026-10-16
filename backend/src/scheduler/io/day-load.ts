@@ -183,6 +183,10 @@ export interface ScheduleItem {
   durationMinutes: number;
   /** The row's TASK deadline, if any. */
   deadlineMs: number | null;
+  /** Placement anchor (ADR-0022). Only meaningful for a flexible `TASK`; absent means `AUTO`. */
+  anchor?: "AUTO" | "CHOSEN" | "PINNED";
+  /** Done or skipped: the placer must not move it. Absent means `false`. */
+  completed?: boolean;
 }
 
 /**
@@ -234,6 +238,9 @@ export async function loadScheduleItems(
         durationMinutes: true,
         deadline: true,
         type: true,
+        anchor: true,
+        completedAt: true,
+        skipped: true,
       },
     }),
     prisma.sessionSeries.findMany({
@@ -266,6 +273,8 @@ export async function loadScheduleItems(
       end: start + o.durationMinutes * 60_000,
       durationMinutes: o.durationMinutes,
       deadlineMs: (o as { deadline?: Date | null }).deadline?.getTime() ?? null,
+      anchor: o.anchor,
+      completed: o.completedAt !== null || o.skipped,
     });
   }
   for (const series of recurringSeries) {
@@ -289,6 +298,7 @@ export async function loadScheduleItems(
         end: start + rep.durationMinutes * 60_000,
         durationMinutes: rep.durationMinutes,
         deadlineMs: null,
+        completed: false,
       });
     }
   }

@@ -36,15 +36,17 @@ Covered now, by file in `mobile/test/screens/`:
 
 | File | Covers |
 | --- | --- |
-| `login` | invalid email, OTP request success/server error/429 lockout/offline, verify success/wrong code, change email |
-| `onboarding` | step order, name save, skip paths, notifications step (on, blocked, not now), preference saves and rollback, tags bulk, summary "Set up" detour, `onboarded: true` and its failure |
-| `week` | header range and today chip, blocks from `GET /sessions` in the user's timezone, tap and recurring-id routing, empty-day add, day switching and "Jump to today", `date` deep link, "Next up" pill |
+| `login` | student ID and full email, invalid email, OTP request success/server error/429 lockout/offline, verify success/wrong code/pasted code, change email |
+| `onboarding` | step order, name save, skip paths, notifications step (on, blocked, not now), focus band save, preference saves and rollback, summary "Set up" detour, default tags and DND routines on finish (best effort, skipped by title), `onboarded: true` and its failure |
+| `week` | header range and today chip, blocks from `GET /sessions` in the user's timezone, tap opens the detail sheet, Edit routing for recurring ids, empty-day add, day switching and "Jump to today", `date` deep link, "Next up" pill |
 | `month` | grid and adjacent days, pills, month navigation, "Jump to today", load-failure toast |
 | `task-new` | defaults and route-param prefill, validation, `POST /sessions` payload, landing on the placed day, no-slot, infeasible policies and retry, divergent hand-off, error |
 | `task-edit` | read-only view, edit and `PATCH`, validation, infeasible retry, delete (one-off, recurring scopes, task sittings) and failure |
 | `settings`, `settings-sections`, `preferences-section`, `dlu-accounts` | sign-out; profile edit; finish-setup card; tags; language, timezone, reminder and notification toggle; connect, sync, update and disconnect LMS and portal accounts |
 | `notifications` | empty, list, open row, dismiss, select and clear all, sync-conflict "Reschedule them all" |
 | `tab-bar` | labels, tab press events, no navigation on the focused tab |
+| `components/session-detail-sheet` | details on open, note off the peek snap and loaded at full, empty note, Edit route with the session id, check-off from the disc |
+| `components/session-search-view` | day headers, type-coloured row borders, title highlight, empty and no-match states, load on open, Back |
 
 Not covered by component tests, on purpose: pan, long-press and swipe gestures (the gesture-handler and swipeable stubs only simulate taps), and `className` styling.
 
@@ -77,26 +79,38 @@ pnpm e2e flows/06-logout.yaml     # one flow
 
 Install Maestro first: <https://docs.maestro.dev/getting-started/installing-maestro>. Results (junit, screenshots, logs) go to `mobile/e2e/results/` (gitignored).
 
+### Landing page screenshots
+
+`pnpm --filter mobile e2e:screenshots` signs in as a seeded fixture student and writes four WebP shots (`week`, `month`, `settings`, `new-task`) to `../landing/public/shots/` in the landing repo. The flow is `e2e/screenshots/capture.yaml`, the runner `e2e/screenshots.sh`.
+
+- Needs the E2E build on a booted emulator or simulator, plus the dev stack, API and fake DLU server ([fixtures README](../../backend/scripts/fixtures/dlu/README.md)).
+- `SEED=1` seeds the first fixture student first; `EMAIL=...` signs in as someone else.
+- The runner sets a 09:41 status bar on Android (`adb`) or iOS (`simctl`), and needs `cwebp` (`brew install webp`) for WebP.
+- Prefer an Android emulator: the landing page says Android.
+
 ## CI (`.github/workflows/mobile.yml`)
 
 | Job | When | Output |
 | --- | --- | --- |
-| `build-android` | PRs touching `mobile/` or `packages/` **labelled `build-mobile`**, nightly, `release/**`, manual | `zenflow-android-apk` → `zenflow-android.apk` |
-| `build-ios` | same | `zenflow-ios-simulator-app` → `zenflow-ios-simulator.zip` |
-| `e2e-android` | nightly, `release/**`, manual | `maestro-android-results`: junit, failure screenshots, screen recording, logcat, `api.log` |
-| `e2e-ios` | `release/**`, or manual with `run_ios_e2e` (advisory) | `maestro-ios-results` |
+| `build-android` | PRs touching `mobile/` or `packages/` (called from `ci.yml`), nightly, `release/**`, manual | `zenflow-android-apk` → `zenflow-android.apk` |
+| `e2e-android` | same, except releases | `maestro-android-results`: junit, failure screenshots, screen recording, logcat, `api.log` |
+| `build-ios` | nightly, `release/**`, manual with `run_ios_e2e` (simulator `.app`); releases (unsigned `.ipa`). Never in a PR | `zenflow-ios-simulator-app` → `zenflow-ios-simulator.zip`, or `zenflow-ios-unsigned-ipa` → `zenflow-ios-unsigned.ipa` |
+| `e2e-ios` | nightly, `release/**`, manual with `run_ios_e2e` (advisory) | `maestro-ios-results` |
 
-Builds run on GitHub runners via `expo prebuild` (no Expo/EAS account). It is not part of the required `ci-ok` check.
+In a PR, `ci.yml` calls it after lint, typecheck and unit tests pass, and `CI ok` requires the Android jobs. iOS runs only nightly and on `release/**`.
+
+Builds run on GitHub runners via `expo prebuild` (no Expo/EAS account).
 
 - `e2e` (default): emulator-host API URL, cleartext HTTP allowed (`plugins/withE2eCleartext.js`, `ZENFLOW_E2E=1` only).
-- `release`: run the workflow manually. API defaults to `https://zenflow.alphatrann.com/api/v1`, or pass `api_url`.
+- `release`: run the workflow manually. API defaults to `https://api.usezenflow.com/api/v1`, or pass `api_url`.
 
 ### Android artifact: `.apk`
 
-A release `.apk` for sideloading (`adb install zenflow-android.apk`). Signed with the Expo debug keystore: fine for testing, not the Play Store (needs a release keystore and `.aab`).
+A release `.apk` for sideloading (`adb install zenflow-android.apk`). Release builds sign with the keystore from the `ANDROID_KEYSTORE_*` secrets ([releasing.md](../ops/releasing.md#android-signing-and-updates)); without them (PRs, e2e, forks) the Expo debug key is used. The Play Store needs an `.aab`.
 
 ### iOS artifact: `.app` vs `.ipa`
 
-- **Simulator `.app` (what CI produces, zipped).** Runs only in the iOS Simulator on a Mac (`xcrun simctl install booted Zenflow.app`). Needs no Apple account.
+- **Simulator `.app` (e2e only, zipped).** Runs only in the iOS Simulator on a Mac (`xcrun simctl install booted Zenflow.app`). Needs no Apple account.
+
 - **Device `.ipa`:** for real iPhones, TestFlight and the App Store. Needs a paid Apple Developer account (certificate and provisioning profile). Not set up.
 - **Unsigned `.ipa`** (`zenflow-ios-unsigned.ipa`). A device build with no signature, for sideloading: SideStore/AltStore re-sign it on the phone with a free Apple ID (7-day expiry, push and other paid entitlements unavailable).

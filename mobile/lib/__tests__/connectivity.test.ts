@@ -52,3 +52,15 @@ describe("forced offline (dev toggle)", () => {
     setOnline(true);
   });
 });
+
+describe("reconnect", () => {
+  it("clearing stale keys drops the offline glyph for pages that never refetch", () => {
+    const { setOnline, setStale, clearStale } = useConnectivity.getState();
+    setOnline(true);
+    setStale("2026-01-01", true);
+    setStale("month:2026-01", true);
+    expect(selectOffline(useConnectivity.getState())).toBe(true);
+    clearStale();
+    expect(selectOffline(useConnectivity.getState())).toBe(false);
+  });
+});

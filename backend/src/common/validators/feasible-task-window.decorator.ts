@@ -10,6 +10,7 @@ interface FeasibleTaskWindowHost {
   type?: string;
   durationMinutes?: number;
   sessionCount?: number;
+  sessionDurations?: number[];
 }
 
 /**
@@ -40,7 +41,11 @@ export class IsFeasibleTaskWindowConstraint implements ValidatorConstraintInterf
       return true; // its own @IsInt/@Min decorators report this
 
     const sessionCount = Math.max(1, Math.trunc(o.sessionCount ?? 1));
-    const neededMs = o.durationMinutes * sessionCount * 60_000;
+    const totalMinutes =
+      Array.isArray(o.sessionDurations) && o.sessionDurations.length > 0
+        ? o.sessionDurations.reduce((a, b) => a + (Number(b) || 0), 0)
+        : o.durationMinutes * sessionCount;
+    const neededMs = totalMinutes * 60_000;
     return Date.now() + neededMs <= Date.parse(deadline);
   }
 

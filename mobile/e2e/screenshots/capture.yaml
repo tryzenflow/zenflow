@@ -1,0 +1,94 @@
+# Marketing screenshots for the landing page, posts and ios.json: signs in as a seeded
+# fixture student (LMS and portal connected, see e2e/screenshots.sh) and
+# captures the app screens. Not part of the smoke suite; run via `pnpm e2e:screenshots`.
+# Needs EMAIL (the seeded student) and MAILPIT_URL.
+appId: com.zenflow.app
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      notifications: deny
+- assertVisible:
+    id: login.email
+- tapOn:
+    id: login.use-email
+- tapOn:
+    id: login.email
+- inputText: ${EMAIL}
+- tapOn:
+    id: login.submit
+- extendedWaitUntil:
+    visible:
+      id: login.change-email
+    timeout: 20000
+- runScript:
+    file: ../scripts/otp.js
+    env:
+      EMAIL: ${EMAIL}
+      MAILPIT_URL: ${MAILPIT_URL}
+- inputText: ${output.otp}
+- runFlow: ../subflows/finish-onboarding.yaml
+- extendedWaitUntil:
+    visible:
+      id: tab.index
+    timeout: 20000
+# The first sync fills the calendar in the background; wait for a real block.
+- extendedWaitUntil:
+    visible:
+      id: "task-block\\..*"
+    timeout: 120000
+- waitForAnimationToEnd
+- takeScreenshot: day
+- tapOn:
+    id: view-switch.week
+- extendedWaitUntil:
+    visible:
+      id: "week-bar\\..*"
+    timeout: 10000
+- waitForAnimationToEnd
+- takeScreenshot: week
+- tapOn:
+    id: view-switch.month
+- extendedWaitUntil:
+    visible:
+      id: "month-cell\\..*"
+    timeout: 10000
+- waitForAnimationToEnd
+- takeScreenshot: month
+- tapOn:
+    id: tab.list
+- extendedWaitUntil:
+    visible:
+      id: "session-search\\.row\\..*"
+    timeout: 20000
+- waitForAnimationToEnd
+- takeScreenshot: list
+- tapOn:
+    id: tab.index
+- tapOn:
+    id: fab.new-task
+- extendedWaitUntil:
+    visible:
+      id: task.save
+    timeout: 10000
+- waitForAnimationToEnd
+- takeScreenshot: new-task
+- tapOn:
+    id: task.close
+- tapOn:
+    id: tab.settings
+- extendedWaitUntil:
+    visible:
+      id: settings.student-card
+    timeout: 20000
+- waitForAnimationToEnd
+- takeScreenshot: settings
+- tapOn:
+    id: settings.student-card
+- extendedWaitUntil:
+    visible:
+      id: marks.sheet
+    timeout: 20000
+- waitForAnimationToEnd
+- takeScreenshot: marks

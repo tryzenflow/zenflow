@@ -48,7 +48,7 @@ Only `TASK` sessions reach this path — fixed types and `DND` are user-pinned (
    fully-booked preferred day loses to the next day's best slot.
 
 6. **Record the proposal** — `SlotProposal.proposedStartTime`, `selectedArm` (largest
-   overlap contribution), `featureVector` — so the delayed `MOVE`/`RETAINED` reward can
+   overlap contribution), `featureVector` — so the delayed `MOVE` / outcome reward can
    credit the right arm later.
 
 ## Trade-offs

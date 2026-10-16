@@ -52,7 +52,9 @@ def _body(
 
 def test_urgent_task_evicts_chill_tasks_that_spill_to_a_later_day() -> None:
     """Today 08:00-24:00 and all of tomorrow are packed with tasks due in a
-    week; day+2 is free. A 60m task due today 18:00 must still be placed."""
+    week; day+2 is free. A 60m task due today 18:00 must still be placed.
+    a0 (08-12) is frozen; a2 (16-20) is the cheapest to spill (closest to the
+    free day), so the task takes 16:00, the earliest start that moves only a2."""
     week = NOW + 7 * DAY_MS
     flex = _chill("a", NOW, MIDNIGHT + DAY_MS, week) + _chill(
         "b", MIDNIGHT + DAY_MS, MIDNIGHT + 2 * DAY_MS, week
@@ -61,14 +63,15 @@ def test_urgent_task_evicts_chill_tasks_that_spill_to_a_later_day() -> None:
     r = ok(_body(flex, [], deadline))["results"][0]
 
     assert r["outcome"] == "DISPLACED"
-    assert r["startMs"] == NOW  # earliest feasible
+    assert r["startMs"] == MIDNIGHT + 16 * HOUR
     assert r["startMs"] + HOUR <= deadline
     by_id = {f["id"]: f for f in flex}
-    assert [m["id"] for m in r["moves"]] == ["a0"]
+    assert [m["id"] for m in r["moves"]] == ["a2"]
     (mv,) = r["moves"]
     # nearest free slot to its old start: day+2 00:00 (everything before is packed)
     assert mv["toMs"] == MIDNIGHT + 2 * DAY_MS
-    assert mv["toMs"] + by_id["a0"]["durationMinutes"] * 60_000 <= week
+    assert mv["toMs"] + by_id["a2"]["durationMinutes"] * 60_000 <= week
+    assert mv["anchor"] == "AUTO" and mv["cost"] == 1 + 32 + 10
 
 
 # ---- core planner -------------------------------------------------------
@@ -108,6 +111,7 @@ def _plan(
         [TODAY],
         occ if horizon is None else horizon,
         HORIZON_END,
+        frozen_ms=0,  # EDF mechanics only; the freeze window is tested separately
     )
 
 
@@ -132,7 +136,7 @@ def test_edf_earlier_deadline_keeps_the_closer_slot() -> None:
         FlexibleTask("late", 60, NOW + 7 * DAY_MS, NOW),  # 08-09
         FlexibleTask("soon", 60, NOW + 2 * DAY_MS, NOW + HOUR),  # 09-10
     ]
-    plan = _plan(flex, wall, MIDNIGHT + 12 * HOUR, dur=120)  # needs 08-10
+    plan = _plan(flex, wall, MIDNIGHT + 10 * HOUR, dur=120)  # needs 08-10
     assert plan.kind == "placed" and plan.start_ms == NOW
     to = {m.id: m.to_ms for m in plan.moves}
     assert to["soon"] == NOW + 2 * HOUR  # 10:00 -- nearest free

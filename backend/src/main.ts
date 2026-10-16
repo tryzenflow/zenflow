@@ -44,16 +44,15 @@ async function bootstrap() {
   app.useLogger(app.get(Logger));
   // SIGTERM -> close queue producers/pub-sub clients cleanly (rolling deploys).
   app.enableShutdownHooks();
-  // TLS is terminated by the nginx reverse proxy, which forwards plain HTTP to
-  // this app with the real scheme in `X-Forwarded-Proto`. Trusting the first
-  // proxy hop makes `req.secure` reflect that header, so express-session will
-  // emit the `Secure` session cookie instead of silently dropping it. This must
-  // be set before the session middleware is registered.
-  app.set("trust proxy", 1);
+  // Cloudflare fronts the nginx reverse proxy, which terminates TLS and forwards
+  // plain HTTP to this app with the real scheme in `X-Forwarded-Proto`. Trusting
+  // both hops (`TRUST_PROXY_HOPS`, default 2) makes `req.secure` reflect that header (so express-session emits
+  // the `Secure` session cookie) and makes `req.ip` the client, not a Cloudflare
+  // edge. nginx must append to `X-Forwarded-For`. This must be set before the
+  // session middleware is registered.
   const configService = app.get(ConfigService);
-  // The public legal pages live at the site root (`/privacy`, `/terms`), so the
-  // app stores and the login screen can link to short stable URLs.
-  app.setGlobalPrefix("api/v1", { exclude: ["privacy", "terms"] });
+  app.set("trust proxy", configService.get<number>("TRUST_PROXY_HOPS"));
+  app.setGlobalPrefix("api/v1");
   // Comma-separated list: the web frontend and Expo's web dev server are
   // separate origins. `cors` only echoes a single origin back, so this must be
   // an array for it to match the request and reflect the right one.

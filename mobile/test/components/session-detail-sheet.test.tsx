@@ -1,0 +1,173 @@
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { router } from "expo-router";
+import { http, HttpResponse } from "msw";
+import { type RefObject, createRef } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  SessionDetailSheet,
+  type SessionDetailSheetHandle,
+} from "@/components/calendar/session-detail-sheet";
+import { makeSession } from "@/test/fixtures";
+import { API } from "@/test/msw/handlers";
+import { server } from "@/test/msw/server";
+import { renderScreen } from "@/test/utils/render";
+import { waitForContent } from "@/test/utils/skeleton";
+
+// Props of the sheet's content on its last render, so a test can move it to a snap point
+// (gestures do not run under happy-dom).
+const sheet = vi.hoisted(() => ({
+  props: null as null | Record<string, unknown>,
+}));
+
+vi.mock("@/components/ui/bottom-sheet", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/ui/bottom-sheet")>();
+  const { createElement, forwardRef } = await import("react");
+  const BottomSheetContent = forwardRef((props: Record<string, unknown>, ref) => {
+    sheet.props = props;
+    return createElement(actual.BottomSheetContent, { ...props, ref } as never);
+  });
+  return { ...actual, BottomSheetContent };
+});
+
+// The WebView stand-in shows the document it was given, so the note is assertable.
+vi.mock("react-native-webview", () => ({
+  WebView: ({ source }: { source: { html: string } }) => (
+    <div data-testid="session-note" data-html={source.html} />
+  ),
+}));
+
+// The font loader reads an asset the component tests do not provide.
+vi.mock("@/lib/geist-webview-font", () => ({
+  loadGeistWebviewFontDataUri: vi.fn(async () => ""),
+}));
+
+const TZ = "Asia/Ho_Chi_Minh";
+
+function renderSheet() {
+  const ref: RefObject<SessionDetailSheetHandle | null> = createRef();
+  renderScreen(<SessionDetailSheet ref={ref} tz={TZ} />);
+  return ref;
+}
+
+beforeEach(() => {
+  sheet.props = null;
+});
+
+describe("SessionDetailSheet", () => {
+  it("opens on the calendar with the session details", async () => {
+    const ref = renderSheet();
+    act(() =>
+      ref.current?.open(
+        makeSession({
+          id: "a",
+          title: "Algorithms lecture",
+          type: "TASK",
+          anchor: "PINNED",
+          // 03:00Z is 10:00 in UTC+7.
+          scheduledStartTime: "2026-10-15T03:00:00.000Z",
+          durationMinutes: 90,
+          deadline: "2026-10-20T10:00:00.000Z",
+          location: "Room B201",
+          tags: ["Algorithms"],
+          reminders: [15],
+        }),
+      ),
+    );
+    expect((await screen.findByTestId("session-detail-title")).textContent).toBe(
+      "Algorithms lecture",
+    );
+    await waitForContent();
+    expect(screen.getByText(/10:00 AM – 11:30 AM/)).toBeTruthy();
+    expect(screen.getByText("Room B201")).toBeTruthy();
+    expect(screen.getByText("Algorithms")).toBeTruthy();
+    expect(screen.getByText("Pinned in place")).toBeTruthy();
+    expect(screen.getByTestId("session-detail-edit")).toBeTruthy();
+  });
+
+  it("shows the localized reason for the placed start", async () => {
+    const ref = renderSheet();
+    act(() =>
+      ref.current?.open(
+        makeSession({
+          id: "a",
+          scheduledStartTime: "2026-10-15T14:00:00.000Z",
+          placementReason: "PREFERRED_HOUR",
+        }),
+      ),
+    );
+    await screen.findByTestId("session-detail-title");
+    await waitForContent();
+    expect(screen.getByTestId("session-detail-reason").textContent).toBe(
+      "Placed at 9:00 PM, you usually study then",
+    );
+  });
+
+  it("shows no reason when the start was not placed by the scheduler", async () => {
+    const ref = renderSheet();
+    act(() =>
+      ref.current?.open(
+        makeSession({
+          id: "a",
+          scheduledStartTime: "2026-10-15T14:00:00.000Z",
+          placementReason: null,
+        }),
+      ),
+    );
+    await screen.findByTestId("session-detail-title");
+    expect(screen.queryByTestId("session-detail-reason")).toBeNull();
+  });
+
+  it("shows the note with the details", async () => {
+    const ref = renderSheet();
+    act(() =>
+      ref.current?.open(makeSession({ id: "a", note: "<p>Read chapter 4</p>" })),
+    );
+    await screen.findByTestId("session-detail-title");
+    await waitForContent();
+    const note = await screen.findByTestId("session-note");
+    expect(note.getAttribute("data-html")).toContain("<p>Read chapter 4</p>");
+  });
+
+  it("does not show a note section for an empty note", async () => {
+    const ref = renderSheet();
+    act(() => ref.current?.open(makeSession({ id: "a", note: "<p></p>" })));
+    await screen.findByTestId("session-detail-title");
+    await waitForContent();
+    expect(screen.queryByTestId("session-note")).toBeNull();
+  });
+
+  it("opens the composer for this session when Edit is pressed", async () => {
+    const id = "series1::2026-10-15T03:00:00.000Z";
+    const ref = renderSheet();
+    act(() =>
+      ref.current?.open(
+        makeSession({ id, seriesId: "series1", rrule: "FREQ=WEEKLY" }),
+      ),
+    );
+    fireEvent.click(await screen.findByTestId("session-detail-edit"));
+    await waitFor(() =>
+      expect(router.push).toHaveBeenCalledWith(`/task/${encodeURIComponent(id)}/edit`),
+    );
+  });
+
+  it("marks the session done from the disc and keeps the sheet open", async () => {
+    let completed = false;
+    server.use(
+      http.post(`${API}/sessions/a/complete`, () => {
+        completed = true;
+        return HttpResponse.json({
+          data: {
+            session: { id: "a", completedAt: "2026-10-15T05:00:00.000Z", skipped: false },
+            streak: { current: 1, longest: 1 },
+          },
+        });
+      }),
+    );
+    const ref = renderSheet();
+    act(() => ref.current?.open(makeSession({ id: "a", title: "Algorithms lecture", type: "TASK" })));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Mark Algorithms lecture done" }));
+    await waitFor(() => expect(completed).toBe(true));
+    expect(await screen.findByRole("checkbox", { name: "Mark Algorithms lecture not done" })).toBeTruthy();
+    expect(screen.getByTestId("session-detail-title").textContent).toBe("Algorithms lecture");
+  });
+});
