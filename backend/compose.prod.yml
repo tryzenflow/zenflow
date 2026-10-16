@@ -820,7 +820,7 @@ services:
         exec minio server /data --console-address ":9001"
     environment:
       # Console redirects and cookies use the public URL behind nginx.
-      MINIO_BROWSER_REDIRECT_URL: https://minio.alphatrann.com
+      MINIO_BROWSER_REDIRECT_URL: https://minio.usezenflow.com
     expose:
       - "9000"
       - "9001"

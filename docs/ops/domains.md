@@ -11,7 +11,7 @@ For operators. Public hosts, the DNS records behind them and the cutover to `use
 | `api.usezenflow.com` | Nest API | `A` to the VPS, DNS only | default (`api.usezenflow.com`) |
 | `app.usezenflow.com` | Web PWA (Netlify) | `CNAME` to the Netlify site, DNS only | Netlify |
 | `grafana.usezenflow.com` | Grafana | `A` to the VPS, DNS only | `DOMAIN=grafana.usezenflow.com` |
-| `minio.alphatrann.com` | MinIO console | unchanged | `DOMAIN=minio.alphatrann.com` |
+| `minio.usezenflow.com` | MinIO console | `A` to the VPS, DNS only | `DOMAIN=minio.usezenflow.com` |
 
 Keep VPS records DNS only (grey cloud): certbot renews over the nginx webroot on port 80. Server blocks: `backend/nginx/nginx.prod.conf`.
 
@@ -34,9 +34,9 @@ Records at `usezenflow.com`:
 ## Cutover
 
 1. Lower the TTL on `zenflow.alphatrann.com` a day ahead.
-2. Create the `A` records for the apex, `www`, `api` and `grafana`, and the `app` `CNAME`.
+2. Create the `A` records for the apex, `www`, `api`, `grafana` and `minio`, and the `app` `CNAME`.
 3. Add `app.usezenflow.com` as the Netlify custom domain and wait for its certificate.
-4. On the VPS, with the current nginx running, issue the three new certificates (table above).
+4. On the VPS, with the current nginx running, issue the new certificates (table above).
 5. Mailgun: add domain `usezenflow.com`, publish SPF and DKIM, wait for verified. Create the SMTP password for `postmaster@usezenflow.com`.
 6. Write it to Vault: `MAIL_PASSWORD` in `api` and `GF_SMTP_PASSWORD` in `grafana` ([vault.md](vault.md)).
 7. Cloudflare Email Routing for `privacy@` ([inbox-email.md](inbox-email.md)), then publish DMARC.
@@ -44,3 +44,4 @@ Records at `usezenflow.com`:
 9. Deploy the web app to Netlify, then cut a mobile release (it defaults to `api.usezenflow.com`).
 10. Remove the `zenflow.alphatrann.com` record and its certificate (`certbot delete --cert-name zenflow.alphatrann.com` in the `certbot` service). APKs built before the move stop working.
 11. Remove the `grafana.alphatrann.com` record and its certificate (`certbot delete --cert-name grafana.alphatrann.com` in the `certbot` service).
+12. Remove the `minio.alphatrann.com` record and its certificate (`certbot delete --cert-name minio.alphatrann.com` in the `certbot` service).
