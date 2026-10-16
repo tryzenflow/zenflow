@@ -56,7 +56,7 @@ docker compose --env-file .env.staging -f compose.staging.yml up -d    # API via
 
 Config and rationale: [ADR-0010](../docs/adr/0010-nginx-replaces-caddy.md); files in [`nginx/`](nginx/).
 
-- First issuance, once per certificate, before the first `up`: `LE_EMAIL=you@example.com ./nginx/init-cert.sh` (`api.usezenflow.com`). Repeat with `DOMAIN=usezenflow.com,www.usezenflow.com`, `DOMAIN=grafana.usezenflow.com`, `DOMAIN=minio.alphatrann.com` and `DOMAIN=zenflow.alphatrann.com` (nginx will not start without them). Hosts: [docs/ops/domains.md](../docs/ops/domains.md).
+- First issuance, once per certificate, before the first `up`: `LE_EMAIL=you@example.com ./nginx/init-cert.sh` (`api.usezenflow.com`). Repeat with `DOMAIN=usezenflow.com,www.usezenflow.com`, `DOMAIN=grafana.usezenflow.com`, and `DOMAIN=minio.alphatrann.com` (nginx will not start without them). Hosts: [docs/ops/domains.md](../docs/ops/domains.md).
 - Admin UIs go through nginx: Grafana at `grafana.*` and the MinIO console at `minio.*` (`minio.localhost` in staging). Log in to MinIO with `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`. The S3 API is not exposed.
 - Renewal is the `certbot` service (twice daily, webroot); `nginx` reloads every 12 h to pick the new certificate up. Alert on certificate expiry.
 - The API upstream is `state/upstream.api.conf` on the host, written by `scripts/deploy/deploy.sh` (blue-green, [ci-cd.md](../docs/ops/ci-cd.md)); do not edit it by hand.
