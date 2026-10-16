@@ -6,8 +6,6 @@ For operators. Public hosts, the DNS records behind them and the cutover to `use
 
 | Host | Serves | Record | Certificate (`nginx/init-cert.sh`) |
 | --- | --- | --- | --- |
-| `usezenflow.com` | Landing, `/privacy`, `/terms` (Nest via nginx) | `A` to the VPS, DNS only | `DOMAIN=usezenflow.com,www.usezenflow.com` |
-| `www.usezenflow.com` | 301 to the apex | `A` to the VPS, DNS only | same as apex |
 | `api.usezenflow.com` | Nest API | `A` to the VPS, DNS only | default (`api.usezenflow.com`) |
 | `app.usezenflow.com` | Web PWA (Netlify) | `CNAME` to the Netlify site, DNS only | Netlify |
 | `grafana.usezenflow.com` | Grafana | `A` to the VPS, DNS only | `DOMAIN=grafana.usezenflow.com` |
@@ -34,7 +32,7 @@ Records at `usezenflow.com`:
 ## Cutover
 
 1. Lower the TTL on `zenflow.alphatrann.com` a day ahead.
-2. Create the `A` records for the apex, `www`, `api`, `grafana` and `minio`, and the `app` `CNAME`.
+2. Create the `A` records for `api`, `grafana` and `minio`, and the `app` `CNAME`.
 3. Add `app.usezenflow.com` as the Netlify custom domain and wait for its certificate.
 4. On the VPS, with the current nginx running, issue the new certificates (table above).
 5. Mailgun: add domain `usezenflow.com`, publish SPF and DKIM, wait for verified. Create the SMTP password for `postmaster@usezenflow.com`.

@@ -4,7 +4,6 @@
 # certificate, so certbot answers the challenge on :80 itself. Renewal then runs
 # in the `certbot` service over the nginx webroot.
 # Usage: LE_EMAIL=ops@example.com ./nginx/init-cert.sh                  # api.usezenflow.com
-#        LE_EMAIL=... DOMAIN=usezenflow.com,www.usezenflow.com ./nginx/init-cert.sh
 #        LE_EMAIL=... DOMAIN=grafana.usezenflow.com ./nginx/init-cert.sh
 #        LE_EMAIL=... DOMAIN=minio.usezenflow.com ./nginx/init-cert.sh
 # DOMAIN is a comma-separated list for one certificate; it is named after the first host.
