@@ -1,5 +1,6 @@
 /** Vietnamese UI copy. English keys remain the English fallback. */
 export default {
+  "Month calendar": "Lịch tháng",
   "Import my timetable": "Nhập thời khóa biểu",
   "Show night hours": "Hiện giờ đêm",
   "{from} to {to}": "{from} đến {to}",
@@ -328,6 +329,7 @@ export default {
   "Manage {provider}": "Quản lý {provider}",
   "Sync {provider} now": "Đồng bộ {provider} ngay",
   "Sign in to your {provider}": "Đăng nhập {provider}",
+  "Sign in to see your schedule": "Đăng nhập để xem lịch",
   "Update your {provider} login": "Cập nhật đăng nhập {provider}",
   "Task created": "Đã tạo task",
   "{count} sittings have an alternative": "{count} buổi có giờ thay thế",

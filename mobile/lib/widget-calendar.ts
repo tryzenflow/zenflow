@@ -1,0 +1,97 @@
+import { zonedWallClockToUtc } from '@zenflow/core';
+import type { SessionType } from '@zenflow/shared';
+import type { WidgetEvent, WidgetSnapshot } from './widget-snapshot';
+
+export interface CalendarDay {
+  day: number;
+  date: string;
+  isToday: boolean;
+  isSunday: boolean;
+}
+
+function dateParts(instant: string | number, timezone: string) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date(instant));
+  const read = (type: string) => Number(parts.find((part) => part.type === type)?.value);
+  return { year: read('year'), month: read('month'), day: read('day') };
+}
+
+export function calendarDate(instant: string | number, timezone: string): string {
+  try {
+    const { year, month, day } = dateParts(instant, timezone);
+    return [year, month, day].map((value, index) => String(value).padStart(index ? 2 : 4, '0')).join('-');
+  } catch {
+    return calendarDate(instant, 'UTC');
+  }
+}
+
+export function monthCalendar(snapshot: WidgetSnapshot | null, now = Date.now()) {
+  const timezone = snapshot?.tz || 'UTC';
+  const today = calendarDate(now, timezone);
+  const month = today.slice(0, 7);
+  const selected = today;
+  const [year, monthNumber] = month.split('-').map(Number);
+  const firstWeekday = (new Date(Date.UTC(year, monthNumber - 1, 1)).getUTCDay() + 6) % 7;
+  const daysInMonth = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  const days: (CalendarDay | null)[] = [
+    ...Array.from({ length: firstWeekday }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, index) => {
+      const day = index + 1;
+      const date = month + '-' + String(day).padStart(2, '0');
+      return { day, date, isToday: date === today, isSunday: (firstWeekday + index) % 7 === 6 };
+    }),
+  ];
+  while (days.length % 7) days.push(null);
+  const allEvents = [...(snapshot?.calendarEvents ?? []), ...(snapshot?.events ?? [])];
+  const events = allEvents
+    .filter((event) => calendarDate(event.start, timezone) === selected)
+    .filter((event) => event.type !== 'DND')
+    .filter((event, index, all) => all.findIndex((item) => item.id === event.id) === index)
+    .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+  return { month, selected, today, days, events };
+}
+
+export function widgetMonthHref() {
+  return 'zenflow://month';
+}
+
+export function widgetEventHref(id: string) {
+  return `zenflow://task/${encodeURIComponent(id)}/edit`;
+}
+
+export function widgetNewTaskHref(date: string, timezone: string) {
+  const [year, month, day] = date.split('-').map(Number);
+  const wall = new Date(year, month - 1, day, 23, 45);
+  const deadline = zonedWallClockToUtc(wall, timezone).toISOString();
+  return `zenflow://task/new?start=${encodeURIComponent(deadline)}&deadline=${encodeURIComponent(deadline)}`;
+}
+
+export function widgetEventTime(event: WidgetEvent, timezone: string, language: 'en' | 'vi') {
+  try {
+    return new Intl.DateTimeFormat(language === 'vi' ? 'vi-VN' : 'en-GB', {
+      timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    }).format(new Date(event.start));
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Canonical widget hex colour per session type — matches the in-app calendar
+ * (brand-orange for TASK, teal-500 for ASSIGNMENT, etc.). The dark-mode
+ * brand-orange is `#FF7A24`; we pick the slightly lighter light-mode value
+ * `#FF8E3E` since the widget always renders on a transparent/dark surface.
+ */
+const WIDGET_TYPE_COLORS: Record<SessionType, `#${string}`> = {
+  TASK: '#FF8E3E',
+  ASSIGNMENT: '#14B8A6',
+  EXAM: '#F43F5E',
+  LECTURE: '#0EA5E9',
+  DND: '#94A3B8',
+};
+
+export function widgetEventColor(type: SessionType): `#${string}` {
+  return WIDGET_TYPE_COLORS[type] ?? WIDGET_TYPE_COLORS.TASK;
+}
