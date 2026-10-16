@@ -1,5 +1,12 @@
 # frontend
 
+## 1.0.0-beta.13
+
+### Patch Changes
+
+- @zenflow/shared@1.0.0-beta.13
+- @zenflow/core@1.0.0-beta.13
+
 ## 1.0.0-beta.12
 
 ### Patch Changes
