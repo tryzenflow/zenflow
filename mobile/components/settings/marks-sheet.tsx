@@ -23,7 +23,7 @@ function termNumber(termId: string): string {
 }
 
 const LETTER_TONE: Record<string, string> = {
-  A: "bg-success/15",
+  A: "bg-success/50",
   B: "bg-brand-yellow/20",
   C: "bg-brand-orange/20",
 };
@@ -117,7 +117,7 @@ function TermCard({
               <Text
                 className={cn(
                   "text-[12px] font-semibold",
-                  trend.trend === "up" && "text-success",
+                  trend.trend === "up" && "text-session-done-ink",
                   trend.trend === "down" && "text-destructive",
                   trend.trend === "flat" && "text-muted-foreground",
                 )}
