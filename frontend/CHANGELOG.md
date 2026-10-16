@@ -1,5 +1,14 @@
 # frontend
 
+## 1.0.0-beta.12
+
+### Patch Changes
+
+- 7fef532: Morning brief and evening check-in send at the set time even when a Do Not Disturb block covers the day. The list view opens on today instead of the oldest past day. The list view refreshes after a delete or edit. A tag created in the task form is selected. Success uses the brand lime and the move past deadline warning is yellow. The streak sits next to Getting started.
+- Updated dependencies [7fef532]
+  - @zenflow/shared@1.0.0-beta.12
+  - @zenflow/core@1.0.0-beta.12
+
 ## 1.0.0-beta.11
 
 ### Major Changes
