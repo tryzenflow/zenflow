@@ -738,7 +738,7 @@ services:
       GF_SMTP_ENABLED: ${GRAFANA_SMTP_ENABLED:-true}
       GF_SMTP_HOST: ${GRAFANA_SMTP_HOST:-smtp.mailgun.org:587}
       GF_SMTP_USER: ${GRAFANA_SMTP_USER:-postmaster@usezenflow.com}
-      GF_SMTP_FROM_ADDRESS: ${GRAFANA_SMTP_FROM:-no-reply@usezenflow.com}
+      GF_SMTP_FROM_ADDRESS: ${GRAFANA_SMTP_FROM:-alerts@usezenflow.com}
       GF_SMTP_FROM_NAME: Zenflow alerts
       GF_SMTP_STARTTLS_POLICY: MandatoryStartTLS
     volumes:
@@ -820,7 +820,7 @@ services:
         exec minio server /data --console-address ":9001"
     environment:
       # Console redirects and cookies use the public URL behind nginx.
-      MINIO_BROWSER_REDIRECT_URL: https://minio.alphatrann.com
+      MINIO_BROWSER_REDIRECT_URL: https://minio.usezenflow.com
     expose:
       - "9000"
       - "9001"

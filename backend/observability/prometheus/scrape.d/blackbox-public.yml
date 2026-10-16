@@ -1,5 +1,4 @@
 # Prod only: each public host through nginx, which also reports TLS certificate expiry.
-# The old host stays until pre-move APKs are gone.
 scrape_configs:
   - job_name: zenflow-public
     metrics_path: /probe
@@ -10,7 +9,6 @@ scrape_configs:
           - https://api.usezenflow.com/api/v1/health/live
           - https://usezenflow.com/privacy
           - https://grafana.usezenflow.com/api/health
-          - https://zenflow.alphatrann.com/api/v1/health/live
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target

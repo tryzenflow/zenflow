@@ -6,8 +6,7 @@
 # Usage: LE_EMAIL=ops@example.com ./nginx/init-cert.sh                  # api.usezenflow.com
 #        LE_EMAIL=... DOMAIN=usezenflow.com,www.usezenflow.com ./nginx/init-cert.sh
 #        LE_EMAIL=... DOMAIN=grafana.usezenflow.com ./nginx/init-cert.sh
-#        LE_EMAIL=... DOMAIN=minio.alphatrann.com ./nginx/init-cert.sh
-#        LE_EMAIL=... DOMAIN=zenflow.alphatrann.com ./nginx/init-cert.sh  # old host, kept for old APKs
+#        LE_EMAIL=... DOMAIN=minio.usezenflow.com ./nginx/init-cert.sh
 # DOMAIN is a comma-separated list for one certificate; it is named after the first host.
 # If nginx is already running (adding a host to a live stack) the webroot method is used
 # instead, so :80 stays up. Point each host's DNS A record here first. Issue every cert

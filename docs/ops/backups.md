@@ -145,7 +145,7 @@ Contact point `zenflow-ops-email` (`alerting/contact-points.yml`) is the default
 | Env | Delivery |
 | --- | --- |
 | Staging | Grafana to Mailpit (<http://localhost:8025>) |
-| Prod | Mailgun SMTP from `no-reply@usezenflow.com` |
+| Prod | Mailgun SMTP from `alerts@usezenflow.com` |
 
 Prod Mailgun setup:
 1. Verify the `usezenflow.com` sending domain ([domains.md](domains.md#mail)).
