@@ -1,23 +1,24 @@
 'use no memo';
 
 import vietnamese from '@/lib/i18n-vi';
-import { monthCalendar, widgetEventHref, widgetEventTime, widgetMonthHref, widgetNewTaskHref } from '@/lib/widget-calendar';
+import { monthCalendar, widgetEventColor, widgetEventHref, widgetEventTime, widgetMonthHref, widgetNewTaskHref } from '@/lib/widget-calendar';
 import type { WidgetSnapshot } from '@/lib/widget-snapshot';
-import { FlexWidget, TextWidget } from 'react-native-android-widget';
+import { FlexWidget, ListWidget, TextWidget } from 'react-native-android-widget';
 
 const colors = {
   background: '#00000000',
   text: '#F7F5F6',
   muted: '#C2BEC9',
   sunday: '#F36972',
-  divider: '#8A8790',
-  blue: '#27B9F3',
+  divider: '#3A3740',
+  addBg: '#2A2730',
 } as const;
 
-export function MonthAgendaWidget({ snapshot, compact = false, width = 400 }: {
+export function MonthAgendaWidget({ snapshot, compact = false, width = 400, height = 130 }: {
   snapshot: WidgetSnapshot | null;
   compact?: boolean;
   width?: number;
+  height?: number;
 }) {
   const language = snapshot?.language ?? 'vi';
   const calendar = monthCalendar(snapshot);
@@ -31,15 +32,19 @@ export function MonthAgendaWidget({ snapshot, compact = false, width = 400 }: {
     ? language === 'vi' ? vietnamese['Sign in to see your schedule'] : 'Sign in to see your schedule'
     : language === 'vi' ? vietnamese['Nothing scheduled'] : 'Nothing scheduled';
 
+  // Sized for exactly 3 items (~34dp per item including separator). Additional tasks scroll.
+  const listHeight = compact ? 106 : 112;
+
   return (
     <FlexWidget
       style={{ width: 'match_parent', height: 'match_parent', backgroundColor: colors.background, padding: compact ? 8 : 12, flexDirection: 'row' }}
       accessibilityLabel={language === 'vi' ? vietnamese['Month calendar'] : 'Month calendar'}
     >
-      <FlexWidget style={{ width: 168, marginRight: 10, justifyContent: 'center' }} clickAction="OPEN_URI" clickActionData={{ uri: widgetMonthHref() }}>
-        <FlexWidget style={{ flexDirection: 'row', marginBottom: compact ? 2 : 5 }}>
+      {/* ── Left: mini calendar (straight grid, no dots, top-aligned) ── */}
+      <FlexWidget style={{ width: 168, marginRight: compact ? 10 : 12 }} clickAction="OPEN_URI" clickActionData={{ uri: widgetMonthHref() }}>
+        <FlexWidget style={{ flexDirection: 'row', height: 26, alignItems: 'center', marginBottom: compact ? 4 : 6 }}>
           {weekdays.map((name, index) => (
-            <FlexWidget key={index} style={{ width: 24, height: compact ? 21 : 24, alignItems: 'center', justifyContent: 'center' }}>
+            <FlexWidget key={index} style={{ width: 24, height: 26, alignItems: 'center', justifyContent: 'center' }}>
               <TextWidget text={name} style={{ color: index === 6 ? colors.sunday : colors.muted, fontSize: 12, fontFamily: 'Geist-Medium' }} />
             </FlexWidget>
           ))}
@@ -49,39 +54,92 @@ export function MonthAgendaWidget({ snapshot, compact = false, width = 400 }: {
             {calendar.days.slice(row * 7, row * 7 + 7).map((day, column) => (
               <FlexWidget
                 key={column}
-                style={{ width: 24, height: compact ? 28 : 30, alignItems: 'center', justifyContent: 'center', borderRadius: 8, ...(day?.date === calendar.selected ? { backgroundColor: colors.text } : {}) }}
+                style={{
+                  width: 24,
+                  height: compact ? 26 : 28,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 8,
+                  ...(day?.date === calendar.selected ? { backgroundColor: colors.text } : {}),
+                }}
                 accessibilityLabel={day ? day.date : undefined}
               >
-                {day && <TextWidget text={String(day.day)} style={{ color: day.date === calendar.selected ? '#171721' : day.isSunday ? colors.sunday : colors.text, fontSize: 13, fontFamily: day.date === calendar.selected ? 'Geist-SemiBold' : 'Geist-Medium' }} />}
+                {day && (
+                  <TextWidget
+                    text={String(day.day)}
+                    style={{
+                      color: day.date === calendar.selected ? '#171721' : day.isSunday ? colors.sunday : colors.text,
+                      fontSize: 13,
+                      fontFamily: day.date === calendar.selected ? 'Geist-SemiBold' : 'Geist-Medium',
+                    }}
+                  />
+                )}
               </FlexWidget>
             ))}
           </FlexWidget>
         ))}
       </FlexWidget>
-      <FlexWidget style={{ width: Math.max(100, width - (compact ? 194 : 202)), justifyContent: 'center' }}>
-        <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: compact ? 8 : 12 }}>
+
+      {/* ── Right: today header (horizontal with weekdays) + divider + scrollable event list ── */}
+      <FlexWidget style={{ width: Math.max(100, width - (compact ? 194 : 202)) }}>
+        {/* Header row — strictly aligned with weekdays height (26) */}
+        <FlexWidget style={{ width: 'match_parent', height: 26, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: compact ? 4 : 6 }}>
           <TextWidget text={monthLabel} style={{ color: colors.text, fontSize: compact ? 19 : 21, fontFamily: 'Geist-SemiBold' }} />
           <FlexWidget
-            style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#171721', alignItems: 'center', justifyContent: 'center' }}
+            style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: colors.addBg, alignItems: 'center', justifyContent: 'center' }}
             clickAction="OPEN_URI"
             clickActionData={{ uri: widgetNewTaskHref(calendar.selected, snapshot?.tz ?? 'UTC') }}
             accessibilityLabel={language === 'vi' ? vietnamese['Add session'] : 'Add session'}
           >
-            <TextWidget text="+" style={{ color: colors.text, fontSize: 27, fontFamily: 'Geist' }} />
+            <TextWidget text="+" style={{ color: colors.text, fontSize: 20, fontFamily: 'Geist' }} />
           </FlexWidget>
         </FlexWidget>
-        {calendar.events.length === 0 && <TextWidget text={empty} style={{ color: colors.muted, fontSize: 12, fontFamily: 'Geist' }} />}
-        {calendar.events.slice(0, compact ? 3 : 4).map((event, index) => (
-          <FlexWidget key={event.id} style={{ marginBottom: compact ? 7 : 9 }}>
-            <FlexWidget style={{ flexDirection: 'row', alignItems: 'center' }} clickAction="OPEN_URI" clickActionData={{ uri: widgetEventHref(event.id) }} accessibilityLabel={event.title}>
-              <FlexWidget style={{ width: 4, height: 24, borderRadius: 3, backgroundColor: colors.blue, marginRight: 6 }} />
-              <TextWidget text={widgetEventTime(event, snapshot?.tz ?? 'UTC', language)} style={{ color: colors.text, fontSize: 12, fontFamily: 'Geist-SemiBold', marginRight: 6 }} />
-              <FlexWidget style={{ flex: 1 }}><TextWidget text={event.title} style={{ color: colors.text, fontSize: 12, fontFamily: 'Geist', width: 'match_parent' }} maxLines={1} truncate="END" /></FlexWidget>
-            </FlexWidget>
-            {index < Math.min(calendar.events.length, compact ? 3 : 4) - 1 && <FlexWidget style={{ height: 1, backgroundColor: colors.divider, marginTop: compact ? 7 : 9 }} />}
+
+        {/* Thin divider line below header */}
+        <FlexWidget style={{ width: 'match_parent', height: 1, backgroundColor: colors.divider, marginBottom: compact ? 4 : 6 }} />
+
+        {/* Empty state */}
+        {calendar.events.length === 0 && (
+          <FlexWidget style={{ width: 'match_parent', height: listHeight, justifyContent: 'center', alignItems: 'center' }}>
+            <TextWidget text={empty} style={{ color: colors.muted, fontSize: 12, fontFamily: 'Geist' }} />
           </FlexWidget>
-        ))}
-        {calendar.events.length > (compact ? 3 : 4) && <TextWidget text={'+' + (calendar.events.length - (compact ? 3 : 4))} style={{ color: colors.muted, fontSize: 11, fontFamily: 'Geist' }} />}
+        )}
+
+        {/* Event list — single line (accent bar + time + title) with divider, scrollable */}
+        {calendar.events.length > 0 && (
+          <ListWidget style={{ width: 'match_parent', height: listHeight }}>
+            {calendar.events.map((event) => (
+              <FlexWidget
+                key={event.id}
+                style={{ width: 'match_parent', paddingTop: compact ? 3 : 4, paddingBottom: compact ? 3 : 4 }}
+                clickAction="OPEN_URI"
+                clickActionData={{ uri: widgetEventHref(event.id) }}
+                accessibilityLabel={event.title}
+              >
+                <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center' }}>
+                  {/* Coloured accent bar */}
+                  <FlexWidget style={{ width: 4, height: 18, borderRadius: 2, backgroundColor: widgetEventColor(event.type), marginRight: 8 }} />
+                  {/* Time in bold */}
+                  <TextWidget
+                    text={widgetEventTime(event, snapshot?.tz ?? 'UTC', language)}
+                    style={{ color: colors.text, fontSize: 13, fontFamily: 'Geist-SemiBold', marginRight: 8 }}
+                  />
+                  {/* Title */}
+                  <FlexWidget style={{ flex: 1 }}>
+                    <TextWidget
+                      text={event.title}
+                      style={{ color: colors.text, fontSize: 13, fontFamily: 'Geist', width: 'match_parent' }}
+                      maxLines={1}
+                      truncate="END"
+                    />
+                  </FlexWidget>
+                </FlexWidget>
+                {/* Thin divider line below item */}
+                <FlexWidget style={{ width: 'match_parent', height: 1, backgroundColor: colors.divider, marginTop: compact ? 4 : 5 }} />
+              </FlexWidget>
+            ))}
+          </ListWidget>
+        )}
       </FlexWidget>
     </FlexWidget>
   );

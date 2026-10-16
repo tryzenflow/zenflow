@@ -7,3 +7,4 @@ export const FlexWidget = (props: any) => <div {...props} />;
 export const TextWidget = (props: any) => <span {...props} />;
 export const IconWidget = (props: any) => <span {...props} />;
 export const ImageWidget = (props: any) => <img {...props} />;
+export const ListWidget = (props: any) => <div {...props} />;

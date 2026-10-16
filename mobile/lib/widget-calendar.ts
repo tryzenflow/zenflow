@@ -1,4 +1,5 @@
 import { zonedWallClockToUtc } from '@zenflow/core';
+import type { SessionType } from '@zenflow/shared';
 import type { WidgetEvent, WidgetSnapshot } from './widget-snapshot';
 
 export interface CalendarDay {
@@ -75,4 +76,22 @@ export function widgetEventTime(event: WidgetEvent, timezone: string, language: 
   } catch {
     return '';
   }
+}
+
+/**
+ * Canonical widget hex colour per session type — matches the in-app calendar
+ * (brand-orange for TASK, teal-500 for ASSIGNMENT, etc.). The dark-mode
+ * brand-orange is `#FF7A24`; we pick the slightly lighter light-mode value
+ * `#FF8E3E` since the widget always renders on a transparent/dark surface.
+ */
+const WIDGET_TYPE_COLORS: Record<SessionType, `#${string}`> = {
+  TASK: '#FF8E3E',
+  ASSIGNMENT: '#14B8A6',
+  EXAM: '#F43F5E',
+  LECTURE: '#0EA5E9',
+  DND: '#94A3B8',
+};
+
+export function widgetEventColor(type: SessionType): `#${string}` {
+  return WIDGET_TYPE_COLORS[type] ?? WIDGET_TYPE_COLORS.TASK;
 }

@@ -11,5 +11,5 @@ export async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
 
   const snapshot = await readWidgetSnapshot();
   if (props.widgetInfo.widgetName !== "NextUpMedium") return;
-  props.renderWidget(<MonthAgendaWidget snapshot={snapshot} compact width={props.widgetInfo.width} />);
+  props.renderWidget(<MonthAgendaWidget snapshot={snapshot} compact width={props.widgetInfo.width} height={props.widgetInfo.height} />);
 }

@@ -32,7 +32,7 @@ function enqueueSnapshot() {
       await writeWidgetSnapshot(snapshot);
       await requestWidgetUpdate({
         widgetName: "NextUpMedium",
-        renderWidget: (info) => <MonthAgendaWidget snapshot={snapshot} compact width={info.width} />,
+        renderWidget: (info) => <MonthAgendaWidget snapshot={snapshot} compact width={info.width} height={info.height} />,
       });
     })
     .catch(() => {});
