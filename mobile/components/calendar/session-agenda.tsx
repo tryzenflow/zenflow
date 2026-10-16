@@ -217,10 +217,15 @@ export function SessionAgenda({
 
   useEffect(() => {
     if (showSkeleton || status !== "ready" || placedRef.current) return;
-    if (nowIndex <= 0) return;
+    if (nowIndex <= 0 || nowIndex >= rows.length) return;
     placedRef.current = true;
-    listRef.current?.scrollToIndex({ index: nowIndex, animated: false });
-  }, [showSkeleton, status, nowIndex]);
+    try {
+      listRef.current?.scrollToIndex({ index: nowIndex, animated: false });
+    } catch {
+      // The list has not taken the rows yet; the next render retries.
+      placedRef.current = false;
+    }
+  }, [showSkeleton, status, nowIndex, rows.length]);
 
   const openSession = (session: Session) => {
     onOpenSession?.();
@@ -289,14 +294,16 @@ export function SessionAgenda({
             offset: info.averageItemLength * info.index,
             animated: false,
           });
-          setTimeout(
-            () =>
+          setTimeout(() => {
+            try {
               listRef.current?.scrollToIndex({
                 index: info.index,
                 animated: false,
-              }),
-            50,
-          );
+              });
+            } catch {
+              // The rows were replaced meanwhile.
+            }
+          }, 50);
         }}
         onScrollBeginDrag={() => {
           scrolledRef.current = true;
