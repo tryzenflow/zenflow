@@ -1,6 +1,5 @@
 import {
   briefCounts,
-  dndCoversDay,
   expandDayItems,
   pendingCheckIn,
   type DayItem,
@@ -120,32 +119,5 @@ describe("pendingCheckIn", () => {
       item({ id: "missed", skipped: true }),
     ]);
     expect(pending.map((i) => i.id)).toEqual(["open"]);
-  });
-});
-
-describe("dndCoversDay", () => {
-  it("is true when a DND block overlaps the day", () => {
-    const dnd = [
-      item({
-        start: zonedToUtc("2026-10-13", "23:00", HCM),
-        durationMinutes: 120,
-      }),
-    ];
-    expect(dndCoversDay(dnd, dayStart, dayEnd)).toBe(true);
-  });
-
-  it("is false for a block that ends exactly at midnight", () => {
-    const dnd = [
-      item({
-        start: zonedToUtc("2026-10-13", "22:00", HCM),
-        durationMinutes: 120,
-      }),
-    ];
-    expect(dndCoversDay(dnd, dayStart, dayEnd)).toBe(false);
-  });
-
-  it("is false for a block on another day", () => {
-    const dnd = [item({ start: zonedToUtc("2026-10-15", "09:00", HCM) })];
-    expect(dndCoversDay(dnd, dayStart, dayEnd)).toBe(false);
   });
 });

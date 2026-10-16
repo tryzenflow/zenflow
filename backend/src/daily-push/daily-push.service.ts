@@ -11,7 +11,6 @@ import { type DeliverOptions, PushService } from "../devices/push.service";
 import type { PushMessage } from "../devices/types";
 import {
   briefCounts,
-  dndCoversDay,
   expandDayItems,
   BRIEF_TYPES,
   pendingCheckIn,
@@ -35,8 +34,8 @@ const PUSH_URL = "/calendar";
  * {@link deliver} builds the message from that day's sessions when the job
  * runs.
  *
- * A day with a DND block overlapping it sends neither push. A push with
- * nothing to report (no sessions, or nothing left to check in) sends nothing.
+ * A push with nothing to report (no sessions, or nothing left to check in)
+ * sends nothing.
  */
 @Injectable()
 export class DailyPushService {
@@ -75,23 +74,20 @@ export class DailyPushService {
     };
   }
 
-  /**
-   * The day's sessions (brief types, including recurring occurrences) and
-   * whether a DND block covers the day.
-   */
+  /** The day's sessions (brief types, including recurring occurrences). */
   async loadDay(
     userId: string,
     tz: string,
     localDate: string,
-  ): Promise<{ items: DayItem[]; dnd: boolean }> {
+  ): Promise<DayItem[]> {
     const { start, end } = dayBounds(localDate, tz);
-    // A recurring DND or a session that started yesterday can still overlap the day.
+    // A session that started yesterday can still overlap the day.
     const lookBack = new Date(start.getTime() - DAY_MS);
     const rows = (await this.prisma.session.findMany({
       where: {
         userId,
         deleted: false,
-        type: { in: [...BRIEF_TYPES, "DND"] },
+        type: { in: [...BRIEF_TYPES] },
         OR: [
           { scheduledStartTime: { gte: lookBack, lt: end } },
           { series: { rrule: { not: null } } },
@@ -126,21 +122,7 @@ export class DailyPushService {
       ]),
     );
 
-    const items = expandDayItems(
-      rows.filter((r) => r.type !== "DND"),
-      states,
-      start,
-      end,
-      tz,
-    );
-    const dnd = expandDayItems(
-      rows.filter((r) => r.type === "DND"),
-      states,
-      lookBack,
-      end,
-      tz,
-    );
-    return { items, dnd: dndCoversDay(dnd, start, end) };
+    return expandDayItems(rows, states, start, end, tz);
   }
 
   /** Build and send one daily push. Runs in the notify worker. */
@@ -165,8 +147,7 @@ export class DailyPushService {
       kind === "morning" ? user.morningBriefTime : user.eveningCheckinTime;
     if (!time) return;
 
-    const { items, dnd } = await this.loadDay(userId, user.timezone, localDate);
-    if (dnd) return;
+    const items = await this.loadDay(userId, user.timezone, localDate);
 
     const msg =
       kind === "morning"

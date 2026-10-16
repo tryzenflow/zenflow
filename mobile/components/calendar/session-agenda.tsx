@@ -21,8 +21,9 @@ import {
   type SearchListRow,
   sessionTimeRange,
 } from "@/lib/session-search-list";
+import { subscribeToSessionMutations } from "@/lib/session-cache";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
-import { deriveState, SESSION_TONES, sessionTone } from "@zenflow/core";
+import { deriveState, SESSION_TONES, sessionTone, splitZoned } from "@zenflow/core";
 import type { Session, SessionSearchDirection } from "@zenflow/shared";
 import { SunriseIcon } from "@/components/brand/icons";
 import { NoResultsMark } from "@/components/brand/state-marks";
@@ -140,12 +141,15 @@ export function SessionAgenda({
   });
   const pagingRef = useRef<SessionSearchDirection | null>(null);
   const scrolledRef = useRef(false);
+  const listRef = useRef<FlatList<SearchListRow>>(null);
+  const placedRef = useRef(false);
 
   useEffect(() => {
     const gen = ++generation.current;
     pagingRef.current = null;
     cursorsRef.current = { forward: null, backward: null };
     scrolledRef.current = false;
+    placedRef.current = false;
     setStatus("loading");
     const q = term || undefined;
     Promise.all([
@@ -171,6 +175,37 @@ export function SessionAgenda({
         if (gen === generation.current) setStatus("failed");
       });
   }, [term, anchor]);
+
+  // A create, edit or delete anywhere refetches the pages around the anchor in
+  // place: no skeleton, no jump back to today.
+  useEffect(
+    () =>
+      subscribeToSessionMutations(() => {
+        const gen = ++generation.current;
+        pagingRef.current = null;
+        const q = term || undefined;
+        Promise.all([
+          searchSessions({ q, anchor, direction: "backward", limit: PAGE_SIZE }),
+          searchSessions({ q, anchor, direction: "forward", limit: PAGE_SIZE }),
+        ])
+          .then(([before, after]) => {
+            if (gen !== generation.current) return;
+            cursorsRef.current = {
+              backward: before.nextCursor,
+              forward: after.nextCursor,
+            };
+            setSessions(
+              mergeSearchPage(
+                mergeSearchPage([], before.sessions, "backward"),
+                after.sessions,
+                "forward",
+              ),
+            );
+          })
+          .catch(() => {});
+      }),
+    [term, anchor],
+  );
 
   const loadMore = useCallback(
     (direction: SessionSearchDirection) => {
@@ -203,6 +238,26 @@ export function SessionAgenda({
   const showSkeleton = useDelayedLoading(
     pending || !painted || status === "loading",
   );
+
+  // Open on today: the first day from the anchor on, or the last row when
+  // every session is past.
+  const nowIndex = useMemo(() => {
+    const today = splitZoned(anchor, tz).date;
+    const i = rows.findIndex((r) => r.kind === "day" && r.date >= today);
+    return i === -1 ? rows.length - 1 : i;
+  }, [rows, anchor, tz]);
+
+  useEffect(() => {
+    if (showSkeleton || status !== "ready" || placedRef.current) return;
+    if (nowIndex <= 0 || nowIndex >= rows.length) return;
+    placedRef.current = true;
+    try {
+      listRef.current?.scrollToIndex({ index: nowIndex, animated: false });
+    } catch {
+      // The list has not taken the rows yet; the next render retries.
+      placedRef.current = false;
+    }
+  }, [showSkeleton, status, nowIndex, rows.length]);
 
   const openSession = (session: Session) => {
     onOpenSession?.();
@@ -257,12 +312,31 @@ export function SessionAgenda({
       ) : null}
       {showSkeleton ? <AgendaSkeleton /> : null}
       <FlatList
+        ref={listRef}
         style={showSkeleton ? { display: "none" } : undefined}
         data={showSkeleton ? NO_ROWS : rows}
         keyExtractor={(row) => row.key}
         renderItem={renderRow}
         keyboardShouldPersistTaps="handled"
         maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+        onScrollToIndexFailed={(info) => {
+          // Rows past the rendered window have no measured height yet: jump
+          // near, then retry once they exist.
+          listRef.current?.scrollToOffset({
+            offset: info.averageItemLength * info.index,
+            animated: false,
+          });
+          setTimeout(() => {
+            try {
+              listRef.current?.scrollToIndex({
+                index: info.index,
+                animated: false,
+              });
+            } catch {
+              // The rows were replaced meanwhile.
+            }
+          }, 50);
+        }}
         onScrollBeginDrag={() => {
           scrolledRef.current = true;
         }}

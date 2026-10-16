@@ -105,12 +105,12 @@ const TOAST_VARIANTS: Record<
     Icon: AlertCircle,
   },
   warning: {
-    badge: "bg-session-conflict/20",
-    icon: "text-session-conflict-ink",
+    badge: "bg-session-assignment/20",
+    icon: "text-session-assignment-ink",
     Icon: AlertTriangle,
   },
   success: {
-    badge: "bg-session-done/15",
+    badge: "bg-session-done/50",
     icon: "text-session-done-ink",
     Icon: CheckCircle,
   },
@@ -147,7 +147,7 @@ const VARIANT_ACCENT: Record<ToastVariant, ToastAccent> = {
   // Plain notices read as info — blue, not the foreground ink.
   default: SESSION_TONES.lecture.ink,
   destructive: SESSION_TONES.late.ink,
-  warning: SESSION_TONES.conflict.ink,
+  warning: SESSION_TONES.assignment.ink,
   success: SESSION_TONES.done.ink,
   info: SESSION_TONES.lecture.ink,
   tip: SESSION_TONES.task.ink,

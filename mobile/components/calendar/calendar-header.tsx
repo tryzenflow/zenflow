@@ -6,7 +6,6 @@ import { OfflineIndicator } from "@/components/offline-indicator";
 import { GlassButton } from "@/components/ui/glass-button";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { View } from "react-native";
-import { StreakBadge } from "./streak-badge";
 import { type CalendarView, ViewSwitch } from "./view-switch";
 
 interface CalendarHeaderProps {
@@ -19,7 +18,7 @@ interface CalendarHeaderProps {
 
 /**
  * The calendar screen's top bar: the Day | Week | Month switch on the left;
- * the streak, search and the notification bell on the right.
+ * search and the notification bell on the right.
  * Every view sits under it.
  */
 export function CalendarHeader({
@@ -38,7 +37,6 @@ export function CalendarHeader({
       <ViewSwitch value={view} onChange={onViewChange} />
       <View className="min-w-0 flex-1 flex-row items-center justify-end gap-2">
         <OfflineIndicator dayKey={offlineKey} />
-        <StreakBadge />
         <GlassButton
           icon={Search}
           accessibilityLabel={t("Search sessions")}

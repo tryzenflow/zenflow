@@ -14,7 +14,7 @@ export const BRAND = {
   orangeDark: "#FF7A24",
   /** Highlights and assignments. */
   yellow: "#F0B101",
-  /** Light accent and done. Fill only. */
+  /** Light accent, success and done. Fill only. */
   lime: "#D8F998",
   /** Light background. */
   paper: "#FEFCFA",
@@ -26,8 +26,8 @@ export const BRAND = {
 
 export type Scheme = "light" | "dark";
 
-/** Success fill. */
-export const SUCCESS = "#10B981";
+/** Success fill: the brand lime. */
+export const SUCCESS = BRAND.lime;
 
 /**
  * UI neutrals and roles per scheme. Each key is a CSS variable: `background`,
@@ -97,7 +97,7 @@ export const UI: Record<Scheme, UiTokens> = {
     destructiveForeground: BRAND.ink,
     glass: "#FFECDC",
     glassEdge: "#FFAA64",
-    success: "#34D399",
+    success: SUCCESS,
   },
 };
 
@@ -140,8 +140,8 @@ export const SESSION_TONES: Record<SessionTone, SessionToneColors> = {
   task: { base: BRAND.orange, ink: { light: "#9A4A0C", dark: "#FFA866" } },
   /** Soft grey: free time and do not disturb. */
   dnd: { base: BRAND.grey, ink: { light: "#5F574D", dark: "#B8B0A4" } },
-  /** Green. */
-  done: { base: SUCCESS, ink: { light: "#0B6B4B", dark: "#5FD9A9" } },
+  /** Lime: done. */
+  done: { base: SUCCESS, ink: { light: "#4F6B14", dark: "#D8F998" } },
   /** Red: late and overdue work. */
   late: { base: "#E7000B", ink: { light: "#B80009", dark: "#FF8083" } },
   /** Lime: conflict. */
