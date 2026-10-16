@@ -1,4 +1,5 @@
 import { GettingStarted } from "@/components/checklist/getting-started";
+import { StreakBadge } from "./streak-badge";
 import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
@@ -433,7 +434,10 @@ function WeekHeaderImpl(
               })}
             </Text>
           </View>
-          <GettingStarted />
+          <View className="flex-row items-center gap-2">
+            <StreakBadge />
+            <GettingStarted />
+          </View>
         </View>
 
         <Animated.View
