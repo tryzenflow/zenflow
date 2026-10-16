@@ -29,7 +29,7 @@ const FIXED_TYPES: { value: SessionFormType; label: string }[] = [
 /**
  * The less common fields, folded away by default: reminders, repeat (fixed
  * types only), location, notes, the other tags, and the session type of an
- * event. The first tag is the course, so the tags field lists the rest.
+ * event. The first tag is the course; the tags field lists all of them.
  */
 export function MoreOptions({
   form,
@@ -159,11 +159,9 @@ export function MoreOptions({
 
           <FieldCard label="Tags" testID="task.tags">
             <TagAutocomplete
-              value={tags.slice(1)}
+              value={tags}
               disabled={disabled}
-              onChange={(rest) =>
-                form.setValue("tags", tags[0] ? [tags[0], ...rest] : rest)
-              }
+              onChange={(next) => form.setValue("tags", next)}
             />
           </FieldCard>
         </View>

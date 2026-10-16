@@ -513,6 +513,7 @@ export function CourseField({
           value={otherText}
           onChangeText={setOtherText}
           onSubmitEditing={() => setCourse(otherText.trim())}
+          onBlur={() => otherText.trim() && setCourse(otherText.trim())}
           returnKeyType="done"
           placeholder={t("Course name")}
           accessibilityLabel={t("Course name")}
