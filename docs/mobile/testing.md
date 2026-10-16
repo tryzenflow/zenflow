@@ -81,7 +81,7 @@ Install Maestro first: <https://docs.maestro.dev/getting-started/installing-maes
 
 ### Landing page screenshots
 
-`pnpm --filter mobile e2e:screenshots` signs in as a seeded fixture student and writes four WebP shots (`week`, `month`, `settings`, `new-task`) to `backend/src/landing/assets/`, where the landing page picks them up. The flow is `e2e/screenshots/capture.yaml`, the runner `e2e/screenshots.sh`.
+`pnpm --filter mobile e2e:screenshots` signs in as a seeded fixture student and writes four WebP shots (`week`, `month`, `settings`, `new-task`) to `../landing/public/shots/` in the landing repo. The flow is `e2e/screenshots/capture.yaml`, the runner `e2e/screenshots.sh`.
 
 - Needs the E2E build on a booted emulator or simulator, plus the dev stack, API and fake DLU server ([fixtures README](../../backend/scripts/fixtures/dlu/README.md)).
 - `SEED=1` seeds the first fixture student first; `EMAIL=...` signs in as someone else.

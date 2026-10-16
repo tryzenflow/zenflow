@@ -1,7 +1,6 @@
 import {
   Body,
   Container,
-  Font,
   Head,
   Html,
   Img,
@@ -23,15 +22,7 @@ export interface ConfirmEmailProps {
   thanks: string;
   team: string;
   rights: string;
-  /** Where the Geist files are served; omit to use the system fallback. */
-  fontBaseUrl?: string;
 }
-
-const FONTS = [
-  { file: "Geist-Regular.ttf", weight: 400 },
-  { file: "Geist-SemiBold.ttf", weight: 600 },
-  { file: "Geist-ExtraBold.ttf", weight: 800 },
-] as const;
 
 const HERO = "linear-gradient(135deg,#ffb074 0%,#ff8e3e 55%,#f0b101 100%)";
 const PAGE = "linear-gradient(180deg,#fff3e6 0%,#f6f3ef 100%)";
@@ -42,27 +33,16 @@ export function ConfirmEmail(p: ConfirmEmailProps) {
       <Head>
         <title>{p.pageTitle}</title>
         <meta name="color-scheme" content="light" />
-        {p.fontBaseUrl
-          ? FONTS.map((f) => (
-              <Font
-                key={f.file}
-                fontFamily="Geist"
-                fallbackFontFamily="Helvetica"
-                webFont={{
-                  url: `${p.fontBaseUrl}/landing/fonts/${f.file}`,
-                  format: "truetype",
-                }}
-                fontWeight={f.weight}
-                fontStyle="normal"
-              />
-            ))
-          : null}
       </Head>
       <Preview>{p.instructions}</Preview>
       <Tailwind>
         <Body
           className="m-0 bg-[#f6f3ef] px-4 py-10 font-sans text-[#0f0d0a]"
-          style={{ backgroundImage: PAGE, fontFamily: "Geist, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}
+          style={{
+            backgroundImage: PAGE,
+            fontFamily:
+              "Geist, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+          }}
         >
           <Container className="mx-auto max-w-[560px] overflow-hidden rounded-[24px] border border-solid border-[#e8e5df] bg-white">
             <Section

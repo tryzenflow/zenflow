@@ -49,8 +49,6 @@ import { RemindersWorkerModule } from "./reminders/reminders-worker.module";
 import { DailyPushModule } from "./daily-push/daily-push.module";
 import { DailyPushWorkerModule } from "./daily-push/daily-push-worker.module";
 import { HealthModule } from "./health/health.module";
-import { LegalModule } from "./legal/legal.module";
-import { LandingModule } from "./landing/landing.module";
 
 const configEnvFile = envFilePath();
 // `<PREFIX>_HOST` / `_PORT` / `_PASSWORD` for one Redis instance (connections.ts).
@@ -570,8 +568,6 @@ const jobModules = [
     RemindersModule,
     DailyPushModule,
     HealthModule,
-    LegalModule,
-    LandingModule,
     ...jobModules,
   ],
   providers: [MailService],

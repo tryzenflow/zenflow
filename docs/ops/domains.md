@@ -19,7 +19,7 @@ Keep VPS records DNS only (grey cloud): certbot renews over the nginx webroot on
 | --- | --- | --- |
 | `no-reply@usezenflow.com` | Login codes (`MAIL_FROM`) | Mailgun, SMTP user `postmaster@usezenflow.com` |
 | `alerts@usezenflow.com` | Grafana alerts (`GRAFANA_SMTP_FROM`) | Mailgun, same SMTP user |
-| `privacy@usezenflow.com` | `LEGAL_CONTACT_EMAIL` | Cloudflare Email Routing ([inbox-email.md](inbox-email.md)) |
+| `privacy@usezenflow.com` | Landing `CONTACT_EMAIL` | Cloudflare Email Routing ([inbox-email.md](inbox-email.md)) |
 
 Records at `usezenflow.com`:
 

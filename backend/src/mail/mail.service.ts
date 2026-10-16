@@ -61,7 +61,6 @@ export class MailService {
     const props = {
       otp,
       ...copy,
-      fontBaseUrl: process.env.PUBLIC_URL?.replace(/\/+$/, "") || undefined,
     };
     await this.mailerService.sendMail({
       // Only set `from` when explicitly provided. nodemailer copies every key
