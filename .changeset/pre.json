@@ -3,6 +3,7 @@
   "tag": "beta",
   "changesets": [
     "ab-gap-primary-text-note-skeleton",
+    "android-month-widget",
     "backup-failure-visibility",
     "checklist-day-sheet-spotlight",
     "daily-push-ignore-dnd",

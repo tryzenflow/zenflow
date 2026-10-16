@@ -14,7 +14,7 @@ services:
     build:
       context: ..
       dockerfile: backend/Dockerfile
-    image: ${ZENFLOW_API_IMAGE:-zenflow-api:1.0.0-beta.12}
+    image: ${ZENFLOW_API_IMAGE:-zenflow-api:1.0.0-beta.13}
     expose:
       - "8000"
     networks:
@@ -70,7 +70,7 @@ services:
     extends:
       service: api
     profiles: !reset []
-    image: ${ZENFLOW_API_IMAGE_BLUE:-${ZENFLOW_API_IMAGE:-zenflow-api:1.0.0-beta.12}}
+    image: ${ZENFLOW_API_IMAGE_BLUE:-${ZENFLOW_API_IMAGE:-zenflow-api:1.0.0-beta.13}}
     environment:
       BANDIT_SERVICE_URL: http://bandit-blue:8000
     depends_on:
@@ -87,7 +87,7 @@ services:
     extends:
       service: api
     profiles: !reset []
-    image: ${ZENFLOW_API_IMAGE_GREEN:-${ZENFLOW_API_IMAGE:-zenflow-api:1.0.0-beta.12}}
+    image: ${ZENFLOW_API_IMAGE_GREEN:-${ZENFLOW_API_IMAGE:-zenflow-api:1.0.0-beta.13}}
     environment:
       BANDIT_SERVICE_URL: http://bandit-green:8000
     depends_on:
@@ -232,7 +232,7 @@ services:
     build:
       context: ..
       dockerfile: backend/Dockerfile
-    image: ${ZENFLOW_API_IMAGE:-zenflow-api:1.0.0-beta.12}
+    image: ${ZENFLOW_API_IMAGE:-zenflow-api:1.0.0-beta.13}
     networks:
       - db
       - egress

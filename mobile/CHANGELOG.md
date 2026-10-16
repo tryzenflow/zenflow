@@ -1,5 +1,16 @@
 # mobile
 
+## 1.0.0-beta.13
+
+### Minor Changes
+
+- b036590: Add an Android home screen widget that shows the month calendar and your upcoming sessions.
+
+### Patch Changes
+
+- @zenflow/shared@1.0.0-beta.13
+- @zenflow/core@1.0.0-beta.13
+
 ## 1.0.0-beta.12
 
 ### Patch Changes
