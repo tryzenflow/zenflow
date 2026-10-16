@@ -21,6 +21,7 @@ import {
   type SearchListRow,
   sessionTimeRange,
 } from "@/lib/session-search-list";
+import { subscribeToSessionMutations } from "@/lib/session-cache";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { deriveState, SESSION_TONES, sessionTone, splitZoned } from "@zenflow/core";
 import type { Session, SessionSearchDirection } from "@zenflow/shared";
@@ -174,6 +175,37 @@ export function SessionAgenda({
         if (gen === generation.current) setStatus("failed");
       });
   }, [term, anchor]);
+
+  // A create, edit or delete anywhere refetches the pages around the anchor in
+  // place: no skeleton, no jump back to today.
+  useEffect(
+    () =>
+      subscribeToSessionMutations(() => {
+        const gen = ++generation.current;
+        pagingRef.current = null;
+        const q = term || undefined;
+        Promise.all([
+          searchSessions({ q, anchor, direction: "backward", limit: PAGE_SIZE }),
+          searchSessions({ q, anchor, direction: "forward", limit: PAGE_SIZE }),
+        ])
+          .then(([before, after]) => {
+            if (gen !== generation.current) return;
+            cursorsRef.current = {
+              backward: before.nextCursor,
+              forward: after.nextCursor,
+            };
+            setSessions(
+              mergeSearchPage(
+                mergeSearchPage([], before.sessions, "backward"),
+                after.sessions,
+                "forward",
+              ),
+            );
+          })
+          .catch(() => {});
+      }),
+    [term, anchor],
+  );
 
   const loadMore = useCallback(
     (direction: SessionSearchDirection) => {
