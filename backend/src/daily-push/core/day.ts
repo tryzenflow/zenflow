@@ -116,16 +116,3 @@ export function briefCounts(items: DayItem[]): {
 export function pendingCheckIn(items: DayItem[]): DayItem[] {
   return items.filter((i) => !i.done && !i.skipped);
 }
-
-/** `true` when a DND occurrence overlaps `[dayStart, dayEnd)`. */
-export function dndCoversDay(
-  dnd: DayItem[],
-  dayStart: Date,
-  dayEnd: Date,
-): boolean {
-  return dnd.some(
-    (d) =>
-      d.start < dayEnd &&
-      d.start.getTime() + d.durationMinutes * 60_000 > dayStart.getTime(),
-  );
-}

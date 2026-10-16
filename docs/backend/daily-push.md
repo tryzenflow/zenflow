@@ -28,7 +28,6 @@ Morning brief and evening check-in (issue #255). Settings are on `User`
   is empty.
 - Evening: today's items not yet done or skipped, as session ids in the
   `sessionIds` data key (at most 12). No push when none are left.
-- A day with a DND block overlapping it sends neither push.
 
 ## Check-in actions
 
