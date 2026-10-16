@@ -1,6 +1,6 @@
 # Contact inbox for the legal pages
 
-For operators. `/privacy` and `/terms` list `LEGAL_CONTACT_EMAIL` (`privacy@usezenflow.com`). Receive it free with Cloudflare Email Routing, forwarding to an inbox you read. App mail (login codes) is separate: Mailgun from `no-reply@usezenflow.com` ([domains.md](domains.md#mail)).
+For operators. `/privacy` and `/terms` (the [landing repo](https://github.com/usezenflow/landing), `CONTACT_EMAIL` in `src/config.ts`) list `privacy@usezenflow.com`. Receive it free with Cloudflare Email Routing, forwarding to an inbox you read. App mail (login codes) is separate: Mailgun from `no-reply@usezenflow.com` ([domains.md](domains.md#mail)).
 
 ## Receive
 
@@ -26,4 +26,4 @@ Setup fails if the apex already has conflicting records. In **DNS**, check the r
 
 ## Go live
 
-`backend/env/prod.env` sets `LEGAL_CONTACT_EMAIL`. It goes live with the next prod deploy, so finish routing first. Then open `https://usezenflow.com/privacy` and `/terms` and send a test mail from outside.
+The landing site lists the address. It goes live with the next landing deploy, so finish routing first. Then open `https://usezenflow.com/privacy` and `/terms` and send a test mail from outside.

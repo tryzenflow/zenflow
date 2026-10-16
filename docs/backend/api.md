@@ -9,10 +9,6 @@ For developers and API clients. Live schema: Swagger UI at `<API_URL>/api`.
 - Error: `{ success: false, message, statusCode?, field? }`.
 - `POST /auth/otp/verify` reads the `x-timezone` header.
 
-## Legal pages
-
-`GET /privacy` and `GET /terms`: public HTML at the site root, no session. `?lang=en|vi`, else `Accept-Language`. Copy: `backend/src/legal/content/`. Bump `LEGAL_UPDATED` in `legal.docs.ts` on substantive changes. Contact: `LEGAL_CONTACT_EMAIL` ([config](config.md)).
-
 ## Auth (`/auth`)
 
 | Method | Path | Purpose |

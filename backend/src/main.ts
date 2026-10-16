@@ -6,8 +6,7 @@ import { NestExpressApplication } from "@nestjs/platform-express";
 import { Logger } from "nestjs-pino";
 import { AppModule } from "./app.module";
 import session from "express-session";
-import { RequestMethod, ValidationPipe } from "@nestjs/common";
-import { join } from "node:path";
+import { ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import type { Redis } from "ioredis";
@@ -53,23 +52,7 @@ async function bootstrap() {
   // session middleware is registered.
   const configService = app.get(ConfigService);
   app.set("trust proxy", configService.get<number>("TRUST_PROXY_HOPS"));
-  // The public legal pages live at the site root (`/privacy`, `/terms`), so the
-  // app stores and the login screen can link to short stable URLs.
-  // The landing page (`/`), `robots.txt` and `sitemap.xml` sit there too, and its
-  // screenshots are served from `/landing`.
-  app.setGlobalPrefix("api/v1", {
-    exclude: [
-      { path: "/", method: RequestMethod.GET },
-      "privacy",
-      "terms",
-      "robots.txt",
-      "sitemap.xml",
-    ],
-  });
-  app.useStaticAssets(join(__dirname, "landing", "assets"), {
-    prefix: "/landing/",
-    maxAge: "7d",
-  });
+  app.setGlobalPrefix("api/v1");
   // Comma-separated list: the web frontend and Expo's web dev server are
   // separate origins. `cors` only echoes a single origin back, so this must be
   // an array for it to match the request and reflect the right one.

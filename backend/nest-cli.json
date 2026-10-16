@@ -5,8 +5,7 @@
   "compilerOptions": {
     "deleteOutDir": true,
     "assets": [
-      { "include": "mail/templates/**/*.png", "watchAssets": true },
-      { "include": "landing/assets/**/*", "watchAssets": true }
+      { "include": "mail/templates/**/*.png", "watchAssets": true }
     ],
     "plugins": ["@nestjs/swagger"],
     "watchAssets": true

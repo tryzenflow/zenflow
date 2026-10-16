@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Captures the landing-page screenshots into backend/src/landing/assets/ from a
+# Captures the landing-page screenshots into ../landing/public/shots/ from a
 # booted emulator or simulator with the app installed (E2E build, see
 # docs/mobile/testing.md). Needs the dev stack, the fake DLU server and API up
 # (see backend/scripts/fixtures/dlu/README.md).
@@ -13,7 +13,7 @@ command -v maestro >/dev/null || { echo "Install Maestro: https://docs.maestro.d
 
 root="$(cd ../.. && pwd)"
 fixtures="$root/backend/scripts/fixtures/dlu"
-dest="$root/backend/src/landing/assets"
+dest="$root/../landing/public/shots"
 # The first fixture student, as seed-and-sync.js names accounts.
 student="$(node -e 'console.log(require(process.argv[1])[0].StudentID.toLowerCase())' "$fixtures/students.json")"
 email="${EMAIL:-$student@fixtures.test}"
@@ -61,7 +61,7 @@ for name in day week month list new-task settings marks; do
     cwebp -quiet -q 82 -resize 480 0 "$png" -o "$dest/$name.webp"
   else
     cp "$png" "$dest/$name.png"
-    echo "cwebp not found: kept $name.png (update the file names in landing.content.ts or install webp)" >&2
+    echo "cwebp not found: kept $name.png (install webp)" >&2
   fi
 done
 echo "Wrote screenshots to $dest"
